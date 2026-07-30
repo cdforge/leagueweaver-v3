@@ -595,8 +595,8 @@ function ScoreImageImport({ schedule, selectedWeek, onApply, onPendingChange }: 
           teamNames: schedule.setup.teams.map((team) => teamDisplayName(team, true)),
         }),
       });
-      const preview = await response.json() as ImportPreview & { error?: string };
-      if (!response.ok) throw new Error(preview.error || "That score image could not be read.");
+      const preview = await response.json().catch(() => ({})) as ImportPreview & { error?: string };
+      if (!response.ok) throw new Error(apiErrorMessage(response.status, preview.error, "That score image could not be read."));
       const scoreByTeamId = new Map<string, number>();
       preview.teams.forEach((importedTeam) => {
         const matchedTeam = findTeam(importedTeam.city, importedTeam.name);
@@ -1347,15 +1347,20 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       autosaveTimer.current = null;
       try {
         const response = await fetch("/api/seasons", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schedule: scheduleToSave }) });
-        const payload = await response.json() as CloudSaveResponse;
+        const payload = await response.json().catch(() => ({})) as CloudSaveResponse;
         if (!response.ok || !payload.schedule) {
           if (response.status === 401) setEntitlements((current) => ({ ...current, signedIn: false }));
           else if (openSaveConflict(payload, scheduleToSave)) return;
-          else setNotice(payload.error || "Saved on this device, but cloud sync needs attention.");
+          else {
+            const reason = apiErrorMessage(response.status, payload.error, "Cloud sync needs attention.");
+            setCloudRetryState(scheduleToSave, reason);
+            setNotice("Saved on this device. Cloud sync needs attention.");
+          }
           return;
         }
         applyCloudSchedule(payload.schedule, schedule);
-      } catch {
+      } catch (caught) {
+        setCloudRetryState(scheduleToSave, caught instanceof Error ? caught.message : "Cloud sync is temporarily unavailable.");
         setNotice("Saved on this device. Cloud sync is temporarily unavailable.");
       }
     }, 1200);
@@ -1470,8 +1475,8 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ schedule, week: selectedWeek }),
       });
-      const result = await response.json() as { rows?: Array<ImportedScoreRow & { confidence?: "high" | "review" }>; unmatched?: unknown[]; warnings?: string[]; syncedAt?: string; error?: string };
-      if (!response.ok) throw new Error(result.error || "Scores could not be refreshed.");
+      const result = await response.json().catch(() => ({})) as { rows?: Array<ImportedScoreRow & { confidence?: "high" | "review" }>; unmatched?: unknown[]; warnings?: string[]; syncedAt?: string; error?: string };
+      if (!response.ok) throw new Error(apiErrorMessage(response.status, result.error, "Scores could not be refreshed."));
       const highConfidence = (result.rows ?? []).filter((row) => row.confidence !== "review");
       if (highConfidence.length > 0) {
         setSchedule((current) => {
@@ -1494,6 +1499,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
         updatePlatformConnection({ lastSyncAt: result.syncedAt, status: result.warnings?.length ? "warning" : "ready", warnings: result.warnings ?? [] });
       }
       const reviewCount = (result.rows ?? []).length - highConfidence.length;
+      void loadImportHistory();
       setNotice(reviewCount > 0
         ? `Refreshed ${highConfidence.length} scores. ${reviewCount} matchups need review before applying.`
         : highConfidence.length > 0
@@ -1524,8 +1530,8 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scheduleId: schedule.id, provider: connection.provider, providerLeagueId: connection.providerLeagueId, seasonYear: connection.seasonYear, syncMode, swid, espnS2 }),
       });
-      const result = await response.json() as { authType?: PlatformConnection["authType"]; error?: string };
-      if (!response.ok) throw new Error(result.error || "Platform connection could not be saved.");
+      const result = await response.json().catch(() => ({})) as { authType?: PlatformConnection["authType"]; error?: string };
+      if (!response.ok) throw new Error(apiErrorMessage(response.status, result.error, "Platform connection could not be saved."));
       updatePlatformConnection({ syncMode, authType: result.authType ?? connection.authType, status: "ready" });
       setNotice("Platform connection saved.");
     } catch (caught) {
@@ -1608,16 +1614,18 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
           existingScheduleId: saveConflict.existingSeason.id,
         }),
       });
-      const payload = await response.json() as CloudSaveResponse;
+      const payload = await response.json().catch(() => ({})) as CloudSaveResponse;
       if (!response.ok || !payload.schedule) {
-        setNotice(payload.error || "The cloud season could not be updated.");
+        setNotice(apiErrorMessage(response.status, payload.error, "The cloud season could not be updated."));
         return;
       }
       applyCloudSchedule(payload.schedule, scheduleToSave);
       setSaveConflict(null);
       setNotice(saveMode === "copy" ? `${payload.title ?? "Season copy"} created.` : "Existing season updated. The prior version is still in Revisions.");
+      void loadImportHistory();
       window.setTimeout(() => setNotice(null), 5200);
-    } catch {
+    } catch (caught) {
+      setCloudRetryState(scheduleToSave, caught instanceof Error ? caught.message : "Cloud sync is temporarily unavailable.");
       setNotice("Saved on this device. Cloud sync is temporarily unavailable.");
     } finally {
       setSaveConflictLoading(false);
@@ -1628,27 +1636,63 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     setNotice("Cloud autosave is paused for this version. You can keep working and choose what to do after the next change.");
     window.setTimeout(() => setNotice(null), 5200);
   };
+  const retryCloudSave = async () => {
+    if (!cloudRetry) return;
+    const scheduleToSave = freezeCompletedRankHistory(latestSchedule.current ?? cloudRetry.schedule);
+    setCloudRetry({ ...cloudRetry, schedule: scheduleToSave, retrying: true });
+    try {
+      const response = await fetch("/api/seasons", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schedule: scheduleToSave }) });
+      const payload = await response.json().catch(() => ({})) as CloudSaveResponse;
+      if (!response.ok || !payload.schedule) {
+        if (response.status === 401) {
+          setEntitlements((current) => ({ ...current, signedIn: false }));
+          setCloudRetry(null);
+          setNotice("Saved on this device. Sign in again when you want cloud revisions.");
+          return;
+        }
+        if (openSaveConflict(payload, scheduleToSave)) {
+          setCloudRetry(null);
+          return;
+        }
+        throw new Error(apiErrorMessage(response.status, payload.error, "Cloud sync needs attention."));
+      }
+      applyCloudSchedule(payload.schedule, scheduleToSave);
+      setNotice(`Cloud revision ${payload.schedule.revision} saved.`);
+      void loadImportHistory();
+      window.setTimeout(() => setNotice(null), 5200);
+    } catch (caught) {
+      setCloudRetry({
+        schedule: scheduleToSave,
+        reason: caught instanceof Error ? caught.message : "Cloud sync is temporarily unavailable.",
+        retrying: false,
+      });
+    }
+  };
   const save = async () => {
     const frozenSchedule = freezeCompletedRankHistory(schedule);
     saveSeason(frozenSchedule);
     if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current);
     try {
       const response = await fetch("/api/seasons", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schedule: frozenSchedule }) });
-      const payload = await response.json() as CloudSaveResponse;
+      const payload = await response.json().catch(() => ({})) as CloudSaveResponse;
       if (response.status === 401) {
         setNotice("Saved on this device. Sign in when you want cloud revisions and resume-anywhere access.");
         return null;
       } else if (!response.ok || !payload.schedule) {
         if (openSaveConflict(payload, frozenSchedule)) return null;
-        setNotice(payload.error || "Saved on this device, but the cloud copy needs attention.");
+        const reason = apiErrorMessage(response.status, payload.error, "The cloud copy needs attention.");
+        setCloudRetryState(frozenSchedule, reason);
+        setNotice("Saved on this device, but the cloud copy needs attention.");
         return null;
       } else {
         const synced = applyCloudSchedule(payload.schedule, frozenSchedule);
         setEntitlements((current) => ({ ...current, signedIn: true }));
         setNotice(`Cloud revision ${payload.schedule.revision} saved.`);
+        void loadImportHistory();
         return synced;
       }
-    } catch {
+    } catch (caught) {
+      setCloudRetryState(frozenSchedule, caught instanceof Error ? caught.message : "Cloud save is temporarily unavailable.");
       setNotice("Saved on this device. Cloud save is temporarily unavailable.");
       return null;
     } finally {
@@ -1666,8 +1710,8 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
         cloudSchedule = saved;
       }
       const response = await fetch("/api/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: cloudSchedule.id }) });
-      const payload = await response.json() as { url?: string; error?: string };
-      if (!response.ok || !payload.url) return setNotice(payload.error || "This schedule could not be published.");
+      const payload = await response.json().catch(() => ({})) as { url?: string; error?: string };
+      if (!response.ok || !payload.url) return setNotice(apiErrorMessage(response.status, payload.error, "This schedule could not be published."));
       try { await navigator.clipboard.writeText(payload.url); setNotice("Public schedule link copied."); }
       catch { setNotice(`Public schedule ready: ${payload.url}`); }
       window.setTimeout(() => setNotice(null), 5200);
@@ -1681,8 +1725,8 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     setActionBusy("notify");
     try {
       const response = await fetch("/api/notifications/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: schedule.id }) });
-      const payload = await response.json() as { sent?: number; message?: string; error?: string };
-      setNotice(response.ok ? payload.message || `Update sent to ${payload.sent ?? 0} subscriber${payload.sent === 1 ? "" : "s"}.` : payload.error || "The update could not be sent.");
+      const payload = await response.json().catch(() => ({})) as { sent?: number; message?: string; error?: string };
+      setNotice(response.ok ? payload.message || `Update sent to ${payload.sent ?? 0} subscriber${payload.sent === 1 ? "" : "s"}.` : apiErrorMessage(response.status, payload.error, "The update could not be sent."));
       window.setTimeout(() => setNotice(null), 5200);
     } finally {
       setActionBusy(null);
@@ -1739,15 +1783,16 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     ? ({ "--workspace-team-wash": selectedTeamColor } as CSSProperties)
     : undefined;
   return <main className={`workspace-page ${simulation ? "simulation-mode" : ""}`}>
-    {scoreModalOpen && canAccessScorekeeping && <div className="modal-backdrop score-entry-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setScoreModalOpen(false); }}>
+    {scoreModalOpen && canAccessScorekeeping && <div className="modal-backdrop score-entry-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeScoreModal(); }}>
       <section className="score-entry-modal" role="dialog" aria-modal="true" aria-labelledby="score-entry-modal-title">
         <header>
           <span className="score-entry-modal-mark"><LayoutList /></span>
           <span><small>LEAGUE SCHEDULE</small><h2 id="score-entry-modal-title">Enter Week {selectedWeek} scores</h2></span>
-          <button type="button" aria-label="Close score entry" onClick={() => setScoreModalOpen(false)}><X /></button>
+          <button type="button" aria-label="Close score entry" onClick={() => closeScoreModal()}><X /></button>
         </header>
-        <div className="score-entry-modal-body"><ScoreImageImport schedule={activeSchedule} selectedWeek={selectedWeek} onApply={applyImportedScores} /><ScoresView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} onScore={onScore} onFinalizeScores={onFinalizeScores} simulationActive={Boolean(simulation)} simulationResults={simulationResultByGame} /></div>
-        <footer><span><ShieldCheck /><small>Scores save automatically as you enter them.</small></span><button type="button" className="button-primary" onClick={() => { onFinalizeScores(); setScoreModalOpen(false); }}>Done</button></footer>
+        <div className="score-entry-modal-body"><ScoreImageImport schedule={activeSchedule} selectedWeek={selectedWeek} onApply={applyImportedScores} onPendingChange={setScoreImportPending} /><ScoresView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} onScore={onScore} onFinalizeScores={onFinalizeScores} simulationActive={Boolean(simulation)} simulationResults={simulationResultByGame} /></div>
+        {scoreDiscardConfirmOpen && <div className="score-entry-discard-warning" role="alert"><span><strong>Discard imported score suggestions?</strong><small>Apply the reviewed scores first, or discard the suggestions and close this panel.</small></span><button type="button" onClick={() => setScoreDiscardConfirmOpen(false)}>Keep reviewing</button><button type="button" onClick={discardScoreSuggestions}>Discard</button></div>}
+        <footer><span><ShieldCheck /><small>Scores save automatically as you enter them.</small></span><button type="button" className="button-primary" onClick={() => closeScoreModal(true)}>Done</button></footer>
       </section>
     </div>}
     <header className="workspace-topbar"><BrandLockup /><div className="workspace-season-switch"><EntityLogo className="mini-league-mark" color={schedule.setup.color} logoUrl={schedule.setup.logoUrl} monogram={resolveInitials(schedule.setup.initials, leagueAcronym(schedule.setup.name))} size={34} /><span><strong>{schedule.setup.name}</strong><small>{schedule.setup.seasonYear} season</small></span><ChevronDown /></div><div className="workspace-top-actions"><Tooltip label="Send schedule update"><button type="button" aria-label="Send schedule update" disabled={actionBusy !== null} onClick={sendNotification}>{actionBusy === "notify" ? <LoaderCircle className="spin" /> : <Bell />}</button></Tooltip><AccountIdentity identity={entitlements} plan={entitlements.plan} /></div></header>
@@ -1756,6 +1801,11 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       <section className={`workspace-main ${selectedTeamColor ? "team-workspace-branded" : ""}`} style={workspaceMainStyle}>
         <div className="workspace-toolbar"><div><span className="workspace-breadcrumb">{schedule.setup.abbreviation} / {schedule.setup.seasonYear}</span><h1>{currentTitle}</h1></div><div className="toolbar-actions"><button type="button" title={simulation ? "Export simulated CSV" : "Export CSV"} onClick={() => downloadCsv(activeSchedule)}><Download />CSV</button><button type="button" title={simulation ? "Print simulated ESPN entry sheet" : "Print ESPN entry sheet"} onClick={() => downloadSchedulePdf(activeSchedule)}><FileDown />ESPN PDF</button><button type="button" title={simulation ? "Share the real schedule" : "Share schedule"} disabled={actionBusy !== null} onClick={share}>{actionBusy === "share" ? <LoaderCircle className="spin" /> : <Share2 />}Share</button></div></div>
         {notice && <div className="workspace-notice"><Cloud />{notice}</div>}
+        {cloudRetry && <section className="cloud-retry-banner" role="status" aria-label="Cloud autosave needs attention">
+          <Cloud />
+          <span><strong>Saved on this device.</strong><small>{cloudRetry.reason}</small></span>
+          <button type="button" onClick={retryCloudSave} disabled={cloudRetry.retrying}>{cloudRetry.retrying ? <LoaderCircle className="spin" /> : <RefreshCw />}Retry cloud save</button>
+        </section>}
         {saveConflict && <section className="workspace-conflict-notice" aria-labelledby="season-save-conflict-title">
           <span className="season-save-conflict-mark"><Cloud /></span>
           <div>
@@ -1809,7 +1859,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
             onDiscard={discardSimulation}
             onOpenSchedule={openLeagueScheduleWeek}
           />}
-          {view === "settings" && <SettingsView schedule={activeSchedule} onOpenDraftRanking={() => setDraftRankingRequest((current) => current + 1)} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshPlatformScores={refreshPlatformScores} onSavePlatformConnection={savePlatformConnection} onDisconnectPlatform={disconnectPlatform} />}
+          {view === "settings" && <SettingsView schedule={activeSchedule} onOpenDraftRanking={() => setDraftRankingRequest((current) => current + 1)} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshPlatformScores={refreshPlatformScores} onSavePlatformConnection={savePlatformConnection} onDisconnectPlatform={disconnectPlatform} importHistory={importHistory} importHistoryLoading={importHistoryLoading} importHistoryError={importHistoryError} onRefreshImportHistory={loadImportHistory} />}
         </div>
         {entitlements.plan !== "pro" && <AdUnit placement="workspace" />}
       </section>

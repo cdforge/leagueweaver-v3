@@ -652,6 +652,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .spin { animation: spin 1s linear infinite; }
 .workspace-notice { min-height: 43px; display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--gold-soft); color: #5c4a10; border-bottom: 1px solid #ead98e; font-size: 11px; }
 .workspace-notice svg { width: 16px; }
+.cloud-retry-banner { min-height: 62px; display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 11px; border-bottom: 1px solid #cfe0d7; background: #f4fbf7; color: var(--field-dark); padding: 10px 18px; }
+.cloud-retry-banner > svg { width: 22px; color: var(--field); }
+.cloud-retry-banner span { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.cloud-retry-banner strong { font-size: 11px; }
+.cloud-retry-banner small { color: var(--muted); font-size: 9px; line-height: 1.4; }
+.cloud-retry-banner button { min-height: 44px; border: 1px solid #91b4a1; border-radius: 5px; background: white; color: var(--field-dark); display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; font-family: inherit; font-size: 10px; font-weight: 850; cursor: pointer; white-space: nowrap; }
+.cloud-retry-banner button:disabled { cursor: progress; opacity: .72; }
+.cloud-retry-banner button svg { width: 15px; }
 .workspace-conflict-notice { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 12px; border-bottom: 1px solid #ead98e; background: linear-gradient(180deg, #fff8da 0%, #fffdf1 100%); padding: 12px 18px; color: var(--ink); }
 .workspace-conflict-notice > div { min-width: 0; }
 .workspace-conflict-notice small { display: block; margin-bottom: 3px; color: var(--field); font-size: 9px; font-weight: 850; }
@@ -2004,6 +2012,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .score-image-loading strong { font-size: 10px; }
 .score-image-error { min-height: 48px; border-top: 1px solid #efc3be; background: #fff4f2; color: #842d2d; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; font-size: 10px; }
 .score-image-error button { min-height: 36px; border: 0; background: transparent; color: #842d2d; padding: 0 8px; font: inherit; font-weight: 800; cursor: pointer; text-decoration: underline; }
+.score-entry-discard-warning { min-height: 56px; border-top: 1px solid #efc3be; background: #fff4f2; color: #842d2d; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 9px 14px; }
+.score-entry-discard-warning span { min-width: 0; display: grid; gap: 2px; }
+.score-entry-discard-warning strong { font-size: 11px; }
+.score-entry-discard-warning small { color: #8b4a42; font-size: 9px; line-height: 1.35; }
+.score-entry-discard-warning button { min-height: 36px; border: 1px solid #efc3be; border-radius: 5px; background: white; color: #842d2d; padding: 0 10px; font-size: 10px; font-weight: 850; cursor: pointer; }
 .score-image-import > header { min-height: 62px; border-bottom: 1px solid var(--line); background: var(--field-soft); display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px; }
 .score-image-import > header button { min-height: 40px; border: 0; background: transparent; color: var(--field-dark); display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; font-family: inherit; font-size: 9px; font-weight: 750; cursor: pointer; }
 .score-image-import > header button:hover { background: white; }
@@ -2957,6 +2970,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .team-schedule-page-shell .custom-select-trigger strong, .team-schedule-page-shell .custom-select-menu strong { font-size: var(--workspace-text-body); }
 .workspace-page .custom-select-trigger small, .workspace-page .custom-select-menu small,
 .team-schedule-page-shell .custom-select-trigger small, .team-schedule-page-shell .custom-select-menu small { font-size: var(--workspace-text-meta); }
+.workspace-page .schedule-week-header .rating-tier-filter .custom-select-trigger strong { color: var(--ink); }
+.workspace-page .schedule-week-header .rating-tier-filter .custom-select-trigger small,
+.workspace-page .schedule-week-header .rating-tier-filter .custom-select-trigger > svg { color: var(--muted); }
 
 .workspace-season-switch strong, .workspace-rail nav button, .workspace-notice { font-size: var(--workspace-text-body); }
 .workspace-season-switch small, .rail-bottom p, .rail-bottom a { font-size: var(--workspace-text-meta); }
