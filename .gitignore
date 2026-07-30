@@ -6,3 +6,6 @@ node_modules/
 *.log
 .DS_Store
 .vercel
+tmp/
+qa-artifacts/
+supabase/email-templates/

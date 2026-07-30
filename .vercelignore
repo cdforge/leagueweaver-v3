@@ -1,0 +1,5 @@
+tmp/
+qa-artifacts/
+supabase/email-templates/
+.next/
+node_modules/
