@@ -1,0 +1,76 @@
+"use client";
+
+import { useMemo } from "react";
+import { ShieldCheck, Sparkles } from "lucide-react";
+import { MatchupCard } from "@/components/season/MatchupPresentation";
+import { getMatchupRatingRange, getMatchupSignal } from "@/lib/matchups";
+import { getNflWeekWindow } from "@/lib/schedule";
+import { formatRecord, getEnteringWeekRankSnapshot } from "@/lib/standings";
+import { gameOfWeekStatusLabel, getScheduleGameSignals } from "@/lib/statistics";
+import type { GeneratedSchedule } from "@/lib/types";
+
+export function GotwWorkspace({ schedule, simulationResults = {}, simulationProbabilities = {} }: {
+  schedule: GeneratedSchedule;
+  simulationResults?: Record<string, { source: "simulated" | "override"; locked: boolean }>;
+  simulationProbabilities?: Record<string, { away: number; home: number }>;
+}) {
+  const signals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
+  const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
+  const divisionById = new Map(schedule.setup.divisions.map((division) => [division.id, division]));
+  const showCity = schedule.setup.display?.cityNames !== false;
+  const showVenue = schedule.setup.display?.venues !== false;
+  const counts = signals.gotwTimeline.reduce((result, entry) => ({ ...result, [entry.status]: result[entry.status] + 1 }), { previous: 0, current: 0, projected: 0 });
+  const selectedCount = counts.previous + counts.current;
+
+  return <div className="gotw-view">
+    <div className="gotw-summary two-status" aria-label="Game of the Week season status">
+      <span><ShieldCheck /><strong>{selectedCount}</strong><small>GOTW</small></span>
+      <span><Sparkles /><strong>{counts.projected}</strong><small>Projected</small></span>
+    </div>
+    <div className="gotw-timeline">
+      {signals.gotwTimeline.map((entry) => {
+        const away = teamById.get(entry.game.awayTeamId)!;
+        const home = teamById.get(entry.game.homeTeamId)!;
+        const rankSnapshot = getEnteringWeekRankSnapshot(schedule, entry.weekNumber);
+        const standingsByTeam = new Map(rankSnapshot.rows.map((row) => [row.teamId, row]));
+        const recordFor = (teamId: string) => {
+          const row = standingsByTeam.get(teamId);
+          return { overall: row ? formatRecord(row) : "0-0", division: row ? `${row.divisionWins}-${row.divisionLosses}` : "0-0" };
+        };
+        const holidays = getNflWeekWindow(schedule.setup.seasonYear, entry.weekNumber).holidays;
+        const ratingRange = getMatchupRatingRange(schedule.weeks.flatMap((week) => week.games), entry.ranks);
+        const statusLabel = gameOfWeekStatusLabel(entry.status);
+        const simulationResult = simulationResults[entry.game.id];
+        return <section className={`gotw-timeline-item status-${entry.status}`} key={entry.weekNumber}>
+          <header>
+            <span className="gotw-week-copy"><strong>Week {entry.weekNumber}</strong><small>{entry.dateLabel}</small></span>
+            <span className="gotw-rating"><small>{entry.lens === "live" ? "LIVE RATING" : "PRESEASON RATING"}</small><strong>{entry.rating.toFixed(1)}</strong></span>
+            {(entry.playoffImplication || holidays.length > 0) && <span className="week-markers">{entry.playoffImplication && <em className="playoff-impact-marker">PLAYOFF IMPACT</em>}{holidays.map((holiday) => <em className="holiday-marker" key={holiday}>{holiday}</em>)}</span>}
+          </header>
+          <MatchupCard
+            game={entry.game}
+            away={away}
+            home={home}
+            awayDivision={divisionById.get(away.divisionId)}
+            homeDivision={divisionById.get(home.divisionId)}
+            awayRank={entry.ranks.get(away.id) ?? away.overallRank}
+            homeRank={entry.ranks.get(home.id) ?? home.overallRank}
+            awayRecord={recordFor(away.id)}
+            homeRecord={recordFor(home.id)}
+            signal={getMatchupSignal(entry.game, entry.ranks, ratingRange)}
+            featured
+            featuredLabel={statusLabel}
+            badges={signals.byGameId.get(entry.game.id)?.badges}
+            showCity={showCity}
+            showVenue={showVenue}
+            variant="gotw"
+            simulationSource={simulationResult?.source}
+            simulationLocked={simulationResult?.locked}
+            winProbability={simulationProbabilities[entry.game.id]}
+            teamHrefBase={`/season/${schedule.id}/team`}
+          />
+        </section>;
+      })}
+    </div>
+  </div>;
+}

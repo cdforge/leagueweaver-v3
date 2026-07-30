@@ -1,0 +1,39 @@
+import { AppHeader } from "@/components/AppHeader";
+import { LeagueBuilder } from "@/components/builder/LeagueBuilder";
+import { AdUnit } from "@/components/ads/AdUnit";
+import { CheckCircle2, FileDown, RefreshCw, ShieldCheck } from "lucide-react";
+
+export default function HomePage() {
+  return (
+    <main>
+      <AppHeader />
+      <LeagueBuilder />
+      <section className="proof-band" aria-labelledby="why-league-weaver">
+        <div className="page-width proof-grid">
+          <div className="proof-intro">
+            <p className="eyebrow">Built for commissioners</p>
+            <h2 id="why-league-weaver">The schedule is only the start.</h2>
+            <p>Generate it here, then keep scores, standings, playoff projections, and every export together.</p>
+          </div>
+          <div className="proof-points">
+            <div><ShieldCheck aria-hidden="true" /><span><strong>Fair by construction</strong>Hard rules are checked before you see a schedule.</span></div>
+            <div><RefreshCw aria-hidden="true" /><span><strong>Ready for every week</strong>Import scores and follow the season from one workspace.</span></div>
+            <div><FileDown aria-hidden="true" /><span><strong>Clean handoff</strong>Download a polished PDF or CSV for the whole league.</span></div>
+            <div><CheckCircle2 aria-hidden="true" /><span><strong>Your platform stays</strong>League Weaver works beside Sleeper and ESPN.</span></div>
+          </div>
+        </div>
+      </section>
+      <AdUnit placement="home" />
+      <footer className="site-footer">
+        <div className="page-width footer-row">
+          <span>© 2026 League Weaver</span>
+          <nav aria-label="Legal">
+            <a href="/privacy">Privacy</a>
+            <a href="/terms">Terms</a>
+            <a href="/pricing">Pricing</a>
+          </nav>
+        </div>
+      </footer>
+    </main>
+  );
+}
