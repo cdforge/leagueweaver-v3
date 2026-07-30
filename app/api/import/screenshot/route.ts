@@ -23,15 +23,20 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   if (!process.env.AI_GATEWAY_API_KEY) return NextResponse.json({ error: "Screenshot import is not connected yet. Add AI_GATEWAY_API_KEY to .env.local, then restart the app." }, { status: 503 });
   try {
-    const body = await request.json() as { imageDataUrl?: string; seasonYear?: number };
+    const body = await request.json() as { imageDataUrl?: string; seasonYear?: number; mode?: "league" | "scores"; week?: number; teamNames?: string[] };
     if (!body.imageDataUrl?.startsWith("data:image/") || body.imageDataUrl.length > 11_000_000) return NextResponse.json({ error: "Choose a valid PNG, JPG, or WebP image under 8 MB." }, { status: 400 });
+    const scoreWeek = Number.isInteger(body.week) && Number(body.week) > 0 ? Number(body.week) : 1;
+    const knownTeams = (body.teamNames ?? []).filter((name) => typeof name === "string" && name.trim()).slice(0, 32);
+    const extractionPrompt = body.mode === "scores"
+      ? `Extract fantasy scores for Week ${scoreWeek}. Match names only when the screenshot clearly corresponds to one of these known teams: ${knownTeams.join(" | ")}. Return each recognized team separately and put its score in scores as { week: ${scoreWeek}, value }. Never guess a team or score. Add a warning for anything unclear.`
+      : "Extract the fantasy league name and each team's separate city, team name, manager, division, prior-season rank, home venue, and any clearly labeled weekly scores. Never guess unreadable text. Add a warning for every uncertain or missing field.";
     const result = await generateText({
       model: gateway(process.env.AI_SCREENSHOT_MODEL || "anthropic/claude-sonnet-5"),
       output: Output.object({ schema: screenshotSchema, name: "fantasy_league_import" }),
       messages: [{
         role: "user",
         content: [
-          { type: "text", text: "Extract the fantasy league name and each team's separate city, team name, manager, division, prior-season rank, home venue, and any clearly labeled weekly scores. Never guess unreadable text. Add a warning for every uncertain or missing field." },
+          { type: "text", text: extractionPrompt },
           { type: "image", image: body.imageDataUrl },
         ],
       }],
@@ -43,7 +48,7 @@ export async function POST(request: Request) {
       seasonYear: Number(body.seasonYear) || new Date().getFullYear(),
       teams: extracted.teams.map((team, index) => ({ providerId: `screenshot-${index + 1}`, ...team })),
       hasPriorSeasonRanks: extracted.teams.every((team) => team.rank != null),
-      warnings: ["AI-read screenshots can contain mistakes. Review every row before confirming.", ...extracted.warnings],
+      warnings: [body.mode === "scores" ? "AI-read scores can contain mistakes. Review every matchup before applying them." : "AI-read screenshots can contain mistakes. Review every row before confirming.", ...extracted.warnings],
       requiresConfirmation: true,
     };
     return NextResponse.json(preview);

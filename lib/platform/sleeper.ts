@@ -1,0 +1,70 @@
+import "server-only";
+import type { GeneratedSchedule, ImportDataFound, PlatformSyncResult, PlatformSyncScoreRow } from "@/lib/types";
+
+const SLEEPER_API = "https://api.sleeper.app/v1";
+
+export interface SleeperLeague { league_id: string; name?: string; season?: string; avatar?: string | null; draft_id?: string | null; previous_league_id?: string | null }
+export interface SleeperUser { user_id: string; display_name?: string; avatar?: string | null; metadata?: { team_name?: string } }
+export interface SleeperRoster { roster_id: number; owner_id?: string | null; settings?: { division?: number } }
+interface SleeperMatchup { roster_id: number; matchup_id?: number; points?: number }
+
+export async function sleeperFetch<T>(path: string): Promise<T> {
+  const response = await fetch(`${SLEEPER_API}${path}`, { headers: { Accept: "application/json" }, cache: "no-store" });
+  if (!response.ok) throw new Error(response.status === 404 ? "We couldn't find that Sleeper league or account." : "Sleeper is unavailable right now. Try again in a moment.");
+  return response.json() as Promise<T>;
+}
+
+export function sleeperAvatarUrl(value?: string | null) {
+  return value ? `https://sleepercdn.com/avatars/thumbs/${value}` : undefined;
+}
+
+export async function resolveSleeperLeagueId(identifier: string, seasonYear: number) {
+  if (/^\d{5,}$/.test(identifier)) return { leagueId: identifier, warnings: [] as string[] };
+  const account = await sleeperFetch<{ user_id?: string }>(`/user/${encodeURIComponent(identifier)}`);
+  if (!account.user_id) throw new Error("We couldn't find that Sleeper username.");
+  const leagues = await sleeperFetch<SleeperLeague[]>(`/user/${account.user_id}/leagues/nfl/${seasonYear}`);
+  if (!leagues.length) throw new Error(`No Sleeper leagues were found for ${seasonYear}.`);
+  return {
+    leagueId: leagues[0].league_id,
+    warnings: leagues.length > 1 ? [`This account has ${leagues.length} leagues. We previewed ${leagues[0].name || "the first one"}; use a league ID to choose another.`] : [],
+  };
+}
+
+export async function scanSleeperHistory(leagueId: string): Promise<ImportDataFound> {
+  const years: number[] = [];
+  let current: string | null | undefined = leagueId;
+  for (let index = 0; index < 8 && current; index += 1) {
+    try {
+      const league: SleeperLeague = await sleeperFetch<SleeperLeague>(`/league/${encodeURIComponent(current)}`);
+      const season = Number(league.season);
+      if (Number.isInteger(season)) years.push(season);
+      current = league.previous_league_id;
+    } catch {
+      current = null;
+    }
+  }
+  return { availableHistoryYears: years, blockedHistoryYears: [], hasDraftData: true, hasRosterData: false, hasPlayerData: false, hasScoreSync: true };
+}
+
+export async function mapSleeperScores(schedule: GeneratedSchedule, week: number): Promise<PlatformSyncResult> {
+  const connection = schedule.setup.platformConnection;
+  if (!connection?.providerLeagueId) throw new Error("This season is not connected to Sleeper.");
+  const matchups = await sleeperFetch<SleeperMatchup[]>(`/league/${encodeURIComponent(connection.providerLeagueId)}/matchups/${week}`);
+  const byRoster = new Map(matchups.map((item) => [`sleeper-${connection.providerLeagueId}-${item.roster_id}`, item]));
+  const rows: PlatformSyncScoreRow[] = [];
+  const unmatched: PlatformSyncResult["unmatched"] = [];
+  const targetWeek = schedule.weeks.find((item) => item.weekNumber === week);
+  for (const game of targetWeek?.games ?? []) {
+    const home = schedule.setup.teams.find((team) => team.id === game.homeTeamId);
+    const away = schedule.setup.teams.find((team) => team.id === game.awayTeamId);
+    const homeMatchup = home?.providerId ? byRoster.get(home.providerId) : undefined;
+    const awayMatchup = away?.providerId ? byRoster.get(away.providerId) : undefined;
+    if (!homeMatchup || !awayMatchup || homeMatchup.points == null || awayMatchup.points == null) {
+      unmatched.push({ week, providerHomeId: home?.providerId, providerAwayId: away?.providerId, reason: "No Sleeper score matched this generated game." });
+      continue;
+    }
+    const sameMatchup = homeMatchup.matchup_id != null && homeMatchup.matchup_id === awayMatchup.matchup_id;
+    rows.push({ gameId: game.id, week, homeTeamId: game.homeTeamId, awayTeamId: game.awayTeamId, homeScore: homeMatchup.points, awayScore: awayMatchup.points, confidence: sameMatchup ? "high" : "review", source: "sleeper" });
+  }
+  return { rows, unmatched, warnings: unmatched.length ? ["Some Sleeper games did not match the generated LeagueWeaver slate."] : [], syncedAt: new Date().toISOString() };
+}

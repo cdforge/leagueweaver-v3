@@ -1,6 +1,7 @@
 import type { Division, LeagueSetupInput, Team } from "./types";
 import { entityMonogram, leagueAcronym } from "./monograms";
 import { createDefaultPlayoffSettings } from "./playoffs";
+import { normalizeTiebreakerSettings } from "./tiebreakers";
 
 const TEAM_NAMES = [
   "Sunday Architects",
@@ -102,6 +103,7 @@ export function createDefaultSetup(): LeagueSetupInput {
     weekOne: {
       rankingSource: "prior-season",
     },
+    tiebreakers: normalizeTiebreakerSettings(),
     playoffs: createDefaultPlayoffSettings(10, "#117A45"),
     fairness: {
       maxHomeAwayStreak: 3,

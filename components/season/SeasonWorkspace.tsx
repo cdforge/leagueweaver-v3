@@ -2,20 +2,23 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   BarChart3,
+  ArrowDownRight,
   Bell,
   CalendarDays,
   Check,
   ChevronDown,
-  CircleUserRound,
   Cloud,
+  Copy,
   Download,
   FileDown,
   FileSpreadsheet,
   Gamepad2,
+  ImagePlus,
   LayoutList,
+  LoaderCircle,
   LockKeyhole,
   MapPin,
   Medal,
@@ -34,22 +37,28 @@ import {
   X,
 } from "lucide-react";
 import { BrandLockup } from "@/components/AppHeader";
+import { AccountIdentity } from "@/components/account/AccountIdentity";
 import { AdUnit } from "@/components/ads/AdUnit";
 import { GotwWorkspace } from "@/components/season/GotwWorkspace";
+import { BracketConnectorLayer, type BracketConnection } from "@/components/season/BracketConnectorLayer";
+import { ConsolationBracket, FinalPlacementTable } from "@/components/season/ConsolationBracket";
 import { GameBadgeChip, MatchupCard, MatchupRatingLegend, MatchupSeriesChip, TeamIdentityBlock, WeekMatchupRank } from "@/components/season/MatchupPresentation";
 import { SimulatorWorkspace, type SimulatorOddsView, type SimulatorResultView } from "@/components/season/SimulatorWorkspace";
 import { StatsWorkspace } from "@/components/season/StatsWorkspace";
 import { TeamScheduleView } from "@/components/season/TeamSchedulePage";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { EntityLogo } from "@/components/ui/EntityLogo";
+import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
+import { ProBadge } from "@/components/ui/ProBadge";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { downloadCsv } from "@/lib/csv";
 import { readableTextColor } from "@/lib/colorContrast";
+import { isDivisionHalvesConsolationUsable, projectConsolationBracket } from "@/lib/consolation";
 import { downloadSchedulePdf } from "@/lib/pdf";
 import { getMatchupRatingRange, getMatchupSignal, matchupRating, sortGamesForDisplay } from "@/lib/matchups";
 import {
-  getFirstRoundSeedPairs,
   getPlayoffByeCount,
+  getPlayoffGameBrandingSlots,
   getPlayoffRoundNames,
   normalizePlayoffSettings,
   playoffPlacementLabel,
@@ -83,21 +92,51 @@ import { loadSeason, normalizeSeason, saveSeason } from "@/lib/storage";
 import { getNflWeekWindow, getWeekDateLabel, updateGameScore } from "@/lib/schedule";
 import { leagueAcronym, resolveInitials } from "@/lib/monograms";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
-import type { GeneratedSchedule, LeagueSetupInput, ScheduledGame, Team } from "@/lib/types";
+import type { GeneratedSchedule, ImportPreview, LeagueSetupInput, PlatformConnection, PlatformSyncMode, PlayoffGame, ScheduledGame, Team, TiebreakerSettings } from "@/lib/types";
 
-type ViewKey = "league-schedule" | "team-schedule" | "gotw" | "matchup-ratings" | "scores" | "standings" | "playoffs" | "simulator" | "fairness" | "settings";
+type ViewKey = "league-schedule" | "team-schedule" | "gotw" | "matchup-ratings" | "standings" | "playoffs" | "simulator" | "settings";
 const CLOUD_SCHEDULE_ID = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
+
+type ExistingSeasonConflict = {
+  id: string;
+  title: string;
+  time_frame?: { seasonYear?: number; weeks?: number };
+  updated_at: string;
+};
+
+type CloudSaveResponse = {
+  schedule?: GeneratedSchedule;
+  title?: string;
+  error?: string;
+  code?: string;
+  existingSeason?: ExistingSeasonConflict;
+};
+
+type SeasonSaveConflict = {
+  existingSeason: ExistingSeasonConflict;
+  schedule: GeneratedSchedule;
+  snapshot: string;
+};
+
+type HighlightedGame = { id: string; medalRank?: number; medalCategory?: string } | null;
+type ImportedScoreRow = { gameId: string; awayTeamId: string; homeTeamId: string; awayName: string; homeName: string; awayScore?: number; homeScore?: number };
+
+function seasonTimeframeLabel(seasonYear: number, weeks: number) {
+  const firstWeek = getNflWeekWindow(seasonYear, 1);
+  const finalWeek = getNflWeekWindow(seasonYear, weeks);
+  const monthDay = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  const finalDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  return `${seasonYear} season · NFL Weeks 1–${weeks} · ${monthDay.format(new Date(firstWeek.startsAt))}–${finalDate.format(new Date(finalWeek.endsAt))}`;
+}
 
 const VIEW_ITEMS: Array<{ key: ViewKey; label: string; icon: typeof CalendarDays; pro?: boolean }> = [
   { key: "league-schedule", label: "League Schedule", icon: CalendarDays },
   { key: "team-schedule", label: "Team Schedule", icon: UsersRound },
   { key: "gotw", label: "Game of the Week", icon: Star },
   { key: "matchup-ratings", label: "Matchup Ratings", icon: SlidersHorizontal },
-  { key: "scores", label: "Scores", icon: LayoutList, pro: true },
   { key: "standings", label: "Standings", icon: BarChart3, pro: true },
   { key: "playoffs", label: "Playoffs", icon: Trophy, pro: true },
   { key: "simulator", label: "Simulator", icon: Play, pro: true },
-  { key: "fairness", label: "Fairness", icon: ShieldCheck },
   { key: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -114,6 +153,7 @@ type PlayoffWeekMatchupView = {
   homeScore?: number;
   awayScore?: number;
   stadium?: string;
+  logoUrl?: string;
   recorded: boolean;
 };
 
@@ -138,7 +178,7 @@ function PlayoffWeekSchedule({ schedule, roundIndex }: { schedule: GeneratedSche
     .filter((game) => game.bracket === "main" && game.roundIndex === roundIndex)
     .sort((left, right) => (left.gameNumber ?? 0) - (right.gameNumber ?? 0) || left.id.localeCompare(right.id));
   const matchups: PlayoffWeekMatchupView[] = actualGames.length
-    ? actualGames.map((game) => ({
+    ? actualGames.map((game, index) => ({
       key: game.id,
       homeTeamId: game.homeTeamId,
       awayTeamId: game.awayTeamId,
@@ -147,14 +187,16 @@ function PlayoffWeekSchedule({ schedule, roundIndex }: { schedule: GeneratedSche
       homeScore: game.homeScore,
       awayScore: game.awayScore,
       stadium: game.stadium,
+      logoUrl: game.logoUrl || settings.gameLogoUrls?.[`main-r${roundIndex + 1}-g${index + 1}`],
       recorded: true,
     }))
     : round.matchups.map((matchup, index) => ({
-      key: `projected-playoff-${roundIndex}-${index}`,
+      key: `main-r${roundIndex + 1}-g${index + 1}`,
       homeTeamId: seedByNumber.get(matchup.homeSeed)?.teamId ?? "",
       awayTeamId: seedByNumber.get(matchup.awaySeed)?.teamId ?? "",
       homeSeed: matchup.homeSeed,
       awaySeed: matchup.awaySeed,
+      logoUrl: settings.gameLogoUrls?.[`main-r${roundIndex + 1}-g${index + 1}`],
       recorded: false,
     }));
   const showCity = schedule.setup.display?.cityNames !== false;
@@ -191,8 +233,8 @@ function PlayoffWeekSchedule({ schedule, roundIndex }: { schedule: GeneratedSche
   };
 
   return <div className="workspace-stack playoff-week-schedule" style={{ "--playoff-week-color": settings.color, "--playoff-week-ink": readableTextColor(settings.color) } as CSSProperties}>
-    <div className="playoff-week-heading">
-      <EntityLogo color={settings.color} logoUrl={settings.logoUrl} monogram="PO" size={48} />
+    <div className={`playoff-week-heading${settings.logoUrl ? " has-logo" : " no-logo"}`}>
+      {settings.logoUrl && <EntityLogo color={settings.color} logoUrl={settings.logoUrl} monogram="PO" size={48} />}
       <span><small>{statusLabel}</small><strong>{round.name}</strong><em>NFL Week {round.weekNumber} · {roundDate}</em></span>
       <span className="playoff-week-heading-copy"><strong>{settings.name}</strong><small>{projectionCopy}</small></span>
     </div>
@@ -204,7 +246,7 @@ function PlayoffWeekSchedule({ schedule, roundIndex }: { schedule: GeneratedSche
         const home = teamById.get(matchup.homeTeamId);
         const venue = matchup.stadium || (championshipNeutral ? "Neutral championship site" : home?.stadium);
         return <article className={`playoff-week-row ${played ? "played" : ""}`} key={matchup.key} role="listitem">
-          <span className="playoff-week-game-label"><Trophy /><span><small>GAME {index + 1}</small><strong>{played ? "Final" : matchup.recorded ? "Scheduled" : "Projected"}</strong></span></span>
+          <span className="playoff-week-game-label">{matchup.logoUrl && <EntityLogo color={settings.color} logoUrl={matchup.logoUrl} monogram={`G${index + 1}`} size={34} />}<span><small>GAME {index + 1}</small><strong>{played ? "Final" : matchup.recorded ? "Scheduled" : "Projected"}</strong></span></span>
           <TeamSlot teamId={matchup.awayTeamId} seedNumber={matchup.awaySeed} result={awayResult} />
           <span className="playoff-week-score" aria-label={played ? `Away ${matchup.awayScore}, home ${matchup.homeScore}, final` : "Projected matchup"}>
             <strong className={awayResult === "loser" ? "loser" : ""}>{matchup.awayScore ?? "—"}</strong>
@@ -227,12 +269,14 @@ function PlayoffWeekSchedule({ schedule, roundIndex }: { schedule: GeneratedSche
   </div>;
 }
 
-function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayoffs, onLockedPlayoffWeek, simulationResults = {}, simulationProbabilities = {} }: {
+function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayoffs, onLockedPlayoffWeek, onOpenScores, highlightedGame, simulationResults = {}, simulationProbabilities = {} }: {
   schedule: GeneratedSchedule;
   selectedWeek: number;
   setSelectedWeek: (week: number) => void;
   canAccessPlayoffs: boolean;
   onLockedPlayoffWeek: (roundName: string) => void;
+  onOpenScores: (week: number) => void;
+  highlightedGame?: HighlightedGame;
   simulationResults?: Record<string, SimulatorResultView>;
   simulationProbabilities?: Record<string, { away: number; home: number }>;
 }) {
@@ -241,10 +285,11 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
   const playoffRounds = useMemo(() => projectPlayoffRounds(schedule), [schedule]);
   const selectedPlayoffIndex = playoffRounds.findIndex((round) => round.weekNumber === selectedWeek);
   useEffect(() => {
-    const gameId = window.location.hash.slice(1);
+    const gameId = highlightedGame?.id || window.location.hash.slice(1);
     if (!gameId) return;
-    window.requestAnimationFrame(() => document.getElementById(gameId)?.scrollIntoView({ behavior: "smooth", block: "center" }));
-  }, [selectedWeek]);
+    const timer = window.setTimeout(() => document.getElementById(gameId)?.scrollIntoView({ behavior: "smooth", block: "center" }), 80);
+    return () => window.clearTimeout(timer);
+  }, [selectedWeek, highlightedGame?.id]);
   const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
   const divisionById = new Map(schedule.setup.divisions.map((division) => [division.id, division]));
   const display = schedule.setup.display ?? { cityNames: true, managers: true, venues: true };
@@ -277,10 +322,15 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
     };
   };
   const gameOfWeekId = gotwEntry?.game.id;
-  const holidays = getNflWeekWindow(schedule.setup.seasonYear, week.weekNumber).holidays;
+  const nflWeekWindow = getNflWeekWindow(schedule.setup.seasonYear, week.weekNumber);
+  const holidays = nflWeekWindow.holidays;
+  const isThanksgivingWeek = holidays.includes("Thanksgiving");
+  const secondaryHolidays = holidays.filter((holiday) => holiday !== "Thanksgiving");
+  const openScoreCount = week.games.filter((game) => game.homeScore == null || game.awayScore == null).length;
+  const scoreEntryDue = openScoreCount > 0 && Date.now() >= new Date(nflWeekWindow.endsAt).getTime();
   const playingTeamIds = new Set(week.games.flatMap((game) => [game.homeTeamId, game.awayTeamId]));
   const byeTeams = schedule.setup.teams.filter((team) => !playingTeamIds.has(team.id));
-  const orderedGames = sortGamesForDisplay(week.games, gameOfWeekId);
+  const orderedGames = sortGamesForDisplay(week.games, displayedRanks);
   const visibleGames = ratingTier === "all" ? orderedGames : orderedGames.filter((game) => getMatchupSignal(game, displayedRanks, ratingRange).label.toLowerCase() === ratingTier);
   const ratingOptions = [
     { value: "all", label: "All matchups", description: "Show the complete week" },
@@ -288,6 +338,12 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
     { value: "neutral", label: "Neutral", description: "Middle third of this schedule" },
     { value: "lopsided", label: "Lopsided", description: "Widest ranking gaps" },
   ];
+  const gotwOverrideDetails = gotwEntry?.playoffImplication && gotwEntry.pureGame.id !== gotwEntry.game.id
+    ? {
+        featuredRanks: `#${gotwEntry.ranks.get(gotwEntry.game.awayTeamId) ?? "—"} vs #${gotwEntry.ranks.get(gotwEntry.game.homeTeamId) ?? "—"}`,
+        pureMatchup: `${teamDisplayName(teamById.get(gotwEntry.pureGame.awayTeamId)!, display.cityNames)} vs ${teamDisplayName(teamById.get(gotwEntry.pureGame.homeTeamId)!, display.cityNames)}`,
+      }
+    : undefined;
   const weekSelector = <div className="week-selector schedule-week-selector" aria-label="Select regular season or playoff week">
     {schedule.weeks.map((item) => <button type="button" className={item.weekNumber === selectedWeek ? "active" : ""} key={item.weekNumber} onClick={() => setSelectedWeek(item.weekNumber)}><span>W{item.weekNumber}</span><small>{item.dateLabel.split(",")[0]}</small><WeekMatchupRank rank={item.matchupRank} total={schedule.weeks.length} compact /></button>)}
     <span className="week-selector-divider" aria-hidden="true" />
@@ -322,16 +378,24 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
   return (
     <div className="workspace-stack">
       {weekSelector}
-      <div className="section-bar"><div><span className="bar-number">{String(week.weekNumber).padStart(2, "0")}</span><span><strong>Week {week.weekNumber}</strong><small>{week.dateLabel}</small></span></div><div className="section-bar-actions"><WeekMatchupRank rank={week.matchupRank} total={schedule.weeks.length} /><span className="week-markers">{holidays.map((holiday) => <em className="holiday-marker" key={holiday}>{holiday}</em>)}{byeTeams.length > 0 && <em className="bye-marker">{byeTeams.length} BYE</em>}</span><span className="rating-tier-filter"><CustomSelect label="Filter matchup rating" value={ratingTier} onChange={setRatingTier} options={ratingOptions} /></span><Tooltip label="More week actions"><button type="button" aria-label="More week actions"><MoreHorizontal /></button></Tooltip></div></div>
-      <div className="matchup-list matchup-card-list">{visibleGames.map((game) => {
-        const analytics = scheduleSignals.byGameId.get(game.id);
-        const featured = game.id === gameOfWeekId;
-        const simulationResult = simulationResults[game.id];
-        return <MatchupCard key={game.id} {...presentationFor(game, week.weekNumber)} featured={featured} featuredLabel={featured && gotwEntry ? gameOfWeekStatusLabel(gotwEntry.status) : undefined} badges={analytics?.badges} medalRank={analytics?.qualityRank} simulationSource={simulationResult?.source} simulationLocked={simulationResult?.locked} winProbability={simulationProbabilities[game.id]} teamHrefBase={`/season/${schedule.id}/team`} />;
-      })}{visibleGames.length === 0 && <div className="rating-filter-empty"><strong>No {ratingTier} matchups this week.</strong><button type="button" onClick={() => setRatingTier("all")}>Show all matchups</button></div>}</div>
+      <div className="schedule-week-panel">
+        <div className={`section-bar schedule-week-header${isThanksgivingWeek ? " is-thanksgiving" : ""}`}><div><span className="bar-number">{String(week.weekNumber).padStart(2, "0")}</span><span><span className="schedule-week-title"><strong>Week {week.weekNumber}</strong>{isThanksgivingWeek && <em className="thanksgiving-week-label">Thanksgiving Week</em>}</span><small>{week.dateLabel}</small></span></div><div className="section-bar-actions"><WeekMatchupRank rank={week.matchupRank} total={schedule.weeks.length} /><button type="button" className={`score-entry-trigger${scoreEntryDue ? " needs-attention" : ""}`} onClick={() => onOpenScores(week.weekNumber)}><LayoutList /><span>{openScoreCount === 0 ? "Edit scores" : scoreEntryDue ? `Enter scores · ${openScoreCount} open` : "Enter scores"}</span></button><span className="week-markers">{secondaryHolidays.map((holiday) => <em className="holiday-marker" key={holiday}>{holiday}</em>)}{byeTeams.length > 0 && <em className="bye-marker">{byeTeams.length} BYE</em>}</span><span className="rating-tier-filter"><CustomSelect label="Filter matchup rating" value={ratingTier} onChange={setRatingTier} options={ratingOptions} showSelectedDescription={false} /></span><Tooltip label="More week actions"><button type="button" className="section-bar-more" aria-label="More week actions"><MoreHorizontal /></button></Tooltip></div></div>
+        {gotwOverrideDetails && gotwEntry && visibleGames.some((game) => game.id === gameOfWeekId) && <section className="gotw-selection-reason" aria-label="Why this matchup is Game of the Week">
+          <span><Star fill="currentColor" /></span>
+          <div><small>LATE-SEASON PLAYOFF IMPACT</small><strong>Why this won the rating tie</strong><p>This {gotwOverrideDetails.featuredRanks} matchup shares the week&apos;s best {gotwEntry.rating.toFixed(1)} rating and crosses the {schedule.setup.playoffs.fieldSize}-team playoff cutline. Playoff impact moved it ahead of <span>{gotwOverrideDetails.pureMatchup}</span> after the rating tie. Lower ratings always remain first.</p></div>
+        </section>}
+        <div className="matchup-list matchup-card-list">{visibleGames.map((game) => {
+          const analytics = scheduleSignals.byGameId.get(game.id);
+          const featured = game.id === gameOfWeekId;
+          const simulationResult = simulationResults[game.id];
+          const isHighlighted = highlightedGame?.id === game.id;
+          const highlightedMedalLabel = isHighlighted && highlightedGame?.medalRank ? ["Gold", "Silver", "Bronze"][highlightedGame.medalRank - 1] : undefined;
+          return <MatchupCard key={game.id} {...presentationFor(game, week.weekNumber)} featured={featured} featuredLabel={featured && gotwEntry ? gameOfWeekStatusLabel(gotwEntry.status) : undefined} gameLabel={featured ? undefined : `Game ${game.gameNumber}`} badges={analytics?.badges} medalRank={isHighlighted ? highlightedGame?.medalRank : analytics?.qualityRank} medalLabel={highlightedMedalLabel ? `${highlightedMedalLabel} · ${highlightedGame?.medalCategory || "League leader"}` : undefined} highlighted={isHighlighted} simulationSource={simulationResult?.source} simulationLocked={simulationResult?.locked} winProbability={simulationProbabilities[game.id]} teamHrefBase={`/season/${schedule.id}/team`} />;
+        })}{visibleGames.length === 0 && <div className="rating-filter-empty"><strong>No {ratingTier} matchups this week.</strong><button type="button" onClick={() => setRatingTier("all")}>Show all matchups</button></div>}</div>
+      </div>
       <MatchupRatingLegend />
       {byeTeams.length > 0 && <div className="week-bye-list"><strong>Bye</strong>{byeTeams.map((team) => <span key={team.id}><EntityLogo size={32} color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} />{teamDisplayName(team, display.cityNames)}</span>)}</div>}
-    </div>
+      </div>
   );
 }
 
@@ -339,6 +403,7 @@ function MatchupRatingsView({ schedule }: { schedule: GeneratedSchedule }) {
   const [lens, setLens] = useState("live");
   const [tier, setTier] = useState("all");
   const [sort, setSort] = useState("best");
+  const scheduleSignals = getScheduleGameSignals(schedule);
   const allGames = schedule.weeks.flatMap((week) => week.games);
   const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
   const divisionById = new Map(schedule.setup.divisions.map((division) => [division.id, division]));
@@ -385,17 +450,22 @@ function MatchupRatingsView({ schedule }: { schedule: GeneratedSchedule }) {
     <MatchupRatingLegend />
     <div className="matchup-ratings-table-wrap">
       <table className="matchup-ratings-table">
-        <thead><tr><th>Wk</th><th>Game</th><th>Away</th><th>Home</th><th>Matchup</th><th>Rating</th></tr></thead>
+        <thead><tr><th>Wk</th><th>Game</th><th>Away</th><th>Result</th><th>Home</th><th>Matchup</th><th>Rating</th></tr></thead>
         <tbody>{visibleGames.map((game) => {
           const away = teamById.get(game.awayTeamId)!;
           const home = teamById.get(game.homeTeamId)!;
           const rowRanks = ranksForGame(game);
           const signal = getMatchupSignal(game, lens === "live" ? rowRanks : undefined, ratingRange);
-          return <tr key={game.id}>
+          const played = game.awayScore != null && game.homeScore != null;
+          const awayWon = played && game.awayScore! > game.homeScore!;
+          const homeWon = played && game.homeScore! > game.awayScore!;
+          const isGameOfWeek = scheduleSignals.gotwIds.has(game.id);
+          return <tr className={isGameOfWeek ? "is-gotw" : undefined} key={game.id}>
             <td><Link href={`/season/${schedule.id}?week=${game.week}#${game.id}`}>W{game.week}</Link></td>
-            <td>#{game.gameNumber ?? "—"}</td>
+            <td>{isGameOfWeek ? <GameBadgeChip badge="GOTW" /> : <span className="matchup-table-game-label">Game {game.gameNumber ?? "—"}</span>}</td>
             <td><TeamIdentityBlock compact showRecord={false} team={away} division={divisionById.get(away.divisionId)} leagueRank={rowRanks.get(away.id) ?? away.overallRank} record={{ overall: "0-0" }} showCity={schedule.setup.display.cityNames} href={`/season/${schedule.id}/team/${away.id}`} /></td>
-            <td><TeamIdentityBlock compact showRecord={false} team={home} division={divisionById.get(home.divisionId)} leagueRank={rowRanks.get(home.id) ?? home.overallRank} record={{ overall: "0-0" }} showCity={schedule.setup.display.cityNames} href={`/season/${schedule.id}/team/${home.id}`} /></td>
+            <td>{played ? <span className="matchup-table-result" aria-label={`Final score: ${away.name} ${game.awayScore}, ${home.name} ${game.homeScore}`}><span><strong className={awayWon ? "winner" : homeWon ? "loser" : ""}>{game.awayScore}</strong><b aria-label="at">@</b><strong className={homeWon ? "winner" : awayWon ? "loser" : ""}>{game.homeScore}</strong></span><small>FINAL</small></span> : <span className="matchup-table-result pending">—<small>NOT PLAYED</small></span>}</td>
+            <td><TeamIdentityBlock mirrored compact showRecord={false} team={home} division={divisionById.get(home.divisionId)} leagueRank={rowRanks.get(home.id) ?? home.overallRank} record={{ overall: "0-0" }} showCity={schedule.setup.display.cityNames} href={`/season/${schedule.id}/team/${home.id}`} /></td>
             <td><MatchupSeriesChip game={game} division={divisionById.get(home.divisionId)} /></td>
             <td><span className="table-rating-cell"><span className={`table-signal signal-${signal.label.toLowerCase()}`} aria-label={`${signal.label} matchup, rating ${signal.rating.toFixed(1)}`}>{[1, 2, 3].map((bar) => <i className={bar <= signal.bars ? "active" : ""} key={bar} />)}<strong>{signal.rating.toFixed(1)}</strong></span><small className="table-rating-ranks">W{game.week} ranks · #{rowRanks.get(away.id) ?? away.overallRank} vs #{rowRanks.get(home.id) ?? home.overallRank}</small></span></td>
           </tr>;
@@ -447,11 +517,174 @@ function ScoresView({ schedule, selectedWeek, setSelectedWeek, onScore, onFinali
   </div>;
 }
 
-function StandingsView({ schedule }: { schedule: GeneratedSchedule }) {
-  return <StatsWorkspace schedule={schedule} />;
+function ScoreImageImport({ schedule, selectedWeek, onApply }: { schedule: GeneratedSchedule; selectedWeek: number; onApply: (rows: ImportedScoreRow[]) => void }) {
+  const [loading, setLoading] = useState(false);
+  const [fileName, setFileName] = useState("");
+  const [rows, setRows] = useState<ImportedScoreRow[] | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const week = schedule.weeks.find((item) => item.weekNumber === selectedWeek) ?? schedule.weeks[0];
+  const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
+  useEffect(() => {
+    setRows(null);
+    setWarnings([]);
+    setError(null);
+    setFileName("");
+  }, [selectedWeek]);
+  const normalizeName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const findTeam = (city: string | undefined, name: string) => {
+    const extracted = [normalizeName(`${city ?? ""}${name}`), normalizeName(name)].filter(Boolean);
+    return schedule.setup.teams.find((team) => {
+      const aliases = [normalizeName(`${team.city}${team.name}`), normalizeName(team.name)].filter(Boolean);
+      return extracted.some((candidate) => aliases.some((alias) => candidate === alias || (alias.length >= 4 && candidate.endsWith(alias))));
+    });
+  };
+  const readImage = (file: File) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("That image could not be read."));
+    reader.onerror = () => reject(new Error("That image could not be read."));
+    reader.readAsDataURL(file);
+  });
+  const importImage = async (file?: File) => {
+    if (!file) return;
+    if (file.size > 8_000_000) return setError("Choose a PNG, JPG, or WebP image under 8 MB.");
+    setLoading(true);
+    setError(null);
+    setRows(null);
+    setFileName(file.name);
+    try {
+      const imageDataUrl = await readImage(file);
+      const response = await fetch("/api/import/screenshot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "scores",
+          imageDataUrl,
+          seasonYear: schedule.setup.seasonYear,
+          week: selectedWeek,
+          teamNames: schedule.setup.teams.map((team) => teamDisplayName(team, true)),
+        }),
+      });
+      const preview = await response.json() as ImportPreview & { error?: string };
+      if (!response.ok) throw new Error(preview.error || "That score image could not be read.");
+      const scoreByTeamId = new Map<string, number>();
+      preview.teams.forEach((importedTeam) => {
+        const matchedTeam = findTeam(importedTeam.city, importedTeam.name);
+        const score = importedTeam.scores?.find((item) => item.week === selectedWeek)?.value;
+        if (matchedTeam && score != null) scoreByTeamId.set(matchedTeam.id, score);
+      });
+      const nextRows = week.games.map((game) => {
+        const away = teamById.get(game.awayTeamId)!;
+        const home = teamById.get(game.homeTeamId)!;
+        return {
+          gameId: game.id,
+          awayTeamId: away.id,
+          homeTeamId: home.id,
+          awayName: teamDisplayName(away, true),
+          homeName: teamDisplayName(home, true),
+          awayScore: scoreByTeamId.get(away.id),
+          homeScore: scoreByTeamId.get(home.id),
+        };
+      });
+      const unmatchedCount = preview.teams.filter((team) => !findTeam(team.city, team.name)).length;
+      setRows(nextRows);
+      setWarnings([...preview.warnings, ...(unmatchedCount ? [`${unmatchedCount} extracted team ${unmatchedCount === 1 ? "name did" : "names did"} not match this league.`] : [])]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "That score image could not be read.");
+    } finally {
+      setLoading(false);
+    }
+  };
+  const updateScore = (gameId: string, side: "awayScore" | "homeScore", value: string) => {
+    const parsed = value === "" ? undefined : Math.round(Math.max(0, Number(value)) * 100) / 100;
+    setRows((current) => current?.map((row) => row.gameId === gameId ? { ...row, [side]: Number.isFinite(parsed) ? parsed : undefined } : row) ?? null);
+  };
+  const completeRows = rows?.filter((row) => row.awayScore != null && row.homeScore != null) ?? [];
+  return <section className={`score-image-import${rows ? " reviewing" : ""}`} aria-label="Import scores from an image">
+    {!rows && <div className="score-image-import-start"><span className="score-image-import-mark"><ImagePlus /></span><span><strong>Import a score image</strong><small>Upload a clear scoreboard screenshot. AI will suggest scores for Week {selectedWeek}, then you review them.</small></span><label className="button-secondary"><ImagePlus />{loading ? "Reading image…" : "Choose image"}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={loading} onChange={(event) => void importImage(event.target.files?.[0])} /></label></div>}
+    {loading && <div className="score-image-loading" role="status"><RefreshCw className="spin" /><span><strong>Reading {fileName}</strong><small>Matching team names and Week {selectedWeek} scores…</small></span></div>}
+    {error && <div className="score-image-error" role="alert"><span>{error}</span><button type="button" onClick={() => setError(null)}>Dismiss</button></div>}
+    {rows && <>
+      <header><span><strong>Review AI score suggestions</strong><small>{fileName} · Week {selectedWeek} · Check every matchup before applying.</small></span><button type="button" onClick={() => { setRows(null); setWarnings([]); setFileName(""); }}><ImagePlus />Choose another</button></header>
+      <div className="score-image-review-list">{rows.map((row) => {
+        const away = teamById.get(row.awayTeamId)!;
+        const home = teamById.get(row.homeTeamId)!;
+        const complete = row.awayScore != null && row.homeScore != null;
+        return <div className={`score-image-review-row${complete ? " complete" : " incomplete"}`} key={row.gameId}>
+          <span className="score-image-team away"><TeamMark team={away} size="small" /><strong>{row.awayName}</strong></span>
+          <input type="number" inputMode="decimal" min="0" step="0.01" aria-label={`${row.awayName} imported score`} value={row.awayScore ?? ""} onChange={(event) => updateScore(row.gameId, "awayScore", event.target.value)} />
+          <b aria-label="at">@</b>
+          <input type="number" inputMode="decimal" min="0" step="0.01" aria-label={`${row.homeName} imported score`} value={row.homeScore ?? ""} onChange={(event) => updateScore(row.gameId, "homeScore", event.target.value)} />
+          <span className="score-image-team home"><strong>{row.homeName}</strong><TeamMark team={home} size="small" /></span>
+          <em>{complete ? "Ready" : "Check scores"}</em>
+        </div>;
+      })}</div>
+      {warnings.length > 0 && <div className="score-image-warnings">{warnings.slice(0, 4).map((warning) => <span key={warning}>{warning}</span>)}</div>}
+      <footer><span><strong>{completeRows.length} of {rows.length} matchups ready</strong><small>Incomplete rows will not be changed.</small></span><button type="button" className="button-primary" disabled={completeRows.length === 0} onClick={() => { onApply(completeRows); setRows(null); setWarnings([]); setFileName(""); }}><Check />Apply reviewed scores</button></footer>
+    </>}
+  </section>;
 }
 
-function PlayoffsView({ schedule, onUpdatePlayoffs, simulationMode = false }: { schedule: GeneratedSchedule; onUpdatePlayoffs: (patch: Partial<LeagueSetupInput["playoffs"]>) => void; simulationMode?: boolean }) {
+function StandingsView({ schedule, onUpdateTiebreakers, readOnly = false }: { schedule: GeneratedSchedule; onUpdateTiebreakers?: (settings: TiebreakerSettings) => void; readOnly?: boolean }) {
+  return <StatsWorkspace schedule={schedule} onUpdateTiebreakers={onUpdateTiebreakers} readOnly={readOnly} />;
+}
+
+function InlinePlayoffScoreEditor({
+  awayName,
+  homeName,
+  awayScore,
+  homeScore,
+  onSave,
+  onClear,
+}: {
+  awayName: string;
+  homeName: string;
+  awayScore?: number;
+  homeScore?: number;
+  onSave: (away: number, home: number) => void;
+  onClear: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [awayDraft, setAwayDraft] = useState(awayScore?.toString() ?? "");
+  const [homeDraft, setHomeDraft] = useState(homeScore?.toString() ?? "");
+  const away = Number(awayDraft);
+  const home = Number(homeDraft);
+  const valid = awayDraft !== "" && homeDraft !== "" && Number.isFinite(away) && Number.isFinite(home) && away >= 0 && home >= 0 && away !== home;
+
+  useEffect(() => {
+    setAwayDraft(awayScore?.toString() ?? "");
+    setHomeDraft(homeScore?.toString() ?? "");
+  }, [awayScore, homeScore]);
+
+  return <div className={`inline-playoff-score${open ? " is-open" : ""}`}>
+    <button type="button" className="inline-playoff-score-trigger" aria-expanded={open} onClick={() => setOpen((current) => !current)}><Pencil />{awayScore != null && homeScore != null ? "Edit score" : "Enter score"}</button>
+    {open && <div className="inline-playoff-score-form">
+      <label><span>{awayName}</span><input aria-label={`${awayName} score`} type="number" min="0" step="0.01" inputMode="decimal" value={awayDraft} onChange={(event) => setAwayDraft(event.target.value)} /></label>
+      <b aria-hidden="true">@</b>
+      <label><span>{homeName}</span><input aria-label={`${homeName} score`} type="number" min="0" step="0.01" inputMode="decimal" value={homeDraft} onChange={(event) => setHomeDraft(event.target.value)} /></label>
+      <span className="inline-playoff-score-actions">
+        {(awayScore != null || homeScore != null) && <button type="button" onClick={() => { onClear(); setOpen(false); }}>Clear</button>}
+        <button type="button" className="button-primary" disabled={!valid} onClick={() => { onSave(Math.round(away * 100) / 100, Math.round(home * 100) / 100); setOpen(false); }}><Check />Save</button>
+      </span>
+      {awayDraft !== "" && homeDraft !== "" && away === home && <small>Playoff games need a winner. Enter a non-tied score.</small>}
+    </div>}
+  </div>;
+}
+
+function PlayoffsView({
+  schedule,
+  onUpdatePlayoffs,
+  onUpdatePlayoffGame,
+  highlightedGame,
+  simulationMode = false,
+}: {
+  schedule: GeneratedSchedule;
+  onUpdatePlayoffs: (patch: Partial<LeagueSetupInput["playoffs"]>) => void;
+  onUpdatePlayoffGame: (game: PlayoffGame) => void;
+  highlightedGame?: HighlightedGame;
+  simulationMode?: boolean;
+}) {
+  const [roundBrandingOpen, setRoundBrandingOpen] = useState(false);
   const settings = normalizePlayoffSettings(schedule.setup.playoffs, schedule.setup.teams.length, schedule.setup.color, schedule.setup.weeks);
   const normalizedSchedule = settings === schedule.setup.playoffs ? schedule : { ...schedule, setup: { ...schedule.setup, playoffs: settings } };
   const fieldSize = settings.fieldSize;
@@ -462,6 +695,12 @@ function PlayoffsView({ schedule, onUpdatePlayoffs, simulationMode = false }: { 
   const seed = (number: number) => seeds.find((item) => item.seed === number);
   const showCity = schedule.setup.display?.cityNames !== false;
   const rounds = getPlayoffRoundNames(settings, schedule.setup.divisions.length);
+  useEffect(() => {
+    if (!highlightedGame?.id) return;
+    const timer = window.setTimeout(() => document.getElementById(highlightedGame.id)?.scrollIntoView({ behavior: "smooth", block: "center" }), 80);
+    return () => window.clearTimeout(timer);
+  }, [highlightedGame?.id]);
+  const mainGameBrandingSlots = getPlayoffGameBrandingSlots(settings, schedule.setup.divisions.length);
   const placement = resolvePlayoffPlacementMode({ divisions: schedule.setup.divisions, playoffs: settings });
   const byeCount = getPlayoffByeCount(fieldSize);
   const roundDate = (index: number) => getWeekDateLabel(schedule.setup.seasonYear, schedule.setup.weeks + index + 1).replace(`, ${schedule.setup.seasonYear}`, "");
@@ -474,38 +713,100 @@ function PlayoffsView({ schedule, onUpdatePlayoffs, simulationMode = false }: { 
     const standing = item ? playoffStandingsByTeam.get(item.teamId) : undefined;
     return <div className={`bracket-slot ${host ? "host" : ""}`}>{team && item ? <><TeamIdentityBlock compact team={team} division={divisionById.get(team.divisionId)} leagueRank={displayedSeed(item)} record={{ overall: item.record, division: standing ? `${standing.divisionWins}-${standing.divisionLosses}` : undefined }} showCity={showCity} href={`/season/${schedule.id}/team/${team.id}`} /><span className="playoff-slot-meta">{item.divisionLeader && <small>DIV WINNER</small>}{item.bye && <small>BYE</small>}{host && <em><MapPin />{hostCopy(team)}</em>}</span></> : <><b>{number}</b><span><strong>To be determined</strong><small>Projected seed</small></span></>}</div>;
   };
-  const Placeholder = ({ label, after }: { label: string; after: string }) => <div className="bracket-slot placeholder"><span><strong>{label}</strong><small>{after}</small></span></div>;
-  const RoundHeading = ({ index }: { index: number }) => <h3><span>{rounds[index] || `Round ${index + 1}`}</span><small>NFL Week {schedule.setup.weeks + index + 1} · {roundDate(index)}</small></h3>;
-  const sideLabel = (numbers: number[]) => {
-    const side = numbers.map((number) => seed(number)?.bracketSide).find(Boolean);
-    if (!side) return null;
-    const divisionNames = [...new Set(seeds.filter((item) => item.bracketSide === side).map((item) => divisionById.get(item.divisionId)?.name).filter(Boolean))];
-    return divisionNames.join(" + ");
-  };
+  const RoundHeading = ({ index }: { index: number }) => <h3 className="playoff-round-heading">{settings.roundLogoUrls?.[index] && <img src={settings.roundLogoUrls[index]} alt="" />}<span className="playoff-round-heading-copy"><span>{rounds[index] || `Round ${index + 1}`}</span><small>NFL Week {schedule.setup.weeks + index + 1} · {roundDate(index)}</small></span></h3>;
   const sideName = (side: "A" | "B") => {
     const divisionNames = [...new Set(seeds.filter((item) => item.bracketSide === side).map((item) => divisionById.get(item.divisionId)?.name).filter(Boolean))];
     return divisionNames.length ? divisionNames.join(" + ") : `Half ${side}`;
   };
-  const seedOneSide = seed(1)?.bracketSide || "A";
-  const seedTwoSide = seed(2)?.bracketSide || "B";
+  const mainGameBrandingLabel = (slot: typeof mainGameBrandingSlots[number]) => {
+    const sameRound = mainGameBrandingSlots.filter((item) => item.roundIndex === slot.roundIndex);
+    if (placement === "division-halves" && schedule.setup.divisions.length === 2 && sameRound.length === 2 && slot.roundIndex < rounds.length - 1) {
+      return `${schedule.setup.divisions[slot.gameIndex]?.name ?? `Half ${slot.gameIndex + 1}`} ${slot.roundName}`;
+    }
+    return sameRound.length === 1 ? slot.roundName : `${slot.roundName} · Game ${slot.gameIndex + 1}`;
+  };
+  const gameDisplayName = (gameId: string, fallback: string) => settings.gameNames?.[gameId]?.trim() || fallback;
   const halfChampionCopy = placement === "division-halves" ? `${sideName("A")} champion vs. ${sideName("B")} champion` : null;
   const championshipCopy = halfChampionCopy ? `${halfChampionCopy} · ${championshipVenueCopy}` : championshipVenueCopy;
-  const fixedSemifinalCopy = placement === "division-halves" && settings.reseedMode !== "fixed"
-    ? [`Lowest remaining in ${sideName(seedOneSide)}`, `Lowest remaining in ${sideName(seedTwoSide)}`]
-    : placement === "division-halves"
-      ? [`Winner of the ${sideName(seedOneSide)} opening game`, `Winner of the ${sideName(seedTwoSide)} opening game`]
-    : settings.reseedMode === "each-round"
-    ? ["Lowest remaining seed", "Highest remaining seed"]
-    : settings.reseedMode === "protected"
-      ? ["Lowest eligible seed", "Highest eligible seed"]
-      : ["Winner of 4 vs 5", "Winner of 3 vs 6"];
   const lockField = () => onUpdatePlayoffs(settings.fieldStatus === "locked"
     ? { fieldStatus: "live", lockedTeamIds: [] }
     : { fieldStatus: "locked", lockedTeamIds: seeds.map((item) => item.teamId) });
   const formatLabel = settings.bracketType.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-  const firstRoundPairs = getFirstRoundSeedPairs(fieldSize);
+  const consolationOptions = [
+    { value: "standard", label: "Standard placement", description: "Overall seeds follow a separate ESPN-style placement bracket" },
+    ...(isDivisionHalvesConsolationUsable(schedule.setup, fieldSize) ? [{ value: "division-halves", label: "Division-halves placement", description: "Teams open inside their division, then cross for final places" }] : []),
+    { value: "off", label: "No consolation bracket", description: "Show only the championship bracket" },
+  ];
+  const updateRoundLogo = (roundIndex: number, logoUrl?: string) => {
+    const roundLogoUrls = [...(settings.roundLogoUrls ?? Array(rounds.length).fill(""))];
+    roundLogoUrls[roundIndex] = logoUrl || "";
+    onUpdatePlayoffs({ roundLogoUrls });
+  };
+  const updateRoundName = (roundIndex: number, name: string) => {
+    const roundNames = [...(settings.roundNames ?? rounds)];
+    roundNames[roundIndex] = name.slice(0, 40);
+    onUpdatePlayoffs({ roundNames });
+  };
+  const updateGameName = (gameId: string, name: string) => {
+    const gameNames = { ...(settings.gameNames ?? {}) };
+    if (name.trim()) gameNames[gameId] = name.slice(0, 60);
+    else delete gameNames[gameId];
+    onUpdatePlayoffs({ gameNames });
+  };
+  const updateGameLogo = (gameId: string, logoUrl?: string) => {
+    const gameLogoUrls = { ...(settings.gameLogoUrls ?? {}) };
+    if (logoUrl) gameLogoUrls[gameId] = logoUrl;
+    else delete gameLogoUrls[gameId];
+    onUpdatePlayoffs({ gameLogoUrls });
+  };
+  const consolationGameBrandingSlots = projectConsolationBracket(normalizedSchedule)?.rounds.flatMap((round) =>
+    round.games.map((game) => ({ ...game, roundName: round.name }))) ?? [];
+  const projectedMainRounds = projectPlayoffRounds(normalizedSchedule);
+  const consolationProjection = projectConsolationBracket(normalizedSchedule);
+  const mainConnections: BracketConnection[] = projectedMainRounds.slice(0, -1).flatMap((round) => {
+    const nextRound = projectedMainRounds[round.roundIndex + 1];
+    if (!nextRound) return [];
+    return round.matchups.map((matchup, gameIndex) => {
+      const projectedWinner = Math.min(matchup.homeSeed, matchup.awaySeed);
+      const targetIndex = Math.max(0, nextRound.matchups.findIndex((next) => next.homeSeed === projectedWinner || next.awaySeed === projectedWinner));
+      return {
+        id: `main-winner-r${round.roundIndex + 1}-g${gameIndex + 1}`,
+        sourceGameId: `main-r${round.roundIndex + 1}-g${gameIndex + 1}`,
+        targetGameId: `main-r${round.roundIndex + 2}-g${targetIndex + 1}`,
+        outcome: "winner" as const,
+        pending: settings.reseedMode !== "fixed",
+        label: settings.reseedMode === "fixed" ? "Winner advances" : "Projected reseed path",
+      };
+    });
+  });
+  const consolationConnections: BracketConnection[] = consolationProjection?.rounds.flatMap((round) => round.games.flatMap((game) =>
+    game.entrants.filter((entrant) => entrant.kind === "result").map((entrant) => ({
+      id: `${entrant.gameId}-${entrant.outcome}-${game.id}`,
+      sourceGameId: entrant.gameId,
+      targetGameId: game.id,
+      outcome: entrant.outcome,
+      label: entrant.label,
+    })))) ?? [];
+  const transferRoutes = consolationConnections.filter((connection) => connection.sourceGameId.startsWith("main-"));
+  const connectedTransferRoutes: BracketConnection[] = transferRoutes.flatMap((connection, index) => {
+    const transferId = `placement-transfer-${index + 1}`;
+    return [
+      { ...connection, id: `${connection.id}-exit`, targetGameId: transferId },
+      { ...connection, id: `${connection.id}-entry`, sourceGameId: transferId },
+    ];
+  });
+  const bracketConnections = [
+    ...mainConnections,
+    ...connectedTransferRoutes,
+    ...consolationConnections.filter((connection) => !connection.sourceGameId.startsWith("main-")),
+  ];
+  const PlayoffGameBrand = ({ roundIndex, gameIndex }: { roundIndex: number; gameIndex: number }) => {
+    const gameId = `main-r${roundIndex + 1}-g${gameIndex + 1}`;
+    const logoUrl = settings.gameLogoUrls?.[gameId] || settings.roundLogoUrls?.[roundIndex] || settings.logoUrl;
+    if (!logoUrl) return null;
+    return <span className="bracket-game-brand" title={`${rounds[roundIndex] ?? `Round ${roundIndex + 1}`} game ${gameIndex + 1} logo`}><EntityLogo color={settings.color} logoUrl={logoUrl} monogram={`G${gameIndex + 1}`} size={34} imagePresentation="bare" /></span>;
+  };
   const simulatedMainGames = (schedule.playoffGames ?? []).filter((game) => game.bracket === "main");
-  const simulatedRounds = [...new Set(simulatedMainGames.map((game) => game.roundIndex))].sort((left, right) => left - right);
   const seedByTeam = new Map(seeds.map((item) => [item.teamId, item.seed]));
   const titleGame = [...simulatedMainGames].sort((left, right) => right.roundIndex - left.roundIndex)[0];
   const championId = titleGame && titleGame.homeScore != null && titleGame.awayScore != null
@@ -522,40 +823,174 @@ function PlayoffsView({ schedule, onUpdatePlayoffs, simulationMode = false }: { 
       <em>{score ?? "—"}</em>
     </span>;
   };
+  const playoffGameById = new Map(simulatedMainGames.map((game) => [game.id, game]));
+  const orderedRoundMatchups = (round: typeof projectedMainRounds[number]) => round.matchups
+    .map((matchup, gameIndex) => ({ matchup, gameIndex }))
+    .sort((left, right) => {
+      if (placement !== "division-halves" || round.roundIndex === projectedMainRounds.length - 1) return left.gameIndex - right.gameIndex;
+      const leftDivision = seed(left.matchup.homeSeed)?.divisionId;
+      const rightDivision = seed(right.matchup.homeSeed)?.divisionId;
+      return schedule.setup.divisions.findIndex((division) => division.id === leftDivision)
+        - schedule.setup.divisions.findIndex((division) => division.id === rightDivision);
+    });
+  const MainPlayoffGame = ({ roundIndex, gameIndex, homeSeed, awaySeed, bracketSide }: { roundIndex: number; gameIndex: number; homeSeed: number; awaySeed: number; bracketSide?: "A" | "B" }) => {
+    const gameId = `main-r${roundIndex + 1}-g${gameIndex + 1}`;
+    const recorded = playoffGameById.get(gameId);
+    const homeSeedEntry = seed(homeSeed);
+    const awaySeedEntry = seed(awaySeed);
+    const homeTeamId = recorded?.homeTeamId ?? homeSeedEntry?.teamId;
+    const awayTeamId = recorded?.awayTeamId ?? awaySeedEntry?.teamId;
+    const homeTeam = homeTeamId ? teamById.get(homeTeamId) : undefined;
+    const awayTeam = awayTeamId ? teamById.get(awayTeamId) : undefined;
+    const played = recorded?.homeScore != null && recorded.awayScore != null;
+    const homeWon = Boolean(played && recorded!.homeScore! > recorded!.awayScore!);
+    const awayWon = Boolean(played && recorded!.awayScore! > recorded!.homeScore!);
+    const route = transferRoutes.find((connection) => connection.sourceGameId === gameId);
+    const side = bracketSide || seed(homeSeed)?.bracketSide;
+    const sideCopy = placement === "division-halves" && side && roundIndex < projectedMainRounds.length - 1 ? `${sideName(side)} tournament` : undefined;
+    const defaultName = projectedMainRounds[roundIndex]?.matchups.length > 1
+      ? `${rounds[roundIndex] || `Round ${roundIndex + 1}`} · Game ${gameIndex + 1}`
+      : rounds[roundIndex] || `Round ${roundIndex + 1}`;
+    const gameName = gameDisplayName(gameId, defaultName);
+    const saveScore = (awayScore: number | undefined, homeScore: number | undefined) => {
+      if (!homeTeamId || !awayTeamId) return;
+      onUpdatePlayoffGame({
+        ...(recorded ?? {}),
+        id: gameId,
+        week: schedule.setup.weeks + roundIndex + 1,
+        gameNumber: gameIndex + 1,
+        homeTeamId,
+        awayTeamId,
+        matchupType: homeTeam?.divisionId === awayTeam?.divisionId ? "division" : "cross-division",
+        seriesGame: 1,
+        seriesLength: 1,
+        dateLabel: getWeekDateLabel(schedule.setup.seasonYear, schedule.setup.weeks + roundIndex + 1),
+        stadium: homeTeam?.stadium || "Venue to be determined",
+        homeScore,
+        awayScore,
+        round: rounds[roundIndex] || `Round ${roundIndex + 1}`,
+        roundIndex,
+        name: settings.gameNames?.[gameId],
+        logoUrl: settings.gameLogoUrls?.[gameId],
+        roundLogoUrl: settings.roundLogoUrls?.[roundIndex],
+        bracket: "main",
+      });
+    };
+    return <article className={`main-playoff-game ${played ? "is-final" : "is-projected"}`} data-bracket-game-id={gameId}>
+      <header><PlayoffGameBrand roundIndex={roundIndex} gameIndex={gameIndex} /><span><strong>{gameName}</strong><small>{sideCopy || (played ? "Final result" : settings.reseedMode === "fixed" ? "Fixed bracket path" : "Projected path")}</small></span><em>{played ? "FINAL" : "PROJECTED"}</em></header>
+      <div className="main-playoff-game-teams">{recorded ? <><SimulatedPlayoffTeam teamId={recorded.awayTeamId} score={recorded.awayScore} winner={awayWon} /><SimulatedPlayoffTeam teamId={recorded.homeTeamId} score={recorded.homeScore} winner={homeWon} /></> : <><Slot number={homeSeed} host /><Slot number={awaySeed} /></>}</div>
+      {!simulationMode && homeTeam && awayTeam && <InlinePlayoffScoreEditor awayName={teamDisplayName(awayTeam, showCity)} homeName={teamDisplayName(homeTeam, showCity)} awayScore={recorded?.awayScore} homeScore={recorded?.homeScore} onSave={(awayScore, homeScore) => saveScore(awayScore, homeScore)} onClear={() => saveScore(undefined, undefined)} />}
+      <footer><span className="advance-route"><b>W</b>Advances toward championship</span>{route && <span className="placement-route"><b>L</b>Moves to placement</span>}</footer>
+    </article>;
+  };
+  const EliminationTransferRail = () => {
+    if (!transferRoutes.length) return null;
+    const consolationById = new Map(consolationGameBrandingSlots.map((game) => [game.id, game]));
+    return <section className="elimination-transfer-rail" aria-labelledby="placement-transfer-title">
+      <header><span><ArrowDownRight /><strong id="placement-transfer-title">Moves to placement</strong></span><small>Championship losses continue below without re-entering title contention.</small></header>
+      <div>{transferRoutes.map((route, index) => {
+        const destination = consolationById.get(route.targetGameId);
+        return <div key={route.id} data-bracket-game-id={`placement-transfer-${index + 1}`}><b>L</b><span><strong>{route.label}</strong><small>{destination ? `Continues in ${destination.label}` : "Destination updates after the result"}</small></span><ArrowDownRight /></div>;
+      })}</div>
+    </section>;
+  };
   return <div className="workspace-stack playoff-workspace" style={{ "--playoff-color": settings.color } as React.CSSProperties}>
-    <div className={`playoff-topline playoff-theme-${settings.theme}`}><div><EntityLogo color={settings.color} logoUrl={settings.logoUrl} monogram="PO" /><span><strong>{settings.name}</strong><small>{fieldSize} teams · {formatLabel} · Higher seed hosts before title · {championshipVenueCopy}</small></span></div><div className="playoff-field-actions">{simulationMode ? <span className="projected-pill simulation"><Gamepad2 />SIMULATED BRACKET</span> : <><span className={`projected-pill ${settings.fieldStatus === "locked" ? "locked" : ""}`}>{settings.fieldStatus === "locked" ? "FIELD LOCKED" : "LIVE PROJECTION"}</span><button type="button" onClick={lockField}><LockKeyhole />{settings.fieldStatus === "locked" ? "Unlock field" : "Lock field"}</button></>}</div></div>
+    <div className={`playoff-topline playoff-theme-${settings.theme}`}><div>{settings.logoUrl && <EntityLogo color={settings.color} logoUrl={settings.logoUrl} monogram="PO" imagePresentation="bare" />}<span><strong>{settings.name}</strong><small>{fieldSize} teams · {formatLabel} · Higher seed hosts before title · {championshipVenueCopy}</small></span></div><div className="playoff-field-actions">{simulationMode ? <span className="projected-pill simulation"><Gamepad2 />SIMULATED BRACKET</span> : <><span className={`projected-pill ${settings.fieldStatus === "locked" ? "locked" : ""}`}>{settings.fieldStatus === "locked" ? "FIELD LOCKED" : "LIVE PROJECTION"}</span><button type="button" onClick={lockField}><LockKeyhole />{settings.fieldStatus === "locked" ? "Unlock field" : "Lock field"}</button></>}</div></div>
     <div className="playoff-policy"><span><strong>{playoffPlacementLabel(placement)}</strong><small>{placement === "division-halves" ? `${sideName("A")} and ${sideName("B")} run separate tournaments; their champions meet in the final` : placement === "division-leaders" ? "Division winners protected at the top" : "Top teams qualify regardless of division"}</small></span><span><strong>{byeCount || "No"} {byeCount === 1 ? "bye" : "byes"}</strong><small>{byeCount ? "Awarded to the top seeds" : "Every qualifier opens play"}</small></span><span><strong>{settings.reseedMode === "fixed" ? "Fixed bracket" : settings.reseedMode === "protected" ? "Protected reseed" : "Reseed each round"}</strong><small>{placement === "division-halves" && settings.reseedMode !== "fixed" ? "Reseeding stays inside each half until the final" : settings.seedDisplayMode === "reranked" ? "Showing bracket seeds" : "Showing standings finish"}</small></span></div>
-    {simulatedMainGames.length ? <div className="simulated-playoff-surface">
-      <header><Trophy /><span><small>SIMULATED PLAYOFF RESULT</small><strong>{champion ? `${teamDisplayName(champion, showCity)} are champions` : "Playoffs in progress"}</strong><em>{champion ? `Seed #${seedByTeam.get(champion.id) ?? champion.overallRank}` : `${simulatedMainGames.filter((game) => game.homeScore != null && game.awayScore != null).length} games complete`}</em></span>{champion && <EntityLogo color={champion.color} logoUrl={champion.logoUrl} monogram={teamInitials(champion)} size={54} />}</header>
-      <div className="simulated-bracket-rounds">{simulatedRounds.map((roundIndex) => <section key={roundIndex}><h3><span>{simulatedMainGames.find((game) => game.roundIndex === roundIndex)?.round || rounds[roundIndex] || `Round ${roundIndex + 1}`}</span><small>NFL Week {schedule.setup.weeks + roundIndex + 1}</small></h3>{simulatedMainGames.filter((game) => game.roundIndex === roundIndex).map((game) => {
-        const played = game.homeScore != null && game.awayScore != null;
-        const homeWon = played && game.homeScore! > game.awayScore!;
-        const awayWon = played && game.awayScore! > game.homeScore!;
-        return <article className="sim-bracket-match" key={game.id}><SimulatedPlayoffTeam teamId={game.awayTeamId} score={game.awayScore} winner={awayWon} /><span className="sim-bracket-separator"><EntityLogo color={settings.color} logoUrl={game.roundLogoUrl || settings.logoUrl} monogram="PO" size={32} /></span><SimulatedPlayoffTeam teamId={game.homeTeamId} score={game.homeScore} winner={homeWon} /></article>;
-      })}</section>)}</div>
-    </div> : settings.bracketType === "single-elimination" ? <div className={`bracket-board field-${fieldSize} rounds-${rounds.length}`}>
-      {fieldSize === 2 && <><section><RoundHeading index={0} /><div className="bracket-match"><Slot number={1} host={settings.championshipVenueMode === "higher-seed"} /><Slot number={2} /></div></section><section><h3><span>Champion</span><small>Winner of the championship</small></h3><div className={`championship-cup playoff-theme-${settings.theme}`}><Trophy /><strong>League Champion</strong><small>{championshipCopy}</small></div></section></>}
-      {fieldSize === 4 && <><section><RoundHeading index={0} />{[[1, 4], [2, 3]].map(([high, low]) => <div className="bracket-match" key={high}>{placement === "division-halves" && <em className="bracket-side-label">{sideLabel([high, low])} tournament</em>}<Slot number={high} host /><Slot number={low} /></div>)}</section><section><RoundHeading index={1} /><div className={`championship-cup playoff-theme-${settings.theme}`}><Trophy /><strong>League Champion</strong><small>{championshipCopy}</small></div></section></>}
-      {fieldSize === 6 && <><section><RoundHeading index={0} />{[[3, 6], [4, 5]].map(([high, low]) => <div className="bracket-match" key={high}>{placement === "division-halves" && <em className="bracket-side-label">{sideLabel([high, low])} tournament</em>}<Slot number={high} host /><Slot number={low} /></div>)}</section><section><RoundHeading index={1} /><div className="bracket-match spaced"><Slot number={1} host /><Placeholder label={fixedSemifinalCopy[0]} after={settings.reseedMode === "fixed" ? `${sideName(seedOneSide)} path` : "After opening round"} /></div><div className="bracket-match"><Slot number={2} host /><Placeholder label={fixedSemifinalCopy[1]} after={settings.reseedMode === "fixed" ? `${sideName(seedTwoSide)} path` : "After opening round"} /></div></section><section><RoundHeading index={2} /><div className={`championship-cup playoff-theme-${settings.theme}`}><Trophy /><strong>League Champion</strong><small>{championshipCopy}</small></div></section></>}
-      {fieldSize === 8 && <><section><RoundHeading index={0} />{firstRoundPairs.map(([high, low]) => <div className="bracket-match" key={high}>{placement === "division-halves" && <em className="bracket-side-label">{sideLabel([high, low])} tournament</em>}<Slot number={high} host /><Slot number={low} /></div>)}</section><section><RoundHeading index={1} /><div className="bracket-match spaced"><Placeholder label={placement === "division-halves" ? `${sideName("A")} quarterfinal winner` : "Opening-round winner"} after={placement === "division-halves" ? `${sideName("A")} path` : settings.reseedMode === "fixed" ? "Top bracket path" : "Highest eligible seed"} /><Placeholder label={placement === "division-halves" ? `${sideName("A")} quarterfinal winner` : "Opening-round winner"} after={placement === "division-halves" ? `${sideName("A")} path` : settings.reseedMode === "fixed" ? "Top bracket path" : "Lowest eligible seed"} /></div><div className="bracket-match"><Placeholder label={placement === "division-halves" ? `${sideName("B")} quarterfinal winner` : "Opening-round winner"} after={placement === "division-halves" ? `${sideName("B")} path` : settings.reseedMode === "fixed" ? "Bottom bracket path" : "Second-highest seed"} /><Placeholder label={placement === "division-halves" ? `${sideName("B")} quarterfinal winner` : "Opening-round winner"} after={placement === "division-halves" ? `${sideName("B")} path` : settings.reseedMode === "fixed" ? "Bottom bracket path" : "Second-lowest seed"} /></div></section><section><RoundHeading index={2} /><div className={`championship-cup playoff-theme-${settings.theme}`}><Trophy /><strong>League Champion</strong><small>{championshipCopy}</small></div></section></>}
-      {![2, 4, 6, 8].includes(fieldSize) && rounds.map((round, roundIndex) => <section key={`${round}-${roundIndex}`}><RoundHeading index={roundIndex} />{roundIndex === 0 ? <div className="format-seed-list">{firstRoundPairs.map(([high, low]) => <div className="bracket-match" key={high}>{placement === "division-halves" && <em className="bracket-side-label">{sideLabel([high, low])} tournament</em>}<Slot number={high} host /><Slot number={low} /></div>)}{seeds.filter((item) => item.bye).map((item) => <div className="format-bye" key={item.seed}><Slot number={item.seed} /><span>ADVANCES WITH BYE</span></div>)}</div> : roundIndex === rounds.length - 1 ? <div className={`championship-cup playoff-theme-${settings.theme}`}><Trophy /><strong>League Champion</strong><small>{championshipCopy}</small></div> : <div className="format-placeholder"><RefreshCw /><strong>{settings.reseedMode === "fixed" ? placement === "division-halves" ? "Each half advances its own winner" : "Fixed bracket winners" : placement === "division-halves" ? "Teams reseeded within each half" : "Remaining teams reseeded"}</strong><small>{placement === "division-halves" ? "The two half champions meet only in the final" : "Updates after the prior round"}</small></div>}</section>)}
-    </div> : <div className={`bracket-board format-board format-${settings.bracketType}`}>
-      {rounds.map((round, roundIndex) => <section key={`${round}-${roundIndex}`}><RoundHeading index={roundIndex} />{roundIndex === 0 ? <div className="format-seed-list">{seeds.filter((item) => !item.bye).map((item) => <Slot key={item.seed} number={item.seed} host={item.seed % 2 === 1} />)}{seeds.filter((item) => item.bye).map((item) => <div className="format-bye" key={item.seed}><Slot number={item.seed} /><span>ADVANCES WITH BYE</span></div>)}</div> : roundIndex === rounds.length - 1 ? <div className={`championship-cup playoff-theme-${settings.theme}`}><Trophy /><strong>League Champion</strong><small>{championshipVenueCopy}</small></div> : <div className="format-placeholder"><RefreshCw /><strong>Advancing ladder teams</strong><small>Updates as playoff results are recorded</small></div>}</section>)}
-    </div>}
-    {settings.thirdPlaceGame && <div className="third-place-note"><Medal /><span><strong>Third-place game enabled</strong><small>Semifinal losers meet during championship week.</small></span></div>}
+    {!simulationMode && <><div className="playoff-customization-bar"><span><strong>Postseason presentation</strong><small>Choose placement format and personalize round names, game names, and logos.</small></span><CustomSelect label="Consolation format" value={settings.consolationMode} onChange={(value) => onUpdatePlayoffs({ consolationMode: value as LeagueSetupInput["playoffs"]["consolationMode"], thirdPlaceGame: value !== "off" })} options={consolationOptions} /><button type="button" aria-expanded={roundBrandingOpen} onClick={() => setRoundBrandingOpen((current) => !current)}><Pencil />Names & logos</button></div>{roundBrandingOpen && <div className="playoff-branding-panels">
+      <section aria-label="Playoff round names and logos"><header><span><strong>Round defaults</strong><small>Rename each round and choose the logo used when a game has no override.</small></span></header><div className="playoff-round-branding">{rounds.map((round, roundIndex) => <div key={`round-${roundIndex}`}><label><span>Round {roundIndex + 1} name</span><input aria-label={`Round ${roundIndex + 1} name`} defaultValue={round} maxLength={40} onBlur={(event) => updateRoundName(roundIndex, event.target.value)} /></label><small>NFL Week {schedule.setup.weeks + roundIndex + 1}</small><IdentityColorPicker compact showColorControl={false} showAbbreviation={false} imagePresentation="bare" name={`${round || `Round ${roundIndex + 1}`} round`} abbreviation={(round || "R").slice(0, 3).toUpperCase()} color={settings.color} logoUrl={settings.roundLogoUrls?.[roundIndex]} onChange={(next) => updateRoundLogo(roundIndex, next.logoUrl)} /></div>)}</div></section>
+      <section aria-label="Specific playoff game names and logos"><header><span><strong>Specific playoff games</strong><small>Rename any matchup and optionally override its round logo.</small></span><em>{mainGameBrandingSlots.length + consolationGameBrandingSlots.length} games</em></header><div className="playoff-game-branding-rounds">{rounds.map((round, roundIndex) => {
+        const mainSlots = mainGameBrandingSlots.filter((slot) => slot.roundIndex === roundIndex);
+        const placementSlots = consolationGameBrandingSlots.filter((game) => game.roundIndex === roundIndex);
+        return <section key={`${roundIndex}-branding`}><header><strong>{round || `Round ${roundIndex + 1}`}</strong><small>NFL Week {schedule.setup.weeks + roundIndex + 1}</small></header><div>{mainSlots.map((slot) => { const fallback = mainGameBrandingLabel(slot); const label = gameDisplayName(slot.id, fallback); return <div key={slot.id}><label><span>Championship bracket</span><input aria-label={`${fallback} name`} defaultValue={label} maxLength={60} onBlur={(event) => updateGameName(slot.id, event.target.value)} /></label><IdentityColorPicker compact showColorControl={false} showAbbreviation={false} imagePresentation="bare" name={label} abbreviation={`G${slot.gameIndex + 1}`} color={settings.color} logoUrl={settings.gameLogoUrls?.[slot.id]} onChange={(next) => updateGameLogo(slot.id, next.logoUrl)} /></div>; })}{placementSlots.map((game) => { const label = gameDisplayName(game.id, game.label); return <div key={game.id}><label><span>Placement bracket</span><input aria-label={`${game.label} name`} defaultValue={label} maxLength={60} onBlur={(event) => updateGameName(game.id, event.target.value)} /></label><IdentityColorPicker compact showColorControl={false} showAbbreviation={false} imagePresentation="bare" name={label} abbreviation="CG" color={settings.color} logoUrl={settings.gameLogoUrls?.[game.id]} onChange={(next) => updateGameLogo(game.id, next.logoUrl)} /></div>; })}</div></section>;
+      })}</div></section>
+    </div>}</>}
+    <div className="postseason-map-scroll" aria-label="Connected postseason bracket">
+      <BracketConnectorLayer connections={bracketConnections} className={`postseason-map-canvas rounds-${rounds.length}`}>
+        <section className="championship-picture" aria-labelledby="championship-picture-title">
+          <header><span><Trophy /><span><small>TITLE BRACKET</small><strong id="championship-picture-title">Road to the championship</strong></span></span><em>{settings.fieldStatus === "locked" ? "Locked field" : "Live projection"}</em></header>
+          <div className="championship-bracket-grid" style={{ gridTemplateColumns: `repeat(${rounds.length}, minmax(270px, 1fr))` }}>
+            {projectedMainRounds.map((round) => <section key={round.roundIndex}><RoundHeading index={round.roundIndex} /><div className="main-playoff-round-games">{orderedRoundMatchups(round).map(({ matchup, gameIndex }) => <MainPlayoffGame key={`${round.roundIndex}-${gameIndex}`} roundIndex={round.roundIndex} gameIndex={gameIndex} homeSeed={matchup.homeSeed} awaySeed={matchup.awaySeed} bracketSide={matchup.bracketSide} />)}{round.roundIndex === 0 && round.byeSeeds.length > 0 && <div className="playoff-bye-strip"><strong>{round.byeSeeds.length} BYE{round.byeSeeds.length === 1 ? "" : "S"}</strong><span>{round.byeSeeds.map((byeSeed) => <Slot key={byeSeed} number={byeSeed} />)}</span></div>}{round.roundIndex === projectedMainRounds.length - 1 && <div className={`championship-outcome playoff-theme-${settings.theme}`}><Trophy />{champion ? <><EntityLogo color={champion.color} logoUrl={champion.logoUrl} monogram={teamInitials(champion)} size={52} /><strong>{teamDisplayName(champion, showCity)}</strong><small>League Champion</small></> : <><strong>League Champion</strong><small>{championshipCopy}</small></>}</div>}</div></section>)}
+          </div>
+        </section>
+        <EliminationTransferRail />
+        <ConsolationBracket schedule={normalizedSchedule} onUpdateGame={simulationMode ? undefined : onUpdatePlayoffGame} />
+      </BracketConnectorLayer>
+    </div>
+    <FinalPlacementTable schedule={normalizedSchedule} />
   </div>;
 }
 
-function FairnessView({ schedule }: { schedule: GeneratedSchedule }) {
-  const report = schedule.fairness;
-  return <div className="workspace-stack"><div className="fairness-hero"><div className="score-ring" style={{ "--score": `${report.score * 3.6}deg` } as React.CSSProperties}><span><strong>{report.score}</strong><small>/100</small></span></div><div><span className="status-pass"><Check />HARD RULES PASSED</span><h2>A balanced season, ready to play.</h2><p>Correctness is never a Pro feature. Every team, matchup, and home/away total was validated before this schedule appeared.</p></div></div><div className="fairness-grid"><div><span>Home/away spread</span><strong>{report.homeAwaySpread}</strong><small>{report.homeAwaySpread <= 1 ? "Excellent balance" : "Within allowed range"}</small></div><div><span>Immediate rematches</span><strong>{report.immediateRematches}</strong><small>{report.immediateRematches === 0 ? "None scheduled" : "Review recommended"}</small></div><div><span>Final-week division share</span><strong>{Math.round(report.divisionalFinishShare * 100)}%</strong><small>Shape-aware finish</small></div></div><div className="audit-list"><h3>Validation audit</h3>{report.notes.map((note) => <div key={note}><Check /><span>{note}</span><b>Passed</b></div>)}<div><Check /><span>Each required matchup appears exactly once in its assigned week.</span><b>Passed</b></div><div><Check /><span>No team plays more than one matchup in a week.</span><b>Passed</b></div></div></div>;
+function PlatformSyncCard({
+  schedule,
+  canAccessPlatformSync,
+  platformSyncLoading,
+  onRefreshScores,
+  onSaveConnection,
+  onDisconnect,
+}: {
+  schedule: GeneratedSchedule;
+  canAccessPlatformSync: boolean;
+  platformSyncLoading: boolean;
+  onRefreshScores: () => void;
+  onSaveConnection: (syncMode: PlatformSyncMode, swid?: string, espnS2?: string) => void;
+  onDisconnect: () => void;
+}) {
+  const connection = schedule.setup.platformConnection;
+  const [syncMode, setSyncMode] = useState<PlatformSyncMode>(connection?.syncMode ?? "manual");
+  const [swid, setSwid] = useState("");
+  const [espnS2, setEspnS2] = useState("");
+  useEffect(() => setSyncMode(connection?.syncMode ?? "manual"), [connection?.syncMode]);
+  if (!connection) {
+    return <div className="platform-sync-card"><div><Cloud /><span><strong>Platform Sync</strong><small>Connect ESPN or Sleeper during import to refresh scores after your platform schedule is updated.</small></span></div><Link href="/" className="button-secondary"><RefreshCw />Import league</Link></div>;
+  }
+  const providerLabel = connection.provider === "espn" ? "ESPN" : "Sleeper";
+  const lastSync = connection.lastSyncAt ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(connection.lastSyncAt)) : "Not synced yet";
+  const proLocked = !canAccessPlatformSync && syncMode !== "manual";
+  return <div className="platform-sync-panel">
+    <div className="platform-sync-card">
+      <div><Cloud /><span><strong>{providerLabel} Platform Sync</strong><small>Generate here, update your fantasy platform, then sync scores back.</small></span></div>
+      <button type="button" className="button-primary" disabled={platformSyncLoading} onClick={onRefreshScores}>{platformSyncLoading ? <LoaderCircle className="spin" /> : <RefreshCw />}Refresh scores</button>
+    </div>
+    <div className="platform-sync-details">
+      <span><strong>League ID</strong><small>{connection.providerLeagueId}</small></span>
+      <span><strong>Last synced</strong><small>{lastSync}</small></span>
+      <span><strong>Status</strong><small>{connection.status}</small></span>
+      <span><strong>History found</strong><small>{connection.availableHistoryYears?.join(", ") || "Scan after connecting"}</small></span>
+    </div>
+    <div className="platform-sync-mode">
+      <CustomSelect label="Sync mode" value={syncMode} onChange={(value) => setSyncMode(value as PlatformSyncMode)} options={[
+        { value: "manual", label: "Manual", description: "Only refresh when you click" },
+        { value: "assisted", label: "Assisted · Pro", description: "Prompt when platform data may be stale" },
+        { value: "auto", label: "Auto · Pro", description: "Refresh when possible" },
+      ]} />
+      <button type="button" className="button-secondary visible" disabled={proLocked} onClick={() => onSaveConnection(syncMode, swid, espnS2)}><Save />Save sync mode</button>
+      {proLocked && <small className="platform-sync-lock">Assisted and Auto sync are included with Pro.</small>}
+    </div>
+    {connection.provider === "espn" && <div className="platform-cookie-fields">
+      <div><LockKeyhole /><span><strong>Private ESPN permission · Pro</strong><small>Use only if ESPN blocks private leagues or older history. Never paste your ESPN password.</small></span></div>
+      <label><span>SWID</span><input disabled={!canAccessPlatformSync} value={swid} onChange={(event) => setSwid(event.target.value)} placeholder="{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}" /></label>
+      <label><span>espn_s2</span><input disabled={!canAccessPlatformSync} value={espnS2} onChange={(event) => setEspnS2(event.target.value)} placeholder="Paste from your own signed-in browser" /></label>
+      <button type="button" className="button-secondary visible" disabled={!canAccessPlatformSync || !swid || !espnS2} onClick={() => onSaveConnection(syncMode, swid, espnS2)}><ShieldCheck />Save ESPN permission</button>
+    </div>}
+    <div className="platform-sync-note"><ShieldCheck /><span>LeagueWeaver cannot update ESPN/Sleeper schedules for you. Auto refresh runs when possible, and platform availability may vary.</span><button type="button" onClick={onDisconnect}>Disconnect</button></div>
+  </div>;
 }
 
-function SettingsView({ schedule, onOpenDraftRanking }: { schedule: GeneratedSchedule; onOpenDraftRanking: () => void }) {
+function SettingsView({ schedule, onOpenDraftRanking, canAccessPlatformSync, platformSyncLoading, onRefreshPlatformScores, onSavePlatformConnection, onDisconnectPlatform }: {
+  schedule: GeneratedSchedule;
+  onOpenDraftRanking: () => void;
+  canAccessPlatformSync: boolean;
+  platformSyncLoading: boolean;
+  onRefreshPlatformScores: () => void;
+  onSavePlatformConnection: (syncMode: PlatformSyncMode, swid?: string, espnS2?: string) => void;
+  onDisconnectPlatform: () => void;
+}) {
   const seeding = schedule.setup.priorSeason.entryMode === "manual" ? "Manual order" : schedule.setup.priorSeason.entryMode === "history" ? schedule.setup.priorSeason.source === "playoffs" ? "Last year’s playoff finish" : "Last year’s regular-season finish" : "Not used";
   const draftRankingPending = schedule.setup.weekOne.rankingSource === "draft-day" && getTeamsMissingDraftPlaces(schedule.setup).length > 0;
   return <div className="workspace-stack">
     <div className="settings-band"><div><Pencil /><span><strong>Schedule setup</strong><small>Changing league structure regenerates the complete matchup slate as a new revision.</small></span></div><Link href="/" className="button-secondary"><Pencil />Edit and regenerate</Link></div>
+    <PlatformSyncCard schedule={schedule} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshScores={onRefreshPlatformScores} onSaveConnection={onSavePlatformConnection} onDisconnect={onDisconnectPlatform} />
     <div className="settings-list">
       <div><span>League</span><strong>{schedule.setup.name}</strong></div>
       <div><span>Season format</span><strong>{schedule.setup.teams.length} teams · {schedule.setup.divisions.length} divisions · {schedule.setup.weeks} weeks</strong></div>
@@ -564,12 +999,15 @@ function SettingsView({ schedule, onOpenDraftRanking }: { schedule: GeneratedSch
       <div><span>Revision</span><strong>Version {schedule.revision}</strong></div>
       <div><span>Generation seed</span><code>{schedule.seed}</code></div>
     </div>
-    <div className="danger-zone"><span><strong>Archive season</strong><small>Archived seasons stay available for viewing and export.</small></span><button type="button">Archive</button></div>
   </div>;
 }
 
 function draftPlaceValues(schedule: GeneratedSchedule) {
   return Object.fromEntries(schedule.setup.teams.map((team) => [team.id, Number.isInteger(team.draftPlace) ? team.draftPlace : undefined]));
+}
+
+function draftRankingReminderDismissalKey(seasonId: string) {
+  return `leagueweaver:v3:draft-ranking-reminder-dismissed:${seasonId}`;
 }
 
 function DraftRankingReminder({ schedule, onSave, openRequest, onOpenSettings }: {
@@ -591,10 +1029,12 @@ function DraftRankingReminder({ schedule, onSave, openRequest, onOpenSettings }:
     const interval = window.setInterval(update, 60 * 60 * 1000);
     return () => window.clearInterval(interval);
   }, [cutoff]);
+  useEffect(() => {
+    setDismissed(window.localStorage.getItem(draftRankingReminderDismissalKey(schedule.id)) === "true");
+  }, [schedule.id]);
   useEffect(() => setValues(draftPlaceValues(schedule)), [schedule]);
   useEffect(() => {
     if (!openRequest) return;
-    setDismissed(false);
     setShowSettingsToken(false);
     setOpen(true);
   }, [openRequest]);
@@ -624,19 +1064,20 @@ function DraftRankingReminder({ schedule, onSave, openRequest, onOpenSettings }:
   const dismissReminder = () => {
     setOpen(false);
     setDismissed(true);
+    window.localStorage.setItem(draftRankingReminderDismissalKey(schedule.id), "true");
     setShowSettingsToken(true);
     if (tokenTimer.current) window.clearTimeout(tokenTimer.current);
     tokenTimer.current = window.setTimeout(() => setShowSettingsToken(false), 8000);
   };
 
-  if (dismissed) return showSettingsToken ? <div className="draft-rank-settings-token" role="status"><Settings /><span>Draft-day ranking is available in Settings if you want to add it later.</span><button type="button" onClick={onOpenSettings}>Open Settings</button></div> : null;
+  if (dismissed && !open) return showSettingsToken ? <div className="draft-rank-settings-token" role="status"><Settings /><span>Draft-day ranking is available in Settings if you want to add it later.</span><button type="button" onClick={onOpenSettings}>Open Settings</button></div> : null;
 
   return <>
-    <div className="draft-rank-reminder" role="status">
+    {!dismissed && <div className="draft-rank-reminder" role="status">
       <FileSpreadsheet />
       <span><strong>Draft-day ranking is waiting.</strong><small>Add every team’s draft place by {cutoffLabel}. Until then, Week 1 uses last season’s order; saving the order updates the opening ranks and Game of the Week.</small></span>
       <div className="draft-rank-reminder-actions"><button type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)}>{open ? "Close editor" : "Set draft ranking"}</button><Tooltip label="Dismiss draft ranking reminder"><button type="button" className="draft-rank-reminder-close" aria-label="Dismiss draft ranking reminder" onClick={dismissReminder}><X /></button></Tooltip></div>
-    </div>
+    </div>}
     {open && <section className="draft-rank-panel" aria-label="Draft-day ranking editor">
       <header><span><strong>Set the Week 1 draft ranking</strong><small>Choose each team’s draft place from first through last. Selecting an occupied place swaps the two teams.</small></span><button type="button" aria-label="Close draft ranking editor" onClick={() => setOpen(false)}><X /></button></header>
       <div className="draft-rank-panel-list">{orderedTeams.map((team) => <div className="draft-rank-panel-row" key={team.id}>
@@ -669,78 +1110,139 @@ function SimulatorLaunch({ hasSavedRun, onPlay, onStartFromReal }: { hasSavedRun
 export function SeasonWorkspace({ initialView = "league-schedule" }: { initialView?: ViewKey }) {
   const params = useParams<{ id: string; teamId?: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [schedule, setSchedule] = useState<GeneratedSchedule | null>(null);
+  const [seasonLoadState, setSeasonLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const [seasonLoadError, setSeasonLoadError] = useState<string | null>(null);
   const [view, setView] = useState<ViewKey>(initialView);
   const [selectedTeamId, setSelectedTeamId] = useState(params.teamId ?? "");
   const [selectedWeek, setSelectedWeek] = useState(1);
+  const [highlightedGame, setHighlightedGame] = useState<HighlightedGame>(null);
   const [draftRankingRequest, setDraftRankingRequest] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [simulation, setSimulation] = useState<SimulationSandbox | null>(null);
   const [savedSimulation, setSavedSimulation] = useState<SimulationSandbox | null>(null);
   const [simulationLoaded, setSimulationLoaded] = useState(false);
   const [simulationTrials, setSimulationTrials] = useState<MonteCarloTrialCount>(500);
-  const [entitlements, setEntitlements] = useState<{ signedIn: boolean; plan: "free" | "pro"; features: string[]; email?: string }>({ signedIn: false, plan: "free", features: [] });
+  const [entitlements, setEntitlements] = useState<{ signedIn: boolean; plan: "free" | "pro"; features: string[]; email?: string; displayName?: string; avatarUrl?: string }>({ signedIn: false, plan: "free", features: [] });
+  const [saveConflict, setSaveConflict] = useState<SeasonSaveConflict | null>(null);
+  const [saveConflictLoading, setSaveConflictLoading] = useState(false);
+  const [scoreModalOpen, setScoreModalOpen] = useState(false);
+  const [platformSyncLoading, setPlatformSyncLoading] = useState(false);
+  const [actionBusy, setActionBusy] = useState<"share" | "notify" | null>(null);
   const cloudScheduleSnapshot = useRef<string | null>(null);
+  const blockedCloudSnapshot = useRef<string | null>(null);
   const latestSchedule = useRef<GeneratedSchedule | null>(null);
   const autosaveTimer = useRef<number | null>(null);
+  const platformAutoRefreshKey = useRef<string | null>(null);
+  const applyCloudSchedule = (savedSchedule: GeneratedSchedule, sourceSchedule: GeneratedSchedule) => {
+    const synced = freezeCompletedRankHistory(normalizeSeason(savedSchedule));
+    cloudScheduleSnapshot.current = JSON.stringify(synced);
+    blockedCloudSnapshot.current = null;
+    const latest = latestSchedule.current;
+    if (latest && latest !== sourceSchedule) {
+      const merged = normalizeSeason({ ...latest, id: synced.id, revision: synced.revision });
+      latestSchedule.current = merged;
+      setSchedule(merged);
+    } else {
+      latestSchedule.current = synced;
+      setSchedule(synced);
+    }
+    const nextPath = window.location.pathname.replace(`/season/${sourceSchedule.id}`, `/season/${synced.id}`);
+    window.history.replaceState(null, "", `${nextPath}${window.location.search}${window.location.hash}`);
+    return synced;
+  };
+  const openSaveConflict = (payload: CloudSaveResponse, scheduleToSave: GeneratedSchedule) => {
+    if (payload.code !== "SEASON_EXISTS" || !payload.existingSeason) return false;
+    const snapshot = JSON.stringify(scheduleToSave);
+    blockedCloudSnapshot.current = snapshot;
+    setSaveConflict({ existingSeason: payload.existingSeason, schedule: scheduleToSave, snapshot });
+    return true;
+  };
   useEffect(() => {
     const local = loadSeason();
     if (local && (params.id === local.id || params.id === "local-season")) {
       latestSchedule.current = local;
       cloudScheduleSnapshot.current = CLOUD_SCHEDULE_ID.test(local.id) ? JSON.stringify(local) : null;
       setSchedule(local);
-    } else if (params.id) fetch(`/api/seasons/${params.id}`).then((response) => response.ok ? response.json() : null).then((payload) => {
-      if (!payload?.schedule) return;
-      const loaded = freezeCompletedRankHistory(normalizeSeason(payload.schedule));
-      latestSchedule.current = loaded;
-      cloudScheduleSnapshot.current = JSON.stringify(loaded);
-      setSchedule(loaded);
-    }).catch(() => undefined);
+      setSeasonLoadState("ready");
+      setSeasonLoadError(null);
+    } else if (params.id && CLOUD_SCHEDULE_ID.test(params.id)) {
+      setSeasonLoadState("loading");
+      setSeasonLoadError(null);
+      fetch(`/api/seasons/${params.id}`).then(async (response) => {
+        const payload = await response.json().catch(() => null) as { schedule?: GeneratedSchedule; error?: string } | null;
+        if (!response.ok || !payload?.schedule) throw new Error(payload?.error || "That saved season could not be opened.");
+        const loaded = freezeCompletedRankHistory(normalizeSeason(payload.schedule));
+        latestSchedule.current = loaded;
+        cloudScheduleSnapshot.current = JSON.stringify(loaded);
+        setSchedule(loaded);
+        setSeasonLoadState("ready");
+      }).catch((error) => {
+        setSchedule(null);
+        setSeasonLoadState("error");
+        setSeasonLoadError(error instanceof Error ? error.message : "That saved season could not be opened.");
+      });
+    } else {
+      setSeasonLoadState("ready");
+      setSeasonLoadError(null);
+    }
     fetch(`/api/entitlements${params.id ? `?scheduleId=${encodeURIComponent(params.id)}` : ""}`).then((response) => response.json()).then(setEntitlements).catch(() => undefined);
   }, [params.id]);
   useEffect(() => {
-    const query = new URLSearchParams(window.location.search);
-    const week = Number(query.get("week"));
+    const week = Number(searchParams.get("week"));
     if (Number.isInteger(week) && week >= 1 && week <= 17) setSelectedWeek(week);
-    const requestedViewValue = query.get("view");
-    const requestedView = (requestedViewValue === "schedule" ? "league-schedule" : requestedViewValue) as ViewKey | null;
+    const requestedViewValue = searchParams.get("view");
+    if (requestedViewValue === "scores") {
+      setView("league-schedule");
+      setScoreModalOpen(true);
+    }
+    if (requestedViewValue === "fairness") setView("league-schedule");
+    const requestedView = (requestedViewValue === "schedule" || requestedViewValue === "scores" || requestedViewValue === "fairness" ? "league-schedule" : requestedViewValue) as ViewKey | null;
     if (requestedView && VIEW_ITEMS.some((item) => item.key === requestedView)) setView(requestedView);
-  }, []);
+    const gameId = decodeURIComponent(window.location.hash.slice(1));
+    const medalRank = Number(searchParams.get("medal"));
+    setHighlightedGame(gameId ? {
+      id: gameId,
+      medalRank: Number.isInteger(medalRank) && medalRank >= 1 && medalRank <= 3 ? medalRank : undefined,
+      medalCategory: searchParams.get("medalCategory") || undefined,
+    } : null);
+  }, [searchParams]);
   useEffect(() => {
     if (!schedule || !selectedTeamId || schedule.setup.teams.some((team) => team.id === selectedTeamId)) return;
     setSelectedTeamId(schedule.setup.teams[0]?.id ?? "");
   }, [schedule, selectedTeamId]);
   useEffect(() => {
+    if (!scoreModalOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setScoreModalOpen(false); };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [scoreModalOpen]);
+  useEffect(() => {
     if (!schedule) return;
     latestSchedule.current = schedule;
     saveSeason(schedule);
     const snapshot = JSON.stringify(schedule);
-    if (!entitlements.signedIn || snapshot === cloudScheduleSnapshot.current) return;
+    if (!entitlements.signedIn || snapshot === cloudScheduleSnapshot.current || snapshot === blockedCloudSnapshot.current) return;
     if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current);
     const scheduleToSave = freezeCompletedRankHistory(schedule);
     autosaveTimer.current = window.setTimeout(async () => {
       autosaveTimer.current = null;
       try {
         const response = await fetch("/api/seasons", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schedule: scheduleToSave }) });
-        const payload = await response.json() as { schedule?: GeneratedSchedule; error?: string };
+        const payload = await response.json() as CloudSaveResponse;
         if (!response.ok || !payload.schedule) {
           if (response.status === 401) setEntitlements((current) => ({ ...current, signedIn: false }));
+          else if (openSaveConflict(payload, scheduleToSave)) return;
           else setNotice(payload.error || "Saved on this device, but cloud sync needs attention.");
           return;
         }
-        const synced = freezeCompletedRankHistory(normalizeSeason(payload.schedule));
-        cloudScheduleSnapshot.current = JSON.stringify(synced);
-        const latest = latestSchedule.current;
-        if (latest && latest !== schedule) {
-          const merged = normalizeSeason({ ...latest, id: synced.id, revision: synced.revision });
-          latestSchedule.current = merged;
-          setSchedule(merged);
-        } else {
-          latestSchedule.current = synced;
-          setSchedule(synced);
-        }
-        const nextPath = window.location.pathname.replace(`/season/${schedule.id}`, `/season/${synced.id}`);
-        window.history.replaceState(null, "", `${nextPath}${window.location.search}${window.location.hash}`);
+        applyCloudSchedule(payload.schedule, schedule);
       } catch {
         setNotice("Saved on this device. Cloud sync is temporarily unavailable.");
       }
@@ -771,6 +1273,8 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       setSavedSimulation(simulation);
     }
   }, [schedule?.id, simulation, simulationLoaded]);
+  const canAccessScorekeeping = entitlements.plan === "pro" || entitlements.features.includes("scorekeeping");
+  const canAccessPlatformSync = entitlements.plan === "pro" || entitlements.features.includes("platform_sync");
   const activeSchedule = useMemo(() => schedule && simulation ? materializeSimulationSchedule(simulation) : schedule, [schedule, simulation]);
   const simulatorOdds = useMemo((): SimulatorOddsView[] => {
     if (!activeSchedule || view !== "simulator") return [];
@@ -808,7 +1312,19 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     }
     return probabilities;
   }, [simulation]);
-  if (!schedule || !activeSchedule) return <div className="empty-season"><BrandLockup /><CalendarDays /><h1>No generated season yet.</h1><p>Build your league first, then your complete schedule will appear here.</p><Link href="/" className="button-primary">Open schedule builder</Link></div>;
+  useEffect(() => {
+    const connection = schedule?.setup.platformConnection;
+    if (!connection || connection.syncMode === "manual" || !canAccessPlatformSync || platformSyncLoading || simulation) return;
+    const key = `${schedule.id}:${connection.provider}:${connection.providerLeagueId}:${connection.syncMode}:${selectedWeek}`;
+    if (platformAutoRefreshKey.current === key) return;
+    platformAutoRefreshKey.current = key;
+    void refreshPlatformScores();
+  }, [schedule?.id, schedule?.setup.platformConnection, selectedWeek, canAccessPlatformSync, platformSyncLoading, simulation]);
+  if (!schedule || !activeSchedule) {
+    if (seasonLoadState === "loading") return <div className="empty-season" role="status"><BrandLockup /><LoaderCircle className="spin" /><h1>Loading season…</h1><p>Opening the latest saved schedule and checking your access.</p></div>;
+    if (seasonLoadState === "error") return <div className="empty-season" role="alert"><BrandLockup /><Cloud /><h1>Season could not open.</h1><p>{seasonLoadError || "The saved season was not available. Your local work is still safe on this device if it was created here."}</p><Link href="/account" className="button-primary">Open account</Link><Link href="/" className="button-secondary">Open schedule builder</Link></div>;
+    return <div className="empty-season"><BrandLockup /><CalendarDays /><h1>No generated season yet.</h1><p>Build your league first, then your complete schedule will appear here.</p><Link href="/" className="button-primary">Open schedule builder</Link></div>;
+  }
   const onScore = (id: string, home?: number, away?: number) => {
     if (simulation) {
       if (home != null && away != null && home !== away) setSimulation((current) => current ? overrideSimulationGame(current, id, { homeScore: home, awayScore: away }) : current);
@@ -819,7 +1335,122 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const onFinalizeScores = () => {
     if (!simulation) setSchedule((current) => current ? freezeCompletedRankHistory(current) : current);
   };
+  const applyImportedScores = (rows: ImportedScoreRow[]) => {
+    if (simulation || rows.length === 0) return;
+    setSchedule((current) => {
+      if (!current) return current;
+      const updated = rows.reduce((next, row) => updateGameScore(next, row.gameId, row.homeScore, row.awayScore), current);
+      return freezeCompletedRankHistory(updated);
+    });
+    setNotice(`${rows.length} reviewed ${rows.length === 1 ? "matchup" : "matchups"} added to Week ${selectedWeek}.`);
+    window.setTimeout(() => setNotice(null), 4200);
+  };
+  const updatePlatformConnection = (patch: Partial<PlatformConnection>) => setSchedule((current) => {
+    if (!current?.setup.platformConnection) return current;
+    return { ...current, setup: { ...current.setup, platformConnection: { ...current.setup.platformConnection, ...patch } } };
+  });
+  async function refreshPlatformScores() {
+    if (!schedule?.setup.platformConnection || simulation) return;
+    setPlatformSyncLoading(true);
+    try {
+      const response = await fetch("/api/platform/sync/scores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schedule, week: selectedWeek }),
+      });
+      const result = await response.json() as { rows?: Array<ImportedScoreRow & { confidence?: "high" | "review" }>; unmatched?: unknown[]; warnings?: string[]; syncedAt?: string; error?: string };
+      if (!response.ok) throw new Error(result.error || "Scores could not be refreshed.");
+      const highConfidence = (result.rows ?? []).filter((row) => row.confidence !== "review");
+      if (highConfidence.length > 0) {
+        setSchedule((current) => {
+          if (!current) return current;
+          const updated = highConfidence.reduce((next, row) => updateGameScore(next, row.gameId, row.homeScore, row.awayScore), current);
+          return freezeCompletedRankHistory({
+            ...updated,
+            setup: {
+              ...updated.setup,
+              platformConnection: updated.setup.platformConnection ? {
+                ...updated.setup.platformConnection,
+                lastSyncAt: result.syncedAt,
+                status: result.warnings?.length ? "warning" : "ready",
+                warnings: result.warnings ?? [],
+              } : undefined,
+            },
+          });
+        });
+      } else {
+        updatePlatformConnection({ lastSyncAt: result.syncedAt, status: result.warnings?.length ? "warning" : "ready", warnings: result.warnings ?? [] });
+      }
+      const reviewCount = (result.rows ?? []).length - highConfidence.length;
+      setNotice(reviewCount > 0
+        ? `Refreshed ${highConfidence.length} scores. ${reviewCount} matchups need review before applying.`
+        : highConfidence.length > 0
+          ? `Refreshed ${highConfidence.length} platform scores.`
+          : "No platform scores were ready yet. Try again after the fantasy platform has matching results.");
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Scores could not be refreshed.";
+      updatePlatformConnection({ status: "failed", warnings: [message] });
+      setNotice(message);
+    } finally {
+      setPlatformSyncLoading(false);
+      window.setTimeout(() => setNotice(null), 5200);
+    }
+  }
+  const savePlatformConnection = async (syncMode: PlatformSyncMode, swid?: string, espnS2?: string) => {
+    if (!schedule?.setup.platformConnection) return;
+    const connection = schedule.setup.platformConnection;
+    updatePlatformConnection({ syncMode });
+    if (!entitlements.signedIn || !CLOUD_SCHEDULE_ID.test(schedule.id)) {
+      setNotice("Save this season to your account before storing platform permissions.");
+      window.setTimeout(() => setNotice(null), 5200);
+      return;
+    }
+    setPlatformSyncLoading(true);
+    try {
+      const response = await fetch("/api/platform/connections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduleId: schedule.id, provider: connection.provider, providerLeagueId: connection.providerLeagueId, seasonYear: connection.seasonYear, syncMode, swid, espnS2 }),
+      });
+      const result = await response.json() as { authType?: PlatformConnection["authType"]; error?: string };
+      if (!response.ok) throw new Error(result.error || "Platform connection could not be saved.");
+      updatePlatformConnection({ syncMode, authType: result.authType ?? connection.authType, status: "ready" });
+      setNotice("Platform connection saved.");
+    } catch (caught) {
+      setNotice(caught instanceof Error ? caught.message : "Platform connection could not be saved.");
+    } finally {
+      setPlatformSyncLoading(false);
+      window.setTimeout(() => setNotice(null), 5200);
+    }
+  };
+  const disconnectPlatform = async () => {
+    if (!schedule?.setup.platformConnection) return;
+    const connection = schedule.setup.platformConnection;
+    setSchedule((current) => current ? { ...current, setup: { ...current.setup, platformConnection: undefined } } : current);
+    if (entitlements.signedIn && CLOUD_SCHEDULE_ID.test(schedule.id)) {
+      await fetch("/api/platform/connections", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: schedule.id, provider: connection.provider }) }).catch(() => undefined);
+    }
+    setNotice("Platform connection disconnected. Your generated schedule and scores stayed in place.");
+    window.setTimeout(() => setNotice(null), 5200);
+  };
   const onUpdatePlayoffs = (patch: Partial<LeagueSetupInput["playoffs"]>) => setSchedule((current) => current ? { ...current, setup: { ...current.setup, playoffs: { ...current.setup.playoffs, ...patch } } } : current);
+  const onUpdatePlayoffGame = (game: PlayoffGame) => setSchedule((current) => {
+    if (!current) return current;
+    const existing = (current.playoffGames ?? []).filter((item) => {
+      if (item.id === game.id) return true;
+      if (game.bracket === "main") {
+        if (item.bracket === "main" && item.roundIndex > game.roundIndex) return false;
+        if (item.bracket === "consolation" && item.roundIndex >= game.roundIndex) return false;
+      }
+      if (game.bracket === "consolation" && item.bracket === "consolation" && item.roundIndex > game.roundIndex) return false;
+      return true;
+    });
+    const playoffGames = existing.some((item) => item.id === game.id)
+      ? existing.map((item) => item.id === game.id ? game : item)
+      : [...existing, game];
+    return { ...current, playoffGames };
+  });
+  const onUpdateTiebreakers = (tiebreakers: TiebreakerSettings) => setSchedule((current) => current ? normalizeSeason({ ...current, rankHistory: undefined, setup: { ...current.setup, tiebreakers } }) : current);
   const commitSimulation = () => {
     if (!simulation) return;
     const committed = freezeCompletedRankHistory(materializeSimulationSchedule(simulation));
@@ -851,28 +1482,59 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     setNotice("Draft ranking saved. Week 1 ranks and Game of the Week are updated.");
     window.setTimeout(() => setNotice(null), 4200);
   };
+  const resolveSaveConflict = async (saveMode: "overwrite" | "copy") => {
+    if (!saveConflict) return;
+    setSaveConflictLoading(true);
+    const scheduleToSave = freezeCompletedRankHistory(latestSchedule.current ?? saveConflict.schedule);
+    try {
+      const response = await fetch("/api/seasons", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schedule: scheduleToSave,
+          saveMode,
+          existingScheduleId: saveConflict.existingSeason.id,
+        }),
+      });
+      const payload = await response.json() as CloudSaveResponse;
+      if (!response.ok || !payload.schedule) {
+        setNotice(payload.error || "The cloud season could not be updated.");
+        return;
+      }
+      applyCloudSchedule(payload.schedule, scheduleToSave);
+      setSaveConflict(null);
+      setNotice(saveMode === "copy" ? `${payload.title ?? "Season copy"} created.` : "Existing season updated. The prior version is still in Revisions.");
+      window.setTimeout(() => setNotice(null), 5200);
+    } catch {
+      setNotice("Saved on this device. Cloud sync is temporarily unavailable.");
+    } finally {
+      setSaveConflictLoading(false);
+    }
+  };
+  const dismissSaveConflict = () => {
+    setSaveConflict(null);
+    setNotice("Cloud autosave is paused for this version. You can keep working and choose what to do after the next change.");
+    window.setTimeout(() => setNotice(null), 5200);
+  };
   const save = async () => {
     const frozenSchedule = freezeCompletedRankHistory(schedule);
     saveSeason(frozenSchedule);
     if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current);
     try {
       const response = await fetch("/api/seasons", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schedule: frozenSchedule }) });
-      const payload = await response.json() as { schedule?: GeneratedSchedule; error?: string };
+      const payload = await response.json() as CloudSaveResponse;
       if (response.status === 401) {
         setNotice("Saved on this device. Sign in when you want cloud revisions and resume-anywhere access.");
         return null;
       } else if (!response.ok || !payload.schedule) {
+        if (openSaveConflict(payload, frozenSchedule)) return null;
         setNotice(payload.error || "Saved on this device, but the cloud copy needs attention.");
         return null;
       } else {
-        const synced = freezeCompletedRankHistory(normalizeSeason(payload.schedule));
-        cloudScheduleSnapshot.current = JSON.stringify(synced);
-        latestSchedule.current = synced;
-        setSchedule(synced);
+        const synced = applyCloudSchedule(payload.schedule, frozenSchedule);
         setEntitlements((current) => ({ ...current, signedIn: true }));
-        window.history.replaceState(null, "", `/season/${payload.schedule.id}`);
         setNotice(`Cloud revision ${payload.schedule.revision} saved.`);
-        return payload.schedule;
+        return synced;
       }
     } catch {
       setNotice("Saved on this device. Cloud save is temporarily unavailable.");
@@ -882,33 +1544,45 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     }
   };
   const share = async () => {
+    if (actionBusy) return;
+    setActionBusy("share");
     let cloudSchedule = schedule;
-    if (!CLOUD_SCHEDULE_ID.test(schedule.id)) {
-      const saved = await save();
-      if (!saved) return;
-      cloudSchedule = saved;
+    try {
+      if (!CLOUD_SCHEDULE_ID.test(schedule.id)) {
+        const saved = await save();
+        if (!saved) return;
+        cloudSchedule = saved;
+      }
+      const response = await fetch("/api/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: cloudSchedule.id }) });
+      const payload = await response.json() as { url?: string; error?: string };
+      if (!response.ok || !payload.url) return setNotice(payload.error || "This schedule could not be published.");
+      try { await navigator.clipboard.writeText(payload.url); setNotice("Public schedule link copied."); }
+      catch { setNotice(`Public schedule ready: ${payload.url}`); }
+      window.setTimeout(() => setNotice(null), 5200);
+    } finally {
+      setActionBusy(null);
     }
-    const response = await fetch("/api/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: cloudSchedule.id }) });
-    const payload = await response.json() as { url?: string; error?: string };
-    if (!response.ok || !payload.url) return setNotice(payload.error || "This schedule could not be published.");
-    try { await navigator.clipboard.writeText(payload.url); setNotice("Public schedule link copied."); }
-    catch { setNotice(`Public schedule ready: ${payload.url}`); }
-    window.setTimeout(() => setNotice(null), 5200);
   };
   const sendNotification = async () => {
+    if (actionBusy) return;
     if (!CLOUD_SCHEDULE_ID.test(schedule.id)) return setNotice("This season needs to finish cloud syncing before sending an update.");
-    const response = await fetch("/api/notifications/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: schedule.id }) });
-    const payload = await response.json() as { sent?: number; message?: string; error?: string };
-    setNotice(response.ok ? payload.message || `Update sent to ${payload.sent ?? 0} subscriber${payload.sent === 1 ? "" : "s"}.` : payload.error || "The update could not be sent.");
-    window.setTimeout(() => setNotice(null), 5200);
+    setActionBusy("notify");
+    try {
+      const response = await fetch("/api/notifications/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: schedule.id }) });
+      const payload = await response.json() as { sent?: number; message?: string; error?: string };
+      setNotice(response.ok ? payload.message || `Update sent to ${payload.sent ?? 0} subscriber${payload.sent === 1 ? "" : "s"}.` : payload.error || "The update could not be sent.");
+      window.setTimeout(() => setNotice(null), 5200);
+    } finally {
+      setActionBusy(null);
+    }
   };
   const selectView = (item: typeof VIEW_ITEMS[number]) => {
-    const feature = item.key === "scores" ? "scorekeeping" : item.key;
+    const feature = item.key;
     if (item.pro && entitlements.plan !== "pro" && !entitlements.features.includes(feature)) {
       setNotice(`${item.label} is included with Pro. Your complete schedule and basic fairness report remain available on Free.`);
       return;
     }
-    if (item.key === "scores" && selectedWeek > schedule.setup.weeks) setSelectedWeek(schedule.setup.weeks);
+    setScoreModalOpen(false);
     setView(item.key);
     if (item.key === "league-schedule") router.push(`/season/${schedule.id}`);
     else if (item.key === "team-schedule") {
@@ -923,6 +1597,15 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   };
   const currentTitle = VIEW_ITEMS.find((item) => item.key === view)?.label ?? "League Schedule";
   const canAccessPlayoffs = entitlements.plan === "pro" || entitlements.features.includes("playoffs");
+  const openScoreEntry = (weekNumber: number) => {
+    if (!canAccessScorekeeping) {
+      setNotice("Manual score entry is included with Pro. Your complete generated schedule remains available on Free.");
+      window.setTimeout(() => setNotice(null), 5200);
+      return;
+    }
+    setSelectedWeek(Math.min(weekNumber, schedule.setup.weeks));
+    setScoreModalOpen(true);
+  };
   const showLockedPlayoffNotice = (roundName: string) => {
     setNotice(`${roundName} is included with Pro. The playoff weeks remain visible here so you can see how the full season is structured.`);
     window.setTimeout(() => setNotice(null), 5200);
@@ -944,12 +1627,36 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     ? ({ "--workspace-team-wash": selectedTeamColor } as CSSProperties)
     : undefined;
   return <main className={`workspace-page ${simulation ? "simulation-mode" : ""}`}>
-    <header className="workspace-topbar"><BrandLockup /><div className="workspace-season-switch"><EntityLogo className="mini-league-mark" color={schedule.setup.color} logoUrl={schedule.setup.logoUrl} monogram={resolveInitials(schedule.setup.initials, leagueAcronym(schedule.setup.name))} size={34} /><span><strong>{schedule.setup.name}</strong><small>{schedule.setup.seasonYear} season</small></span><ChevronDown /></div><div className="workspace-top-actions"><Tooltip label="Send schedule update"><button type="button" aria-label="Send schedule update" onClick={sendNotification}><Bell /></button></Tooltip><Link href="/account"><CircleUserRound />{entitlements.signedIn ? "Account" : "Sign in"}</Link></div></header>
+    {scoreModalOpen && canAccessScorekeeping && <div className="modal-backdrop score-entry-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setScoreModalOpen(false); }}>
+      <section className="score-entry-modal" role="dialog" aria-modal="true" aria-labelledby="score-entry-modal-title">
+        <header>
+          <span className="score-entry-modal-mark"><LayoutList /></span>
+          <span><small>LEAGUE SCHEDULE</small><h2 id="score-entry-modal-title">Enter Week {selectedWeek} scores</h2></span>
+          <button type="button" aria-label="Close score entry" onClick={() => setScoreModalOpen(false)}><X /></button>
+        </header>
+        <div className="score-entry-modal-body"><ScoreImageImport schedule={activeSchedule} selectedWeek={selectedWeek} onApply={applyImportedScores} /><ScoresView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} onScore={onScore} onFinalizeScores={onFinalizeScores} simulationActive={Boolean(simulation)} simulationResults={simulationResultByGame} /></div>
+        <footer><span><ShieldCheck /><small>Scores save automatically as you enter them.</small></span><button type="button" className="button-primary" onClick={() => { onFinalizeScores(); setScoreModalOpen(false); }}>Done</button></footer>
+      </section>
+    </div>}
+    <header className="workspace-topbar"><BrandLockup /><div className="workspace-season-switch"><EntityLogo className="mini-league-mark" color={schedule.setup.color} logoUrl={schedule.setup.logoUrl} monogram={resolveInitials(schedule.setup.initials, leagueAcronym(schedule.setup.name))} size={34} /><span><strong>{schedule.setup.name}</strong><small>{schedule.setup.seasonYear} season</small></span><ChevronDown /></div><div className="workspace-top-actions"><Tooltip label="Send schedule update"><button type="button" aria-label="Send schedule update" disabled={actionBusy !== null} onClick={sendNotification}>{actionBusy === "notify" ? <LoaderCircle className="spin" /> : <Bell />}</button></Tooltip><AccountIdentity identity={entitlements} plan={entitlements.plan} /></div></header>
     <div className="workspace-shell">
-      <aside className="workspace-rail"><nav aria-label="Season workspace">{VIEW_ITEMS.map((item) => { const Icon = item.icon; return <button type="button" key={item.key} aria-label={item.label} title={item.label} className={view === item.key ? "active" : ""} onClick={() => selectView(item)}><Icon /><span>{item.label}</span>{item.pro && entitlements.plan !== "pro" && <em>PRO</em>}</button>; })}</nav><div className="rail-bottom"><span>{entitlements.plan === "pro" ? "PRO PLAN" : "FREE PLAN"}</span><p>{entitlements.plan === "pro" ? "Unlimited seasons" : "1 editable season"}</p>{entitlements.plan === "free" && <Link href="/pricing">Upgrade</Link>}</div></aside>
+      <aside className="workspace-rail"><nav aria-label="Season workspace">{VIEW_ITEMS.map((item) => { const Icon = item.icon; return <button type="button" key={item.key} aria-label={`${item.label}${item.pro ? ", Pro feature" : ""}`} title={item.label} className={view === item.key ? "active" : ""} onClick={() => selectView(item)}><Icon /><span>{item.label}</span>{item.pro && <ProBadge compact />}</button>; })}</nav><div className="rail-bottom">{entitlements.plan === "pro" ? <ProBadge label="PRO PLAN" /> : <span>FREE PLAN</span>}<p>{entitlements.plan === "pro" ? "Unlimited seasons" : "1 editable season"}</p>{entitlements.plan === "free" && <Link href="/pricing">Upgrade</Link>}</div></aside>
       <section className={`workspace-main ${selectedTeamColor ? "team-workspace-branded" : ""}`} style={workspaceMainStyle}>
-        <div className="workspace-toolbar"><div><span className="workspace-breadcrumb">{schedule.setup.abbreviation} / {schedule.setup.seasonYear}</span><h1>{currentTitle}</h1></div><div className="toolbar-actions"><button type="button" title={simulation ? "Export simulated CSV" : "Export CSV"} onClick={() => downloadCsv(activeSchedule)}><Download />CSV</button><button type="button" title={simulation ? "Export simulated PDF" : "Export PDF"} onClick={() => downloadSchedulePdf(activeSchedule)}><FileDown />PDF</button><button type="button" title={simulation ? "Share the real schedule" : "Share schedule"} onClick={share}><Share2 />Share</button></div></div>
+        <div className="workspace-toolbar"><div><span className="workspace-breadcrumb">{schedule.setup.abbreviation} / {schedule.setup.seasonYear}</span><h1>{currentTitle}</h1></div><div className="toolbar-actions"><button type="button" title={simulation ? "Export simulated CSV" : "Export CSV"} onClick={() => downloadCsv(activeSchedule)}><Download />CSV</button><button type="button" title={simulation ? "Print simulated ESPN entry sheet" : "Print ESPN entry sheet"} onClick={() => downloadSchedulePdf(activeSchedule)}><FileDown />ESPN PDF</button><button type="button" title={simulation ? "Share the real schedule" : "Share schedule"} disabled={actionBusy !== null} onClick={share}>{actionBusy === "share" ? <LoaderCircle className="spin" /> : <Share2 />}Share</button></div></div>
         {notice && <div className="workspace-notice"><Cloud />{notice}</div>}
+        {saveConflict && <section className="workspace-conflict-notice" aria-labelledby="season-save-conflict-title">
+          <span className="season-save-conflict-mark"><Cloud /></span>
+          <div>
+            <small>SAVED SEASON FOUND</small>
+            <h2 id="season-save-conflict-title">Update this season or make a copy?</h2>
+            <p><strong>{saveConflict.existingSeason.title}</strong> · {seasonTimeframeLabel(saveConflict.schedule.setup.seasonYear, saveConflict.schedule.setup.weeks)}</p>
+          </div>
+          <div className="workspace-conflict-actions">
+            <button type="button" className="button-secondary" onClick={dismissSaveConflict} disabled={saveConflictLoading} aria-label="Dismiss saved season choice"><X />Later</button>
+            <button type="button" className="button-secondary" onClick={() => resolveSaveConflict("copy")} disabled={saveConflictLoading}><Copy />Create copy</button>
+            <button type="button" className="button-primary" onClick={() => resolveSaveConflict("overwrite")} disabled={saveConflictLoading}><RefreshCw />Overwrite</button>
+          </div>
+        </section>}
         {simulation && <div className="simulation-mode-banner" role="status">
           <Gamepad2 />
           <span><strong>You’re in the Simulator</strong><small>Every score, rank, statistic, GOTW, odds, and playoff result shown is hypothetical until you save this run.</small></span>
@@ -960,13 +1667,12 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
         </div>}
         <DraftRankingReminder schedule={schedule} onSave={onSaveDraftPlaces} openRequest={draftRankingRequest} onOpenSettings={openDraftRankingSettings} />
         <div className="workspace-content">
-          {view === "league-schedule" && <ScheduleView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} canAccessPlayoffs={canAccessPlayoffs} onLockedPlayoffWeek={showLockedPlayoffNotice} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
+          {view === "league-schedule" && <ScheduleView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} canAccessPlayoffs={canAccessPlayoffs} onLockedPlayoffWeek={showLockedPlayoffNotice} onOpenScores={openScoreEntry} highlightedGame={highlightedGame} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
           {view === "team-schedule" && <TeamScheduleView schedule={activeSchedule} teamId={selectedTeamId} onSelectTeam={selectTeamSchedule} onSelectWeek={openLeagueScheduleWeek} simulationResults={simulationResultByGame} />}
           {view === "gotw" && <GotwWorkspace schedule={activeSchedule} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
           {view === "matchup-ratings" && <MatchupRatingsView schedule={activeSchedule} />}
-          {view === "scores" && <ScoresView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} onScore={onScore} onFinalizeScores={onFinalizeScores} simulationActive={Boolean(simulation)} simulationResults={simulationResultByGame} />}
-          {view === "standings" && <StandingsView schedule={activeSchedule} />}
-          {view === "playoffs" && <PlayoffsView schedule={activeSchedule} onUpdatePlayoffs={simulation ? () => undefined : onUpdatePlayoffs} simulationMode={Boolean(simulation)} />}
+          {view === "standings" && <StandingsView schedule={activeSchedule} onUpdateTiebreakers={simulation ? undefined : onUpdateTiebreakers} readOnly={Boolean(simulation)} />}
+          {view === "playoffs" && <PlayoffsView schedule={activeSchedule} onUpdatePlayoffs={simulation ? () => undefined : onUpdatePlayoffs} onUpdatePlayoffGame={simulation ? () => undefined : onUpdatePlayoffGame} highlightedGame={highlightedGame} simulationMode={Boolean(simulation)} />}
           {view === "simulator" && !simulation && simulationLoaded && <SimulatorLaunch hasSavedRun={Boolean(savedSimulation)} onPlay={playSimulation} onStartFromReal={startSimulationFromReal} />}
           {view === "simulator" && simulation && <SimulatorWorkspace
             schedule={activeSchedule}
@@ -991,8 +1697,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
             onDiscard={discardSimulation}
             onOpenSchedule={openLeagueScheduleWeek}
           />}
-          {view === "fairness" && <FairnessView schedule={activeSchedule} />}
-          {view === "settings" && <SettingsView schedule={activeSchedule} onOpenDraftRanking={() => setDraftRankingRequest((current) => current + 1)} />}
+          {view === "settings" && <SettingsView schedule={activeSchedule} onOpenDraftRanking={() => setDraftRankingRequest((current) => current + 1)} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshPlatformScores={refreshPlatformScores} onSavePlatformConnection={savePlatformConnection} onDisconnectPlatform={disconnectPlatform} />}
         </div>
         {entitlements.plan !== "pro" && <AdUnit placement="workspace" />}
       </section>

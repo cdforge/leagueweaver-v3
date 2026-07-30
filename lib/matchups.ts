@@ -16,6 +16,8 @@ export interface GameOfWeekContext {
   weekNumber: number;
   regularSeasonWeeks: number;
   playoffFieldSize: number;
+  playoffBerthTeamIds?: ReadonlySet<string>;
+  eliminatedTeamIds?: ReadonlySet<string>;
 }
 
 export interface GameOfWeekSelection {
@@ -23,6 +25,8 @@ export interface GameOfWeekSelection {
   rating: number;
   adjustedRating: number;
   playoffImplication: boolean;
+  pureGameId: string;
+  pureRating: number;
 }
 
 export function calculateMatchupRating(game: Pick<ScheduledGame, "homeTeamId" | "awayTeamId">, ranks: Map<string, number>) {
@@ -120,8 +124,14 @@ export function normalizeScheduleMatchups(weeks: ScheduleWeek[], ranksForWeek: (
   }));
 }
 
-function playoffImplicationScore(game: ScheduledGame, ranks: Map<string, number>, fieldSize: number) {
+function playoffImplicationScore(game: ScheduledGame, ranks: Map<string, number>, context: GameOfWeekContext) {
+  const fieldSize = context.playoffFieldSize;
   if (fieldSize >= ranks.size) return 0;
+  const hasClinchContext = Boolean(context.playoffBerthTeamIds || context.eliminatedTeamIds);
+  if (hasClinchContext) {
+    const unsettled = (teamId: string) => !context.playoffBerthTeamIds?.has(teamId) && !context.eliminatedTeamIds?.has(teamId);
+    if (!unsettled(game.homeTeamId) && !unsettled(game.awayTeamId)) return 0;
+  }
   const homeRank = ranks.get(game.homeTeamId) ?? Number.POSITIVE_INFINITY;
   const awayRank = ranks.get(game.awayTeamId) ?? Number.POSITIVE_INFINITY;
   const cutline = fieldSize + 0.5;
@@ -138,16 +148,20 @@ export function getGameOfWeekSelection(games: ScheduledGame[], ranks: Map<string
   const weightPlayoffImplications = context && context.weekNumber >= context.regularSeasonWeeks - 2;
   const candidates = games.map((game, index) => {
     const rating = calculateMatchupRating(game, ranks);
-    const implication = weightPlayoffImplications ? playoffImplicationScore(game, ranks, context.playoffFieldSize) : 0;
-    return { game, index, rating, adjustedRating: rating - implication * 0.8, implication };
+    const implication = weightPlayoffImplications && context ? playoffImplicationScore(game, ranks, context) : 0;
+    return { game, index, rating, implication };
   });
   const purePick = [...candidates].sort((left, right) => left.rating - right.rating || compareGamesByMatchupRating(left.game, right.game, ranks) || left.index - right.index)[0];
-  const selected = [...candidates].sort((left, right) => left.adjustedRating - right.adjustedRating || compareGamesByMatchupRating(left.game, right.game, ranks) || left.index - right.index)[0];
+  const selected = candidates
+    .filter((candidate) => candidate.rating === purePick.rating)
+    .sort((left, right) => right.implication - left.implication || compareGamesByMatchupRating(left.game, right.game, ranks) || left.index - right.index)[0];
   return {
     gameId: selected.game.id,
     rating: selected.rating,
-    adjustedRating: selected.adjustedRating,
+    adjustedRating: selected.rating,
     playoffImplication: selected.implication > 0 && selected.game.id !== purePick.game.id,
+    pureGameId: purePick.game.id,
+    pureRating: purePick.rating,
   };
 }
 
@@ -155,15 +169,15 @@ export function getGameOfWeekId(games: ScheduledGame[], ranks: Map<string, numbe
   return getGameOfWeekSelection(games, ranks, context)?.gameId;
 }
 
-export function sortGamesForDisplay(games: ScheduledGame[], gameOfWeekId: string | undefined, ranks?: Map<string, number>) {
+export function sortGamesForDisplay(games: ScheduledGame[], ranks?: Map<string, number>) {
   const order = new Map(games.map((game, index) => [game.id, index]));
-  return [...games].sort((left, right) => {
-    const featuredDifference = Number(right.id === gameOfWeekId) - Number(left.id === gameOfWeekId);
-    if (featuredDifference) return featuredDifference;
-    if (ranks) return compareGamesByMatchupRating(left, right, ranks);
-    const ratingDifference = matchupRating(left) - matchupRating(right);
-    return ratingDifference || (left.gameNumber ?? order.get(left.id) ?? 0) - (right.gameNumber ?? order.get(right.id) ?? 0);
-  });
+  return [...games]
+    .sort((left, right) => {
+      if (ranks) return compareGamesByMatchupRating(left, right, ranks);
+      const ratingDifference = matchupRating(left) - matchupRating(right);
+      return ratingDifference || (left.gameNumber ?? order.get(left.id) ?? 0) - (right.gameNumber ?? order.get(right.id) ?? 0);
+    })
+    .map((game, index) => ({ ...game, gameNumber: index + 1 }));
 }
 
 export function matchupSeriesLabel(game: ScheduledGame) {

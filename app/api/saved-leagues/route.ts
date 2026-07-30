@@ -13,6 +13,18 @@ const savedLeagueSchema = z.object({
     divisions: z.array(z.unknown()).min(2).max(4),
     teams: z.array(z.unknown()).min(8).max(16),
     display: z.object({ cityNames: z.boolean(), managers: z.boolean(), venues: z.boolean() }),
+    priorSeason: z.unknown().optional(),
+    platformConnection: z.unknown().optional(),
+    playoffs: z.object({
+      name: z.string().max(80),
+      color: z.string(),
+      theme: z.enum(["gold", "silver", "bronze", "custom"]),
+      logoUrl: z.string().optional(),
+      roundNames: z.array(z.string().max(40)).optional(),
+      roundLogoUrls: z.array(z.string()).optional(),
+      gameNames: z.record(z.string(), z.string().max(60)).optional(),
+      gameLogoUrls: z.record(z.string(), z.string()).optional(),
+    }).optional(),
   }),
 });
 

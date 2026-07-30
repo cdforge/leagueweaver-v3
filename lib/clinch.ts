@@ -1,5 +1,5 @@
 import { projectPlayoffSeeds, resolvePlayoffPlacementMode } from "./playoffs";
-import { calculateStandings } from "./standings";
+import { calculateDivisionStandings, calculateStandings } from "./standings";
 import type { GeneratedSchedule, StandingsRow } from "./types";
 
 export interface TeamClinchState {
@@ -121,7 +121,7 @@ export function calculateTeamClinchStates(schedule: GeneratedSchedule, throughWe
   const final = isRegularSeasonComplete(schedule, normalizedWeek);
   const finalPlayoffIds = final ? new Set(projectPlayoffSeeds(schedule, fieldSize).map((seed) => seed.teamId)) : undefined;
   const finalDivisionLeaderIds = final
-    ? new Set(schedule.setup.divisions.map((division) => standings.find((row) => schedule.setup.teams.find((team) => team.id === row.teamId)?.divisionId === division.id)?.teamId).filter(Boolean))
+    ? new Set(schedule.setup.divisions.map((division) => calculateDivisionStandings(schedule, division.id, normalizedWeek)[0]?.teamId).filter(Boolean))
     : undefined;
 
   return ranges.map((team) => {

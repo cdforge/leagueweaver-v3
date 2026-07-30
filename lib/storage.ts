@@ -4,6 +4,7 @@ import { divisionAcronym, entityMonogram, leagueAcronym, resolveInitials } from 
 import { normalizePlayoffSettings } from "./playoffs";
 import { getWeekOneRankMap } from "./rankings";
 import { freezeCompletedRankHistory } from "./standings";
+import { normalizeTiebreakerSettings } from "./tiebreakers";
 
 export function normalizeSetup(setup: LeagueSetupInput): LeagueSetupInput {
   const hasLeagueInitials = Object.prototype.hasOwnProperty.call(setup, "initials");
@@ -15,7 +16,15 @@ export function normalizeSetup(setup: LeagueSetupInput): LeagueSetupInput {
     display: setup.display || { cityNames: true, managers: true, venues: true },
     priorSeason: { ...setup.priorSeason, hasData: setup.priorSeason.hasData ?? setup.priorSeason.enabled, entryMode: setup.priorSeason.entryMode ?? (setup.priorSeason.enabled ? setup.priorSeason.hasData ? "history" : "manual" : "none") },
     weekOne: setup.weekOne || { rankingSource: "prior-season" },
+    tiebreakers: normalizeTiebreakerSettings(setup.tiebreakers),
     playoffs: normalizePlayoffSettings(setup.playoffs, setup.teams.length, setup.color, setup.weeks),
+    platformConnection: setup.platformConnection ? {
+      ...setup.platformConnection,
+      syncMode: setup.platformConnection.syncMode ?? "manual",
+      authType: setup.platformConnection.authType ?? "public",
+      status: setup.platformConnection.status ?? "idle",
+      warnings: setup.platformConnection.warnings ?? [],
+    } : undefined,
     divisions: setup.divisions.map((division) => ({ ...division, initials: Object.prototype.hasOwnProperty.call(division, "initials") ? division.initials : undefined })),
     teams: setup.teams.map((team) => {
       const { draftScore: legacyDraftScore, ...teamWithoutLegacyScore } = team as typeof team & { draftScore?: number };
@@ -23,7 +32,7 @@ export function normalizeSetup(setup: LeagueSetupInput): LeagueSetupInput {
       const teamInitials = Object.prototype.hasOwnProperty.call(team, "initials") ? team.initials : team.shortName || undefined;
       const storedDraftPlace = Number.isInteger(team.draftPlace) && team.draftPlace! >= 1 && team.draftPlace! <= setup.teams.length ? team.draftPlace : undefined;
       const migratedDraftPlace = Number.isInteger(legacyDraftScore) && legacyDraftScore! >= 1 && legacyDraftScore! <= setup.teams.length ? legacyDraftScore : undefined;
-      return { ...teamWithoutLegacyScore, city, initials: teamInitials, draftPlace: storedDraftPlace ?? migratedDraftPlace, shortName: resolveInitials(teamInitials, entityMonogram(team.name, city)) };
+      return { ...teamWithoutLegacyScore, providerId: team.providerId, city, initials: teamInitials, draftPlace: storedDraftPlace ?? migratedDraftPlace, shortName: resolveInitials(teamInitials, entityMonogram(team.name, city)) };
     }),
   };
 }
@@ -32,12 +41,14 @@ const SETUP_KEY = "leagueweaver:v3:setup";
 const SEASON_KEY = "leagueweaver:v3:season";
 
 export function normalizeSeason(schedule: GeneratedSchedule): GeneratedSchedule {
+  const hadTiebreakerSettings = Boolean(schedule.setup.tiebreakers);
   const setup = normalizeSetup(schedule.setup);
   const preseasonRanks = new Map(setup.teams.map((team) => [team.id, team.overallRank]));
   const openingWeekRanks = getWeekOneRankMap(setup);
   return {
     ...schedule,
     setup,
+    rankHistory: hadTiebreakerSettings ? schedule.rankHistory : undefined,
     weeks: normalizeScheduleMatchups(schedule.weeks, (weekNumber) => weekNumber === 1 ? openingWeekRanks : preseasonRanks),
   };
 }

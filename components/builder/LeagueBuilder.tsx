@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -11,6 +11,7 @@ import {
   CircleAlert,
   FileSpreadsheet,
   GripVertical,
+  ImagePlus,
   Info,
   LockKeyhole,
   BookmarkPlus,
@@ -18,12 +19,14 @@ import {
   Medal,
   Minus,
   Plus,
+  RefreshCw,
   ShieldCheck,
   Sparkles,
   Trophy,
   Upload,
   Users,
   WandSparkles,
+  X,
   ArrowUp,
   ArrowDown,
 } from "lucide-react";
@@ -31,6 +34,7 @@ import { ImportLeagueModal, type ImportSource } from "@/components/imports/Impor
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
 import { EntityLogo } from "@/components/ui/EntityLogo";
+import { ProBadge } from "@/components/ui/ProBadge";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { createBlankSetup, createDefaultSetup, createDivisions, createTeams } from "@/lib/defaults";
 import { identityFromSetup, normalizeSavedLeague } from "@/lib/savedLeagues";
@@ -38,11 +42,13 @@ import { generateLeagueSchedule, getNflWeeks, getNflWeekWindow, getWeekDateLabel
 import { loadSetup, saveSeason, saveSetup } from "@/lib/storage";
 import { divisionAcronym, entityMonogram, leagueAcronym, resolveInitials } from "@/lib/monograms";
 import { accessibleAccentColor } from "@/lib/colorContrast";
+import { isDivisionHalvesConsolationUsable } from "@/lib/consolation";
 import { formatDraftPlace, getTeamsMissingDraftPlaces, getWeekOneTeamOrder, hasCompleteDraftRanking } from "@/lib/rankings";
 import {
   getPlayoffByeCount,
   getMaximumPlayoffFieldSize,
   getMaximumPlayoffWeeks,
+  getPlayoffGameBrandingSlots,
   getPlayoffRoundNames,
   getRequiredPlayoffWeeks,
   isPlayoffPlacementUsable,
@@ -51,9 +57,54 @@ import {
   resolvePlayoffPlacementMode,
 } from "@/lib/playoffs";
 import { teamDisplayName, teamInitials, teamMonogram } from "@/lib/teamIdentity";
-import type { Division, ImportPreview, LeagueSetupInput, PlayoffFieldSize, SavedLeaguePreset, Team } from "@/lib/types";
+import type { Division, ImportPreview, LeagueSetupInput, PlayoffFieldSize, SavedLeagueIdentity, SavedLeaguePreset, Team } from "@/lib/types";
 
-const STEPS = ["League & Import", "Teams", "Divisions", "Season", "Seeding", "Week 1 Ranking", "Fairness Rules", "Playoffs PRO", "Review & Generate"];
+const STEPS = [
+  { label: "League & Import", shortLabel: "League" },
+  { label: "Teams", shortLabel: "Teams" },
+  { label: "Divisions", shortLabel: "Divisions" },
+  { label: "Season", shortLabel: "Season" },
+  { label: "Seeding", shortLabel: "Seeding" },
+  { label: "Week 1 Ranking", shortLabel: "Week 1" },
+  { label: "Fairness Rules", shortLabel: "Fairness" },
+  { label: "Playoffs", shortLabel: "Playoffs", pro: true },
+  { label: "Review & Generate", shortLabel: "Review" },
+];
+
+type LogoSavePrompt = {
+  changedCount: number;
+  fingerprint: string;
+  nextStep: number;
+  presetId?: string;
+  presetName: string;
+};
+
+function setupLogoEntries(setup: LeagueSetupInput) {
+  return [
+    ["league", setup.logoUrl],
+    ...setup.divisions.map((division) => [`division:${division.id}`, division.logoUrl]),
+    ...setup.teams.map((team) => [`team:${team.id}`, team.logoUrl]),
+    ["playoffs", setup.playoffs.logoUrl],
+    ...(setup.playoffs.roundLogoUrls ?? []).map((logoUrl, index) => [`playoff-round:${index}`, logoUrl]),
+    ...Object.entries(setup.playoffs.gameLogoUrls ?? {}).map(([gameId, logoUrl]) => [`playoff-game:${gameId}`, logoUrl]),
+  ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+}
+
+function savedLogoEntries(identity?: SavedLeagueIdentity) {
+  if (!identity) return [];
+  return [
+    ["league", identity.league.logoUrl],
+    ...identity.divisions.map((division) => [`division:${division.id}`, division.logoUrl]),
+    ...identity.teams.map((team) => [`team:${team.id}`, team.logoUrl]),
+    ["playoffs", identity.playoffs?.logoUrl],
+    ...(identity.playoffs?.roundLogoUrls ?? []).map((logoUrl, index) => [`playoff-round:${index}`, logoUrl]),
+    ...Object.entries(identity.playoffs?.gameLogoUrls ?? {}).map(([gameId, logoUrl]) => [`playoff-game:${gameId}`, logoUrl]),
+  ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+}
+
+function logoFingerprint(setup: LeagueSetupInput) {
+  return JSON.stringify(setupLogoEntries(setup).sort(([left], [right]) => left.localeCompare(right)));
+}
 
 function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
   return (
@@ -87,6 +138,12 @@ function FieldSwitch({ checked, onChange, label }: { checked: boolean; onChange:
   return <label className="field-switch"><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} /><i aria-hidden="true" /><span>{label}</span></label>;
 }
 
+function connectedLabel(preset: SavedLeaguePreset) {
+  const provider = preset.data.platformConnection?.provider;
+  if (!provider) return null;
+  return provider === "espn" ? "ESPN connected" : "Sleeper connected";
+}
+
 function SavedLeagueShortcut({ presets, signedIn, onChoose, onStartNew }: { presets: SavedLeaguePreset[]; signedIn: boolean; onChoose: (preset: SavedLeaguePreset) => void; onStartNew: () => void }) {
   const [selectedId, setSelectedId] = useState("new");
   const selectLeague = (value: string) => {
@@ -99,7 +156,10 @@ function SavedLeagueShortcut({ presets, signedIn, onChoose, onStartNew }: { pres
     <div className="saved-league-shortcut">
       <span className="saved-league-icon"><BookmarkPlus /></span>
       <div className="saved-league-copy"><strong>{presets.length ? "Start from a saved league" : "Skip setup next season"}</strong><small>{presets.length ? "Load every saved league, team, division, color, and logo detail." : signedIn ? "Save a league after confirming its teams and divisions." : "Sign in to save this league and skip League, Teams, and Divisions next time."}</small></div>
-      <CustomSelect label="League setup" value={selectedId} onChange={selectLeague} options={[{ value: "new", label: "Start a new league", description: "Clear identity fields and begin fresh", swatch: "#607069", monogram: "+" }, ...presets.map((preset) => ({ value: preset.id, label: preset.name, description: `${preset.data.teams.length} teams · ${preset.data.divisions.length} divisions · skip to Season`, logoUrl: preset.data.league.logoUrl, swatch: preset.data.league.color, monogram: resolveInitials(preset.data.league.initials, leagueAcronym(preset.data.league.name)) }))]} />
+      <CustomSelect label="League setup" value={selectedId} onChange={selectLeague} options={[{ value: "new", label: "Start a new league", description: "Clear identity fields and begin fresh", swatch: "#607069", monogram: "+" }, ...presets.map((preset) => {
+        const connection = preset.data.platformConnection;
+        return { value: preset.id, label: preset.name, description: connection ? `${connectedLabel(preset)} · League ${connection.providerLeagueId} · ${preset.data.teams.length} teams` : `${preset.data.teams.length} teams · ${preset.data.divisions.length} divisions · skip to Season`, logoUrl: preset.data.league.logoUrl, swatch: preset.data.league.color, monogram: resolveInitials(preset.data.league.initials, leagueAcronym(preset.data.league.name)) };
+      })]} />
       {!signedIn && <Link href="/account?next=/" className="button-secondary saved-league-signin"><LogIn />Sign in</Link>}
     </div>
   );
@@ -112,6 +172,14 @@ function LeagueStep({ setup, setSetup, onImport, presets, signedIn, onQuickImpor
         <span className="step-kicker">Step 1 of 9</span>
         <h1>Start with your league.</h1>
         <p>Name it, bring in a roster, or start from a clean lineup.</p>
+      </div>
+      <div>
+        <FieldLabel>Setup source</FieldLabel>
+        <div className="source-choice-panel" aria-label="Choose league setup source">
+          <button type="button" onClick={() => onImport("espn")}><span className="import-icon espn"><img src="/providers/espn.ico" alt="" /></span><strong>Connect ESPN</strong><small>Prefill teams now. Refresh scores later after you update ESPN.</small></button>
+          <button type="button" onClick={() => onImport("sleeper")}><span className="import-icon sleeper"><img src="/providers/sleeper.ico" alt="" /></span><strong>Connect Sleeper</strong><small>Use the read-only Sleeper API for teams and sync-ready IDs.</small></button>
+          <button type="button" onClick={onStartNew}><Users /><strong>Start manually</strong><small>Build a clean league from scratch.</small></button>
+        </div>
       </div>
       <SavedLeagueShortcut presets={presets} signedIn={signedIn} onChoose={onQuickImport} onStartNew={onStartNew} />
       <div className="field-grid two-col">
@@ -141,7 +209,7 @@ function LeagueStep({ setup, setSetup, onImport, presets, signedIn, onQuickImpor
       <div className="divider-label"><span>or import a league</span></div>
       <div className="import-grid">
         <button type="button" onClick={() => onImport("sleeper")}><span className="import-icon sleeper"><img src="/providers/sleeper.ico" alt="" /></span><strong>Sleeper</strong><small>League ID or username</small></button>
-        <button type="button" onClick={() => onImport("espn")}><span className="import-icon espn"><img src="/providers/espn.ico" alt="" /></span><strong>ESPN Public Beta</strong><small>Public league URL</small></button>
+        <button type="button" onClick={() => onImport("espn")}><span className="import-icon espn"><img src="/providers/espn.ico" alt="" /></span><strong>ESPN</strong><small>League URL or ID</small></button>
         <button type="button" onClick={() => onImport("csv")}><FileSpreadsheet /><strong>CSV or paste</strong><small>Roster template included</small></button>
         <button type="button" onClick={() => onImport("screenshot")}><Upload /><strong>Screenshot</strong><small>Teams and weekly scores</small></button>
       </div>
@@ -175,11 +243,11 @@ function TeamsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: Rea
           <div className="team-editor-head"><span>Identity</span>{setup.display.cityNames && <span>City</span>}<span>Team name</span><span>Initials</span>{setup.display.managers && <span>Manager</span>}{setup.display.venues && <span>Home venue</span>}</div>
           <div className="team-editor-list">{setup.teams.map((team) => <div className="team-editor-row" key={team.id}>
             <IdentityColorPicker compact name={teamDisplayName(team, setup.display.cityNames)} abbreviation={teamInitials(team)} color={team.color} logoUrl={team.logoUrl} onChange={(next) => updateTeam(team.id, next)} />
-            {setup.display.cityNames && <input aria-label={`Team ${team.overallRank} city`} placeholder="City" value={team.city} onChange={(event) => updateTeam(team.id, { city: event.target.value })} />}
-            <input aria-label={`Team ${team.overallRank} name`} placeholder="Team name" value={team.name} onChange={(event) => updateTeam(team.id, { name: event.target.value })} />
-            <input aria-label={`${teamDisplayName(team)} initials override`} maxLength={4} placeholder={`Auto: ${entityMonogram(team.name, team.city)}`} value={team.initials ?? ""} onChange={(event) => updateTeam(team.id, { initials: event.target.value || undefined })} />
-            {setup.display.managers && <input aria-label={`${teamDisplayName(team)} manager`} placeholder="Manager" value={team.manager} onChange={(event) => updateTeam(team.id, { manager: event.target.value })} />}
-            {setup.display.venues && <input aria-label={`${teamDisplayName(team)} venue`} placeholder="Home venue" value={team.stadium} onChange={(event) => updateTeam(team.id, { stadium: event.target.value })} />}
+            {setup.display.cityNames && <label className="team-editor-field"><span>City</span><input aria-label={`Team ${team.overallRank} city`} placeholder="City" value={team.city} onChange={(event) => updateTeam(team.id, { city: event.target.value })} /></label>}
+            <label className="team-editor-field"><span>Team name</span><input aria-label={`Team ${team.overallRank} name`} placeholder="Team name" value={team.name} onChange={(event) => updateTeam(team.id, { name: event.target.value })} /></label>
+            <label className="team-editor-field"><span>Initials</span><input aria-label={`${teamDisplayName(team)} initials override`} maxLength={4} placeholder={`Auto: ${entityMonogram(team.name, team.city)}`} value={team.initials ?? ""} onChange={(event) => updateTeam(team.id, { initials: event.target.value || undefined })} /></label>
+            {setup.display.managers && <label className="team-editor-field"><span>Manager</span><input aria-label={`${teamDisplayName(team)} manager`} placeholder="Manager" value={team.manager} onChange={(event) => updateTeam(team.id, { manager: event.target.value })} /></label>}
+            {setup.display.venues && <label className="team-editor-field"><span>Home venue</span><input aria-label={`${teamDisplayName(team)} venue`} placeholder="Home venue" value={team.stadium} onChange={(event) => updateTeam(team.id, { stadium: event.target.value })} /></label>}
           </div>)}</div>
         </div>
       </div>
@@ -208,7 +276,7 @@ function DivisionsStep({ setup, setSetup, signedIn, saveState, onSaveLeague }: {
       <div className="division-strip">{setup.divisions.map((division) => <div className="division-identity-edit" key={division.id}><IdentityColorPicker compact name={`${division.name} division`} abbreviation={resolveInitials(division.initials, divisionAcronym(division.name))} color={division.color} logoUrl={division.logoUrl} onChange={(next) => updateDivision(division.id, next)} /><div><input aria-label={`${division.name} division name`} value={division.name} onChange={(event) => updateDivision(division.id, { name: event.target.value })} /><input aria-label={`${division.name} division initials override`} maxLength={4} placeholder={`Auto: ${divisionAcronym(division.name)}`} value={division.initials ?? ""} onChange={(event) => updateDivision(division.id, { initials: event.target.value || undefined })} /></div></div>)}</div>
       <div className="division-assignments"><div className="division-assign-head"><strong>Place each team</strong><span>Keep each division within one team of the others.</span></div><div>{setup.teams.map((team) => <div className="division-assign-row" key={team.id}><EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} /><span>{setup.display.cityNames && team.city && <small className="team-city">{team.city}</small>}<strong>{team.name}</strong>{setup.display.managers && <small>{team.manager || "No manager"}</small>}</span><CustomSelect label={`${teamDisplayName(team)} division`} value={team.divisionId} onChange={(divisionId) => updateTeam(team.id, divisionId)} options={setup.divisions.map((division) => ({ value: division.id, label: division.name, swatch: division.color, logoUrl: division.logoUrl, monogram: resolveInitials(division.initials, divisionAcronym(division.name)) }))} /></div>)}</div></div>
     </div>
-    <div className="save-league-row"><span><BookmarkPlus /><span><strong>Reuse this league setup</strong><small>Save cities, team names, initials, colors, logos, managers, divisions, rankings, and venues.</small></span></span><div>{saveState && <small role="status">{saveState}</small>}{!signedIn && <Link href="/account?next=/">Sign in to enable</Link>}<button type="button" className="button-secondary" onClick={onSaveLeague} disabled={!signedIn}><BookmarkPlus />Save league</button></div></div>
+    <div className="save-league-row"><span><BookmarkPlus /><span><strong>Reuse this league setup</strong><small>Save cities, team names, initials, colors, logos, managers, divisions, rankings, and venues.</small></span></span><div>{saveState && <small role="status">{saveState}</small>}{!signedIn && <Link href="/account?next=/">Sign in to enable</Link>}<button type="button" className="button-secondary" onClick={() => onSaveLeague()} disabled={!signedIn}><BookmarkPlus />Save league</button></div></div>
   </div>;
 }
 
@@ -359,15 +427,47 @@ function PlayoffsStep({ setup, setSetup, isPro, onSkip }: { setup: LeagueSetupIn
       fieldStatus: "live",
       lockedTeamIds: [],
       roundNames: undefined,
+      roundLogoUrls: undefined,
+      gameNames: undefined,
+      gameLogoUrls: undefined,
     });
   };
-  const updateFieldSize = (fieldSize: PlayoffFieldSize) => update({ fieldSize, fieldStatus: "live", lockedTeamIds: [], roundNames: undefined });
+  const updateFieldSize = (fieldSize: PlayoffFieldSize) => update({
+    fieldSize,
+    fieldStatus: "live",
+    lockedTeamIds: [],
+    roundNames: undefined,
+    roundLogoUrls: undefined,
+    gameNames: undefined,
+    gameLogoUrls: undefined,
+    consolationMode: setup.playoffs.consolationMode === "division-halves" && !isDivisionHalvesConsolationUsable(setup, fieldSize)
+      ? "standard"
+      : setup.playoffs.consolationMode,
+  });
   const updateRoundName = (index: number, name: string) => {
     const roundNames = [...(setup.playoffs.roundNames ?? Array(getPlayoffRoundNames(setup.playoffs, setup.divisions.length).length).fill(""))];
     roundNames[index] = name;
     update({ roundNames });
   };
+  const updateRoundLogo = (index: number, logoUrl?: string) => {
+    const roundLogoUrls = [...(setup.playoffs.roundLogoUrls ?? Array(getPlayoffRoundNames(setup.playoffs, setup.divisions.length).length).fill(""))];
+    roundLogoUrls[index] = logoUrl || "";
+    update({ roundLogoUrls });
+  };
   const rounds = getPlayoffRoundNames(setup.playoffs, setup.divisions.length);
+  const gameBrandingSlots = getPlayoffGameBrandingSlots(setup.playoffs, setup.divisions.length);
+  const updateGameLogo = (gameId: string, logoUrl?: string) => {
+    const gameLogoUrls = { ...(setup.playoffs.gameLogoUrls ?? {}) };
+    if (logoUrl) gameLogoUrls[gameId] = logoUrl;
+    else delete gameLogoUrls[gameId];
+    update({ gameLogoUrls });
+  };
+  const updateGameName = (gameId: string, name: string) => {
+    const gameNames = { ...(setup.playoffs.gameNames ?? {}) };
+    if (name.trim()) gameNames[gameId] = name.slice(0, 60);
+    else delete gameNames[gameId];
+    update({ gameNames });
+  };
   const maximumFieldSize = getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, setup.playoffs.bracketType);
   const maximumPlayoffWeeks = getMaximumPlayoffWeeks(setup.weeks);
   const requiredPlayoffWeeks = getRequiredPlayoffWeeks(setup.playoffs.fieldSize, setup.playoffs.bracketType);
@@ -396,14 +496,19 @@ function PlayoffsStep({ setup, setSetup, isPro, onSkip }: { setup: LeagueSetupIn
     { value: "reranked", label: "Bracket seed", description: "Show each team’s current playoff seed" },
     { value: "standings-finish", label: "Standings finish", description: "Keep the team’s final regular-season position visible" },
   ];
+  const consolationOptions = [
+    { value: "standard", label: "Standard placement", description: "ESPN-style placement games keep eliminated teams active without letting them re-enter the title bracket" },
+    ...(isDivisionHalvesConsolationUsable(setup) ? [{ value: "division-halves", label: "Division-halves placement", description: "Non-playoff teams open inside their division, then winners and losers cross divisions for final places" }] : []),
+    { value: "off", label: "No consolation bracket", description: "Only the championship bracket is played" },
+  ];
   const selectTheme = (theme: LeagueSetupInput["playoffs"]["theme"]) => update({
     theme,
     color: theme === "custom" ? setup.playoffs.color : PLAYOFF_THEME_COLORS[theme],
   });
   return <div className="step-stack">
-    <div className="section-heading"><span className="step-kicker">Step 8 of 9 <em>PRO</em></span><h1>Shape the playoff run.</h1><p>Preview the postseason on Free. Pro commissioners can customize the bracket and carry it into the season workspace.</p></div>
+    <div className="section-heading"><span className="step-kicker">Step 8 of 9 <ProBadge compact /></span><h1>Shape the playoff run.</h1><p>Preview the postseason on Free. Pro commissioners can customize the bracket and carry it into the season workspace.</p></div>
     <div className={`playoff-builder ${isPro ? "" : "playoff-builder-locked"}`}>
-      <div className="playoff-builder-head"><span><EntityLogo color={setup.playoffs.color} logoUrl={setup.playoffs.logoUrl} monogram="PO" /><span><strong>{setup.playoffs.name}</strong><small>{rounds.length} rounds · starts NFL Week {setup.weeks + 1}</small></span></span>{isPro ? <em><Check />PRO ACTIVE</em> : <em><LockKeyhole />PRO PREVIEW</em>}</div>
+      <div className="playoff-builder-head"><span>{setup.playoffs.logoUrl && <EntityLogo color={setup.playoffs.color} logoUrl={setup.playoffs.logoUrl} monogram="PO" />}<span><strong>{setup.playoffs.name}</strong><small>{rounds.length} rounds · starts NFL Week {setup.weeks + 1}</small></span></span><ProBadge label={isPro ? "PRO ACTIVE" : "PRO PREVIEW"} className="playoff-pro-status" /></div>
       <div className="playoff-recommendation"><ShieldCheck /><span><strong>Recommended for this league</strong><small>Single elimination · {setup.playoffs.fieldSize} teams · {playoffPlacementLabel(resolvedPlacement)} · {byeCount ? `${byeCount} first-round byes` : "no byes"} · higher seed hosts · fixed bracket</small></span><em>AUTO</em></div>
       <fieldset className="playoff-settings" disabled={!isPro}>
         <div className="playoff-identity-row">
@@ -418,10 +523,20 @@ function PlayoffsStep({ setup, setSetup, isPro, onSkip }: { setup: LeagueSetupIn
           <div><FieldLabel>Reseeding</FieldLabel><CustomSelect label="Reseeding mode" value={setup.playoffs.reseedMode} onChange={(value) => update({ reseedMode: value as LeagueSetupInput["playoffs"]["reseedMode"] })} options={reseedOptions} /></div>
           <div><FieldLabel hint="Earlier rounds always use the higher seed">Championship venue</FieldLabel><CustomSelect label="Championship venue" value={setup.playoffs.championshipVenueMode} onChange={(value) => update({ championshipVenueMode: value as LeagueSetupInput["playoffs"]["championshipVenueMode"] })} options={championshipVenueOptions} /></div>
           <div><FieldLabel>Seed display</FieldLabel><CustomSelect label="Seed display" value={setup.playoffs.seedDisplayMode} onChange={(value) => update({ seedDisplayMode: value as LeagueSetupInput["playoffs"]["seedDisplayMode"] })} options={seedDisplayOptions} /></div>
+          <div><FieldLabel hint="All placement games stay separate from the title bracket">Consolation format</FieldLabel><CustomSelect label="Consolation format" value={setup.playoffs.consolationMode} onChange={(value) => update({ consolationMode: value as LeagueSetupInput["playoffs"]["consolationMode"], thirdPlaceGame: value !== "off" })} options={consolationOptions} /></div>
         </div>
-        <Toggle checked={setup.playoffs.thirdPlaceGame} onChange={(thirdPlaceGame) => update({ thirdPlaceGame })} label="Third-place game" description="Add a final matchup for semifinal losers." />
-        <div className="playoff-rounds-head"><span><strong>Round names and dates</strong><small>Rename any round. Dates follow the NFL week calendar.</small></span><em>Field stays live until you lock it in the season workspace.</em></div>
-        <div className="playoff-round-preview">{rounds.map((round, index) => { const week = setup.weeks + index + 1; return <div key={`${round}-${index}`}><span>{index + 1}</span><input aria-label={`Round ${index + 1} name`} value={round} maxLength={40} onChange={(event) => updateRoundName(index, event.target.value)} /><small>NFL Week {week}</small><b>{getWeekDateLabel(setup.seasonYear, week).replace(`, ${setup.seasonYear}`, "")}</b></div>; })}</div>
+        <div className="playoff-rounds-head"><span><strong>Round names, logos, and dates</strong><small>Rename any round and optionally add its own logo. Empty logo spots are never shown in the bracket.</small></span><em>Field stays live until you lock it in the season workspace.</em></div>
+        <div className="playoff-round-preview">{rounds.map((round, index) => { const week = setup.weeks + index + 1; const abbreviation = round.split(/\s+/).map((word) => word[0]).join("").slice(0, 3).toUpperCase(); return <div key={`${round}-${index}`}><span>{index + 1}</span><IdentityColorPicker compact showColorControl={false} showAbbreviation={false} name={`${round} round`} abbreviation={abbreviation} color={setup.playoffs.color} logoUrl={setup.playoffs.roundLogoUrls?.[index]} onChange={(next) => updateRoundLogo(index, next.logoUrl)} /><input aria-label={`Round ${index + 1} name`} value={round} maxLength={40} onChange={(event) => updateRoundName(index, event.target.value)} /><small>NFL Week {week}</small><b>{getWeekDateLabel(setup.seasonYear, week).replace(`, ${setup.seasonYear}`, "")}</b></div>; })}</div>
+        <div className="playoff-rounds-head playoff-game-branding-head"><span><strong>Specific game names and logos</strong><small>Rename individual matchups and optionally override the round logo.</small></span><em>{gameBrandingSlots.length} playoff games</em></div>
+        <div className="playoff-game-branding-grid">{gameBrandingSlots.map((slot) => {
+          const sameRound = gameBrandingSlots.filter((item) => item.roundIndex === slot.roundIndex);
+          const divisionLabel = resolvedPlacement === "division-halves" && setup.divisions.length === 2 && sameRound.length === 2 && slot.roundIndex < rounds.length - 1
+            ? setup.divisions[slot.gameIndex]?.name
+            : undefined;
+          const fallback = divisionLabel ? `${divisionLabel} ${slot.roundName}` : sameRound.length === 1 ? slot.roundName : `${slot.roundName} · Game ${slot.gameIndex + 1}`;
+          const label = setup.playoffs.gameNames?.[slot.id] || fallback;
+          return <div key={slot.id}><span><input className="text-input" aria-label={`${fallback} name`} defaultValue={label} maxLength={60} onBlur={(event) => updateGameName(slot.id, event.target.value)} /><small>NFL Week {setup.weeks + slot.roundIndex + 1}</small></span><IdentityColorPicker compact showColorControl={false} showAbbreviation={false} name={label} abbreviation={`G${slot.gameIndex + 1}`} color={setup.playoffs.color} logoUrl={setup.playoffs.gameLogoUrls?.[slot.id]} onChange={(next) => updateGameLogo(slot.id, next.logoUrl)} /></div>;
+        })}</div>
       </fieldset>
     </div>
     {!isPro && <div className="playoff-upgrade"><LockKeyhole /><span><strong>Unlock the playoff builder with Pro.</strong><small>Your regular-season schedule stays complete on Free. Upgrade for bracket controls, projections, and live playoff tracking, or skip this step.</small></span><Link href="/pricing" className="button-primary">See Pro plans</Link><button type="button" className="button-secondary" onClick={onSkip}>Skip playoffs</button></div>}
@@ -466,7 +581,9 @@ function LivePreview({ setup, step }: { setup: LeagueSetupInput; step: number })
 export function LeagueBuilder() {
   const router = useRouter();
   const [step, setStep] = useState(0);
+  const progressTrackRef = useRef<HTMLOListElement>(null);
   const [setup, setSetup] = useState<LeagueSetupInput>(createDefaultSetup);
+  const logoBaseline = useRef<Map<string, string>>(new Map(setupLogoEntries(setup)));
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [importSource, setImportSource] = useState<ImportSource | null>(null);
@@ -474,6 +591,12 @@ export function LeagueBuilder() {
   const [signedIn, setSignedIn] = useState(false);
   const [plan, setPlan] = useState<"free" | "pro">("free");
   const [leagueSaveState, setLeagueSaveState] = useState<string | null>(null);
+  const [activeSavedLeagueId, setActiveSavedLeagueId] = useState<string | null>(null);
+  const [connectedSavedLeaguePrompt, setConnectedSavedLeaguePrompt] = useState<SavedLeaguePreset | null>(null);
+  const [logoSavePrompt, setLogoSavePrompt] = useState<LogoSavePrompt | null>(null);
+  const [logoSaveBusy, setLogoSaveBusy] = useState(false);
+  const [logoSaveError, setLogoSaveError] = useState<string | null>(null);
+  const dismissedLogoFingerprint = useRef<string | null>(null);
 
   useEffect(() => {
     const stored = loadSetup();
@@ -481,11 +604,41 @@ export function LeagueBuilder() {
   }, []);
   useEffect(() => saveSetup(setup), [setup]);
   useEffect(() => {
+    const track = progressTrackRef.current;
+    const activeStep = track?.querySelector<HTMLElement>("button.active");
+    if (!track || !activeStep || track.scrollWidth <= track.clientWidth) return;
+    track.scrollTo({ left: activeStep.offsetLeft - (track.clientWidth - activeStep.offsetWidth) / 2, behavior: "smooth" });
+  }, [step]);
+  useEffect(() => {
     fetch("/api/entitlements").then((response) => response.json()).then((payload: { signedIn?: boolean; plan?: "free" | "pro" }) => { setSignedIn(Boolean(payload.signedIn)); setPlan(payload.plan || "free"); }).catch(() => undefined);
     fetch("/api/saved-leagues").then((response) => response.json()).then((payload: { presets?: Array<{ id: string; name: string; data: unknown; updated_at?: string }> }) => {
       setSavedLeagues((payload.presets ?? []).map(normalizeSavedLeague).filter((preset): preset is SavedLeaguePreset => Boolean(preset)));
     }).catch(() => undefined);
   }, []);
+  useEffect(() => {
+    const savedLeagueId = new URLSearchParams(window.location.search).get("savedLeague");
+    if (!savedLeagueId) return;
+    const preset = savedLeagues.find((item) => item.id === savedLeagueId);
+    if (!preset) return;
+    if (preset.data.platformConnection) setConnectedSavedLeaguePrompt(preset);
+    else applySavedLeaguePreset(preset, true);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("savedLeague");
+    window.history.replaceState({}, "", url);
+  }, [savedLeagues]);
+  useEffect(() => {
+    if (!logoSavePrompt) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !logoSaveBusy) setLogoSavePrompt(null);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [logoSaveBusy, logoSavePrompt]);
 
   const validationError = useMemo(() => {
     if (step === 0 && !setup.name.trim()) return "Enter a league name before continuing.";
@@ -507,41 +660,116 @@ export function LeagueBuilder() {
     }
     return null;
   }, [setup, step]);
+  const advanceToStep = (nextStep: number) => {
+    setStep(Math.min(STEPS.length - 1, nextStep));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const matchingSavedLeague = () => savedLeagues.find((preset) => preset.id === activeSavedLeagueId)
+    ?? savedLeagues.find((preset) => preset.name.trim().toLowerCase() === setup.name.trim().toLowerCase());
+  function applySavedLeaguePreset(preset: SavedLeaguePreset, includeConnection: boolean) {
+    setSetup((current) => ({
+      ...current,
+      ...preset.data.league,
+      display: preset.data.display,
+      divisions: preset.data.divisions,
+      teams: preset.data.teams,
+      platformConnection: includeConnection ? preset.data.platformConnection : undefined,
+      priorSeason: preset.data.priorSeason ?? { ...current.priorSeason, enabled: false, hasData: false, entryMode: "none" },
+      playoffs: preset.data.playoffs ? { ...current.playoffs, ...preset.data.playoffs } : current.playoffs,
+    }));
+    setActiveSavedLeagueId(preset.id);
+    logoBaseline.current = new Map(savedLogoEntries(preset.data));
+    dismissedLogoFingerprint.current = null;
+    setConnectedSavedLeaguePrompt(null);
+    setStep(3);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
   const next = () => {
     if (validationError) return setError(validationError);
     setError(null);
-    setStep((current) => Math.min(STEPS.length - 1, current + 1));
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    const fingerprint = logoFingerprint(setup);
+    const targetPreset = matchingSavedLeague();
+    const savedLogos = new Map(savedLogoEntries(targetPreset?.data));
+    const changedCount = setupLogoEntries(setup).filter(([key, logoUrl]) => logoBaseline.current.get(key) !== logoUrl && savedLogos.get(key) !== logoUrl).length;
+    if (changedCount > 0 && dismissedLogoFingerprint.current !== fingerprint) {
+      setLogoSaveError(null);
+      setLogoSavePrompt({
+        changedCount,
+        fingerprint,
+        nextStep: step + 1,
+        presetId: targetPreset?.id,
+        presetName: targetPreset?.name || setup.name || "this league",
+      });
+      return;
+    }
+    advanceToStep(step + 1);
   };
 
   const skipDraftRankForNow = step === 5 && setup.weekOne.rankingSource === "draft-day" && getTeamsMissingDraftPlaces(setup).length === setup.teams.length;
   const back = () => { setError(null); setStep((current) => Math.max(0, current - 1)); window.scrollTo({ top: 0, behavior: "smooth" }); };
   const quickImportSavedLeague = (preset: SavedLeaguePreset) => {
-    setSetup((current) => ({ ...current, ...preset.data.league, display: preset.data.display, divisions: preset.data.divisions, teams: preset.data.teams, priorSeason: preset.data.priorSeason ?? { ...current.priorSeason, enabled: false, hasData: false, entryMode: "none" } }));
-    setStep(3);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (preset.data.platformConnection) {
+      setConnectedSavedLeaguePrompt(preset);
+      return;
+    }
+    applySavedLeaguePreset(preset, false);
   };
   const startNewLeague = () => {
-    setSetup(createBlankSetup());
+    const blankSetup = createBlankSetup();
+    setSetup(blankSetup);
+    logoBaseline.current = new Map(setupLogoEntries(blankSetup));
+    setActiveSavedLeagueId(null);
+    dismissedLogoFingerprint.current = null;
     setLeagueSaveState(null);
     setStep(0);
   };
-  const saveLeaguePreset = async () => {
-    if (!signedIn) return setLeagueSaveState("Sign in first, then this shortcut will stay with your account.");
+  const saveLeaguePreset = async (requestedId?: string) => {
+    if (!signedIn) {
+      setLeagueSaveState("Sign in first, then this shortcut will stay with your account.");
+      return false;
+    }
+    const targetId = requestedId ?? matchingSavedLeague()?.id;
     setLeagueSaveState("Saving…");
     try {
-      const response = await fetch("/api/saved-leagues", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: setup.name, data: identityFromSetup(setup) }) });
+      const response = await fetch("/api/saved-leagues", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: targetId, name: setup.name, data: identityFromSetup(setup) }) });
       const payload = await response.json() as { preset?: { id: string; name: string; data: unknown; updated_at?: string }; error?: string };
       if (!response.ok || !payload.preset) throw new Error(payload.error || "This league could not be saved.");
       const normalized = normalizeSavedLeague(payload.preset);
-      if (normalized) setSavedLeagues((current) => [normalized, ...current.filter((preset) => preset.id !== normalized.id)]);
-      setLeagueSaveState("League saved. It will be ready from Step 1 next time.");
+      if (!normalized) throw new Error("The saved league response could not be read.");
+      setSavedLeagues((current) => [normalized, ...current.filter((preset) => preset.id !== normalized.id)]);
+      setActiveSavedLeagueId(normalized.id);
+      logoBaseline.current = new Map(setupLogoEntries(setup));
+      dismissedLogoFingerprint.current = null;
+      setLeagueSaveState(targetId ? "Saved league updated." : "League saved. It will be ready from Step 1 next time.");
+      return true;
     } catch (caught) {
       setLeagueSaveState(caught instanceof Error ? caught.message : "This league could not be saved.");
+      return false;
     }
   };
+  const savePromptLogos = async () => {
+    if (!logoSavePrompt || !signedIn) return;
+    setLogoSaveBusy(true);
+    setLogoSaveError(null);
+    const saved = await saveLeaguePreset(logoSavePrompt.presetId);
+    setLogoSaveBusy(false);
+    if (!saved) {
+      setLogoSaveError("The logos could not be saved yet. Your wizard entries are still here.");
+      return;
+    }
+    const nextStep = logoSavePrompt.nextStep;
+    setLogoSavePrompt(null);
+    advanceToStep(nextStep);
+  };
+  const skipPromptLogoSave = () => {
+    if (!logoSavePrompt) return;
+    dismissedLogoFingerprint.current = logoSavePrompt.fingerprint;
+    const nextStep = logoSavePrompt.nextStep;
+    setLogoSavePrompt(null);
+    advanceToStep(nextStep);
+  };
   const applyImport = (preview: ImportPreview) => {
-    const importedDivisionNames = Array.from(new Set(preview.teams.map((team) => team.division?.trim()).filter((name): name is string => Boolean(name))));
+    const importedDivisionNames = Array.from(new Set(preview.teams.map((team) => team.division?.replace(/\s+division$/i, "").trim()).filter((name): name is string => Boolean(name))));
     const divisionCount: 2 | 3 | 4 = importedDivisionNames.length === 4 ? 4 : importedDivisionNames.length === 3 ? 3 : 2;
     const divisions = createDivisions(divisionCount).map((division, index) => ({
       ...division,
@@ -552,6 +780,7 @@ export function LeagueBuilder() {
       const name = team.name.trim() || `Team ${index + 1}`;
       return {
         id: `team-${index + 1}`,
+        providerId: team.providerId,
         city: team.city?.trim() || "",
         name,
         shortName: teamMonogram(team.city || "", name),
@@ -575,14 +804,33 @@ export function LeagueBuilder() {
         seasonYear: preview.seasonYear || current.seasonYear,
         divisions,
         teams,
+        platformConnection: preview.provider === "espn" || preview.provider === "sleeper" ? {
+          provider: preview.provider,
+          providerLeagueId: preview.providerLeagueId || "",
+          providerLeagueName: leagueName,
+          seasonYear: preview.seasonYear || current.seasonYear,
+          syncMode: preview.syncMode || "manual",
+          authType: preview.authType || "public",
+          status: "idle",
+          warnings: preview.warnings,
+          availableHistoryYears: preview.dataFound?.availableHistoryYears,
+          blockedHistoryYears: preview.dataFound?.blockedHistoryYears,
+          hasDraftData: preview.dataFound?.hasDraftData,
+          hasRosterData: preview.dataFound?.hasRosterData,
+          hasPlayerData: preview.dataFound?.hasPlayerData,
+          hasScoreSync: preview.dataFound?.hasScoreSync,
+        } : undefined,
         priorSeason: { ...current.priorSeason, enabled: Boolean(preview.hasPriorSeasonRanks), hasData: Boolean(preview.hasPriorSeasonRanks), entryMode: preview.hasPriorSeasonRanks ? "history" : "none" },
       };
     });
     setImportSource(null);
-    setStep(1);
+    setActiveSavedLeagueId(null);
+    dismissedLogoFingerprint.current = null;
+    setStep(0);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const generate = () => {
+    if (generating) return;
     const missingCore = !setup.name.trim() || setup.teams.length < 8 || setup.teams.some((team) => !team.name.trim());
     if (missingCore) {
       setError("Return to League and Teams to complete every required name before generating.");
@@ -613,8 +861,15 @@ export function LeagueBuilder() {
         <div><p className="eyebrow">Fantasy football schedule maker</p><h2>Build the season your league deserves.</h2></div>
         <p>Fair matchups. Real NFL weeks. No spreadsheet math.</p>
       </div>
-      <div className="page-width wizard-progress" role="list" aria-label="Setup progress">
-        {STEPS.map((label, index) => <button type="button" key={label} role="listitem" className={index === step ? "active" : index < step ? "complete" : ""} onClick={() => { if (index <= step) { setError(null); setStep(index); } }}><span>{index < step ? <Check /> : index + 1}</span><em>{label}</em></button>)}
+      <div className="page-width wizard-progress" aria-label="Setup progress">
+        <div className="wizard-progress-summary">
+          <span><small>Step {step + 1} of {STEPS.length}</small><strong>{STEPS[step].label}</strong></span>
+          <em>{Math.round(((step + 1) / STEPS.length) * 100)}% complete</em>
+          <div aria-hidden="true"><i style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} /></div>
+        </div>
+        <ol className="wizard-progress-track" ref={progressTrackRef} style={{ "--wizard-progress-ratio": step / (STEPS.length - 1) } as React.CSSProperties}>
+          {STEPS.map((item, index) => <li key={item.label}><button type="button" title={item.label} aria-current={index === step ? "step" : undefined} aria-label={`Step ${index + 1}: ${item.label}${item.pro ? ", Pro feature" : ""}${index < step ? ", complete" : index === step ? ", current" : ", upcoming"}`} disabled={index > step} className={index === step ? "active" : index < step ? "complete" : ""} onClick={() => { setError(null); setStep(index); }}><span>{index < step ? <Check /> : index + 1}</span><em><b>{item.label}</b><small>{item.shortLabel}</small>{item.pro && <ProBadge compact />}</em></button></li>)}
+        </ol>
       </div>
       <div className="page-width builder-layout">
         <div className="builder-tool">
@@ -626,7 +881,7 @@ export function LeagueBuilder() {
             {step === 4 && <SeedingStep setup={setup} setSetup={setSetup} />}
             {step === 5 && <OpeningWeekStep setup={setup} setSetup={setSetup} />}
             {step === 6 && <FairnessStep setup={setup} setSetup={setSetup} />}
-            {step === 7 && <PlayoffsStep setup={setup} setSetup={setSetup} isPro={plan === "pro"} onSkip={() => setStep(8)} />}
+            {step === 7 && <PlayoffsStep setup={setup} setSetup={setSetup} isPro={plan === "pro"} onSkip={next} />}
             {step === 8 && <ReviewStep setup={setup} />}
           </div>
           {error && <div className="builder-error" role="alert"><CircleAlert />{error}</div>}
@@ -638,6 +893,45 @@ export function LeagueBuilder() {
         <LivePreview setup={setup} step={step} />
       </div>
       {importSource && <ImportLeagueModal source={importSource} setup={setup} onClose={() => setImportSource(null)} onConfirm={applyImport} />}
+      {connectedSavedLeaguePrompt && <div className="modal-backdrop connected-saved-league-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setConnectedSavedLeaguePrompt(null); }}>
+        <section className="season-save-conflict connected-saved-league-modal" role="dialog" aria-modal="true" aria-labelledby="connected-saved-league-title" aria-describedby="connected-saved-league-description">
+          <header>
+            <span className="season-save-conflict-mark">{connectedSavedLeaguePrompt.data.platformConnection?.provider === "espn" ? <img src="/providers/espn.ico" alt="" /> : <img src="/providers/sleeper.ico" alt="" />}</span>
+            <span><small>{connectedLabel(connectedSavedLeaguePrompt)?.toUpperCase()}</small><h2 id="connected-saved-league-title">Use connected league data?</h2></span>
+            <button type="button" aria-label="Close connected saved league choice" onClick={() => setConnectedSavedLeaguePrompt(null)}><X /></button>
+          </header>
+          <div>
+            <strong>{connectedSavedLeaguePrompt.name}</strong>
+            <p id="connected-saved-league-description">This saved league includes {connectedSavedLeaguePrompt.data.platformConnection?.provider === "espn" ? "ESPN" : "Sleeper"} League {connectedSavedLeaguePrompt.data.platformConnection?.providerLeagueId}. You can keep that connection for score refresh later, or load only the teams and divisions.</p>
+            <small>LeagueWeaver still generates the schedule here. It will not update ESPN or Sleeper for you.</small>
+          </div>
+          <footer>
+            <button type="button" className="button-secondary" onClick={() => applySavedLeaguePreset(connectedSavedLeaguePrompt, false)}>Roster only</button>
+            <button type="button" className="button-primary" onClick={() => applySavedLeaguePreset(connectedSavedLeaguePrompt, true)}><RefreshCw />Use saved connection</button>
+          </footer>
+        </section>
+      </div>}
+      {logoSavePrompt && <div className="modal-backdrop league-logo-save-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !logoSaveBusy) setLogoSavePrompt(null); }}>
+        <section className="season-save-conflict league-logo-save-modal" role="dialog" aria-modal="true" aria-labelledby="league-logo-save-title" aria-describedby="league-logo-save-description">
+          <header>
+            <span className="season-save-conflict-mark"><ImagePlus /></span>
+            <span><small>{logoSavePrompt.presetId ? "NEW LOGOS FOUND" : "KEEP YOUR NEW LOGOS"}</small><h2 id="league-logo-save-title">{logoSavePrompt.presetId ? `Update ${logoSavePrompt.presetName}?` : "Save these with your league?"}</h2></span>
+            <button type="button" aria-label="Close logo save recommendation" disabled={logoSaveBusy} onClick={() => setLogoSavePrompt(null)}><X /></button>
+          </header>
+          <div>
+            <strong>{logoSavePrompt.changedCount} new or changed {logoSavePrompt.changedCount === 1 ? "image" : "images"}</strong>
+            <p id="league-logo-save-description">{logoSavePrompt.presetId ? "Save the new league, division, team, and playoff logos to this saved league so they are ready next season." : "Save this league setup with its logos so you will not need to upload them again."}</p>
+            <small>This includes the main playoff logo plus any round-specific and game-specific playoff logos.</small>
+            {logoSaveError && <span className="league-logo-save-error" role="alert">{logoSaveError}</span>}
+          </div>
+          <footer>
+            <button type="button" className="button-secondary" disabled={logoSaveBusy} onClick={skipPromptLogoSave}>Not now</button>
+            {signedIn
+              ? <button type="button" className="button-primary" disabled={logoSaveBusy} onClick={() => void savePromptLogos()}><BookmarkPlus />{logoSaveBusy ? "Saving…" : logoSavePrompt.presetId ? "Update saved league" : "Save league and logos"}</button>
+              : <Link href="/account?next=/" className="button-primary"><LogIn />Sign in to save</Link>}
+          </footer>
+        </section>
+      </div>}
     </section>
   );
 }

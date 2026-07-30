@@ -1,4 +1,5 @@
 import { calculateMatchupRating, getGameOfWeekSelection } from "./matchups";
+import { calculateTeamClinchStates } from "./clinch";
 import { getWeekOneRankMap } from "./rankings";
 import { calculateStandings, formatRecord, getEnteringWeekRankMap, getLiveRankHistory } from "./standings";
 import type { GeneratedSchedule, ScheduledGame, StandingsRow } from "./types";
@@ -13,6 +14,7 @@ export interface TeamSeasonStats extends StandingsRow {
   record: string;
   home: SplitRecord;
   away: SplitRecord;
+  bestStreak: string;
   divisionPointsFor: number;
   divisionPointsAgainst: number;
   strengthOfVictory: number | null;
@@ -35,6 +37,8 @@ export interface GameOfWeekTimelineEntry {
   planningRating: number;
   liveRating: number;
   playoffImplication: boolean;
+  pureGame: ScheduledGame;
+  pureRating: number;
   ranks: Map<string, number>;
 }
 
@@ -84,13 +88,23 @@ export function calculateTeamSeasonStats(schedule: GeneratedSchedule, playoffOdd
   const opponents = new Map(schedule.setup.teams.map((team) => [team.id, [] as string[]]));
   const defeated = new Map(schedule.setup.teams.map((team) => [team.id, [] as string[]]));
   const featuredWins = new Map(schedule.setup.teams.map((team) => [team.id, 0]));
+  const activeWinStreak = new Map(schedule.setup.teams.map((team) => [team.id, 0]));
+  const bestWinStreak = new Map(schedule.setup.teams.map((team) => [team.id, 0]));
   const gotwIds = getRegularSeasonGotwIds(schedule);
 
-  for (const week of schedule.weeks) {
+  for (const week of [...schedule.weeks].sort((left, right) => left.weekNumber - right.weekNumber)) {
     for (const game of week.games) {
       if (game.homeScore == null || game.awayScore == null) continue;
       updateRecord(home.get(game.homeTeamId)!, game.homeScore, game.awayScore);
       updateRecord(away.get(game.awayTeamId)!, game.awayScore, game.homeScore);
+      for (const [teamId, won] of [
+        [game.homeTeamId, game.homeScore > game.awayScore],
+        [game.awayTeamId, game.awayScore > game.homeScore],
+      ] as const) {
+        const next = won ? (activeWinStreak.get(teamId) ?? 0) + 1 : 0;
+        activeWinStreak.set(teamId, next);
+        bestWinStreak.set(teamId, Math.max(bestWinStreak.get(teamId) ?? 0, next));
+      }
       opponents.get(game.homeTeamId)!.push(game.awayTeamId);
       opponents.get(game.awayTeamId)!.push(game.homeTeamId);
       if (game.homeScore > game.awayScore) defeated.get(game.homeTeamId)!.push(game.awayTeamId);
@@ -117,6 +131,7 @@ export function calculateTeamSeasonStats(schedule: GeneratedSchedule, playoffOdd
       record: formatRecord(row),
       home: home.get(row.teamId)!,
       away: away.get(row.teamId)!,
+      bestStreak: bestWinStreak.get(row.teamId) ? `W${bestWinStreak.get(row.teamId)}` : "—",
       divisionPointsFor: division.for,
       divisionPointsAgainst: division.against,
       strengthOfVictory: average(victoryStrengths),
@@ -174,14 +189,21 @@ export function getGameOfWeekTimeline(schedule: GeneratedSchedule): GameOfWeekTi
         : planningRanks;
     const enteringSnapshot = rankHistory.find((snapshot) => snapshot.weekNumber === Math.max(0, week.weekNumber - 1));
     const usesLiveRanks = status === "previous" ? (enteringSnapshot?.playedGames ?? 0) > 0 : hasLiveResults;
+    const implicationThroughWeek = status === "previous"
+      ? Math.max(0, week.weekNumber - 1)
+      : latestLiveSnapshot?.weekNumber ?? 0;
+    const clinchStates = calculateTeamClinchStates(schedule, implicationThroughWeek);
     const selection = getGameOfWeekSelection(week.games, ranks, {
       weekNumber: week.weekNumber,
       regularSeasonWeeks: schedule.setup.weeks,
       playoffFieldSize: schedule.setup.playoffs.fieldSize,
+      playoffBerthTeamIds: new Set(clinchStates.filter((state) => state.playoffBerth).map((state) => state.teamId)),
+      eliminatedTeamIds: new Set(clinchStates.filter((state) => state.eliminated).map((state) => state.teamId)),
     });
     if (!selection) return [];
     const game = week.games.find((item) => item.id === selection.gameId);
-    if (!game) return [];
+    const pureGame = week.games.find((item) => item.id === selection.pureGameId);
+    if (!game || !pureGame) return [];
     return [{
       weekNumber: week.weekNumber,
       dateLabel: week.dateLabel,
@@ -193,6 +215,8 @@ export function getGameOfWeekTimeline(schedule: GeneratedSchedule): GameOfWeekTi
       planningRating: calculateMatchupRating(game, planningRanks),
       liveRating: calculateMatchupRating(game, ranks),
       playoffImplication: selection.playoffImplication,
+      pureGame,
+      pureRating: selection.pureRating,
       ranks,
     }];
   });

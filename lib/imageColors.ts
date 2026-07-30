@@ -78,9 +78,9 @@ export async function analyzeIdentityImage(file: File) {
   const distinct: Array<[number, number, number]> = [];
   for (const candidate of candidates) {
     if (distinct.every((existing) => colorDistance(existing, candidate) >= 72)) distinct.push(candidate);
-    if (distinct.length === 3) break;
+    if (distinct.length === 5) break;
   }
-  while (distinct.length < 3) distinct.push([17, 122, 69]);
+  while (distinct.length < 5) distinct.push([17, 122, 69]);
 
   return {
     logoUrl,

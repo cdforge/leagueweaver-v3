@@ -9,6 +9,15 @@ export type PlayoffSeedDisplayMode = "reranked" | "standings-finish";
 export type PlayoffChampionshipVenueMode = "higher-seed" | "neutral-site";
 export type PlayoffTheme = "gold" | "silver" | "bronze" | "custom";
 export type PlayoffFieldStatus = "live" | "locked";
+export type PlayoffConsolationMode = "off" | "standard" | "division-halves";
+export type TiebreakerScope = "division" | "league";
+export type TiebreakerRule = "win-percentage" | "head-to-head" | "division-percentage" | "common-opponents" | "strength-of-victory" | "strength-of-schedule" | "point-differential" | "points-scored";
+
+export interface TiebreakerSettings {
+  division: TiebreakerRule[];
+  league: TiebreakerRule[];
+  manualOverrides: Record<string, string[]>;
+}
 
 export interface Division {
   id: string;
@@ -20,6 +29,7 @@ export interface Division {
 
 export interface Team {
   id: string;
+  providerId?: string;
   city: string;
   name: string;
   shortName: string;
@@ -31,6 +41,29 @@ export interface Team {
   overallRank: number;
   draftPlace?: number;
   stadium: string;
+}
+
+export type PlatformProvider = "espn" | "sleeper";
+export type PlatformSyncMode = "manual" | "assisted" | "auto";
+export type PlatformAuthType = "public" | "private-cookie" | "none";
+export type PlatformSyncStatus = "idle" | "ready" | "warning" | "failed" | "syncing";
+
+export interface PlatformConnection {
+  provider: PlatformProvider;
+  providerLeagueId: string;
+  providerLeagueName?: string;
+  seasonYear: number;
+  syncMode: PlatformSyncMode;
+  authType: PlatformAuthType;
+  lastSyncAt?: string;
+  status: PlatformSyncStatus;
+  warnings: string[];
+  availableHistoryYears?: number[];
+  blockedHistoryYears?: number[];
+  hasDraftData?: boolean;
+  hasRosterData?: boolean;
+  hasPlayerData?: boolean;
+  hasScoreSync?: boolean;
 }
 
 export interface LeagueSetupInput {
@@ -59,6 +92,7 @@ export interface LeagueSetupInput {
   weekOne: {
     rankingSource: "prior-season" | "draft-day";
   };
+  tiebreakers?: TiebreakerSettings;
   playoffs: {
     fieldSize: PlayoffFieldSize;
     bracketType: PlayoffBracketType;
@@ -69,12 +103,17 @@ export interface LeagueSetupInput {
     theme: PlayoffTheme;
     fieldStatus: PlayoffFieldStatus;
     lockedTeamIds: string[];
+    consolationMode: PlayoffConsolationMode;
     thirdPlaceGame: boolean;
     name: string;
     color: string;
     logoUrl?: string;
     roundNames?: string[];
+    roundLogoUrls?: string[];
+    gameNames?: Record<string, string>;
+    gameLogoUrls?: Record<string, string>;
   };
+  platformConnection?: PlatformConnection;
   fairness: {
     maxHomeAwayStreak: 2 | 3 | 4;
     preventImmediateRematches: boolean;
@@ -121,6 +160,10 @@ export interface ScheduleWeek {
 export interface PlayoffGame extends ScheduledGame {
   round: string;
   roundIndex: number;
+  /** Optional commissioner-authored name for this exact playoff matchup. */
+  name?: string;
+  /** Optional branding for this exact playoff matchup. */
+  logoUrl?: string;
   roundLogoUrl?: string;
   bracket: "main" | "consolation";
 }
@@ -156,7 +199,32 @@ export interface StandingsRow {
   winPercentage: number;
   divisionWins: number;
   divisionLosses: number;
+  divisionTies: number;
   streak: string;
+}
+
+export interface StandingsRankExplanation {
+  rule?: TiebreakerRule;
+  label: string;
+  value?: number;
+  resolution: "rule" | "manual" | "fallback";
+}
+
+export interface StandingsTieGroup {
+  signature: string;
+  scope: TiebreakerScope;
+  divisionId?: string;
+  teamIds: string[];
+  orderedTeamIds: string[];
+  appliedRules: TiebreakerRule[];
+  resolution: "manual" | "fallback";
+  explanation: string;
+}
+
+export interface StandingsResolution {
+  rows: StandingsRow[];
+  tieGroups: StandingsTieGroup[];
+  explanationsByTeam: Record<string, StandingsRankExplanation>;
 }
 
 export interface RankedStandingsRow extends StandingsRow {
@@ -164,6 +232,7 @@ export interface RankedStandingsRow extends StandingsRow {
   previousRank: number;
   rankChange: number;
   preseasonRank: number;
+  tiebreaker?: StandingsRankExplanation;
 }
 
 export interface RankHistorySnapshot {
@@ -192,22 +261,53 @@ export interface ImportTeam {
   division?: string;
   rank?: number;
   color?: string;
+  colorSuggestions?: string[];
   logoUrl?: string;
   stadium?: string;
   scores?: Array<{ week: number; value: number }>;
 }
 
+export interface ImportDataFound {
+  availableHistoryYears: number[];
+  blockedHistoryYears: number[];
+  hasDraftData: boolean;
+  hasRosterData: boolean;
+  hasPlayerData: boolean;
+  hasScoreSync: boolean;
+}
+
 export interface ImportPreview {
-  provider: "sleeper" | "espn" | "csv" | "paste" | "screenshot";
+  provider: PlatformProvider | "csv" | "paste" | "screenshot";
   providerLeagueId?: string;
   leagueName?: string;
   leagueLogoUrl?: string;
   leagueColor?: string;
   seasonYear?: number;
   teams: ImportTeam[];
+  dataFound?: ImportDataFound;
+  syncMode?: PlatformSyncMode;
+  authType?: PlatformAuthType;
   hasPriorSeasonRanks?: boolean;
   warnings: string[];
   requiresConfirmation: true;
+}
+
+export interface PlatformSyncScoreRow {
+  gameId: string;
+  week: number;
+  awayTeamId: string;
+  homeTeamId: string;
+  awayScore?: number;
+  homeScore?: number;
+  confidence: "high" | "review";
+  source: PlatformProvider;
+}
+
+export interface PlatformSyncResult {
+  rows: PlatformSyncScoreRow[];
+  unmatched: Array<{ week: number; providerHomeId?: string; providerAwayId?: string; reason: string }>;
+  warnings: string[];
+  syncedAt: string;
 }
 
 export interface SavedSeasonSummary {
@@ -226,6 +326,8 @@ export interface SavedLeagueIdentity {
   teams: Team[];
   display: LeagueSetupInput["display"];
   priorSeason?: LeagueSetupInput["priorSeason"];
+  platformConnection?: PlatformConnection;
+  playoffs?: Pick<LeagueSetupInput["playoffs"], "name" | "color" | "theme" | "logoUrl" | "roundNames" | "roundLogoUrls" | "gameNames" | "gameLogoUrls">;
 }
 
 export interface SavedLeaguePreset {

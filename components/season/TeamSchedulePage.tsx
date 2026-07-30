@@ -7,6 +7,7 @@ import { ClinchBadges } from "@/components/season/ClinchBadges";
 import { GameBadgeChip, MatchupRatingLegend, MatchupSeriesChip, TeamIdentityBlock } from "@/components/season/MatchupPresentation";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { DivisionIdentity } from "@/components/ui/DivisionIdentity";
+import { FloatingPopover } from "@/components/ui/FloatingPopover";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
 import { getTeamClinchTimelines, type TeamClinchTimeline } from "@/lib/clinch";
@@ -14,12 +15,13 @@ import { calculateMatchupRating, formatGameDateTimeOverride, getMatchupRatingRan
 import { getWeekOneRankMap } from "@/lib/rankings";
 import { getNflWeekWindow } from "@/lib/schedule";
 import { formatRecord, getEnteringWeekRankSnapshot, getWeekRankSnapshot } from "@/lib/standings";
-import { calculateTeamSeasonStats, formatSplitRecord, gameOfWeekStatusLabel, getScheduleGameSignals } from "@/lib/statistics";
+import { calculateTeamSeasonStats, formatSplitRecord, gameOfWeekStatusLabel, getScheduleGameSignals, recordGames, recordPercentage } from "@/lib/statistics";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
 import type { GeneratedSchedule, RankedStandingsRow, Team } from "@/lib/types";
 
 type DirectorySortKey = "team" | "group" | "home" | "away" | "byes" | "division" | "rating" | "sos";
 type DisplayKey = "cityNames" | "venues" | "matchup" | "rating" | "badges" | "details";
+type PlacementTone = "positive" | "neutral" | "negative";
 
 interface TeamScheduleSummary {
   team: Team;
@@ -71,6 +73,40 @@ function ordinal(value: number) {
 
 function statDecimal(value: number | null) {
   return value == null ? "—" : value.toFixed(3).replace(/^0/, "");
+}
+
+function streakValue(streak: string) {
+  if (streak.startsWith("W")) return Number(streak.slice(1)) || 0;
+  if (streak.startsWith("L")) return -(Number(streak.slice(1)) || 0);
+  return 0;
+}
+
+function statPlacement(teamId: string, values: Array<{ teamId: string; value: number | null }>, direction: "asc" | "desc", toneMode: "best-good" | "best-bad" | "neutral" = "best-good") {
+  const total = values.length;
+  const sorted = values
+    .filter((item) => item.value != null && Number.isFinite(item.value))
+    .sort((left, right) => {
+      const difference = left.value! - right.value!;
+      return (direction === "asc" ? difference : -difference) || left.teamId.localeCompare(right.teamId);
+    });
+  const target = sorted.find((item) => item.teamId === teamId);
+  if (!target) return { label: `No rank of ${total}`, tone: "neutral" satisfies PlacementTone };
+
+  const rank = sorted.findIndex((item) => item.value === target.value) + 1;
+  const tied = sorted.filter((item) => item.value === target.value).length > 1;
+  const percentile = total <= 1 ? 0.5 : (rank - 1) / (total - 1);
+  const placementTone: PlacementTone = toneMode === "neutral"
+    ? "neutral"
+    : percentile <= 0.33
+      ? toneMode === "best-good" ? "positive" : "negative"
+      : percentile >= 0.67
+        ? toneMode === "best-good" ? "negative" : "positive"
+        : "neutral";
+
+  return {
+    label: `${tied ? "Tied for " : ""}${ordinal(rank)} of ${total}`,
+    tone: placementTone,
+  };
 }
 
 function teamBrandStyle(color: string) {
@@ -249,6 +285,45 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
       {holidays.map((holiday) => <em key={holiday}>{holiday}</em>)}
     </button>
   );
+  const pointDifference = teamStats.pointsFor - teamStats.pointsAgainst;
+  const allTeamStats = Array.from(seasonStatsByTeam.values());
+  const statRowsByTeam = new Map(allTeamStats.map((row) => [row.teamId, row]));
+  const summariesByTeam = new Map(summaries.map((item) => [item.team.id, item]));
+  const placement = (
+    value: (teamId: string) => number | null,
+    direction: "asc" | "desc" = "desc",
+    toneMode: "best-good" | "best-bad" | "neutral" = "best-good",
+  ) => statPlacement(team.id, schedule.setup.teams.map((item) => ({ teamId: item.id, value: value(item.id) })), direction, toneMode);
+  const performanceStats = [
+    { label: "Live rank", value: `#${summary.liveRank}`, placement: placement((id) => summariesByTeam.get(id)?.liveRank ?? null, "asc") },
+    { label: "Record", value: teamStats.record, placement: placement((id) => statRowsByTeam.get(id)?.winPercentage ?? null) },
+    { label: "Division", value: `${teamStats.divisionWins}-${teamStats.divisionLosses}`, placement: placement((id) => {
+      const row = statRowsByTeam.get(id);
+      const games = row ? row.divisionWins + row.divisionLosses + row.divisionTies : 0;
+      return row && games ? (row.divisionWins + row.divisionTies * 0.5) / games : 0;
+    }) },
+    { label: "Home", value: formatSplitRecord(teamStats.home), placement: placement((id) => {
+      const record = statRowsByTeam.get(id)?.home;
+      return record && recordGames(record) ? recordPercentage(record) : 0;
+    }) },
+    { label: "Away", value: formatSplitRecord(teamStats.away), placement: placement((id) => {
+      const record = statRowsByTeam.get(id)?.away;
+      return record && recordGames(record) ? recordPercentage(record) : 0;
+    }) },
+    { label: "Win %", value: statDecimal(teamStats.winPercentage), placement: placement((id) => statRowsByTeam.get(id)?.winPercentage ?? null) },
+    { label: "Points for", value: String(teamStats.pointsFor), placement: placement((id) => statRowsByTeam.get(id)?.pointsFor ?? null) },
+    { label: "Points against", value: String(teamStats.pointsAgainst), placement: placement((id) => statRowsByTeam.get(id)?.pointsAgainst ?? null, "asc") },
+    { label: "Point differential", value: `${pointDifference >= 0 ? "+" : ""}${pointDifference}`, tone: pointDifference >= 0 ? "positive" : "negative", placement: placement((id) => {
+      const row = statRowsByTeam.get(id);
+      return row ? row.pointsFor - row.pointsAgainst : null;
+    }) },
+    { label: "Strength of victory", value: statDecimal(teamStats.strengthOfVictory), placement: placement((id) => statRowsByTeam.get(id)?.strengthOfVictory ?? null) },
+    { label: "Strength of schedule", value: statDecimal(teamStats.strengthOfSchedule), placement: placement((id) => statRowsByTeam.get(id)?.strengthOfSchedule ?? null, "desc", "best-bad") },
+    { label: "Streak", value: teamStats.streak, placement: placement((id) => streakValue(statRowsByTeam.get(id)?.streak ?? "—")) },
+    { label: "GOTW wins", value: String(teamStats.featuredWins), placement: placement((id) => statRowsByTeam.get(id)?.featuredWins ?? null) },
+    { label: "Byes", value: String(summary.byes), placement: placement((id) => summariesByTeam.get(id)?.byes ?? null, "desc", "neutral") },
+    { label: "Average rating", value: summary.averageRating.toFixed(1), placement: placement((id) => summariesByTeam.get(id)?.averageRating ?? null, "asc", "best-bad") },
+  ];
 
   return (
     <div className="team-schedule-view team-branded-schedule" style={teamBrandStyle(team.color)}>
@@ -289,17 +364,14 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
               })),
             ]}
           />
-          <details className="team-display-menu">
-            <summary aria-label="Choose schedule fields" title="Choose schedule fields"><SlidersHorizontal />Display</summary>
-            <div>
+          <FloatingPopover className="team-display-menu" label="Choose schedule fields" trigger={<><SlidersHorizontal />Display</>} closeOnSelect={false} menuClassName="team-display-menu-panel">
               {DISPLAY_OPTIONS.map((option) => (
                 <label key={option.key}>
                   <input type="checkbox" checked={display[option.key]} onChange={() => toggleDisplay(option.key)} />
                   <span>{option.label}</span>
                 </label>
               ))}
-            </div>
-          </details>
+          </FloatingPopover>
         </div>
       </section>
 
@@ -362,6 +434,9 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
               const ownScore = isHome ? game.homeScore : game.awayScore;
               const opponentScore = isHome ? game.awayScore : game.homeScore;
               const result = !played ? "—" : ownScore === opponentScore ? "T" : ownScore! > opponentScore! ? "W" : "L";
+              const isTied = played && game.awayScore === game.homeScore;
+              const awayScoreClass = isTied ? "score-tied" : game.awayScore! > game.homeScore! ? "score-winner" : "score-loser";
+              const homeScoreClass = isTied ? "score-tied" : game.homeScore! > game.awayScore! ? "score-winner" : "score-loser";
               const gotwEntry = scheduleSignals.gotwByWeek.get(week.weekNumber);
               const signal = getMatchupSignal(game, undefined, planningRatingRange);
               const simulationResult = simulationResults[game.id];
@@ -394,7 +469,7 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
                   <td className="col-gotw">{isGameOfWeek ? <GameBadgeChip badge="GOTW" title={gotwLabel} /> : <span aria-hidden="true">—</span>}</td>
                   <td className="col-result"><span className={`result-chip result-${result.toLowerCase()}`}>{result}</span></td>
                   <td className="col-score table-score" aria-label={played ? `${away.name} ${game.awayScore} at ${home.name} ${game.homeScore}` : "Score not entered"}>
-                    {played ? <><strong className={isHome ? "team-score-opponent" : "team-score-own"}>{game.awayScore}</strong><i aria-hidden="true">@</i><strong className={isHome ? "team-score-own" : "team-score-opponent"}>{game.homeScore}</strong></> : "—"}
+                    {played ? <><strong className={awayScoreClass}>{game.awayScore}</strong><i aria-hidden="true">@</i><strong className={homeScoreClass}>{game.homeScore}</strong></> : "—"}
                   </td>
                   {display.venues && <td className="col-venue"><span className="table-venue"><MapPin />{home.logoUrl && <img src={home.logoUrl} alt="" />}<strong>{game.stadium}</strong></span></td>}
                   {display.matchup && <td className="col-matchup"><MatchupSeriesChip game={game} division={opponentDivision} /></td>}
@@ -402,14 +477,11 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
                   {display.badges && <td className="col-badges">{badges.length ? <span className="game-badge-row">{badges.map((badge) => <GameBadgeChip badge={badge} key={badge} />)}</span> : "—"}</td>}
                   {display.details && <td className="col-details"><span className="team-game-details">{game.dateTimeOverride && <strong>{formatGameDateTimeOverride(game.dateTimeOverride)}</strong>}{metadata && <small>{metadata}</small>}{!game.dateTimeOverride && !metadata && "—"}</span></td>}
                   <td className="col-actions">
-                    <details className="table-actions">
-                      <summary aria-label={`Actions for Week ${week.weekNumber}`} title="Game actions"><MoreHorizontal /></summary>
-                      <div>
+                    <FloatingPopover className="table-actions" label={`Actions for Week ${week.weekNumber}`} trigger={<MoreHorizontal />} menuClassName="table-actions-menu">
                         <Link href={`/season/${schedule.id}?view=scores&week=${week.weekNumber}`}>Set score</Link>
                         <Link href={`/season/${schedule.id}?week=${week.weekNumber}#${game.id}`}>Game details</Link>
                         <Link href={`/season/${schedule.id}/team/${opponent.id}`}>Opponent schedule</Link>
-                      </div>
-                    </details>
+                    </FloatingPopover>
                   </td>
                 </tr>
               );
@@ -420,12 +492,9 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
 
       <section className="team-performance-panel" aria-label={`${teamDisplayName(team, showCity)} team statistics`}>
         <header><BarChart3 /><span><strong>Team performance</strong><small>Results through Week {currentSnapshot.weekNumber || 0}</small></span></header>
-        <div className="team-performance-table-wrap">
-          <table className="team-performance-table">
-            <thead><tr><th>LIVE RK</th><th>RECORD</th><th>DIV</th><th>HOME</th><th>AWAY</th><th>WIN %</th><th>PF</th><th>PA</th><th>DIFF</th><th>SOV</th><th>SOS</th><th>STREAK</th><th>GOTW WINS</th><th>BYES</th><th>AVG RATING</th></tr></thead>
-            <tbody><tr><td>#{summary.liveRank}</td><td>{teamStats.record}</td><td>{teamStats.divisionWins}-{teamStats.divisionLosses}</td><td>{formatSplitRecord(teamStats.home)}</td><td>{formatSplitRecord(teamStats.away)}</td><td>{statDecimal(teamStats.winPercentage)}</td><td>{teamStats.pointsFor}</td><td>{teamStats.pointsAgainst}</td><td className={teamStats.pointsFor - teamStats.pointsAgainst >= 0 ? "positive" : "negative"}>{teamStats.pointsFor - teamStats.pointsAgainst >= 0 ? "+" : ""}{teamStats.pointsFor - teamStats.pointsAgainst}</td><td>{statDecimal(teamStats.strengthOfVictory)}</td><td>{statDecimal(teamStats.strengthOfSchedule)}</td><td>{teamStats.streak}</td><td>{teamStats.featuredWins}</td><td>{summary.byes}</td><td>{summary.averageRating.toFixed(1)}</td></tr></tbody>
-          </table>
-        </div>
+        <dl className="team-performance-grid">
+          {performanceStats.map((stat) => <div key={stat.label}><dt>{stat.label}</dt><dd className={stat.tone}><strong className="team-stat-value">{stat.value}</strong><small className={`team-stat-placement placement-${stat.placement.tone}`}>{stat.placement.label}</small></dd></div>)}
+        </dl>
       </section>
 
       <MatchupRatingLegend />

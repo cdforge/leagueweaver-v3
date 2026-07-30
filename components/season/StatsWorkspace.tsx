@@ -1,38 +1,51 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
   BarChart3,
+  CircleX,
   Flame,
   Gauge,
+  GripVertical,
   Home,
   LockKeyhole,
   MapPin,
   Medal,
   Minus,
   Plane,
+  RotateCcw,
   ShieldCheck,
+  SlidersHorizontal,
   Swords,
   Target,
   TrendingUp,
   Trophy,
+  Trash2,
+  X,
   Zap,
   type LucideIcon,
 } from "lucide-react";
 import { CustomSelect, type SelectOption } from "@/components/ui/CustomSelect";
-import { ClinchBadges, ClinchStatusLegend } from "@/components/season/ClinchBadges";
+import { ClinchBadges } from "@/components/season/ClinchBadges";
 import { GameBadgeChip } from "@/components/season/MatchupPresentation";
 import { DivisionIdentity } from "@/components/ui/DivisionIdentity";
 import { EntityLogo } from "@/components/ui/EntityLogo";
-import { getTeamClinchTimelines } from "@/lib/clinch";
+import { getTeamClinchTimelines, type TeamClinchTimeline } from "@/lib/clinch";
 import { accessibleTeamColor, tintColor } from "@/lib/colorContrast";
 import { divisionAcronym, leagueAcronym, resolveInitials } from "@/lib/monograms";
 import { calculateSeasonOdds } from "@/lib/simulator";
-import { formatRecord, getLiveRankHistory } from "@/lib/standings";
+import { formatRecord, getLiveRankHistory, resolveStandings } from "@/lib/standings";
+import {
+  DEFAULT_TIEBREAKERS,
+  normalizeTiebreakerSettings,
+  TIEBREAKER_RULE_DESCRIPTIONS,
+  TIEBREAKER_RULE_LABELS,
+  TIEBREAKER_RULES,
+} from "@/lib/tiebreakers";
 import {
   calculateGameAnalytics,
   calculateTeamSeasonStats,
@@ -44,13 +57,14 @@ import {
   type TeamSeasonStats,
 } from "@/lib/statistics";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
-import type { GeneratedSchedule, PlayoffGame, RankedStandingsRow, RankHistorySnapshot, Team } from "@/lib/types";
+import type { Division, GeneratedSchedule, PlayoffGame, RankedStandingsRow, RankHistorySnapshot, StandingsTieGroup, Team, TiebreakerRule, TiebreakerScope, TiebreakerSettings } from "@/lib/types";
 
 type StatsTab = "standings" | "rank-race" | "team-leaders" | "league-leaders" | "playoffs" | "team-stats";
-type TeamSortKey = "team" | "record" | "winPercentage" | "division" | "pointsFor" | "pointsAgainst" | "difference" | "home" | "away" | "featuredWins" | "sov" | "sos" | "streak" | "playoff";
+type TeamSortKey = "team" | "record" | "winPercentage" | "division" | "pointsFor" | "pointsAgainst" | "difference" | "home" | "away" | "featuredWins" | "sov" | "sos" | "currentStreak" | "bestStreak" | "playoff";
 type RaceMetric = "rank" | "pointsFor" | "pointDifference" | "winPercentage";
 type ActiveRacePoint = { teamId: string; pointIndex: number } | null;
 type LeagueLeaderView = "overall" | "gotw" | "closest" | "scoring" | "divisional";
+type RaceMilestone = "top-seed" | "division-title" | "playoff-berth" | "eliminated";
 
 const RACE_METRIC_OPTIONS: SelectOption[] = [
   { value: "rank", label: "Live rank", description: "Weekly standings position" },
@@ -60,6 +74,41 @@ const RACE_METRIC_OPTIONS: SelectOption[] = [
 ];
 
 const MEDAL_LABELS = ["Gold", "Silver", "Bronze"] as const;
+const RACE_MILESTONE_LABELS: Record<RaceMilestone, string> = {
+  "top-seed": "Clinched #1 seed",
+  "division-title": "Clinched division title",
+  "playoff-berth": "Clinched playoff spot",
+  eliminated: "Eliminated",
+};
+
+function raceMilestonesAtWeek(timeline: TeamClinchTimeline | undefined, weekNumber: number): RaceMilestone[] {
+  if (!timeline) return [];
+  const milestones: RaceMilestone[] = [];
+  if (timeline.topSeedWeek === weekNumber) milestones.push("top-seed");
+  if (timeline.divisionTitleWeek === weekNumber) milestones.push("division-title");
+  if (timeline.playoffBerthWeek === weekNumber) milestones.push("playoff-berth");
+  if (timeline.eliminatedWeek === weekNumber) milestones.push("eliminated");
+  return milestones;
+}
+
+function RaceMilestoneMarker({ milestone, division, x, y, index, total }: {
+  milestone: RaceMilestone;
+  division?: Division;
+  x: number;
+  y: number;
+  index: number;
+  total: number;
+}) {
+  const markerX = x + (index - (total - 1) / 2) * 15;
+  const markerY = y - 18;
+  const symbol = milestone === "top-seed" ? "1" : milestone === "division-title" ? "★" : milestone === "playoff-berth" ? "✓" : "×";
+  return <g className={`race-milestone-marker ${milestone}`} aria-hidden="true">
+    <circle cx={markerX} cy={markerY} r="7" style={milestone === "division-title" && division ? { fill: division.color } : undefined} />
+    {milestone === "division-title" && division?.logoUrl
+      ? <image href={division.logoUrl} x={markerX - 5} y={markerY - 5} width="10" height="10" preserveAspectRatio="xMidYMid meet" />
+      : <text x={markerX} y={markerY + 3.1} textAnchor="middle">{symbol}</text>}
+  </g>;
+}
 
 function percentage(value: number) {
   return `${Math.round(value * 100)}%`;
@@ -134,24 +183,27 @@ function GameHighlight({ schedule, analytics, rank, round, roundLogoUrl, deepLin
   const home = teamById.get(game.homeTeamId)!;
   const awayWon = game.awayScore! > game.homeScore!;
   const homeWon = game.homeScore! > game.awayScore!;
-  return <div className="game-highlight">
+  return <Link className="game-highlight" href={deepLink} aria-label={`Open ${away.name} at ${home.name}, ${MEDAL_LABELS[rank - 1]} in this category`}>
     <div className="game-highlight-head"><span className={`medal-pill medal-${rank}`}><Medal />{MEDAL_LABELS[rank - 1]}</span><span className="game-badge-row">{analytics.badges.map((badge) => <GameBadgeChip badge={badge} key={badge} />)}</span></div>
     <div className="game-highlight-sides">
       <span className="game-highlight-team" style={{ background: tintColor(away.color, .88), color: accessibleTeamColor(away.color) }}><EntityLogo color={away.color} logoUrl={away.logoUrl} monogram={teamInitials(away)} size={34} /><span><small className="team-city">{away.city}</small><strong>{away.name}</strong></span>{awayWon && <em>W</em>}<b>{game.awayScore}</b></span>
-      <span className="game-highlight-separator">{roundLogoUrl ? <img src={roundLogoUrl} alt="" /> : round ? <EntityLogo color={schedule.setup.playoffs.color} logoUrl={schedule.setup.playoffs.logoUrl} monogram="PO" size={32} /> : "@"}</span>
+      <span className="game-highlight-separator">{roundLogoUrl ? <img src={roundLogoUrl} alt="" /> : schedule.setup.playoffs.logoUrl ? <img src={schedule.setup.playoffs.logoUrl} alt="" /> : "@"}</span>
       <span className="game-highlight-team" style={{ background: tintColor(home.color, .88), color: accessibleTeamColor(home.color) }}><EntityLogo color={home.color} logoUrl={home.logoUrl} monogram={teamInitials(home)} size={34} /><span><small className="team-city">{home.city}</small><strong>{home.name}</strong></span>{homeWon && <em>W</em>}<b>{game.homeScore}</b></span>
     </div>
     <div className="game-stat-chips"><span>Margin <strong>{analytics.margin}</strong><small>#{analytics.marginRank}</small></span><span>Total <strong>{analytics.total}</strong><small>#{analytics.totalRank}</small></span><span>Quality <strong>{analytics.qualityScore}</strong><small>#{analytics.qualityRank}</small></span></div>
-    <footer><span><MapPin />{home.logoUrl && <img src={home.logoUrl} alt="" />}<strong>{game.stadium}</strong></span><span>{round || `Week ${game.week}`}{game.specialEvent ? ` · ${game.specialEvent}` : ""}</span><Link href={deepLink}>Open game</Link></footer>
-  </div>;
+    <footer><span><MapPin />{home.logoUrl && <img src={home.logoUrl} alt="" />}<strong>{game.stadium}</strong></span><span>{round || `Week ${game.week}`}{game.specialEvent ? ` · ${game.specialEvent}` : ""}</span><span className="game-highlight-open">Open game</span></footer>
+  </Link>;
 }
 
 function GameHighlightPanel({ title, schedule, items, metric, direction, playoff = false }: { title: string; schedule: GeneratedSchedule; items: GameAnalytics[]; metric: "qualityScore" | "margin" | "total"; direction: "asc" | "desc"; playoff?: boolean }) {
   const ranked = categoryRanks(items, metric, direction);
   return <article className="game-leader-panel"><header><Trophy /><strong>{title}</strong></header>{ranked.length ? <div>{ranked.map(({ item, rank }) => {
     const game = item.game as PlayoffGame;
-    const deepLink = playoff ? `/season/${schedule.id}?view=playoffs#${game.id}` : `/season/${schedule.id}?week=${game.week}#${game.id}`;
-    return <GameHighlight schedule={schedule} analytics={item} rank={rank} round={playoff ? game.round : undefined} roundLogoUrl={playoff ? game.roundLogoUrl : undefined} deepLink={deepLink} key={item.game.id} />;
+    const query = new URLSearchParams(playoff ? { view: "playoffs" } : { view: "league-schedule", week: String(game.week) });
+    query.set("medal", String(rank));
+    query.set("medalCategory", title);
+    const deepLink = `/season/${schedule.id}?${query.toString()}#${game.id}`;
+    return <GameHighlight schedule={schedule} analytics={item} rank={rank} round={playoff ? game.round : undefined} roundLogoUrl={playoff ? game.logoUrl || game.roundLogoUrl : undefined} deepLink={deepLink} key={item.game.id} />;
   })}</div> : <div className="leader-empty">No completed results yet</div>}</article>;
 }
 
@@ -164,6 +216,73 @@ function RankMovement({ row }: { row: RankedStandingsRow }) {
   const change = Math.abs(row.rankChange);
   const label = direction === "up" ? `Up ${change}` : direction === "down" ? `Down ${change}` : "No change";
   return <span className="rank-movement"><strong>{row.rank}</strong><small className={direction} aria-label={label}>{direction === "up" ? <ArrowUp /> : direction === "down" ? <ArrowDown /> : <Minus />}{change || ""}</small></span>;
+}
+
+function PreseasonMovement({ row }: { row: RankedStandingsRow }) {
+  const change = row.preseasonRank - row.rank;
+  const direction = change > 0 ? "up" : change < 0 ? "down" : "even";
+  const label = change > 0 ? `Up ${change} from preseason` : change < 0 ? `Down ${Math.abs(change)} from preseason` : "Same as preseason";
+  return <span className={`preseason-movement ${direction}`} aria-label={label}>{direction === "up" ? <ArrowUp /> : direction === "down" ? <ArrowDown /> : <Minus />}<strong>{change ? Math.abs(change) : "—"}</strong></span>;
+}
+
+function moveListItem<T>(items: T[], from: number, to: number) {
+  if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) return items;
+  const next = [...items];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
+function TiebreakerEditor({ settings, onChange, disabled = false }: { settings: TiebreakerSettings; onChange: (settings: TiebreakerSettings) => void; disabled?: boolean }) {
+  const [draggedRule, setDraggedRule] = useState<TiebreakerRule | null>(null);
+  const [addRule, setAddRule] = useState("choose");
+  const stack = settings.league;
+  const removedRules = TIEBREAKER_RULES.filter((rule) => !stack.includes(rule));
+  const updateStack = (next: TiebreakerRule[]) => onChange({ ...settings, division: [...next], league: [...next] });
+  const addOptions = [
+    { value: "choose", label: removedRules.length ? "Add another rule" : "All rules are active", description: removedRules.length ? `${removedRules.length} available` : "Remove a rule to add it again" },
+    ...removedRules.map((rule) => ({ value: rule, label: TIEBREAKER_RULE_LABELS[rule], description: TIEBREAKER_RULE_DESCRIPTIONS[rule] })),
+  ];
+  const chooseRule = (value: string) => {
+    setAddRule("choose");
+    if (value === "choose" || !TIEBREAKER_RULES.includes(value as TiebreakerRule)) return;
+    updateStack([...stack, value as TiebreakerRule]);
+  };
+  return <section className="tiebreaker-editor" aria-label="Tiebreaker rule editor">
+    <header><span><SlidersHorizontal /><span><strong>Standings tiebreaker rules</strong><small>One rule order applies to league seeds and division ranks. Drag to reorder from top to bottom.</small></span></span></header>
+    <div className="tiebreaker-rule-list">{stack.map((rule, index) => <div
+      className={`tiebreaker-rule-row ${draggedRule === rule ? "dragging" : ""}`}
+      draggable={!disabled}
+      onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", rule); setDraggedRule(rule); }}
+      onDragEnd={() => setDraggedRule(null)}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={() => {
+        if (!draggedRule) return;
+        updateStack(moveListItem(stack, stack.indexOf(draggedRule), index));
+        setDraggedRule(null);
+      }}
+      key={rule}
+    >
+      <GripVertical aria-hidden="true" /><b>{index + 1}</b><span><strong>{TIEBREAKER_RULE_LABELS[rule]}</strong><small>{TIEBREAKER_RULE_DESCRIPTIONS[rule]}</small></span><div><button type="button" title="Move rule up" aria-label={`Move ${TIEBREAKER_RULE_LABELS[rule]} up`} disabled={disabled || index === 0} onClick={() => updateStack(moveListItem(stack, index, index - 1))}><ArrowUp /></button><button type="button" title="Move rule down" aria-label={`Move ${TIEBREAKER_RULE_LABELS[rule]} down`} disabled={disabled || index === stack.length - 1} onClick={() => updateStack(moveListItem(stack, index, index + 1))}><ArrowDown /></button><button type="button" title="Remove rule" aria-label={`Remove ${TIEBREAKER_RULE_LABELS[rule]}`} disabled={disabled} onClick={() => updateStack(stack.filter((item) => item !== rule))}><Trash2 /></button></div>
+    </div>)}</div>
+    <footer><CustomSelect label="Add tiebreaker rule" value={addRule} onChange={chooseRule} disabled={disabled || removedRules.length === 0} options={addOptions} /><button type="button" disabled={disabled} onClick={() => updateStack([...DEFAULT_TIEBREAKERS])}><RotateCcw />Reset defaults</button></footer>
+  </section>;
+}
+
+function TieResolutionModal({ tie, schedule, onClose, onSave }: { tie: StandingsTieGroup; schedule: GeneratedSchedule; onClose: () => void; onSave: (orderedTeamIds: string[]) => void }) {
+  const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
+  const [teamIds, setTeamIds] = useState(tie.orderedTeamIds);
+  const [draggedTeamId, setDraggedTeamId] = useState<string | null>(null);
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+  return <div className="tie-resolution-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}><section className="tie-resolution-modal" role="dialog" aria-modal="true" aria-labelledby="tie-resolution-title">
+    <header><span><strong id="tie-resolution-title">Resolve tied teams</strong><small>This order applies only while this exact {tie.scope} tie remains unchanged.</small></span><button type="button" aria-label="Close tie resolution" onClick={onClose}><X /></button></header>
+    <div className="tie-resolution-list">{teamIds.map((teamId, index) => { const team = teamById.get(teamId)!; return <div draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", teamId); setDraggedTeamId(teamId); }} onDragEnd={() => setDraggedTeamId(null)} onDragOver={(event) => event.preventDefault()} onDrop={() => { if (draggedTeamId) setTeamIds(moveListItem(teamIds, teamIds.indexOf(draggedTeamId), index)); }} key={teamId}><GripVertical /><b>{index + 1}</b><EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={38} /><span>{team.city && <small className="team-city">{team.city}</small>}<strong>{team.name}</strong></span><button type="button" aria-label={`Move ${teamDisplayName(team)} up`} disabled={index === 0} onClick={() => setTeamIds(moveListItem(teamIds, index, index - 1))}><ArrowUp /></button><button type="button" aria-label={`Move ${teamDisplayName(team)} down`} disabled={index === teamIds.length - 1} onClick={() => setTeamIds(moveListItem(teamIds, index, index + 1))}><ArrowDown /></button></div>; })}</div>
+    <footer><button type="button" onClick={onClose}>Cancel</button><button type="button" className="button-primary" onClick={() => onSave(teamIds)}>Save tie order</button></footer>
+  </section></div>;
 }
 
 function formatRaceValue(metric: RaceMetric, value: number) {
@@ -183,6 +302,25 @@ function formatRaceMovement(metric: RaceMetric, value: number, previousValue?: n
   return `${change > 0 ? "+" : "-"}${formattedChange} from prior week`;
 }
 
+function spreadRaceEndpointYs(entries: Array<{ teamId: string; y: number }>, minimum: number, maximum: number) {
+  const ordered = [...entries].sort((left, right) => left.y - right.y || left.teamId.localeCompare(right.teamId));
+  if (ordered.length < 2) return new Map(ordered.map((entry) => [entry.teamId, entry.y]));
+  const gap = Math.min(27, (maximum - minimum) / (ordered.length - 1));
+  const positions = ordered.map((entry) => Math.max(minimum, Math.min(maximum, entry.y)));
+
+  for (let index = 1; index < positions.length; index += 1) {
+    positions[index] = Math.max(positions[index], positions[index - 1] + gap);
+  }
+  if (positions.at(-1)! > maximum) {
+    positions[positions.length - 1] = maximum;
+    for (let index = positions.length - 2; index >= 0; index -= 1) {
+      positions[index] = Math.min(positions[index], positions[index + 1] - gap);
+    }
+  }
+
+  return new Map(ordered.map((entry, index) => [entry.teamId, positions[index]]));
+}
+
 function SeasonRaceChart({ schedule, history, throughWeek, divisionId }: {
   schedule: GeneratedSchedule;
   history: RankHistorySnapshot[];
@@ -193,6 +331,8 @@ function SeasonRaceChart({ schedule, history, throughWeek, divisionId }: {
   const [focusedTeamId, setFocusedTeamId] = useState<string | null>(null);
   const [activePoint, setActivePoint] = useState<ActiveRacePoint>(null);
   const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
+  const divisionById = new Map(schedule.setup.divisions.map((item) => [item.id, item]));
+  const milestoneByTeam = useMemo(() => new Map(getTeamClinchTimelines(schedule, throughWeek).map((timeline) => [timeline.teamId, timeline])), [schedule, throughWeek]);
   const division = divisionId === "all" ? undefined : schedule.setup.divisions.find((item) => item.id === divisionId);
   const scopeTeams = schedule.setup.teams.filter((team) => divisionId === "all" || team.divisionId === divisionId);
   const snapshots = history.filter((snapshot) => (
@@ -247,6 +387,8 @@ function SeasonRaceChart({ schedule, history, throughWeek, divisionId }: {
     const raw = yMinimum + (index / (tickCount - 1)) * (yMaximum - yMinimum);
     return metric === "rank" ? Math.round(raw) : raw;
   }).filter((value, index, items) => items.indexOf(value) === index);
+  const firstEndpointYs = spreadRaceEndpointYs(series.map((item) => ({ teamId: item.team.id, y: yFor(item.points[0]?.value ?? 0) })), top + 14, height - bottom - 14);
+  const lastEndpointYs = spreadRaceEndpointYs(series.map((item) => ({ teamId: item.team.id, y: yFor(item.points.at(-1)?.value ?? 0) })), top + 14, height - bottom - 14);
   const activeFocusedTeamId = scopeTeams.some((team) => team.id === focusedTeamId) ? focusedTeamId : null;
   const metricLabel = RACE_METRIC_OPTIONS.find((option) => option.value === metric)?.label ?? "Live rank";
   const lastSnapshot = chartSnapshots.at(-1);
@@ -273,6 +415,7 @@ function SeasonRaceChart({ schedule, history, throughWeek, divisionId }: {
         </button>;
       })}
     </div>
+    {metric === "rank" && <div className="race-milestone-legend" aria-label="Rank race milestone legend"><strong>Milestones</strong><span className="top-seed"><Medal />#1 seed</span><span className="division-title"><Trophy />Division title</span><span className="playoff-berth"><ShieldCheck />Playoff spot</span><span className="eliminated"><CircleX />Eliminated</span><small>Each marker sits on the first week the result became mathematically certain.</small></div>}
     <div className="season-race-chart-scroll">
       <div className="season-race-chart-stage">
         <svg className="season-race-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${scopeLabel} ${metricLabel.toLowerCase()} from preseason through Week ${lastSnapshot?.weekNumber ?? 0}`}>
@@ -291,8 +434,14 @@ function SeasonRaceChart({ schedule, history, throughWeek, divisionId }: {
               {item.points.map((point, index) => {
                 const x = xFor(index);
                 const y = yFor(point.value);
-                const isEndpoint = metric === "rank" && (index === 0 || index === item.points.length - 1);
-                const pointLabel = `${teamDisplayName(item.team)}, ${point.snapshot.weekNumber === 0 ? "Preseason" : `Week ${point.snapshot.weekNumber}`}, ${metricLabel} ${formatRaceValue(metric, point.value)}`;
+                const isEndpoint = index === 0 || index === item.points.length - 1;
+                const isFirstEndpoint = index === 0;
+                const endpointY = isEndpoint ? (isFirstEndpoint ? firstEndpointYs : lastEndpointYs).get(item.team.id) ?? y : y;
+                const endpointWasMoved = Math.abs(endpointY - y) > 1;
+                const endpointX = endpointWasMoved ? x + (isFirstEndpoint ? 18 : -18) : x;
+                const milestones = metric === "rank" ? raceMilestonesAtWeek(milestoneByTeam.get(item.team.id), point.snapshot.weekNumber) : [];
+                const milestoneLabel = milestones.length ? `, ${milestones.map((milestone) => RACE_MILESTONE_LABELS[milestone]).join(", ")}` : "";
+                const pointLabel = `${teamDisplayName(item.team)}, ${point.snapshot.weekNumber === 0 ? "Preseason" : `Week ${point.snapshot.weekNumber}`}, ${metricLabel} ${formatRaceValue(metric, point.value)}${milestoneLabel}`;
                 return <g
                   className="race-point"
                   aria-describedby={activePoint?.teamId === item.team.id && activePoint.pointIndex === index ? "race-point-tooltip" : undefined}
@@ -313,14 +462,16 @@ function SeasonRaceChart({ schedule, history, throughWeek, divisionId }: {
                   tabIndex={0}
                 >
                   <circle className="race-point-dot" cx={x} cy={y} r={isEndpoint ? 4 : 2.8} />
+                  {isEndpoint && endpointWasMoved && <line className="race-endpoint-leader" x1={x} x2={endpointX} y1={y} y2={endpointY} />}
                   {isEndpoint && (item.team.logoUrl
-                    ? <image className="race-endpoint-logo" href={item.team.logoUrl} x={x - 12} y={y - 12} width="24" height="24" preserveAspectRatio="xMidYMid meet" />
+                    ? <image className="race-endpoint-logo" href={item.team.logoUrl} x={endpointX - 12} y={endpointY - 12} width="24" height="24" preserveAspectRatio="xMidYMid meet" />
                     : <g className="race-endpoint-monogram">
-                      <rect x={x - 13} y={y - 13} width="26" height="26" rx="4" fill={tintColor(item.team.color, .82)} />
-                      <text x={x} y={y + 3.5} textAnchor="middle">{teamInitials(item.team).slice(0, 3)}</text>
+                      <rect x={endpointX - 13} y={endpointY - 13} width="26" height="26" rx="4" fill={tintColor(item.team.color, .82)} />
+                      <text x={endpointX} y={endpointY + 3.5} textAnchor="middle">{teamInitials(item.team).slice(0, 3)}</text>
                     </g>)}
-                  <circle className="race-point-focus-ring" cx={x} cy={y} r={isEndpoint ? 15 : 10} />
-                  <circle className="race-point-hit" cx={x} cy={y} r={isEndpoint ? 16 : 11} />
+                  {milestones.map((milestone, milestoneIndex) => <RaceMilestoneMarker milestone={milestone} division={divisionById.get(item.team.divisionId)} x={x} y={y} index={milestoneIndex} total={milestones.length} key={milestone} />)}
+                  <circle className="race-point-focus-ring" cx={isEndpoint ? endpointX : x} cy={isEndpoint ? endpointY : y} r={isEndpoint ? 15 : 10} />
+                  <circle className="race-point-hit" cx={isEndpoint ? endpointX : x} cy={isEndpoint ? endpointY : y} r={isEndpoint ? 16 : 11} />
                 </g>;
               })}
             </g>;
@@ -331,6 +482,7 @@ function SeasonRaceChart({ schedule, history, throughWeek, divisionId }: {
           const x = xFor(pointIndex);
           const y = yFor(point.value);
           const weekLabel = point.snapshot.weekNumber === 0 ? "Preseason" : `Week ${point.snapshot.weekNumber}`;
+          const milestones = metric === "rank" ? raceMilestonesAtWeek(milestoneByTeam.get(item.team.id), point.snapshot.weekNumber) : [];
           return <div
             className={`race-point-tooltip ${x > width * .72 ? "align-right" : ""} ${y < 88 ? "below" : ""}`}
             id="race-point-tooltip"
@@ -345,6 +497,7 @@ function SeasonRaceChart({ schedule, history, throughWeek, divisionId }: {
             </span>
             <span className="race-point-tooltip-value"><strong>{formatRaceValue(metric, point.value)}</strong><small>{metricLabel}</small></span>
             <small className="race-point-tooltip-movement">{formatRaceMovement(metric, point.value, item.points[pointIndex - 1]?.value)}</small>
+            {milestones.length > 0 && <span className="race-point-tooltip-milestones">{milestones.map((milestone) => <span className={milestone} key={milestone}>{milestone === "top-seed" ? <Medal /> : milestone === "division-title" ? <Trophy /> : milestone === "playoff-berth" ? <ShieldCheck /> : <CircleX />}{RACE_MILESTONE_LABELS[milestone]}</span>)}</span>}
           </div>;
         })()}
       </div>
@@ -364,23 +517,30 @@ function sortableValue(row: TeamSeasonStats, key: TeamSortKey, teamById: Map<str
   if (key === "featuredWins") return row.featuredWins;
   if (key === "sov") return row.strengthOfVictory ?? -1;
   if (key === "sos") return row.strengthOfSchedule ?? -1;
-  if (key === "streak") return row.streak === "—" ? 0 : (row.streak.startsWith("W") ? 1 : -1) * Number(row.streak.slice(1));
+  if (key === "currentStreak") return row.streak === "—" || row.streak.startsWith("T") ? 0 : (row.streak.startsWith("W") ? 1 : -1) * Number(row.streak.slice(1));
+  if (key === "bestStreak") return row.bestStreak === "—" ? 0 : Number(row.bestStreak.slice(1));
   return row.playoffOdds;
 }
 
-export function StatsWorkspace({ schedule }: { schedule: GeneratedSchedule }) {
+export function StatsWorkspace({ schedule, onUpdateTiebreakers, readOnly = false }: { schedule: GeneratedSchedule; onUpdateTiebreakers?: (settings: TiebreakerSettings) => void; readOnly?: boolean }) {
   const [tab, setTab] = useState<StatsTab>("standings");
   const [leagueLeaderView, setLeagueLeaderView] = useState<LeagueLeaderView>("overall");
   const [divisionId, setDivisionId] = useState("all");
   const [standingsWeek, setStandingsWeek] = useState("current");
   const [sortKey, setSortKey] = useState<TeamSortKey>("winPercentage");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [showTiebreakerEditor, setShowTiebreakerEditor] = useState(false);
+  const [activeTieSignature, setActiveTieSignature] = useState<string | null>(null);
+  const tiebreakerSettings = useMemo(() => normalizeTiebreakerSettings(schedule.setup.tiebreakers), [schedule.setup.tiebreakers]);
   const odds = useMemo(() => calculateSeasonOdds(schedule, 500), [schedule]);
   const oddsByTeam = useMemo(() => new Map(odds.map((row) => [row.teamId, row.playoffOdds])), [odds]);
   const teamStats = useMemo(() => calculateTeamSeasonStats(schedule, oddsByTeam), [schedule, oddsByTeam]);
   const rankHistory = useMemo(() => getLiveRankHistory(schedule), [schedule]);
   const currentRankSnapshot = [...rankHistory].reverse().find((snapshot) => snapshot.playedGames > 0) ?? rankHistory[0];
   const selectedRankSnapshot = standingsWeek === "current" ? currentRankSnapshot : rankHistory.find((snapshot) => String(snapshot.weekNumber) === standingsWeek) ?? currentRankSnapshot;
+  const selectedScope: TiebreakerScope = divisionId === "all" ? "league" : "division";
+  const selectedResolution = useMemo(() => resolveStandings(schedule, { throughWeek: selectedRankSnapshot.weekNumber, scope: selectedScope, divisionId: divisionId === "all" ? undefined : divisionId }), [schedule, selectedRankSnapshot.weekNumber, selectedScope, divisionId]);
+  const previousResolution = useMemo(() => resolveStandings(schedule, { throughWeek: Math.max(0, selectedRankSnapshot.weekNumber - 1), scope: selectedScope, divisionId: divisionId === "all" ? undefined : divisionId }), [schedule, selectedRankSnapshot.weekNumber, selectedScope, divisionId]);
   const currentClinches = useMemo(() => new Map(getTeamClinchTimelines(schedule, currentRankSnapshot.weekNumber).map((timeline) => [timeline.teamId, timeline])), [schedule, currentRankSnapshot.weekNumber]);
   const selectedClinches = useMemo(() => new Map(getTeamClinchTimelines(schedule, selectedRankSnapshot.weekNumber).map((timeline) => [timeline.teamId, timeline])), [schedule, selectedRankSnapshot.weekNumber]);
   const regularSignals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
@@ -391,7 +551,13 @@ export function StatsWorkspace({ schedule }: { schedule: GeneratedSchedule }) {
   const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
   const divisionById = new Map(schedule.setup.divisions.map((division) => [division.id, division]));
   const selectedDivision = divisionId === "all" ? undefined : divisionById.get(divisionId);
-  const visibleStandings = divisionId === "all" ? selectedRankSnapshot.rows : selectedRankSnapshot.rows.filter((row) => teamById.get(row.teamId)?.divisionId === divisionId);
+  const preseasonRankByTeam = new Map(selectedRankSnapshot.rows.map((row) => [row.teamId, row.preseasonRank]));
+  const previousRankByTeam = new Map(previousResolution.rows.map((row, index) => [row.teamId, index + 1]));
+  const visibleStandings: RankedStandingsRow[] = selectedResolution.rows.map((row, index) => {
+    const rank = index + 1;
+    const previousRank = previousRankByTeam.get(row.teamId) ?? rank;
+    return { ...row, rank, previousRank, rankChange: previousRank - rank, preseasonRank: preseasonRankByTeam.get(row.teamId) ?? rank, tiebreaker: selectedResolution.explanationsByTeam[row.teamId] };
+  });
   const visibleOdds = divisionId === "all" ? odds : odds.filter((row) => teamById.get(row.teamId)?.divisionId === divisionId);
   const filterOptions = [{ value: "all", label: "League standings", description: `${schedule.setup.teams.length} teams`, swatch: schedule.setup.color, logoUrl: schedule.setup.logoUrl, monogram: resolveInitials(schedule.setup.initials, leagueAcronym(schedule.setup.name)) }, ...schedule.setup.divisions.map((division) => ({ value: division.id, label: division.name, description: `${schedule.setup.teams.filter((team) => team.divisionId === division.id).length} teams`, swatch: division.color, logoUrl: division.logoUrl, monogram: resolveInitials(division.initials, divisionAcronym(division.name)) }))];
   const rankHistoryOptions = [
@@ -400,6 +566,13 @@ export function StatsWorkspace({ schedule }: { schedule: GeneratedSchedule }) {
     ...rankHistory.filter((snapshot) => snapshot.weekNumber > 0 && snapshot.playedGames > 0).map((snapshot) => ({ value: String(snapshot.weekNumber), label: snapshot.completed ? `After Week ${snapshot.weekNumber}` : `Week ${snapshot.weekNumber} in progress`, description: `${snapshot.playedGames} of ${schedule.weeks.find((week) => week.weekNumber === snapshot.weekNumber)?.games.length ?? 0} games scored` })),
   ];
   const selectedHistoryLabel = selectedRankSnapshot.weekNumber === 0 ? "Preseason seed" : selectedRankSnapshot.completed ? `Final table after Week ${selectedRankSnapshot.weekNumber}` : `Live table during Week ${selectedRankSnapshot.weekNumber}`;
+  const rankHeader = divisionId !== "all"
+    ? "DIV RK"
+    : selectedRankSnapshot.weekNumber === 0
+    ? "PRE RK"
+    : selectedRankSnapshot.weekNumber === schedule.setup.weeks && selectedRankSnapshot.completed
+      ? "FINAL RK"
+      : "LIVE RK";
   const completedTeams = teamStats.filter((row) => row.wins + row.losses + row.ties > 0);
   const divisionsPlayed = (row: TeamSeasonStats) => row.divisionWins + row.divisionLosses > 0;
   const hottest = (row: TeamSeasonStats) => row.streak.startsWith("W") ? Number(row.streak.slice(1)) : null;
@@ -410,6 +583,8 @@ export function StatsWorkspace({ schedule }: { schedule: GeneratedSchedule }) {
     return (sortDirection === "asc" ? comparison : -comparison) || teamById.get(left.teamId)!.name.localeCompare(teamById.get(right.teamId)!.name);
   });
   const onSort = (key: TeamSortKey) => { if (key === sortKey) setSortDirection((current) => current === "asc" ? "desc" : "asc"); else { setSortKey(key); setSortDirection(key === "team" ? "asc" : "desc"); } };
+  const updateTiebreakers = (settings: TiebreakerSettings) => onUpdateTiebreakers?.(settings);
+  const activeTie = selectedResolution.tieGroups.find((tie) => tie.signature === activeTieSignature);
   const tabs: Array<{ key: StatsTab; label: string; disabled?: boolean }> = [{ key: "standings", label: "Standings" }, { key: "rank-race", label: "Rank race" }, { key: "team-leaders", label: "Team leaders" }, { key: "league-leaders", label: "League leaders" }, { key: "playoffs", label: "Playoff stats", disabled: !hasPlayoffResults }, { key: "team-stats", label: "Team stats" }];
   const leagueLeaderTabs: Array<{ key: LeagueLeaderView; label: string }> = [{ key: "overall", label: "Best games" }, { key: "gotw", label: "GOTW" }, { key: "closest", label: "Close games" }, { key: "scoring", label: "High scoring" }, { key: "divisional", label: "Divisional" }];
   const leagueLeaderPanels = {
@@ -425,15 +600,17 @@ export function StatsWorkspace({ schedule }: { schedule: GeneratedSchedule }) {
     <div className="stats-tabs" role="tablist" aria-label="Standings and statistics">{tabs.map((item) => <button type="button" role="tab" aria-selected={tab === item.key} disabled={item.disabled} className={tab === item.key ? "active" : ""} onClick={() => setTab(item.key)} key={item.key}>{item.disabled && <LockKeyhole />}{item.label}</button>)}</div>
     {tab === "standings" && <div className="stats-tab-panel">
       <div className="stats-filter-bar"><span>{selectedDivision ? <DivisionIdentity iconOnly division={selectedDivision} /> : <BarChart3 />}<span><strong>{divisionId === "all" ? "League standings" : `${selectedDivision?.name} standings`}</strong><small>{selectedHistoryLabel}</small></span></span><div className="stats-filter-controls"><CustomSelect label="Standings history" value={standingsWeek} onChange={setStandingsWeek} options={rankHistoryOptions} /><CustomSelect label="Standings scope" value={divisionId} onChange={setDivisionId} options={filterOptions} /></div></div>
-      <ClinchStatusLegend />
+      <div className="tiebreaker-summary"><span><SlidersHorizontal /><span><strong>Standings tiebreakers</strong><small>{tiebreakerSettings.league.map((rule) => TIEBREAKER_RULE_LABELS[rule]).join(" → ") || "No field rules; deterministic fallback only"}</small></span></span><button type="button" aria-expanded={showTiebreakerEditor} onClick={() => setShowTiebreakerEditor((current) => !current)}>{showTiebreakerEditor ? "Close editor" : "Configure rules"}</button></div>
+      {showTiebreakerEditor && <TiebreakerEditor settings={tiebreakerSettings} onChange={updateTiebreakers} disabled={readOnly || !onUpdateTiebreakers} />}
       <div className="stats-standings-layout">
-        <div className="data-table-wrap"><table className="data-table standings-table"><thead><tr><th>LIVE RK</th><th>TEAM</th><th>REC</th><th>DIV</th><th>PCT</th><th>PF</th><th>PA</th><th>DIFF</th><th>STRK</th></tr></thead><tbody>{visibleStandings.map((row) => { const team = teamById.get(row.teamId)!; const division = divisionById.get(team.divisionId)!; return <tr key={row.teamId}><td><RankMovement row={row} /></td><td><Link className="standings-team-link" href={`${teamHrefBase}/${team.id}`}><EntityLogo className="team-mark standings-team-logo" color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={50} /><span className="standings-team-copy">{team.city && <small className="standings-team-city team-city">{team.city}</small>}<strong>{team.name}</strong><small className="standings-team-meta">{division.name} · Preseason #{row.preseasonRank}</small><ClinchBadges timeline={selectedClinches.get(team.id)} division={division} /></span><DivisionIdentity iconOnly division={division} /></Link></td><td>{formatRecord(row)}</td><td>{row.divisionWins}-{row.divisionLosses}</td><td>{row.winPercentage.toFixed(3).replace(/^0/, "")}</td><td>{row.pointsFor}</td><td>{row.pointsAgainst}</td><td className={row.pointsFor - row.pointsAgainst >= 0 ? "positive" : "negative"}>{row.pointsFor - row.pointsAgainst >= 0 ? "+" : ""}{row.pointsFor - row.pointsAgainst}</td><td>{row.streak}</td></tr>; })}</tbody></table></div>
+        <div className="data-table-wrap"><table className="data-table standings-table"><thead><tr><th>{rankHeader}</th><th>TEAM</th><th>DIVISION</th><th>PRE RK</th><th>FROM PRE</th><th>STATUS</th><th>REC</th><th>DIV REC</th><th>PCT</th><th>PF</th><th>PA</th><th>DIFF</th><th>STRK</th></tr></thead><tbody>{visibleStandings.map((row) => { const team = teamById.get(row.teamId)!; const division = divisionById.get(team.divisionId)!; const clinch = selectedClinches.get(team.id); const rankReason = row.tiebreaker?.rule ? TIEBREAKER_RULE_LABELS[row.tiebreaker.rule] : row.tiebreaker?.resolution === "manual" ? "Manual tie order" : row.tiebreaker?.resolution === "fallback" ? "Fallback order" : ""; return <tr className={clinch?.eliminated ? "is-eliminated" : undefined} key={row.teamId}><td className="standings-rank-cell" title={row.tiebreaker?.label}><RankMovement row={row} />{rankReason && <small className="standings-rank-reason">{rankReason}</small>}</td><td><Link className="standings-team-link" href={`${teamHrefBase}/${team.id}`}><EntityLogo className="team-mark standings-team-logo" color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={50} /><span className="standings-team-copy">{team.city && <small className="standings-team-city team-city">{team.city}</small>}<strong>{team.name}</strong></span></Link></td><td className="standings-division-cell"><DivisionIdentity division={division} /></td><td className="standings-preseason-cell"><strong>#{row.preseasonRank}</strong></td><td className="standings-preseason-change"><PreseasonMovement row={row} /></td><td className="standings-status-cell"><ClinchBadges timeline={clinch} division={division} compact /><span className="standings-no-status">—</span></td><td>{formatRecord(row)}</td><td>{row.divisionWins}-{row.divisionLosses}{row.divisionTies ? `-${row.divisionTies}` : ""}</td><td>{row.winPercentage.toFixed(3).replace(/^0/, "")}</td><td>{row.pointsFor}</td><td>{row.pointsAgainst}</td><td className={row.pointsFor - row.pointsAgainst >= 0 ? "positive" : "negative"}>{row.pointsFor - row.pointsAgainst >= 0 ? "+" : ""}{row.pointsFor - row.pointsAgainst}</td><td>{row.streak}</td></tr>; })}</tbody></table></div>
+        {selectedResolution.tieGroups.length > 0 && <section className="standings-tie-groups" aria-label="Standings tie groups"><header><Swords /><span><strong>{selectedResolution.tieGroups.length} tied group{selectedResolution.tieGroups.length === 1 ? "" : "s"}</strong><small>These teams reached the end of the configured field rules.</small></span></header>{selectedResolution.tieGroups.map((tie) => <article key={tie.signature}><div className="tie-group-teams">{tie.orderedTeamIds.map((teamId, index) => { const team = teamById.get(teamId)!; return <span key={teamId}><b>{index + 1}</b><EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={32} /><strong>{teamDisplayName(team)}</strong></span>; })}</div><span><strong>{tie.resolution === "manual" ? "Manual order applied" : "Deterministic fallback applied"}</strong><small>{tie.explanation}</small><em>{tie.appliedRules.map((rule) => TIEBREAKER_RULE_LABELS[rule]).join(" → ") || "No configured rules"}</em></span><button type="button" disabled={readOnly || !onUpdateTiebreakers} onClick={() => setActiveTieSignature(tie.signature)}>{tie.resolution === "manual" ? "Edit order" : "Resolve tie"}</button></article>)}</section>}
         <section className="season-odds-table-panel">
           <header><Gauge /><span><strong>Season odds</strong><small>500 deterministic simulations</small></span></header>
           <div className="data-table-wrap"><table className="data-table season-odds-table"><thead><tr><th>TEAM</th><th>PROJ REC</th><th>PLAYOFF</th><th>DIVISION</th><th>CHAMP</th><th>#1 SEED</th><th>AVG FINISH</th></tr></thead><tbody>{visibleOdds.map((row) => { const team = teamById.get(row.teamId)!; const division = divisionById.get(team.divisionId); return <tr key={team.id}><td><Link className="season-odds-team-link" href={`${teamHrefBase}/${team.id}`}><EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={32} /><span><strong>{team.name}</strong><small><span className="team-city">{team.city}</span>{team.city && division ? " · " : ""}{division?.name}</small></span></Link></td><td>{compactProjectedRecord(row.projectedRecord)}</td><td><span className="season-odds-meter"><em>{percentage(row.playoffOdds)}</em><i><b style={{ width: `${Math.max(2, row.playoffOdds * 100)}%`, background: accessibleTeamColor(team.color) }} /></i></span></td><td>{percentage(row.divisionOdds)}</td><td>{percentage(row.championshipOdds)}</td><td>{percentage(row.topSeedOdds)}</td><td>#{row.averageFinish.toFixed(1)}</td></tr>; })}</tbody></table></div>
         </section>
       </div>
-      <div className="stats-rule-strip"><ShieldCheck /><span><strong>League seed rules</strong><small>Live rank uses win percentage, then points scored, then preseason rank. Clinches and eliminations appear only when every remaining outcome confirms them. The final live table feeds projected playoff seeds; locked fields preserve their selected order.</small></span></div>
+      <div className="stats-rule-strip"><ShieldCheck /><span><strong>Standings rules</strong><small>League seeds and division ranks follow the same configured order above. Head-to-head and common opponents are recalculated inside each tied group, and unavailable values fall last. Clinches and eliminations appear only when every remaining outcome confirms them, and the final league order feeds playoff seeding.</small></span></div>
     </div>}
     {tab === "rank-race" && <div className="stats-tab-panel">
       <div className="stats-filter-bar"><span>{selectedDivision ? <DivisionIdentity iconOnly division={selectedDivision} /> : <TrendingUp />}<span><strong>{divisionId === "all" ? "League rank race" : `${selectedDivision?.name} rank race`}</strong><small>{selectedHistoryLabel}</small></span></span><div className="stats-filter-controls"><CustomSelect label="Race history" value={standingsWeek} onChange={setStandingsWeek} options={rankHistoryOptions} /><CustomSelect label="Race scope" value={divisionId} onChange={setDivisionId} options={filterOptions} /></div></div>
@@ -443,6 +620,7 @@ export function StatsWorkspace({ schedule }: { schedule: GeneratedSchedule }) {
     {tab === "team-leaders" && <div className="stats-tab-panel"><div className="team-leader-grid"><TeamPodiumCard title="Hottest teams" icon={Flame} rows={completedTeams} teamById={teamById} value={hottest} label={(row) => row.streak} hrefBase={teamHrefBase} /><TeamPodiumCard title="Best home record" icon={Home} rows={completedTeams} teamById={teamById} value={(row) => recordGames(row.home) ? recordPercentage(row.home) : null} label={(row) => formatSplitRecord(row.home)} hrefBase={teamHrefBase} /><TeamPodiumCard title="Best away record" icon={Plane} rows={completedTeams} teamById={teamById} value={(row) => recordGames(row.away) ? recordPercentage(row.away) : null} label={(row) => formatSplitRecord(row.away)} hrefBase={teamHrefBase} /><TeamPodiumCard title="Best division record" icon={ShieldCheck} rows={completedTeams} teamById={teamById} value={(row) => divisionsPlayed(row) ? row.divisionWins / (row.divisionWins + row.divisionLosses) : null} label={(row) => `${row.divisionWins}-${row.divisionLosses}`} hrefBase={teamHrefBase} /><TeamPodiumCard title="Best division point diff" icon={Swords} rows={completedTeams} teamById={teamById} value={(row) => divisionsPlayed(row) ? row.divisionPointsFor - row.divisionPointsAgainst : null} label={(row) => `${row.divisionPointsFor - row.divisionPointsAgainst >= 0 ? "+" : ""}${row.divisionPointsFor - row.divisionPointsAgainst}`} hrefBase={teamHrefBase} /><TeamPodiumCard title="Highest scoring" icon={Zap} rows={completedTeams} teamById={teamById} value={(row) => row.pointsFor} label={(row) => `${row.pointsFor} PF`} hrefBase={teamHrefBase} /><TeamPodiumCard title="Best point differential" icon={Target} rows={completedTeams} teamById={teamById} value={(row) => row.pointsFor - row.pointsAgainst} label={(row) => `${row.pointsFor - row.pointsAgainst >= 0 ? "+" : ""}${row.pointsFor - row.pointsAgainst}`} hrefBase={teamHrefBase} /></div></div>}
     {tab === "league-leaders" && <div className="stats-tab-panel"><div className="stats-rule-strip"><Trophy /><span><strong>Game quality seed</strong><small>Quality equals margin rank plus total-points rank. Lower is better; tied values share medals. Upsets use each team’s frozen rank entering that week.</small></span><span className="badge-legend">{(["GOTW", "Upset", "Shootout"] as const).map((badge) => <GameBadgeChip badge={badge} key={badge} />)}</span></div><div className="league-leader-browser"><div className="leader-category-tabs" role="tablist" aria-label="League leader category">{leagueLeaderTabs.map((item) => <button type="button" role="tab" aria-selected={leagueLeaderView === item.key} className={leagueLeaderView === item.key ? "active" : ""} onClick={() => setLeagueLeaderView(item.key)} key={item.key}>{item.label}</button>)}</div><div className="league-leader-focus">{leagueLeaderPanels[leagueLeaderView]}</div></div></div>}
     {tab === "playoffs" && hasPlayoffResults && <div className="stats-tab-panel"><div className="game-leader-grid playoff-stat-grid"><GameHighlightPanel title="Greatest playoff games" schedule={schedule} items={playoffAnalytics} metric="qualityScore" direction="asc" playoff /><GameHighlightPanel title="Closest playoff games" schedule={schedule} items={playoffAnalytics} metric="margin" direction="asc" playoff /><GameHighlightPanel title="Highest-scoring playoff games" schedule={schedule} items={playoffAnalytics} metric="total" direction="desc" playoff /></div></div>}
-    {tab === "team-stats" && <div className="stats-tab-panel"><div className="team-stats-table-wrap"><table className="team-stats-table"><thead><tr><SortHeader label="TEAM" sortKey="team" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="RECORD" sortKey="record" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="WIN %" sortKey="winPercentage" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="DIV" sortKey="division" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="PF" sortKey="pointsFor" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="PA" sortKey="pointsAgainst" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="DIFF" sortKey="difference" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="HOME" sortKey="home" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="AWAY" sortKey="away" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="GOTW WINS" sortKey="featuredWins" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="SOV" sortKey="sov" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="SOS" sortKey="sos" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="STREAK" sortKey="streak" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="PLAYOFF %" sortKey="playoff" active={sortKey} direction={sortDirection} onSort={onSort} /></tr></thead><tbody>{sortRows.map((row) => { const team = teamById.get(row.teamId)!; const division = divisionById.get(team.divisionId)!; return <tr key={row.teamId}><td><Link href={`${teamHrefBase}/${team.id}`}><EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={32} /><span><strong>{team.name}</strong><small><span className="team-city">{team.city}</span>{team.city ? " · " : ""}{division.name}</small><ClinchBadges timeline={currentClinches.get(team.id)} division={division} compact /></span><DivisionIdentity iconOnly division={division} /></Link></td><td>{row.record}</td><td>{decimal(row.winPercentage)}</td><td>{row.divisionWins}-{row.divisionLosses}</td><td>{row.pointsFor}</td><td>{row.pointsAgainst}</td><td className={row.pointsFor - row.pointsAgainst >= 0 ? "positive" : "negative"}>{row.pointsFor - row.pointsAgainst >= 0 ? "+" : ""}{row.pointsFor - row.pointsAgainst}</td><td>{formatSplitRecord(row.home)}</td><td>{formatSplitRecord(row.away)}</td><td>{row.featuredWins}</td><td>{decimal(row.strengthOfVictory)}</td><td>{decimal(row.strengthOfSchedule)}</td><td>{row.streak}</td><td>{percentage(row.playoffOdds)}</td></tr>; })}</tbody></table></div></div>}
+    {tab === "team-stats" && <div className="stats-tab-panel"><div className="team-stats-table-wrap"><table className="team-stats-table"><thead><tr><SortHeader label="TEAM" sortKey="team" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="RECORD" sortKey="record" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="WIN %" sortKey="winPercentage" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="DIV" sortKey="division" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="PF" sortKey="pointsFor" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="PA" sortKey="pointsAgainst" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="DIFF" sortKey="difference" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="HOME" sortKey="home" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="AWAY" sortKey="away" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="GOTW WINS" sortKey="featuredWins" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="SOV" sortKey="sov" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="SOS" sortKey="sos" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="CURRENT STREAK" sortKey="currentStreak" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="BEST STREAK" sortKey="bestStreak" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="PLAYOFF %" sortKey="playoff" active={sortKey} direction={sortDirection} onSort={onSort} /></tr></thead><tbody>{sortRows.map((row) => { const team = teamById.get(row.teamId)!; const division = divisionById.get(team.divisionId)!; return <tr key={row.teamId}><td><Link href={`${teamHrefBase}/${team.id}`}><EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={32} /><span><strong>{team.name}</strong><small><span className="team-city">{team.city}</span>{team.city ? " · " : ""}{division.name}</small><ClinchBadges timeline={currentClinches.get(team.id)} division={division} compact /></span><DivisionIdentity iconOnly division={division} /></Link></td><td>{row.record}</td><td>{decimal(row.winPercentage)}</td><td>{row.divisionWins}-{row.divisionLosses}</td><td>{row.pointsFor}</td><td>{row.pointsAgainst}</td><td className={row.pointsFor - row.pointsAgainst >= 0 ? "positive" : "negative"}>{row.pointsFor - row.pointsAgainst >= 0 ? "+" : ""}{row.pointsFor - row.pointsAgainst}</td><td>{formatSplitRecord(row.home)}</td><td>{formatSplitRecord(row.away)}</td><td>{row.featuredWins}</td><td>{decimal(row.strengthOfVictory)}</td><td>{decimal(row.strengthOfSchedule)}</td><td>{row.streak}</td><td>{row.bestStreak}</td><td>{percentage(row.playoffOdds)}</td></tr>; })}</tbody></table></div></div>}
+    {activeTie && <TieResolutionModal tie={activeTie} schedule={schedule} onClose={() => setActiveTieSignature(null)} onSave={(orderedTeamIds) => { updateTiebreakers({ ...tiebreakerSettings, manualOverrides: { ...tiebreakerSettings.manualOverrides, [activeTie.signature]: orderedTeamIds } }); setActiveTieSignature(null); }} />}
   </div>;
 }

@@ -1,4 +1,4 @@
-import { calculateStandings, formatRecord } from "./standings";
+import { calculateDivisionStandings, calculateStandings, formatRecord } from "./standings";
 import type {
   GeneratedSchedule,
   LeagueSetupInput,
@@ -55,7 +55,8 @@ export function createDefaultPlayoffSettings(teamCount: number, _leagueColor = "
     theme: "gold",
     fieldStatus: "live",
     lockedTeamIds: [],
-    thirdPlaceGame: false,
+    consolationMode: "standard",
+    thirdPlaceGame: true,
     name: "Championship Playoffs",
     color: PLAYOFF_THEME_COLORS.gold,
   };
@@ -79,6 +80,9 @@ export function normalizePlayoffSettings(value: LegacyPlayoffSettings | undefine
     : [];
   const theme = ["gold", "silver", "bronze", "custom"].includes(value.theme || "") ? value.theme! : defaults.theme;
   const themedColor = theme === "custom" ? value.color || defaults.color : PLAYOFF_THEME_COLORS[theme];
+  const consolationMode = ["off", "standard", "division-halves"].includes(value.consolationMode || "")
+    ? value.consolationMode!
+    : defaults.consolationMode;
   return {
     fieldSize,
     bracketType,
@@ -89,11 +93,24 @@ export function normalizePlayoffSettings(value: LegacyPlayoffSettings | undefine
     theme,
     fieldStatus: value.fieldStatus === "locked" && lockedTeamIds.length === fieldSize ? "locked" : "live",
     lockedTeamIds,
-    thirdPlaceGame: Boolean(value.thirdPlaceGame),
+    consolationMode,
+    thirdPlaceGame: consolationMode !== "off" && fieldSize >= 4,
     name: value.name?.trim() || defaults.name,
     color: themedColor,
     logoUrl: value.logoUrl || undefined,
     roundNames: Array.isArray(value.roundNames) ? value.roundNames.map((name) => String(name).slice(0, 40)) : undefined,
+    roundLogoUrls: Array.isArray(value.roundLogoUrls) ? value.roundLogoUrls.map((logoUrl) => typeof logoUrl === "string" ? logoUrl : "") : undefined,
+    gameNames: value.gameNames && typeof value.gameNames === "object"
+      ? Object.fromEntries(Object.entries(value.gameNames)
+        .filter(([gameId, name]) => /^(main|consolation)-r\d+-g\d+$/.test(gameId) && typeof name === "string" && name.trim())
+        .map(([gameId, name]) => [gameId, name.trim().slice(0, 60)])
+        .slice(0, 64))
+      : undefined,
+    gameLogoUrls: value.gameLogoUrls && typeof value.gameLogoUrls === "object"
+      ? Object.fromEntries(Object.entries(value.gameLogoUrls)
+        .filter(([gameId, logoUrl]) => /^(main|consolation)-r\d+-g\d+$/.test(gameId) && typeof logoUrl === "string" && logoUrl)
+        .slice(0, 64))
+      : undefined,
   };
 }
 
@@ -159,6 +176,34 @@ export function getPlayoffRoundNames(settings: PlayoffSettings, divisionCount = 
   return defaultPlayoffRoundNames(settings, divisionCount).map((fallback, index) => settings.roundNames?.[index]?.trim() || fallback);
 }
 
+export interface PlayoffGameBrandingSlot {
+  id: string;
+  roundIndex: number;
+  gameIndex: number;
+  roundName: string;
+}
+
+export function getPlayoffGameBrandingSlots(settings: PlayoffSettings, divisionCount = 0): PlayoffGameBrandingSlot[] {
+  const roundNames = getPlayoffRoundNames(settings, divisionCount);
+  const gamesPerRound = settings.bracketType === "ladder"
+    ? roundNames.map(() => 1)
+    : (() => {
+      const bracketSize = nextPowerOfTwo(settings.fieldSize);
+      const counts = [Math.max(1, settings.fieldSize - bracketSize / 2)];
+      for (let games = bracketSize / 4; counts.length < roundNames.length; games /= 2) {
+        counts.push(Math.max(1, Math.round(games)));
+      }
+      return counts;
+    })();
+  return roundNames.flatMap((roundName, roundIndex) =>
+    Array.from({ length: gamesPerRound[roundIndex] ?? 1 }, (_, gameIndex) => ({
+      id: `main-r${roundIndex + 1}-g${gameIndex + 1}`,
+      roundIndex,
+      gameIndex,
+      roundName,
+    })));
+}
+
 export function getFirstRoundSeedPairs(fieldSize: PlayoffFieldSize): Array<[number, number]> {
   const byeCount = getPlayoffByeCount(fieldSize);
   const pairs: Array<[number, number]> = [];
@@ -195,8 +240,9 @@ export function projectPlayoffSeeds(schedule: GeneratedSchedule, fieldSize = sch
   const standingsById = new Map(standings.map((row) => [row.teamId, row]));
   const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
   const leaders = schedule.setup.divisions
-    .map((division) => standings.find((row) => teamById.get(row.teamId)?.divisionId === division.id))
-    .filter((row): row is NonNullable<typeof row> => Boolean(row));
+    .map((division) => calculateDivisionStandings(schedule, division.id)[0])
+    .filter((row): row is NonNullable<typeof row> => Boolean(row))
+    .sort((left, right) => (standingsPosition.get(left.teamId) ?? Infinity) - (standingsPosition.get(right.teamId) ?? Infinity));
   const leaderIds = new Set(leaders.map((row) => row.teamId));
   const byeCount = getPlayoffByeCount(normalizedFieldSize);
   const placementMode = resolvePlayoffPlacementMode({ divisions: schedule.setup.divisions, playoffs: { ...schedule.setup.playoffs, fieldSize: normalizedFieldSize } });
@@ -299,6 +345,12 @@ export function projectPlayoffRounds(schedule: GeneratedSchedule): ProjectedPlay
     ? schedule
     : { ...schedule, setup: { ...schedule.setup, playoffs: settings } };
   const seeds = projectPlayoffSeeds(normalizedSchedule, settings.fieldSize);
+  const seedByTeamId = new Map(seeds.map((item) => [item.teamId, item.seed]));
+  const recordedGames = new Map(
+    (schedule.playoffGames ?? [])
+      .filter((game) => game.bracket === "main")
+      .map((game) => [game.id, game]),
+  );
   const roundNames = getPlayoffRoundNames(settings, schedule.setup.divisions.length);
   const sideBySeed = new Map(seeds.map((item) => [item.seed, item.bracketSide]));
 
@@ -322,17 +374,22 @@ export function projectPlayoffRounds(schedule: GeneratedSchedule): ProjectedPlay
     awaySeed,
     bracketSide: sideBySeed.get(homeSeed),
   }));
-  let advancingSeeds = [
-    ...seeds.filter((item) => item.bye).map((item) => item.seed),
-    ...openingMatchups.map((matchup) => matchup.homeSeed),
-  ].sort((left, right) => left - right);
+  let advancingSeeds = seeds.filter((item) => item.bye).map((item) => item.seed);
 
   return roundNames.map((name, roundIndex) => {
     const matchups = roundIndex === 0
       ? openingMatchups
       : pairProjectedSeeds(advancingSeeds, sideBySeed, placement === "division-halves" && roundIndex < roundNames.length - 1);
     const byeSeeds = roundIndex === 0 ? seeds.filter((item) => item.bye).map((item) => item.seed) : [];
-    if (roundIndex > 0) advancingSeeds = matchups.map((matchup) => matchup.homeSeed).sort((left, right) => left - right);
+    const winners = matchups.map((matchup, gameIndex) => {
+      const recorded = recordedGames.get(`main-r${roundIndex + 1}-g${gameIndex + 1}`);
+      if (recorded?.homeScore == null || recorded.awayScore == null || recorded.homeScore === recorded.awayScore) {
+        return matchup.homeSeed;
+      }
+      const winnerTeamId = recorded.homeScore > recorded.awayScore ? recorded.homeTeamId : recorded.awayTeamId;
+      return seedByTeamId.get(winnerTeamId) ?? matchup.homeSeed;
+    });
+    advancingSeeds = [...byeSeeds, ...winners].sort((left, right) => left - right);
     return {
       roundIndex,
       name,

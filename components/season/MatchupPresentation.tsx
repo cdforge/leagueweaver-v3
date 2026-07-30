@@ -117,7 +117,7 @@ function GameDetails({ game }: { game: ScheduledGame }) {
   </div>;
 }
 
-export function MatchupCard({ game, away, home, awayDivision, homeDivision, awayRank, homeRank, awayRecord, homeRecord, signal, featured, featuredLabel = "GOTW", showCity, showVenue, variant = "standard", teamHrefBase, badges = [], medalRank, simulationSource, simulationLocked = false, winProbability }: {
+export function MatchupCard({ game, away, home, awayDivision, homeDivision, awayRank, homeRank, awayRecord, homeRecord, signal, featured, featuredLabel = "GOTW", gameLabel, showCity, showVenue, variant = "standard", teamHrefBase, badges = [], medalRank, medalLabel, highlighted = false, simulationSource, simulationLocked = false, winProbability }: {
   game: ScheduledGame;
   away: Team;
   home: Team;
@@ -130,12 +130,15 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, away
   signal: MatchupSignal;
   featured: boolean;
   featuredLabel?: string;
+  gameLabel?: string;
   showCity: boolean;
   showVenue: boolean;
   variant?: "standard" | "gotw";
   teamHrefBase?: string;
   badges?: GameBadge[];
   medalRank?: number;
+  medalLabel?: string;
+  highlighted?: boolean;
   simulationSource?: "simulated" | "override";
   simulationLocked?: boolean;
   winProbability?: { away: number; home: number };
@@ -144,12 +147,13 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, away
   const hasAdditionalDetails = Boolean(game.dateTimeOverride || game.rescheduleStatus || game.specialEvent || game.notes?.length || game.tbdReason);
   const awayResult = !played ? "open" : game.awayScore! > game.homeScore! ? "winner" : game.awayScore! < game.homeScore! ? "loser" : "open";
   const homeResult = !played ? "open" : game.homeScore! > game.awayScore! ? "winner" : game.homeScore! < game.awayScore! ? "loser" : "open";
-  return <article id={game.id} className={`matchup-card ${featured ? "is-gotw" : ""} ${simulationSource ? `is-simulated simulation-${simulationSource}` : ""} matchup-card-${variant}`}>
+  return <article id={game.id} className={`matchup-card ${featured ? "is-gotw" : ""} ${highlighted ? "is-stat-highlight" : ""} ${simulationSource ? `is-simulated simulation-${simulationSource}` : ""} matchup-card-${variant}`}>
     <div className="matchup-card-badges">
-      {medalRank && medalRank <= 3 && <span className={`schedule-medal medal-${medalRank}`}><Medal />{medalRank}</span>}
       {featured && <span className="gotw-chip"><Star fill="currentColor" /><strong>{featuredLabel}</strong></span>}
-      {simulationSource && <span className={`simulation-chip source-${simulationSource}`}><Gamepad2 />{simulationSource === "override" ? "Commissioner result" : "Simulated"}{simulationLocked && <LockKeyhole />}</span>}
+      {gameLabel && <span className="game-order-chip">{gameLabel}</span>}
       <MatchupSeriesChip game={game} division={homeDivision} />
+      {medalRank && medalRank <= 3 && <span className={`schedule-medal medal-${medalRank}`} title={medalLabel}><Medal />{medalLabel || medalRank}</span>}
+      {simulationSource && <span className={`simulation-chip source-${simulationSource}`}><Gamepad2 />{simulationSource === "override" ? "Commissioner result" : "Simulated"}{simulationLocked && <LockKeyhole />}</span>}
       {badges.filter((badge) => badge !== "GOTW").map((badge) => <GameBadgeChip badge={badge} key={badge} />)}
       {showVenue && <span className="matchup-venue"><MapPin />{home.logoUrl && <img src={home.logoUrl} alt="" />}<strong>{game.stadium}</strong></span>}
       {winProbability && !played && <span className="matchup-probability" aria-label={`${away.name} ${Math.round(winProbability.away * 100)} percent, ${home.name} ${Math.round(winProbability.home * 100)} percent`}>

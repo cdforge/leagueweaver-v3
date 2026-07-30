@@ -193,6 +193,9 @@ function cloneSchedule(schedule: GeneratedSchedule): GeneratedSchedule {
         ...schedule.setup.playoffs,
         lockedTeamIds: [...schedule.setup.playoffs.lockedTeamIds],
         roundNames: schedule.setup.playoffs.roundNames ? [...schedule.setup.playoffs.roundNames] : undefined,
+        roundLogoUrls: schedule.setup.playoffs.roundLogoUrls ? [...schedule.setup.playoffs.roundLogoUrls] : undefined,
+        gameNames: schedule.setup.playoffs.gameNames ? { ...schedule.setup.playoffs.gameNames } : undefined,
+        gameLogoUrls: schedule.setup.playoffs.gameLogoUrls ? { ...schedule.setup.playoffs.gameLogoUrls } : undefined,
       },
       fairness: { ...schedule.setup.fairness },
     },
@@ -372,7 +375,7 @@ function recordedResults(schedule: GeneratedSchedule) {
 function bracketAsPlayoffGames(sandbox: SimulationSandbox): PlayoffGame[] | undefined {
   if (!sandbox.playoff) return undefined;
   const teamById = new Map(sandbox.baseSchedule.setup.teams.map((team) => [team.id, team]));
-  return sandbox.playoff.rounds.flatMap((round) => round.games.map((game) => ({
+  return sandbox.playoff.rounds.flatMap((round) => round.games.map((game, gameIndex) => ({
     id: game.id,
     week: sandbox.baseSchedule.setup.weeks + round.roundIndex + 1,
     homeTeamId: game.homeTeamId,
@@ -386,7 +389,9 @@ function bracketAsPlayoffGames(sandbox: SimulationSandbox): PlayoffGame[] | unde
     awayScore: game.result.awayScore,
     round: game.roundName,
     roundIndex: game.roundIndex,
-    roundLogoUrl: sandbox.baseSchedule.setup.playoffs.logoUrl,
+    logoUrl: sandbox.baseSchedule.setup.playoffs.gameLogoUrls?.[`main-r${round.roundIndex + 1}-g${gameIndex + 1}`],
+    roundLogoUrl: sandbox.baseSchedule.setup.playoffs.roundLogoUrls?.[round.roundIndex]
+      || sandbox.baseSchedule.setup.playoffs.logoUrl,
     bracket: "main",
   })));
 }

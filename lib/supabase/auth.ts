@@ -7,7 +7,13 @@ export async function getAuthenticatedClient() {
   const { data, error } = await supabase.auth.getClaims();
   const userId = data?.claims?.sub;
   const email = typeof data?.claims?.email === "string" ? data.claims.email : undefined;
-  return !error && userId ? { supabase, userId, email } : null;
+  const metadata = data?.claims?.user_metadata;
+  const userMetadata = metadata && typeof metadata === "object" ? metadata as Record<string, unknown> : {};
+  const displayName = [userMetadata.full_name, userMetadata.name, userMetadata.display_name]
+    .find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim();
+  const avatarUrl = [userMetadata.avatar_url, userMetadata.picture]
+    .find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim();
+  return !error && userId ? { supabase, userId, email, displayName, avatarUrl } : null;
 }
 
 export const PRO_FEATURES = ["public_sharing", "scorekeeping", "multiple_schedules", "standings", "playoffs", "simulator", "platform_sync", "notifications", "advanced_fairness", "no_ads"] as const;

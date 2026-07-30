@@ -10,7 +10,7 @@ interface LegacyDivision {
   color?: string;
   logo?: string;
   teams?: Array<{
-    id?: string; city?: string; location?: string; name?: string; teamName?: string; nickname?: string;
+    id?: string; providerId?: string; city?: string; location?: string; name?: string; teamName?: string; nickname?: string;
     shortName?: string; initials?: string; acronym?: string; manager?: string; owner?: string;
     color?: string; logo?: string; logoUrl?: string; venue?: string; stadium?: string;
     overallSeed?: string | number; overallRank?: string | number; divisionId?: string;
@@ -28,6 +28,7 @@ interface LegacyLeagueData {
 
 type NormalizableTeam = {
   id?: unknown;
+  providerId?: unknown;
   city?: unknown;
   location?: unknown;
   name?: unknown;
@@ -65,6 +66,17 @@ export function identityFromSetup(setup: LeagueSetupInput): SavedLeagueIdentity 
     teams: setup.teams.map((team) => ({ ...team, initials: team.initials ?? "" })),
     display: setup.display,
     priorSeason: setup.priorSeason,
+    platformConnection: setup.platformConnection,
+    playoffs: {
+      name: setup.playoffs.name,
+      color: setup.playoffs.color,
+      theme: setup.playoffs.theme,
+      logoUrl: setup.playoffs.logoUrl,
+      roundNames: setup.playoffs.roundNames,
+      roundLogoUrls: setup.playoffs.roundLogoUrls,
+      gameNames: setup.playoffs.gameNames,
+      gameLogoUrls: setup.playoffs.gameLogoUrls,
+    },
   };
 }
 
@@ -78,7 +90,7 @@ export function normalizeSavedLeague(row: { id: string; name: string; data: unkn
     const leagueInitials = hasLeagueInitials ? data.league.initials || undefined : data.league.abbreviation || undefined;
     const league = { ...data.league, initials: leagueInitials?.slice(0, 4), abbreviation: data.league.abbreviation || leagueAcronym(data.league.name) };
     const priorSeason = data.priorSeason ? { ...data.priorSeason, entryMode: data.priorSeason.entryMode ?? (data.priorSeason.enabled ? data.priorSeason.hasData ? "history" : "manual" : "none") } : { enabled: false, hasData: false, entryMode: "none" as const, source: "regular-season" as const };
-    return { id: row.id, name: row.name, data: { ...data, league, divisions, teams, display: data.display || { cityNames: true, managers: true, venues: true }, priorSeason }, updatedAt: row.updated_at || row.updatedAt || new Date().toISOString() };
+    return { id: row.id, name: row.name, data: { ...data, league, divisions, teams, display: data.display || { cityNames: true, managers: true, venues: true }, priorSeason, platformConnection: data.platformConnection }, updatedAt: row.updated_at || row.updatedAt || new Date().toISOString() };
   }
   const legacy = data as LegacyLeagueData;
   if (!legacy.leagueName || !Array.isArray(legacy.divisions)) return null;
@@ -130,9 +142,10 @@ function normalizeTeam(team: NormalizableTeam, index: number, fallbackDivisionId
   const initials = (hasInitials ? String(team.initials || "") || undefined : String(team.shortName || team.acronym || "") || undefined)?.slice(0, 4);
   const automatic = teamMonogram(city, name);
   const draftPlace = Number(team.draftPlace ?? team.draftScore);
-  return {
-    id: String(team.id || `team-${index + 1}`),
-    city,
+    return {
+      id: String(team.id || `team-${index + 1}`),
+      providerId: typeof team.providerId === "string" ? team.providerId : undefined,
+      city,
     name,
     shortName: resolveInitials(initials, automatic),
     initials,

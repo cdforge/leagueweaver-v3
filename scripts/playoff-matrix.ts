@@ -4,12 +4,15 @@ import {
   createDefaultPlayoffSettings,
   getMaximumPlayoffFieldSize,
   getPlayoffByeCount,
+  getPlayoffGameBrandingSlots,
   getPlayoffRoundNames,
   getRequiredPlayoffWeeks,
   projectPlayoffRounds,
   projectPlayoffSeeds,
+  normalizePlayoffSettings,
   resolvePlayoffPlacementMode,
 } from "../lib/playoffs";
+import { projectConsolationBracket, projectFinalPlacements } from "../lib/consolation";
 import { formatDraftPlace, getTeamsMissingDraftPlaces, getWeekOneTeamOrder, hasCompleteDraftRanking } from "../lib/rankings";
 import { getNflWeekWindow } from "../lib/schedule";
 import { calculateStandings } from "../lib/standings";
@@ -56,6 +59,74 @@ check(() => {
   assert.equal(settings.theme, "gold");
   assert.equal(settings.bracketType, "single-elimination");
   assert.equal(settings.reseedMode, "fixed");
+  assert.equal(settings.consolationMode, "standard");
+  assert.equal(settings.thirdPlaceGame, true);
+});
+
+check(() => {
+  const defaults = createDefaultPlayoffSettings(10);
+  const normalized = normalizePlayoffSettings({
+    ...defaults,
+    consolationMode: "division-halves",
+    roundLogoUrls: ["data:image/png;base64,round-one"],
+    gameLogoUrls: {
+      "main-r1-g1": "data:image/png;base64,wild-card-one",
+      "invalid-slot": "data:image/png;base64,discard-me",
+    },
+  }, 10, "#117A45", 14);
+  assert.equal(normalized.consolationMode, "division-halves");
+  assert.equal(normalized.roundLogoUrls?.[0], "data:image/png;base64,round-one");
+  assert.equal(normalized.gameLogoUrls?.["main-r1-g1"], "data:image/png;base64,wild-card-one");
+  assert.equal(normalized.gameLogoUrls?.["invalid-slot"], undefined);
+  const disabled = normalizePlayoffSettings({ ...defaults, consolationMode: "off", thirdPlaceGame: true }, 10, "#117A45", 14);
+  assert.equal(disabled.thirdPlaceGame, false);
+});
+
+check(() => {
+  const settings = createDefaultPlayoffSettings(10);
+  const slots = getPlayoffGameBrandingSlots(settings, 2);
+  assert.deepEqual(slots.map((slot) => slot.id), [
+    "main-r1-g1",
+    "main-r1-g2",
+    "main-r2-g1",
+    "main-r2-g2",
+    "main-r3-g1",
+  ]);
+});
+
+check(() => {
+  const setup = createDefaultSetup();
+  setup.playoffs = { ...setup.playoffs, consolationMode: "standard" };
+  const bracket = projectConsolationBracket(blankSchedule(setup));
+  assert.ok(bracket);
+  assert.equal(bracket.mode, "standard");
+  const firstRoundTeamGames = bracket.rounds[0].games.filter((game) => game.entrants.every((entrant) => entrant.kind === "team"));
+  assert.deepEqual(firstRoundTeamGames.map((game) => game.entrants.map((entrant) => entrant.projectedSeed)), [[7, 10], [8, 9]]);
+  assert.ok(bracket.rounds[1].games.some((game) => game.label === "5th Place"));
+  assert.ok(bracket.rounds[1].games.some((game) => game.label === "7th Place"));
+  assert.ok(bracket.rounds[1].games.some((game) => game.label === "9th Place"));
+  assert.ok(bracket.rounds[2].games.some((game) => game.label === "3rd Place"));
+});
+
+check(() => {
+  const setup = createDefaultSetup();
+  setup.playoffs = { ...setup.playoffs, consolationMode: "division-halves" };
+  const bracket = projectConsolationBracket(blankSchedule(setup));
+  assert.ok(bracket);
+  assert.equal(bracket.mode, "division-halves");
+  const divisionGames = bracket.rounds[0].games.filter((game) => Boolean(game.divisionId));
+  assert.equal(divisionGames.length, 2);
+  divisionGames.forEach((game) => {
+    const teamEntrants = game.entrants.filter((entrant) => entrant.kind === "team");
+    assert.equal(new Set(teamEntrants.map((entrant) => entrant.divisionId)).size, 1);
+    assert.match(game.label, /"Not Last Place" Bowl$/);
+  });
+  assert.ok(bracket.rounds[1].games.some((game) => game.label === "Draft Pick Bowl (7th Place)"));
+  assert.ok(bracket.rounds[1].games.some((game) => game.label === "Toilet Bowl (9th Place)"));
+  const placements = projectFinalPlacements(blankSchedule(setup));
+  assert.equal(placements.length, setup.teams.length);
+  assert.equal(placements[6].eventLabel, "Draft Pick Bowl (7th Place)");
+  assert.equal(placements[8].eventLabel, "Toilet Bowl (9th Place)");
 });
 
 check(() => {

@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { CircleUserRound } from "lucide-react";
+import { AccountIdentity } from "@/components/account/AccountIdentity";
 
 export function BrandLockup({ compact = false }: { compact?: boolean }) {
   return (
@@ -23,10 +23,7 @@ export function AppHeader() {
         <BrandLockup />
         <nav className="topnav" aria-label="Primary navigation">
           <Link href="/pricing">Pricing</Link>
-          <Link href="/account" className="account-link">
-            <CircleUserRound size={19} aria-hidden="true" />
-            Sign in
-          </Link>
+          <AccountIdentity />
         </nav>
       </div>
     </header>
