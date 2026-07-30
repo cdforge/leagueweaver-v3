@@ -2616,6 +2616,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .topnav > a:first-child { display: none; }
   .topnav .account-identity { width: 44px; padding: 0; justify-content: center; }
   .topnav .account-link.account-identity > span { display: none; }
+  .topnav .account-identity span:not(.account-avatar) { display: none !important; }
   .topnav .account-identity > span:not(.account-avatar):not(.account-identity-copy) { display: none; }
   .topnav .account-identity-copy { display: none; }
   .builder-section { padding-top: 24px; }
