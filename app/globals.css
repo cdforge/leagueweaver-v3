@@ -2615,6 +2615,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .brand-lockup strong { font-size: 18px; }
   .topnav > a:first-child { display: none; }
   .topnav .account-identity { width: 44px; padding: 0; justify-content: center; }
+  .topnav .account-link.account-identity > span { display: none; }
   .topnav .account-identity > span:not(.account-avatar):not(.account-identity-copy) { display: none; }
   .topnav .account-identity-copy { display: none; }
   .builder-section { padding-top: 24px; }
@@ -2696,10 +2697,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .workspace-top-actions .account-identity-copy { display: none; }
   .workspace-shell { display: block; }
   .workspace-rail { position: fixed; z-index: 25; top: auto; bottom: 0; left: 0; right: 0; width: auto; height: calc(62px + env(safe-area-inset-bottom)); border-right: 0; border-top: 1px solid #23362c; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); }
-  .workspace-rail nav { width: 100%; grid-template-columns: repeat(8, minmax(44px, 1fr)); gap: 1px; overflow-x: auto; }
-  .workspace-rail nav button { min-height: 48px; flex-direction: column; gap: 2px; }
+  .workspace-rail nav { width: 100%; display: flex; gap: 1px; overflow-x: auto; }
+  .workspace-rail nav button { min-width: 44px; min-height: 48px; flex: 0 0 44px; flex-direction: column; gap: 2px; }
+  .workspace-rail nav button.active { flex-basis: 88px; }
   .workspace-rail nav button svg { width: 16px; }
-  .workspace-rail nav button.active span { display: block; max-width: 54px; overflow: hidden; font-size: 8px; line-height: 1; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+  .workspace-rail nav button.active span { display: block; max-width: 74px; overflow: hidden; font-size: 8px; line-height: 1; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
   .workspace-main { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
   .workspace-toolbar { align-items: flex-start; flex-direction: column; padding: 13px 14px; }
   .draft-rank-reminder { grid-template-columns: 30px minmax(0, 1fr); padding: 11px 14px; }
