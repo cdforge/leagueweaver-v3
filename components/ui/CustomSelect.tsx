@@ -39,6 +39,7 @@ export function CustomSelect({ value, options, onChange, label, disabled = false
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const selected = options.find((option) => option.value === value) ?? options[0];
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === selected.value));
+  const optionId = (index: number) => `${menuId}-option-${index}`;
 
   const choose = (optionValue: string) => {
     onChange(optionValue);
@@ -141,15 +142,15 @@ export function CustomSelect({ value, options, onChange, label, disabled = false
 
   return (
     <div className="custom-select" ref={root}>
-      <button ref={trigger} type="button" className="custom-select-trigger" aria-label={label} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? menuId : undefined} disabled={disabled} onClick={() => open ? setOpen(false) : openAt(selectedIndex)} onKeyDown={onTriggerKeyDown}>
+      <button ref={trigger} type="button" className="custom-select-trigger" aria-label={label} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? menuId : undefined} aria-activedescendant={open ? optionId(activeIndex) : undefined} disabled={disabled} onClick={() => open ? setOpen(false) : openAt(selectedIndex)} onKeyDown={onTriggerKeyDown}>
         <OptionIdentity option={selected} />
         <span><strong>{selected.label}</strong>{showSelectedDescription && selected.description && <small>{selected.description}</small>}</span>
         <ChevronDown className={open ? "open" : ""} />
       </button>
       {open && !disabled && typeof document !== "undefined" && createPortal(
-        <div ref={menu} id={menuId} className="custom-select-menu" role="listbox" aria-label={label} onKeyDown={onMenuKeyDown} style={{ left: position.left, top: position.top, width: position.width, maxHeight: position.maxHeight, visibility: position.ready ? "visible" : "hidden" }}>
+        <div ref={menu} id={menuId} className="custom-select-menu" role="listbox" aria-label={label} aria-activedescendant={optionId(activeIndex)} onKeyDown={onMenuKeyDown} style={{ left: position.left, top: position.top, width: position.width, maxHeight: position.maxHeight, visibility: position.ready ? "visible" : "hidden" }}>
           {options.map((option, index) => (
-            <button ref={(node) => { optionRefs.current[index] = node; }} type="button" role="option" aria-selected={option.value === value} key={option.value} onClick={() => choose(option.value)}>
+            <button ref={(node) => { optionRefs.current[index] = node; }} id={optionId(index)} type="button" role="option" aria-selected={option.value === value} data-active={index === activeIndex ? "true" : undefined} key={option.value} onClick={() => choose(option.value)}>
               <OptionIdentity option={option} />
               <span><strong>{option.label}</strong>{option.description && <small>{option.description}</small>}</span>
               {option.value === value && <Check />}
