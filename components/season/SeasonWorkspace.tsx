@@ -1190,8 +1190,14 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const [saveConflict, setSaveConflict] = useState<SeasonSaveConflict | null>(null);
   const [saveConflictLoading, setSaveConflictLoading] = useState(false);
   const [scoreModalOpen, setScoreModalOpen] = useState(false);
+  const [scoreImportPending, setScoreImportPending] = useState(false);
+  const [scoreDiscardConfirmOpen, setScoreDiscardConfirmOpen] = useState(false);
   const [platformSyncLoading, setPlatformSyncLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState<"share" | "notify" | null>(null);
+  const [cloudRetry, setCloudRetry] = useState<CloudRetryState | null>(null);
+  const [importHistory, setImportHistory] = useState<ImportHistoryEvent[]>([]);
+  const [importHistoryLoading, setImportHistoryLoading] = useState(false);
+  const [importHistoryError, setImportHistoryError] = useState<string | null>(null);
   const cloudScheduleSnapshot = useRef<string | null>(null);
   const blockedCloudSnapshot = useRef<string | null>(null);
   const latestSchedule = useRef<GeneratedSchedule | null>(null);
@@ -1201,6 +1207,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     const synced = freezeCompletedRankHistory(normalizeSeason(savedSchedule));
     cloudScheduleSnapshot.current = JSON.stringify(synced);
     blockedCloudSnapshot.current = null;
+    setCloudRetry(null);
     const latest = latestSchedule.current;
     if (latest && latest !== sourceSchedule) {
       const merged = normalizeSeason({ ...latest, id: synced.id, revision: synced.revision });
@@ -1214,12 +1221,29 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     window.history.replaceState(null, "", `${nextPath}${window.location.search}${window.location.hash}`);
     return synced;
   };
+  const setCloudRetryState = (scheduleToSave: GeneratedSchedule, reason: string) => {
+    setCloudRetry({ schedule: scheduleToSave, reason, retrying: false });
+  };
   const openSaveConflict = (payload: CloudSaveResponse, scheduleToSave: GeneratedSchedule) => {
     if (payload.code !== "SEASON_EXISTS" || !payload.existingSeason) return false;
     const snapshot = JSON.stringify(scheduleToSave);
     blockedCloudSnapshot.current = snapshot;
     setSaveConflict({ existingSeason: payload.existingSeason, schedule: scheduleToSave, snapshot });
     return true;
+  };
+  const closeScoreModal = (finalize = false) => {
+    if (scoreImportPending) {
+      setScoreDiscardConfirmOpen(true);
+      return;
+    }
+    if (finalize) onFinalizeScores();
+    setScoreModalOpen(false);
+    setScoreDiscardConfirmOpen(false);
+  };
+  const discardScoreSuggestions = () => {
+    setScoreImportPending(false);
+    setScoreDiscardConfirmOpen(false);
+    setScoreModalOpen(false);
   };
   useEffect(() => {
     const local = loadSeason();
@@ -1234,7 +1258,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       setSeasonLoadError(null);
       fetch(`/api/seasons/${params.id}`).then(async (response) => {
         const payload = await response.json().catch(() => null) as { schedule?: GeneratedSchedule; error?: string } | null;
-        if (!response.ok || !payload?.schedule) throw new Error(payload?.error || "That saved season could not be opened.");
+        if (!response.ok || !payload?.schedule) throw new Error(apiErrorMessage(response.status, payload?.error, "That saved season could not be opened."));
         const loaded = freezeCompletedRankHistory(normalizeSeason(payload.schedule));
         latestSchedule.current = loaded;
         cloudScheduleSnapshot.current = JSON.stringify(loaded);
@@ -1251,6 +1275,32 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     }
     fetch(`/api/entitlements${params.id ? `?scheduleId=${encodeURIComponent(params.id)}` : ""}`).then((response) => response.json()).then(setEntitlements).catch(() => undefined);
   }, [params.id]);
+  const loadImportHistory = async () => {
+    if (!schedule || !CLOUD_SCHEDULE_ID.test(schedule.id)) {
+      setImportHistory([]);
+      setImportHistoryError(null);
+      return;
+    }
+    setImportHistoryLoading(true);
+    setImportHistoryError(null);
+    try {
+      const response = await fetch(`/api/platform/history?scheduleId=${encodeURIComponent(schedule.id)}`);
+      const payload = await response.json().catch(() => ({})) as { events?: ImportHistoryEvent[]; error?: string };
+      if (!response.ok) throw new Error(apiErrorMessage(response.status, payload.error, "Import history could not be loaded."));
+      setImportHistory(payload.events ?? []);
+    } catch (caught) {
+      setImportHistoryError(caught instanceof Error ? caught.message : "Import history could not be loaded.");
+    } finally {
+      setImportHistoryLoading(false);
+    }
+  };
+  useEffect(() => {
+    if (!schedule || !CLOUD_SCHEDULE_ID.test(schedule.id)) {
+      setImportHistory([]);
+      return;
+    }
+    void loadImportHistory();
+  }, [schedule?.id]);
   useEffect(() => {
     const week = Number(searchParams.get("week"));
     if (Number.isInteger(week) && week >= 1 && week <= 17) setSelectedWeek(week);
@@ -1277,14 +1327,14 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   useEffect(() => {
     if (!scoreModalOpen) return;
     const previousOverflow = document.body.style.overflow;
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setScoreModalOpen(false); };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") closeScoreModal(); };
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", closeOnEscape);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", closeOnEscape);
     };
-  }, [scoreModalOpen]);
+  }, [scoreModalOpen, scoreImportPending]);
   useEffect(() => {
     if (!schedule) return;
     latestSchedule.current = schedule;
