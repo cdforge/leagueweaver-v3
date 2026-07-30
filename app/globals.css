@@ -749,6 +749,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .rating-tier-filter { width: 188px; }
 .rating-tier-filter .custom-select-trigger { width: 100%; min-height: 44px; height: auto; display: flex; padding-block: 5px; }
 .rating-tier-filter .custom-select-trigger > svg { width: 15px; }
+.schedule-week-header .rating-tier-filter .custom-select-trigger { border-color: rgba(255,255,255,.42); background: white; color: var(--ink); }
+.schedule-week-header .rating-tier-filter .custom-select-trigger:hover { border-color: rgba(255,255,255,.7); }
+.schedule-week-header .rating-tier-filter .custom-select-trigger strong { color: var(--ink); }
+.schedule-week-header .rating-tier-filter .custom-select-trigger small,
+.schedule-week-header .rating-tier-filter .custom-select-trigger > svg { color: var(--muted); }
 .matchup-list { border: 1px solid var(--line); background: white; box-shadow: var(--shadow-sm); }
 .matchup-row { position: relative; min-width: 790px; min-height: 100px; display: grid; grid-template-columns: 110px minmax(190px, 1fr) 90px minmax(190px, 1fr) minmax(185px, .8fr); align-items: center; gap: 14px; border-bottom: 1px solid var(--line); padding: 13px 16px; transition: background var(--transition); }
 .matchup-row:hover:not(.featured) { background: #fafcfb; }
