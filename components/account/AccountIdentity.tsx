@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CircleUserRound } from "lucide-react";
-import { ProBadge } from "@/components/ui/ProBadge";
 import { createClient } from "@/lib/supabase/client";
 
 export type AccountIdentityData = {
@@ -42,7 +41,6 @@ function identityFromUser(user: { email?: string; user_metadata?: Record<string,
 
 export function AccountIdentity({ identity, plan }: { identity?: AccountIdentityData; plan?: "free" | "pro" }) {
   const [resolved, setResolved] = useState<AccountIdentityData>(identity ?? { signedIn: false });
-  const [resolvedPlan, setResolvedPlan] = useState<"free" | "pro">(plan ?? "free");
   const [loading, setLoading] = useState(identity === undefined);
 
   useEffect(() => {
@@ -75,30 +73,11 @@ export function AccountIdentity({ identity, plan }: { identity?: AccountIdentity
     };
   }, [identity]);
 
-  useEffect(() => {
-    if (plan) {
-      setResolvedPlan(plan);
-      return;
-    }
-    if (!resolved.signedIn) {
-      setResolvedPlan("free");
-      return;
-    }
-    let active = true;
-    fetch("/api/entitlements")
-      .then((response) => response.json())
-      .then((data: { plan?: "free" | "pro" }) => {
-        if (active) setResolvedPlan(data.plan === "pro" ? "pro" : "free");
-      })
-      .catch(() => undefined);
-    return () => { active = false; };
-  }, [plan, resolved.signedIn]);
-
   if (!resolved.signedIn) return <Link href="/account" className={`account-link account-identity${loading ? " loading" : ""}`} aria-label="Sign in to League Weaver"><CircleUserRound aria-hidden="true" /><span><strong>{loading ? "Account" : "Sign in"}</strong></span></Link>;
 
   const name = resolved.displayName || friendlyEmailName(resolved.email);
   return <Link href="/account" className="account-link account-identity" aria-label={`Open account for ${name}`} title={resolved.email}>
     <span className={`account-avatar${resolved.avatarUrl ? " has-image" : ""}`} aria-hidden="true">{resolved.avatarUrl ? <img src={resolved.avatarUrl} alt="" /> : accountInitials(name)}</span>
-    <span className="account-identity-copy"><strong>{name}</strong><small><span>My Account</span>{resolvedPlan === "pro" && <ProBadge compact />}</small></span>
+    <span className="account-identity-copy"><strong>{name}</strong><small><span>My Account</span></small></span>
   </Link>;
 }

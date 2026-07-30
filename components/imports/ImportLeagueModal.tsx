@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowLeft, Check, Clock3, FileSpreadsheet, LoaderCircle, RefreshCw, ShieldCheck, Upload, X } from "lucide-react";
+import { AlertCircle, ArrowLeft, Check, FileSpreadsheet, LoaderCircle, RefreshCw, ShieldCheck, Upload, X } from "lucide-react";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
 import { apiErrorMessage } from "@/lib/apiErrors";
@@ -254,8 +254,6 @@ export function ImportLeagueModal({ source, setup, onClose, onConfirm }: {
               <div className="sync-mode-grid" role="group" aria-label="Platform sync mode">
                 {[
                   { value: "manual", label: "Manual", copy: "Refresh when you click.", icon: RefreshCw },
-                  { value: "assisted", label: "Assisted", copy: "Prompt when data looks stale.", icon: Clock3 },
-                  { value: "auto", label: "Auto", copy: "Refresh when possible.", icon: ShieldCheck },
                 ].map((item) => {
                   const Icon = item.icon;
                   return <button type="button" key={item.value} className={syncMode === item.value ? "active" : ""} onClick={() => setSyncMode(item.value as typeof syncMode)}><Icon /><span><strong>{item.label}</strong><small>{item.copy}</small></span></button>;
@@ -291,7 +289,7 @@ export function ImportLeagueModal({ source, setup, onClose, onConfirm }: {
             </div>
             {preview.dataFound && <div className="import-data-found">
               <span><strong>{preview.dataFound.availableHistoryYears.length || "No"} history years</strong><small>{preview.dataFound.availableHistoryYears.join(", ") || "None found yet"}</small></span>
-              <span><strong>{preview.dataFound.hasDraftData ? "Draft found" : "No draft yet"}</strong><small>Draft board is a Pro sync feature.</small></span>
+              <span><strong>{preview.dataFound.hasDraftData ? "Draft found" : "No draft yet"}</strong><small>Team setup stays active.</small></span>
               <span><strong>Player data paused</strong><small>Team setup and score refresh stay active.</small></span>
               <span><strong>{preview.dataFound.hasScoreSync ? "Score refresh ready" : "Scores unavailable"}</strong><small>Manual score refresh stays free.</small></span>
             </div>}

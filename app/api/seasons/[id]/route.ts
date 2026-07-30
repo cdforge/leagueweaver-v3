@@ -10,7 +10,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const { data: revision } = await auth.supabase.from("schedule_revisions").select("schedule_json,revision_number").eq("id", season.current_revision_id).single();
   if (!revision?.schedule_json) return NextResponse.json({ error: "That season has no generated revision." }, { status: 404 });
   const entitlements = await getEntitlements(auth.userId, auth.supabase, id);
-  return NextResponse.json({ schedule: revision.schedule_json, editable: entitlements.accountPro || entitlements.schedulePro || !season.requires_pro, plan: entitlements.plan });
+  return NextResponse.json({ schedule: revision.schedule_json, editable: true, plan: entitlements.plan });
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {

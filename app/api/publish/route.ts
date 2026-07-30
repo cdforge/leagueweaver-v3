@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
-import { getAuthenticatedClient, getEntitlements } from "@/lib/supabase/auth";
+import { getAuthenticatedClient } from "@/lib/supabase/auth";
 
 function slugify(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 42) || "league";
@@ -11,8 +11,6 @@ export async function POST(request: Request) {
   if (!auth) return NextResponse.json({ error: "Sign in to publish a schedule." }, { status: 401 });
   const body = await request.json() as { scheduleId?: string };
   if (!body.scheduleId) return NextResponse.json({ error: "Save the season before publishing." }, { status: 400 });
-  const entitlements = await getEntitlements(auth.userId, auth.supabase, body.scheduleId);
-  if (!entitlements.features.includes("public_sharing")) return NextResponse.json({ error: "Public sharing is included with Pro." }, { status: 403 });
   const { data: season } = await auth.supabase.from("schedules").select("id,title,format,current_revision_id").eq("id", body.scheduleId).maybeSingle();
   if (!season?.current_revision_id) return NextResponse.json({ error: "Save the season before publishing." }, { status: 404 });
   const { data: revision } = await auth.supabase.from("schedule_revisions").select("id,input_json,schedule_json").eq("id", season.current_revision_id).maybeSingle();

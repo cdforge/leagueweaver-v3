@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
-import { getAuthenticatedClient, getEntitlements } from "@/lib/supabase/auth";
+import { getAuthenticatedClient } from "@/lib/supabase/auth";
 
 export async function POST(request: Request) {
   const auth = await getAuthenticatedClient();
   if (!auth) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
   const body = await request.json() as { scheduleId?: string };
   if (!body.scheduleId) return NextResponse.json({ error: "Choose a season." }, { status: 400 });
-  const entitlements = await getEntitlements(auth.userId, auth.supabase, body.scheduleId);
-  if (!entitlements.features.includes("notifications")) return NextResponse.json({ error: "Email notifications are included with Pro." }, { status: 403 });
   const fromEmail = process.env.NOTIFICATIONS_FROM_EMAIL || process.env.FEEDBACK_FROM_EMAIL;
   if (!process.env.RESEND_API_KEY || !fromEmail) return NextResponse.json({ error: "Email delivery is not configured yet." }, { status: 503 });
   const { data: published } = await auth.supabase.from("published_schedules").select("id,slug,title").eq("schedule_id", body.scheduleId).eq("is_active", true).maybeSingle();

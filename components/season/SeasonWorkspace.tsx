@@ -50,7 +50,6 @@ import { TeamScheduleView } from "@/components/season/TeamSchedulePage";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
-import { ProBadge } from "@/components/ui/ProBadge";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { apiErrorMessage } from "@/lib/apiErrors";
 import { downloadCsv } from "@/lib/csv";
@@ -161,9 +160,7 @@ const VIEW_ITEMS: Array<{ key: ViewKey; label: string; icon: typeof CalendarDays
   { key: "team-schedule", label: "Team Schedule", icon: UsersRound },
   { key: "gotw", label: "Game of the Week", icon: Star },
   { key: "matchup-ratings", label: "Matchup Ratings", icon: SlidersHorizontal },
-  { key: "standings", label: "Standings", icon: BarChart3, pro: true },
-  { key: "playoffs", label: "Playoffs", icon: Trophy, pro: true },
-  { key: "simulator", label: "Simulator", icon: Play, pro: true },
+  { key: "standings", label: "Standings", icon: BarChart3 },
   { key: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -296,12 +293,11 @@ function PlayoffWeekSchedule({ schedule, roundIndex }: { schedule: GeneratedSche
   </div>;
 }
 
-function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayoffs, onLockedPlayoffWeek, onOpenScores, highlightedGame, simulationResults = {}, simulationProbabilities = {} }: {
+function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayoffs, onOpenScores, highlightedGame, simulationResults = {}, simulationProbabilities = {} }: {
   schedule: GeneratedSchedule;
   selectedWeek: number;
   setSelectedWeek: (week: number) => void;
   canAccessPlayoffs: boolean;
-  onLockedPlayoffWeek: (roundName: string) => void;
   onOpenScores: (week: number) => void;
   highlightedGame?: HighlightedGame;
   simulationResults?: Record<string, SimulatorResultView>;
@@ -310,7 +306,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
   const [ratingTier, setRatingTier] = useState("all");
   const scheduleSignals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
   const playoffRounds = useMemo(() => projectPlayoffRounds(schedule), [schedule]);
-  const selectedPlayoffIndex = playoffRounds.findIndex((round) => round.weekNumber === selectedWeek);
+  const selectedPlayoffIndex = canAccessPlayoffs ? playoffRounds.findIndex((round) => round.weekNumber === selectedWeek) : -1;
   useEffect(() => {
     const gameId = highlightedGame?.id || window.location.hash.slice(1);
     if (!gameId) return;
@@ -374,33 +370,25 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
     : undefined;
   const weekSelector = <div className="week-selector schedule-week-selector" aria-label="Select regular season or playoff week">
     {schedule.weeks.map((item) => <button type="button" className={item.weekNumber === selectedWeek ? "active" : ""} key={item.weekNumber} onClick={() => setSelectedWeek(item.weekNumber)}><span>W{item.weekNumber}</span><small>{item.dateLabel.split(",")[0]}</small><WeekMatchupRank rank={item.matchupRank} total={schedule.weeks.length} compact /></button>)}
-    <span className="week-selector-divider" aria-hidden="true" />
-    {playoffRounds.map((round) => <Tooltip key={round.weekNumber} label={canAccessPlayoffs ? `${round.name}, NFL Week ${round.weekNumber}` : `${round.name} is included with Pro`}>
+    {canAccessPlayoffs && <span className="week-selector-divider" aria-hidden="true" />}
+    {canAccessPlayoffs && playoffRounds.map((round) => <Tooltip key={round.weekNumber} label={`${round.name}, NFL Week ${round.weekNumber}`}>
       <button
         type="button"
-        className={`playoff-week-button ${round.weekNumber === selectedWeek ? "active" : ""} ${canAccessPlayoffs ? "" : "locked"}`}
+        className={`playoff-week-button ${round.weekNumber === selectedWeek ? "active" : ""}`}
         style={{ "--playoff-week-color": schedule.setup.playoffs.color, "--playoff-week-ink": readableTextColor(schedule.setup.playoffs.color) } as CSSProperties}
-        aria-label={`${round.name}, NFL Week ${round.weekNumber}${canAccessPlayoffs ? "" : ", Pro required"}`}
-        aria-disabled={!canAccessPlayoffs}
-        onClick={() => canAccessPlayoffs ? setSelectedWeek(round.weekNumber) : onLockedPlayoffWeek(round.name)}
+        aria-label={`${round.name}, NFL Week ${round.weekNumber}`}
+        onClick={() => setSelectedWeek(round.weekNumber)}
       >
         <span>W{round.weekNumber}</span>
         <small>{playoffRoundShortLabel(round.name)}</small>
-        <span className="playoff-week-selector-icon">{canAccessPlayoffs ? <Trophy /> : <LockKeyhole />}</span>
+        <span className="playoff-week-selector-icon"><Trophy /></span>
       </button>
     </Tooltip>)}
   </div>;
   if (selectedPlayoffIndex >= 0) {
     return <div className="workspace-stack">
       {weekSelector}
-      {canAccessPlayoffs
-        ? <PlayoffWeekSchedule schedule={schedule} roundIndex={selectedPlayoffIndex} />
-        : <section className="playoff-week-locked-state">
-          <span><LockKeyhole /></span>
-          <div><small>PRO PLAYOFF WEEK</small><h2>{playoffRounds[selectedPlayoffIndex].name}</h2><p>Upgrade to open projected playoff matchups, byes, venues, and results inside the full season schedule.</p></div>
-          <Link href="/pricing" className="button-primary"><Trophy />See Pro plans</Link>
-          <button type="button" className="button-secondary" onClick={() => setSelectedWeek(schedule.setup.weeks)}>Back to Week {schedule.setup.weeks}</button>
-        </section>}
+      <PlayoffWeekSchedule schedule={schedule} roundIndex={selectedPlayoffIndex} />
     </div>;
   }
   return (
@@ -977,7 +965,6 @@ function PlatformSyncCard({
   }
   const providerLabel = connection.provider === "espn" ? "ESPN" : "Sleeper";
   const lastSync = connection.lastSyncAt ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(connection.lastSyncAt)) : "Not synced yet";
-  const proLocked = !canAccessPlatformSync && syncMode !== "manual";
   return <div className="platform-sync-panel">
     <div className="platform-sync-card">
       <div><Cloud /><span><strong>{providerLabel} Platform Sync</strong><small>Generate here, update your fantasy platform, then sync scores back.</small></span></div>
@@ -992,19 +979,10 @@ function PlatformSyncCard({
     <div className="platform-sync-mode">
       <CustomSelect label="Sync mode" value={syncMode} onChange={(value) => setSyncMode(value as PlatformSyncMode)} options={[
         { value: "manual", label: "Manual", description: "Only refresh when you click" },
-        { value: "assisted", label: "Assisted · Pro", description: "Prompt when platform data may be stale" },
-        { value: "auto", label: "Auto · Pro", description: "Refresh when possible" },
       ]} />
-      <button type="button" className="button-secondary visible" disabled={proLocked} onClick={() => onSaveConnection(syncMode, swid, espnS2)}><Save />Save sync mode</button>
-      {proLocked && <small className="platform-sync-lock">Assisted and Auto sync are included with Pro.</small>}
+      <button type="button" className="button-secondary visible" onClick={() => onSaveConnection("manual", swid, espnS2)}><Save />Save sync mode</button>
     </div>
-    {connection.provider === "espn" && <div className="platform-cookie-fields">
-      <div><LockKeyhole /><span><strong>Private ESPN permission · Pro</strong><small>Use only if ESPN blocks private leagues or older history. Never paste your ESPN password.</small></span></div>
-      <label><span>SWID</span><input disabled={!canAccessPlatformSync} value={swid} onChange={(event) => setSwid(event.target.value)} placeholder="{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}" /></label>
-      <label><span>espn_s2</span><input disabled={!canAccessPlatformSync} value={espnS2} onChange={(event) => setEspnS2(event.target.value)} placeholder="Paste from your own signed-in browser" /></label>
-      <button type="button" className="button-secondary visible" disabled={!canAccessPlatformSync || !swid || !espnS2} onClick={() => onSaveConnection(syncMode, swid, espnS2)}><ShieldCheck />Save ESPN permission</button>
-    </div>}
-    <div className="platform-sync-note"><ShieldCheck /><span>LeagueWeaver cannot update ESPN/Sleeper schedules for you. Auto refresh runs when possible, and platform availability may vary.</span><button type="button" onClick={onDisconnect}>Disconnect</button></div>
+    <div className="platform-sync-note"><ShieldCheck /><span>LeagueWeaver cannot update ESPN/Sleeper schedules for you. Refresh scores after your fantasy platform has matching results.</span><button type="button" onClick={onDisconnect}>Disconnect</button></div>
   </div>;
 }
 
@@ -1391,7 +1369,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       setSavedSimulation(simulation);
     }
   }, [schedule?.id, simulation, simulationLoaded]);
-  const canAccessScorekeeping = entitlements.plan === "pro" || entitlements.features.includes("scorekeeping");
+  const canAccessScorekeeping = true;
   const canAccessPlatformSync = entitlements.plan === "pro" || entitlements.features.includes("platform_sync");
   const activeSchedule = useMemo(() => schedule && simulation ? materializeSimulationSchedule(simulation) : schedule, [schedule, simulation]);
   const simulatorOdds = useMemo((): SimulatorOddsView[] => {
@@ -1734,11 +1712,6 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     }
   };
   const selectView = (item: typeof VIEW_ITEMS[number]) => {
-    const feature = item.key;
-    if (item.pro && entitlements.plan !== "pro" && !entitlements.features.includes(feature)) {
-      setNotice(`${item.label} is included with Pro. Your complete schedule and basic fairness report remain available on Free.`);
-      return;
-    }
     setScoreModalOpen(false);
     setView(item.key);
     if (item.key === "league-schedule") router.push(`/season/${schedule.id}`);
@@ -1753,19 +1726,10 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     router.push(teamId ? `/season/${schedule.id}/team/${teamId}` : `/season/${schedule.id}?view=team-schedule`);
   };
   const currentTitle = VIEW_ITEMS.find((item) => item.key === view)?.label ?? "League Schedule";
-  const canAccessPlayoffs = entitlements.plan === "pro" || entitlements.features.includes("playoffs");
+  const canAccessPlayoffs = false;
   const openScoreEntry = (weekNumber: number) => {
-    if (!canAccessScorekeeping) {
-      setNotice("Manual score entry is included with Pro. Your complete generated schedule remains available on Free.");
-      window.setTimeout(() => setNotice(null), 5200);
-      return;
-    }
     setSelectedWeek(Math.min(weekNumber, schedule.setup.weeks));
     setScoreModalOpen(true);
-  };
-  const showLockedPlayoffNotice = (roundName: string) => {
-    setNotice(`${roundName} is included with Pro. The playoff weeks remain visible here so you can see how the full season is structured.`);
-    window.setTimeout(() => setNotice(null), 5200);
   };
   const openDraftRankingSettings = () => {
     setView("settings");
@@ -1791,14 +1755,14 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
           <span><small>LEAGUE SCHEDULE</small><h2 id="score-entry-modal-title">Enter Week {selectedWeek} scores</h2></span>
           <button type="button" aria-label="Close score entry" onClick={() => closeScoreModal()}><X /></button>
         </header>
-        <div className="score-entry-modal-body"><ScoreImageImport schedule={activeSchedule} selectedWeek={selectedWeek} onApply={applyImportedScores} onPendingChange={setScoreImportPending} /><ScoresView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} onScore={onScore} onFinalizeScores={onFinalizeScores} simulationActive={Boolean(simulation)} simulationResults={simulationResultByGame} /></div>
+        <div className="score-entry-modal-body"><ScoresView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} onScore={onScore} onFinalizeScores={onFinalizeScores} simulationActive={Boolean(simulation)} simulationResults={simulationResultByGame} /></div>
         {scoreDiscardConfirmOpen && <div className="score-entry-discard-warning" role="alert"><span><strong>Discard imported score suggestions?</strong><small>Apply the reviewed scores first, or discard the suggestions and close this panel.</small></span><button type="button" onClick={() => setScoreDiscardConfirmOpen(false)}>Keep reviewing</button><button type="button" onClick={discardScoreSuggestions}>Discard</button></div>}
         <footer><span><ShieldCheck /><small>Scores save automatically as you enter them.</small></span><button type="button" className="button-primary" onClick={() => closeScoreModal(true)}>Done</button></footer>
       </section>
     </div>}
     <header className="workspace-topbar"><BrandLockup /><div className="workspace-season-switch"><EntityLogo className="mini-league-mark" color={schedule.setup.color} logoUrl={schedule.setup.logoUrl} monogram={resolveInitials(schedule.setup.initials, leagueAcronym(schedule.setup.name))} size={34} /><span><strong>{schedule.setup.name}</strong><small>{schedule.setup.seasonYear} season</small></span><ChevronDown /></div><div className="workspace-top-actions"><Tooltip label="Send schedule update"><button type="button" aria-label="Send schedule update" disabled={actionBusy !== null} onClick={sendNotification}>{actionBusy === "notify" ? <LoaderCircle className="spin" /> : <Bell />}</button></Tooltip><AccountIdentity identity={entitlements} plan={entitlements.plan} /></div></header>
     <div className="workspace-shell">
-      <aside className="workspace-rail"><nav aria-label="Season workspace">{VIEW_ITEMS.map((item) => { const Icon = item.icon; return <button type="button" key={item.key} aria-label={`${item.label}${item.pro ? ", Pro feature" : ""}`} title={item.label} className={view === item.key ? "active" : ""} onClick={() => selectView(item)}><Icon /><span>{item.label}</span>{item.pro && <ProBadge compact />}</button>; })}</nav><div className="rail-bottom">{entitlements.plan === "pro" ? <ProBadge label="PRO PLAN" /> : <span>FREE PLAN</span>}<p>{entitlements.plan === "pro" ? "Unlimited seasons" : "1 editable season"}</p>{entitlements.plan === "free" && <Link href="/pricing">Upgrade</Link>}</div></aside>
+      <aside className="workspace-rail"><nav aria-label="Season workspace">{VIEW_ITEMS.map((item) => { const Icon = item.icon; return <button type="button" key={item.key} aria-label={item.label} title={item.label} className={view === item.key ? "active" : ""} onClick={() => selectView(item)}><Icon /><span>{item.label}</span></button>; })}</nav><div className="rail-bottom"><span>MVP ACCESS</span><p>Unlimited saved schedules</p></div></aside>
       <section className={`workspace-main ${selectedTeamColor ? "team-workspace-branded" : ""}`} style={workspaceMainStyle}>
         <div className="workspace-toolbar"><div><span className="workspace-breadcrumb">{schedule.setup.abbreviation} / {schedule.setup.seasonYear}</span><h1>{currentTitle}</h1></div><div className="toolbar-actions"><button type="button" title={simulation ? "Export simulated CSV" : "Export CSV"} onClick={() => downloadCsv(activeSchedule)}><Download />CSV</button><button type="button" title={simulation ? "Print simulated ESPN entry sheet" : "Print ESPN entry sheet"} onClick={() => downloadSchedulePdf(activeSchedule)}><FileDown />ESPN PDF</button><button type="button" title={simulation ? "Share the real schedule" : "Share schedule"} disabled={actionBusy !== null} onClick={share}>{actionBusy === "share" ? <LoaderCircle className="spin" /> : <Share2 />}Share</button></div></div>
         {notice && <div className="workspace-notice"><Cloud />{notice}</div>}
@@ -1830,7 +1794,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
         </div>}
         <DraftRankingReminder schedule={schedule} onSave={onSaveDraftPlaces} openRequest={draftRankingRequest} onOpenSettings={openDraftRankingSettings} />
         <div className="workspace-content">
-          {view === "league-schedule" && <ScheduleView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} canAccessPlayoffs={canAccessPlayoffs} onLockedPlayoffWeek={showLockedPlayoffNotice} onOpenScores={openScoreEntry} highlightedGame={highlightedGame} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
+          {view === "league-schedule" && <ScheduleView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} canAccessPlayoffs={canAccessPlayoffs} onOpenScores={openScoreEntry} highlightedGame={highlightedGame} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
           {view === "team-schedule" && <TeamScheduleView schedule={activeSchedule} teamId={selectedTeamId} onSelectTeam={selectTeamSchedule} onSelectWeek={openLeagueScheduleWeek} simulationResults={simulationResultByGame} />}
           {view === "gotw" && <GotwWorkspace schedule={activeSchedule} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
           {view === "matchup-ratings" && <MatchupRatingsView schedule={activeSchedule} />}

@@ -3,9 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, CalendarDays, ChevronDown, CreditCard, Eye, EyeOff, FolderHeart, History, LoaderCircle, LogOut, RotateCcw, ShieldCheck } from "lucide-react";
-import { CustomSelect } from "@/components/ui/CustomSelect";
 import { EntityLogo } from "@/components/ui/EntityLogo";
-import { ProBadge } from "@/components/ui/ProBadge";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { leagueAcronym, resolveInitials } from "@/lib/monograms";
 import { apiErrorMessage, friendlyAuthMessage } from "@/lib/apiErrors";
@@ -96,7 +94,6 @@ export function AccountPanel() {
   const [plan, setPlan] = useState<"free" | "pro">("free");
   const [seasons, setSeasons] = useState<SeasonSummary[]>([]);
   const [savedLeagues, setSavedLeagues] = useState<SavedLeaguePreset[]>([]);
-  const [freeSeasonId, setFreeSeasonId] = useState("");
   const [expandedSeasonId, setExpandedSeasonId] = useState<string | null>(null);
   const [revisionsBySeason, setRevisionsBySeason] = useState<Record<string, SeasonRevision[]>>({});
   const [revisionLoadingId, setRevisionLoadingId] = useState<string | null>(null);
@@ -116,7 +113,6 @@ export function AccountPanel() {
     ]).then(([seasonPayload, leaguePayload, entitlementPayload]) => {
       const nextSeasons = seasonPayload.seasons ?? [];
       setSeasons(nextSeasons);
-      setFreeSeasonId(nextSeasons.find((season: { editable?: boolean }) => season.editable)?.id || nextSeasons[0]?.id || "");
       setSavedLeagues((leaguePayload.presets ?? []).map(normalizeSavedLeague).filter((preset: SavedLeaguePreset | null): preset is SavedLeaguePreset => Boolean(preset)));
       setPlan(entitlementPayload.plan || "free");
     }).catch(() => setMessage("Account details are temporarily unavailable."));
@@ -157,16 +153,6 @@ export function AccountPanel() {
     setLoading(false);
     if (payload.url) window.location.assign(payload.url);
     else setMessage(apiErrorMessage(response.status, payload.error, "Billing could not be opened."));
-  };
-
-  const chooseFreeSeason = async () => {
-    if (!freeSeasonId) return;
-    setLoading(true);
-    const response = await fetch("/api/account/free-season", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: freeSeasonId }) });
-    const payload = await response.json().catch(() => ({})) as { error?: string };
-    setLoading(false);
-    setMessage(response.ok ? "Your editable Free season is updated." : apiErrorMessage(response.status, payload.error, "The season choice could not be saved."));
-    if (response.ok) setSeasons((current) => current.map((season) => ({ ...season, editable: season.id === freeSeasonId })));
   };
 
   const loadRevisions = async (seasonId: string, force = false) => {
@@ -218,8 +204,8 @@ export function AccountPanel() {
   };
 
   if (signedInEmail) return <div className="account-dashboard">
-    <header><div><p className="eyebrow">Commissioner account</p><h1>Your league office.</h1><p>{signedInEmail}</p></div>{plan === "pro" ? <ProBadge label="PRO PLAN" className="account-plan" /> : <span className="account-plan free"><ShieldCheck />FREE PLAN</span>}</header>
-    <div className="account-stat-row"><div><CalendarDays /><span><strong>{seasons.length}</strong><small>Saved seasons</small></span></div><div><FolderHeart /><span><strong>{savedLeagues.length}</strong><small>Saved leagues</small></span></div><div><CreditCard /><span><strong>{plan === "pro" ? "Unlimited" : "1"}</strong><small>Editable seasons</small></span></div></div>
+    <header><div><p className="eyebrow">Commissioner account</p><h1>Your league office.</h1><p>{signedInEmail}</p></div><span className="account-plan free"><ShieldCheck />MVP ACCESS</span></header>
+    <div className="account-stat-row"><div><CalendarDays /><span><strong>{seasons.length}</strong><small>Saved seasons</small></span></div><div><FolderHeart /><span><strong>{savedLeagues.length}</strong><small>Saved leagues</small></span></div><div><ShieldCheck /><span><strong>Unlimited</strong><small>Editable seasons</small></span></div></div>
     <section className="account-saved-leagues">
       <div className="account-section-head"><span><strong>Saved leagues</strong><small>Reuse league, division, team, color, and logo details.</small></span><Link href="/" className="button-secondary">Start new</Link></div>
       {savedLeagues.length ? <div className="account-saved-league-rows">{savedLeagues.map((preset) => {
@@ -288,9 +274,8 @@ export function AccountPanel() {
         </article>;
       }) : <div className="account-empty"><CalendarDays /><span><strong>No cloud seasons yet.</strong><small>Generated seasons save automatically after you sign in.</small></span></div>}
     </section>
-    {plan === "free" && seasons.length > 1 && <section className="account-free-choice"><div><strong>Choose your editable Free season</strong><small>Other seasons stay viewable and exportable.</small></div><CustomSelect label="Editable Free season" value={freeSeasonId} onChange={setFreeSeasonId} options={seasons.map((season) => ({ value: season.id, label: season.title, description: season.editable ? "Currently editable" : "View only" }))} /><button type="button" className="button-secondary" onClick={chooseFreeSeason} disabled={loading}>Save choice</button></section>}
     {message && <div className="account-message" role="status">{message}</div>}
-    <footer>{plan === "pro" ? <button type="button" className="button-secondary" onClick={openBilling} disabled={loading}><CreditCard />Manage billing</button> : <Link href="/pricing" className="button-primary"><ShieldCheck />Upgrade to Pro</Link>}<button type="button" className="account-signout" onClick={signOut}><LogOut />Sign out</button></footer>
+    <footer>{plan === "pro" ? <button type="button" className="button-secondary" onClick={openBilling} disabled={loading}><CreditCard />Manage billing</button> : <Link href="/" className="button-primary"><CalendarDays />Open builder</Link>}<button type="button" className="account-signout" onClick={signOut}><LogOut />Sign out</button></footer>
   </div>;
 
   return (

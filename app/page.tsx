@@ -13,7 +13,7 @@ export default function HomePage() {
           <div className="proof-intro">
             <p className="eyebrow">Built for commissioners</p>
             <h2 id="why-league-weaver">The schedule is only the start.</h2>
-            <p>Generate it here, then keep scores, standings, playoff projections, and every export together.</p>
+            <p>Generate it here, then keep scores, standings, sharing, and every export together.</p>
           </div>
           <div className="proof-points">
             <div><ShieldCheck aria-hidden="true" /><span><strong>Fair by construction</strong><small>Hard rules are checked before you see a schedule.</small></span></div>
@@ -30,7 +30,6 @@ export default function HomePage() {
           <nav aria-label="Legal">
             <a href="/privacy">Privacy</a>
             <a href="/terms">Terms</a>
-            <a href="/pricing">Pricing</a>
           </nav>
         </div>
       </footer>

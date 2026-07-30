@@ -22,7 +22,6 @@ export function AppHeader() {
       <div className="page-width topbar-row">
         <BrandLockup />
         <nav className="topnav" aria-label="Primary navigation">
-          <Link href="/pricing">Pricing</Link>
           <AccountIdentity />
         </nav>
       </div>

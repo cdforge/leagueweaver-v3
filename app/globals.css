@@ -2961,7 +2961,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .pricing-table-row > strong { grid-column: 1 / -1; padding-bottom: 8px; border-bottom: 1px solid var(--line); font-size: 12px; }
   .pricing-table-row > span:nth-child(2)::before, .pricing-table-row > span:nth-child(3)::before { display: block; margin-bottom: 3px; color: var(--muted); font-size: 8px; font-weight: 850; letter-spacing: .04em; text-transform: uppercase; }
   .pricing-table-row > span:nth-child(2)::before { content: "Free"; }
-  .pricing-table-row > span:nth-child(3)::before { content: "Pro"; }
+  .pricing-table-row > span:nth-child(3)::before { content: "Later"; }
   .public-topbar { padding-inline: 14px; }
   .public-topbar > span { display: none; }
   .public-league-band { grid-template-columns: 46px 1fr; padding: 20px; }

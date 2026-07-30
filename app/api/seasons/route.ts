@@ -58,7 +58,7 @@ export async function GET() {
     return {
       ...season,
       time_frame: resolvedTimeFrame(season),
-      editable: entitlements.accountPro || !season.requires_pro,
+      editable: true,
       revision_count: group.reduce((total, item) => total + (revisionsBySchedule.get(item.id) ?? 0), 0),
     };
   });
@@ -81,7 +81,6 @@ export async function POST(request: Request) {
   if (scheduleId) {
     const { data: existing } = await auth.supabase.from("schedules").select("id,title,requires_pro").eq("id", scheduleId).maybeSingle();
     if (!existing) scheduleId = null;
-    else if (existing.requires_pro && !entitlements.accountPro && !entitlements.schedulePro) return NextResponse.json({ error: "This season is view-only after downgrade. Choose your editable Free season in Account." }, { status: 403 });
     else persistedTitle = isSeasonCopyTitle(existing.title, schedule.setup.name) ? existing.title : schedule.setup.name;
   }
 
@@ -112,23 +111,10 @@ export async function POST(request: Request) {
     if (parsed.data.saveMode === "overwrite") {
       const existingSeason = matchingRows.find((row) => row.id === parsed.data.existingScheduleId) ?? matchingRows[0];
       if (!existingSeason) return NextResponse.json({ error: "The existing season could not be found." }, { status: 404 });
-      const existingEntitlements = await getEntitlements(auth.userId, auth.supabase, existingSeason.id);
-      if (existingSeason.requires_pro && !existingEntitlements.accountPro && !existingEntitlements.schedulePro) {
-        return NextResponse.json({ error: "This season is view-only after downgrade. Choose your editable Free season in Account." }, { status: 403 });
-      }
       scheduleId = existingSeason.id;
       persistedTitle = existingSeason.title;
     }
 
-    const isCreating = !scheduleId;
-    if (!entitlements.accountPro) {
-      const uniqueFreeSeasonKeys = new Set((activeRows ?? [])
-        .filter((row) => !row.requires_pro)
-        .map((row) => savedSeasonIdentity(row.title, row.time_frame)));
-      if (isCreating && uniqueFreeSeasonKeys.size >= 1) {
-        return NextResponse.json({ error: "Free includes one editable saved season. Open Account to choose it or upgrade for unlimited seasons.", code: "FREE_SEASON_LIMIT", seasons: activeRows }, { status: 409 });
-      }
-    }
     if (parsed.data.saveMode === "copy") {
       persistedTitle = nextSeasonCopyTitle(schedule.setup.name, (activeRows ?? []).map((row) => row.title));
     }
@@ -138,7 +124,7 @@ export async function POST(request: Request) {
         title: persistedTitle,
         format: "fantasy_football",
         status: "generated",
-        requires_pro: entitlements.accountPro,
+        requires_pro: false,
         time_frame: timeFrame,
       }).select("id").single();
       if (error || !created) return NextResponse.json({ error: "The season could not be saved." }, { status: 500 });

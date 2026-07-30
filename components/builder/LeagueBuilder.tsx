@@ -13,7 +13,6 @@ import {
   GripVertical,
   ImagePlus,
   Info,
-  LockKeyhole,
   BookmarkPlus,
   LogIn,
   Medal,
@@ -23,7 +22,6 @@ import {
   ShieldCheck,
   Sparkles,
   Trophy,
-  Upload,
   Users,
   WandSparkles,
   X,
@@ -34,7 +32,6 @@ import { ImportLeagueModal, type ImportSource } from "@/components/imports/Impor
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
 import { EntityLogo } from "@/components/ui/EntityLogo";
-import { ProBadge } from "@/components/ui/ProBadge";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { createBlankSetup, createDefaultSetup, createDivisions, createTeams } from "@/lib/defaults";
 import { identityFromSetup, normalizeSavedLeague } from "@/lib/savedLeagues";
@@ -42,22 +39,12 @@ import { generateLeagueSchedule, getNflWeeks, getNflWeekWindow, getWeekDateLabel
 import { loadSetup, saveSeason, saveSetup } from "@/lib/storage";
 import { divisionAcronym, entityMonogram, leagueAcronym, resolveInitials } from "@/lib/monograms";
 import { accessibleAccentColor } from "@/lib/colorContrast";
-import { isDivisionHalvesConsolationUsable } from "@/lib/consolation";
 import { formatDraftPlace, getTeamsMissingDraftPlaces, getWeekOneTeamOrder, hasCompleteDraftRanking } from "@/lib/rankings";
 import {
-  getPlayoffByeCount,
   getMaximumPlayoffFieldSize,
-  getMaximumPlayoffWeeks,
-  getPlayoffGameBrandingSlots,
-  getPlayoffRoundNames,
-  getRequiredPlayoffWeeks,
-  isPlayoffPlacementUsable,
-  PLAYOFF_THEME_COLORS,
-  playoffPlacementLabel,
-  resolvePlayoffPlacementMode,
 } from "@/lib/playoffs";
 import { teamDisplayName, teamInitials, teamMonogram } from "@/lib/teamIdentity";
-import type { Division, ImportPreview, LeagueSetupInput, PlayoffFieldSize, SavedLeagueIdentity, SavedLeaguePreset, Team } from "@/lib/types";
+import type { Division, ImportPreview, LeagueSetupInput, SavedLeagueIdentity, SavedLeaguePreset, Team } from "@/lib/types";
 
 const STEPS = [
   { label: "League & Import", shortLabel: "League" },
@@ -67,7 +54,6 @@ const STEPS = [
   { label: "Seeding", shortLabel: "Seeding" },
   { label: "Week 1 Ranking", shortLabel: "Week 1" },
   { label: "Fairness Rules", shortLabel: "Fairness" },
-  { label: "Playoffs", shortLabel: "Playoffs", pro: true },
   { label: "Review & Generate", shortLabel: "Review" },
 ];
 
@@ -169,7 +155,7 @@ function LeagueStep({ setup, setSetup, onImport, presets, signedIn, onQuickImpor
   return (
     <div className="step-stack">
       <div className="section-heading">
-        <span className="step-kicker">Step 1 of 9</span>
+        <span className="step-kicker">Step 1 of 8</span>
         <h1>Start with your league.</h1>
         <p>Name it, bring in a roster, or start from a clean lineup.</p>
       </div>
@@ -211,7 +197,6 @@ function LeagueStep({ setup, setSetup, onImport, presets, signedIn, onQuickImpor
         <button type="button" onClick={() => onImport("sleeper")}><span className="import-icon sleeper"><img src="/providers/sleeper.ico" alt="" /></span><strong>Sleeper</strong><small>League ID or username</small></button>
         <button type="button" onClick={() => onImport("espn")}><span className="import-icon espn"><img src="/providers/espn.ico" alt="" /></span><strong>ESPN</strong><small>League URL or ID</small></button>
         <button type="button" onClick={() => onImport("csv")}><FileSpreadsheet /><strong>CSV or paste</strong><small>Roster template included</small></button>
-        <button type="button" onClick={() => onImport("screenshot")}><Upload /><strong>Screenshot</strong><small>Teams and weekly scores</small></button>
       </div>
       <div className="info-callout"><ShieldCheck size={19} /><span><strong>Your existing league stays put.</strong> League Weaver works beside your fantasy platform and never asks for its password.</span></div>
     </div>
@@ -236,7 +221,7 @@ function TeamsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: Rea
 
   return (
     <div className="step-stack">
-      <div className="section-heading"><span className="step-kicker">Step 2 of 9</span><h1>Add every team.</h1><p>Confirm team identities now. You’ll organize divisions on the next step.</p></div>
+      <div className="section-heading"><span className="step-kicker">Step 2 of 8</span><h1>Add every team.</h1><p>Confirm team identities now. You’ll organize divisions on the next step.</p></div>
       <div className="team-details-stage">
         <div className="team-meta-controls"><div><FieldLabel>Teams</FieldLabel><div className="stepper"><button type="button" aria-label="Remove two teams" onClick={() => setTeamCount(setup.teams.length - 2)}><Minus /></button><strong>{setup.teams.length}</strong><button type="button" aria-label="Add two teams" onClick={() => setTeamCount(setup.teams.length + 2)}><Plus /></button></div></div><div><FieldLabel>Optional team details</FieldLabel><div className="field-switches"><FieldSwitch checked={setup.display.cityNames} onChange={(cityNames) => updateDisplay({ cityNames })} label="City names" /><FieldSwitch checked={setup.display.managers} onChange={(managers) => updateDisplay({ managers })} label="Managers" /><FieldSwitch checked={setup.display.venues} onChange={(venues) => updateDisplay({ venues })} label="Venues" /></div></div></div>
         <div className="team-editor-table" style={{ "--team-columns": teamColumns } as React.CSSProperties}>
@@ -270,7 +255,7 @@ function DivisionsStep({ setup, setSetup, signedIn, saveState, onSaveLeague }: {
   const counts = setup.divisions.map((division) => setup.teams.filter((team) => team.divisionId === division.id).length);
   const balanced = Math.max(...counts) - Math.min(...counts) <= 1;
   return <div className="step-stack">
-    <div className="section-heading"><span className="step-kicker">Step 3 of 9</span><h1>Build the divisions.</h1><p>Name each group, keep its color and logo visible, then place every team.</p></div>
+    <div className="section-heading"><span className="step-kicker">Step 3 of 8</span><h1>Build the divisions.</h1><p>Name each group, keep its color and logo visible, then place every team.</p></div>
     <div className="division-stage">
       <div className="compact-controls division-controls"><div><FieldLabel>Divisions</FieldLabel><div className="segmented"><button type="button" className={setup.divisions.length === 2 ? "active" : ""} onClick={() => setDivisionCount(2)}>2</button><button type="button" className={setup.divisions.length === 3 ? "active" : ""} onClick={() => setDivisionCount(3)}>3</button><button type="button" className={setup.divisions.length === 4 ? "active" : ""} onClick={() => setDivisionCount(4)}>4</button></div></div><div className={`roster-status ${balanced ? "" : "warning"}`}>{balanced ? <Check /> : <CircleAlert />}<span><strong>{balanced ? "Balanced divisions" : "Divisions need rebalancing"}</strong><small>{counts.join(" · ")} teams</small></span></div></div>
       <div className="division-strip">{setup.divisions.map((division) => <div className="division-identity-edit" key={division.id}><IdentityColorPicker compact name={`${division.name} division`} abbreviation={resolveInitials(division.initials, divisionAcronym(division.name))} color={division.color} logoUrl={division.logoUrl} onChange={(next) => updateDivision(division.id, next)} /><div><input aria-label={`${division.name} division name`} value={division.name} onChange={(event) => updateDivision(division.id, { name: event.target.value })} /><input aria-label={`${division.name} division initials override`} maxLength={4} placeholder={`Auto: ${divisionAcronym(division.name)}`} value={division.initials ?? ""} onChange={(event) => updateDivision(division.id, { initials: event.target.value || undefined })} /></div></div>)}</div>
@@ -303,19 +288,15 @@ function SeasonStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: Re
   }, [requiresFourteenWeeks, setSetup, setup.weeks]);
   return (
     <div className="step-stack">
-      <div className="section-heading"><span className="step-kicker">Step 4 of 9</span><h1>Frame the season.</h1><p>League Weaver uses real NFL week windows, including the path through the championship.</p></div>
+      <div className="section-heading"><span className="step-kicker">Step 4 of 8</span><h1>Frame the season.</h1><p>League Weaver uses real NFL week windows for the regular season.</p></div>
       <div className="field-grid two-col season-controls">
-        <div><FieldLabel>Regular-season length</FieldLabel><div className="choice-row"><button type="button" disabled={requiresFourteenWeeks} className={setup.weeks === 13 ? "active" : ""} onClick={() => setRegularSeasonWeeks(13)}><strong>13 weeks</strong><small>{requiresFourteenWeeks ? "Unavailable for this division shape" : "Allows playoffs through Week 17"}</small></button><button type="button" className={setup.weeks === 14 ? "active" : ""} onClick={() => setRegularSeasonWeeks(14)}><strong>14 weeks</strong><small>Three playoff weeks through Week 17</small></button></div></div>
+        <div><FieldLabel>Regular-season length</FieldLabel><div className="choice-row"><button type="button" disabled={requiresFourteenWeeks} className={setup.weeks === 13 ? "active" : ""} onClick={() => setRegularSeasonWeeks(13)}><strong>13 weeks</strong><small>{requiresFourteenWeeks ? "Unavailable for this division shape" : "Compact regular season"}</small></button><button type="button" className={setup.weeks === 14 ? "active" : ""} onClick={() => setRegularSeasonWeeks(14)}><strong>14 weeks</strong><small>Extra regular-season week</small></button></div></div>
         <div><FieldLabel>NFL season</FieldLabel><CustomSelect label="NFL season" value={String(setup.seasonYear)} onChange={(seasonYear) => setSetup((current) => ({ ...current, seasonYear: Number(seasonYear) }))} options={[2025, 2026, 2027].map((year) => ({ value: String(year), label: `${year} season`, description: year === 2026 ? "Current planning year" : "NFL week calendar" }))} /></div>
       </div>
       {requiresFourteenWeeks && <div className="info-callout"><Info /><span><strong>Fourteen weeks keeps this shape complete.</strong> This division layout needs the extra week so every divisional opponent can play twice without byes.</span></div>}
       <div className="week-window">
         <div className="week-window-head"><span><CalendarDays /><strong>{setup.seasonYear} fantasy week windows</strong></span><small>Tuesday 4:00 AM ET rollover</small></div>
         <div className="week-chip-grid">{weeks.map((week) => <span className={week.holidays.length ? "holiday" : ""} key={week.week}><strong>W{week.week}</strong>{week.label.replace(`, ${setup.seasonYear}`, "")}{week.holidays.map((holiday) => <em key={holiday}>{holiday}</em>)}</span>)}</div>
-      </div>
-      <div className="week-window playoff-window">
-        <div className="week-window-head"><span><Trophy /><strong>Playoff week windows</strong></span><small>{setup.playoffs.fieldSize}-team field</small></div>
-        <div className="playoff-week-grid">{getPlayoffRoundNames(setup.playoffs, setup.divisions.length).map((round, index) => { const week = setup.weeks + index + 1; const window = getNflWeekWindow(setup.seasonYear, week); return <span className={window.holidays.length ? "holiday" : ""} key={`${round}-${index}`}><strong>{round}</strong><small>NFL Week {week}</small>{window.label.replace(`, ${setup.seasonYear}`, "")}{window.holidays.map((holiday) => <em key={holiday}>{holiday}</em>)}</span>; })}</div>
       </div>
     </div>
   );
@@ -333,7 +314,7 @@ function SeedingStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: R
     setSetup((current) => ({ ...current, teams: ordered.map((item, index) => ({ ...item, overallRank: index + 1 })) }));
   };
   return <div className="step-stack">
-    <div className="section-heading"><span className="step-kicker">Step 5 of 9</span><h1>Set last season’s order.</h1><p>Seeding is optional. Use it only when prior-season results should shape cross-division matchups.</p></div>
+    <div className="section-heading"><span className="step-kicker">Step 5 of 8</span><h1>Set last season’s order.</h1><p>Seeding is optional. Use it only when prior-season results should shape cross-division matchups.</p></div>
     <div className="seeding-methods" role="group" aria-label="Seeding method">
       <button type="button" className={setup.priorSeason.entryMode === "manual" ? "active" : ""} onClick={() => setSetup((current) => ({ ...current, priorSeason: { ...current.priorSeason, enabled: true, entryMode: "manual" } }))}><span><GripVertical /></span><strong>Enter order manually</strong><small>Recommended for most leagues. Drag teams or choose each rank.</small></button>
       <button type="button" disabled={!setup.priorSeason.hasData} className={setup.priorSeason.entryMode === "history" && setup.priorSeason.source === "playoffs" ? "active" : ""} onClick={() => setSetup((current) => ({ ...current, priorSeason: { ...current.priorSeason, enabled: true, entryMode: "history", source: "playoffs" } }))}><span><Trophy /></span><strong>Last year’s playoff finish</strong><small>{setup.priorSeason.hasData ? "Use imported or saved playoff placement." : "No imported history available."}</small></button>
@@ -376,7 +357,7 @@ function OpeningWeekStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetu
   });
   const chooseSource = (rankingSource: LeagueSetupInput["weekOne"]["rankingSource"]) => setSetup((current) => ({ ...current, weekOne: { rankingSource } }));
   return <div className="step-stack">
-    <div className="section-heading"><span className="step-kicker">Step 6 of 9</span><h1>Rank the opening week.</h1><p>Choose what should shape Week 1 marquee matchups and the first Game of the Week.</p></div>
+    <div className="section-heading"><span className="step-kicker">Step 6 of 8</span><h1>Rank the opening week.</h1><p>Choose what should shape Week 1 marquee matchups and the first Game of the Week.</p></div>
     <div className="opening-rank-methods" role="group" aria-label="Week 1 ranking source">
       <button type="button" className={setup.weekOne.rankingSource === "prior-season" ? "active" : ""} onClick={() => chooseSource("prior-season")}><span><Medal /></span><strong>Last season’s finish</strong><small>Use the order from the Seeding step. This remains the recommended default.</small></button>
       <button type="button" className={setup.weekOne.rankingSource === "draft-day" ? "active" : ""} onClick={() => chooseSource("draft-day")}><span><FileSpreadsheet /></span><strong>Draft-day place</strong><small>Choose who drafted first through last to set the Week 1 order and Game of the Week.</small></button>
@@ -400,7 +381,7 @@ function FairnessStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   const thanksgivingWeek = getNflWeeks(setup.seasonYear, 14).find((week) => week.holidays.includes("Thanksgiving"))?.week;
   return (
     <div className="step-stack">
-      <div className="section-heading"><span className="step-kicker">Step 7 of 9</span><h1>Set the fairness guardrails.</h1><p>Every hard rule remains included on Free. These controls shape the feel of the season.</p></div>
+      <div className="section-heading"><span className="step-kicker">Step 7 of 8</span><h1>Set the fairness guardrails.</h1><p>Every hard rule is checked before the schedule is shown. These controls shape the feel of the season.</p></div>
       <div className="rule-group">
         <div className="rule-group-title"><ShieldCheck /><span><strong>Competitive balance</strong><small>Hard rules are always checked</small></span></div>
         <Toggle checked={setup.fairness.preventImmediateRematches} onChange={(value) => update({ preventImmediateRematches: value })} label="Space out repeat opponents" description="Avoid playing the same team in consecutive weeks." />
@@ -417,144 +398,17 @@ function FairnessStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   );
 }
 
-function PlayoffsStep({ setup, setSetup, isPro, onSkip }: { setup: LeagueSetupInput; setSetup: React.Dispatch<React.SetStateAction<LeagueSetupInput>>; isPro: boolean; onSkip: () => void }) {
-  const update = (patch: Partial<LeagueSetupInput["playoffs"]>) => setSetup((current) => ({ ...current, playoffs: { ...current.playoffs, ...patch } }));
-  const updateBracketType = (bracketType: LeagueSetupInput["playoffs"]["bracketType"]) => {
-    const maximum = getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, bracketType);
-    update({
-      bracketType,
-      fieldSize: Math.min(setup.playoffs.fieldSize, maximum),
-      fieldStatus: "live",
-      lockedTeamIds: [],
-      roundNames: undefined,
-      roundLogoUrls: undefined,
-      gameNames: undefined,
-      gameLogoUrls: undefined,
-    });
-  };
-  const updateFieldSize = (fieldSize: PlayoffFieldSize) => update({
-    fieldSize,
-    fieldStatus: "live",
-    lockedTeamIds: [],
-    roundNames: undefined,
-    roundLogoUrls: undefined,
-    gameNames: undefined,
-    gameLogoUrls: undefined,
-    consolationMode: setup.playoffs.consolationMode === "division-halves" && !isDivisionHalvesConsolationUsable(setup, fieldSize)
-      ? "standard"
-      : setup.playoffs.consolationMode,
-  });
-  const updateRoundName = (index: number, name: string) => {
-    const roundNames = [...(setup.playoffs.roundNames ?? Array(getPlayoffRoundNames(setup.playoffs, setup.divisions.length).length).fill(""))];
-    roundNames[index] = name;
-    update({ roundNames });
-  };
-  const updateRoundLogo = (index: number, logoUrl?: string) => {
-    const roundLogoUrls = [...(setup.playoffs.roundLogoUrls ?? Array(getPlayoffRoundNames(setup.playoffs, setup.divisions.length).length).fill(""))];
-    roundLogoUrls[index] = logoUrl || "";
-    update({ roundLogoUrls });
-  };
-  const rounds = getPlayoffRoundNames(setup.playoffs, setup.divisions.length);
-  const gameBrandingSlots = getPlayoffGameBrandingSlots(setup.playoffs, setup.divisions.length);
-  const updateGameLogo = (gameId: string, logoUrl?: string) => {
-    const gameLogoUrls = { ...(setup.playoffs.gameLogoUrls ?? {}) };
-    if (logoUrl) gameLogoUrls[gameId] = logoUrl;
-    else delete gameLogoUrls[gameId];
-    update({ gameLogoUrls });
-  };
-  const updateGameName = (gameId: string, name: string) => {
-    const gameNames = { ...(setup.playoffs.gameNames ?? {}) };
-    if (name.trim()) gameNames[gameId] = name.slice(0, 60);
-    else delete gameNames[gameId];
-    update({ gameNames });
-  };
-  const maximumFieldSize = getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, setup.playoffs.bracketType);
-  const maximumPlayoffWeeks = getMaximumPlayoffWeeks(setup.weeks);
-  const requiredPlayoffWeeks = getRequiredPlayoffWeeks(setup.playoffs.fieldSize, setup.playoffs.bracketType);
-  const resolvedPlacement = resolvePlayoffPlacementMode(setup);
-  const byeCount = getPlayoffByeCount(setup.playoffs.fieldSize);
-  const qualifiersPerHalf = setup.playoffs.fieldSize / 2;
-  const placementOptions = [
-    ...(setup.playoffs.bracketType === "single-elimination" && isPlayoffPlacementUsable("division-halves", setup.divisions.length, setup.playoffs.fieldSize) ? [{ value: "division-halves", label: "Division Halves", description: `${qualifiersPerHalf} qualifiers per half; each side crowns a champion, then those champions meet in the final` }] : []),
-    ...(setup.playoffs.bracketType === "single-elimination" && isPlayoffPlacementUsable("division-leaders", setup.divisions.length, setup.playoffs.fieldSize) ? [{ value: "division-leaders", label: "Division Leaders Priority", description: "Division winners receive the top seeds and any available byes" }] : []),
-    { value: "overall", label: "Overall Standings", description: "The top teams qualify in order, regardless of division finish" },
-  ];
-  const bracketOptions = [
-    { value: "single-elimination", label: "Single elimination", description: "One loss eliminates a team; the standard fantasy playoff" },
-    { value: "ladder", label: "Playoff ladder", description: "Lower seeds play first and advance toward the top seed" },
-  ];
-  const reseedOptions = [
-    { value: "fixed", label: "Fixed bracket", description: "Winners follow the matchup path set at the start" },
-    { value: "each-round", label: "Reseed each round", description: resolvedPlacement === "division-halves" ? "Highest plays lowest within each half until the championship" : "The highest remaining seed plays the lowest remaining seed" },
-    { value: "protected", label: "Protected reseed", description: "Reseed teams while preserving division placement rules" },
-  ];
-  const championshipVenueOptions = [
-    { value: "higher-seed", label: "Higher seed hosts", description: "The better seed uses its saved team venue" },
-    { value: "neutral-site", label: "Neutral championship", description: "The title game is shown at a neutral venue" },
-  ];
-  const seedDisplayOptions = [
-    { value: "reranked", label: "Bracket seed", description: "Show each team’s current playoff seed" },
-    { value: "standings-finish", label: "Standings finish", description: "Keep the team’s final regular-season position visible" },
-  ];
-  const consolationOptions = [
-    { value: "standard", label: "Standard placement", description: "ESPN-style placement games keep eliminated teams active without letting them re-enter the title bracket" },
-    ...(isDivisionHalvesConsolationUsable(setup) ? [{ value: "division-halves", label: "Division-halves placement", description: "Non-playoff teams open inside their division, then winners and losers cross divisions for final places" }] : []),
-    { value: "off", label: "No consolation bracket", description: "Only the championship bracket is played" },
-  ];
-  const selectTheme = (theme: LeagueSetupInput["playoffs"]["theme"]) => update({
-    theme,
-    color: theme === "custom" ? setup.playoffs.color : PLAYOFF_THEME_COLORS[theme],
-  });
-  return <div className="step-stack">
-    <div className="section-heading"><span className="step-kicker">Step 8 of 9 <ProBadge compact /></span><h1>Shape the playoff run.</h1><p>Preview the postseason on Free. Pro commissioners can customize the bracket and carry it into the season workspace.</p></div>
-    <div className={`playoff-builder ${isPro ? "" : "playoff-builder-locked"}`}>
-      <div className="playoff-builder-head"><span>{setup.playoffs.logoUrl && <EntityLogo color={setup.playoffs.color} logoUrl={setup.playoffs.logoUrl} monogram="PO" />}<span><strong>{setup.playoffs.name}</strong><small>{rounds.length} rounds · starts NFL Week {setup.weeks + 1}</small></span></span><ProBadge label={isPro ? "PRO ACTIVE" : "PRO PREVIEW"} className="playoff-pro-status" /></div>
-      <div className="playoff-recommendation"><ShieldCheck /><span><strong>Recommended for this league</strong><small>Single elimination · {setup.playoffs.fieldSize} teams · {playoffPlacementLabel(resolvedPlacement)} · {byeCount ? `${byeCount} first-round byes` : "no byes"} · higher seed hosts · fixed bracket</small></span><em>AUTO</em></div>
-      <fieldset className="playoff-settings" disabled={!isPro}>
-        <div className="playoff-identity-row">
-          <div><FieldLabel hint="Upload a logo and choose from its top colors">Playoff identity</FieldLabel><IdentityColorPicker name="Playoff" abbreviation="PO" color={setup.playoffs.color} logoUrl={setup.playoffs.logoUrl} onChange={(next) => update({ ...next, ...(next.color ? { theme: "custom" as const } : {}) })} /></div>
-          <div><FieldLabel>Name</FieldLabel><input className="text-input" value={setup.playoffs.name} maxLength={60} onChange={(event) => update({ name: event.target.value })} /></div>
-        </div>
-        <div className="playoff-theme-field"><FieldLabel hint="Gold is the standard">Playoff color</FieldLabel><div className="playoff-theme-selector" role="group" aria-label="Playoff color theme">{(["gold", "silver", "bronze", "custom"] as const).map((theme) => <button type="button" className={setup.playoffs.theme === theme ? "active" : ""} aria-pressed={setup.playoffs.theme === theme} key={theme} onClick={() => selectTheme(theme)}><span className={`playoff-theme-swatch ${theme}`} style={theme === "custom" ? { background: setup.playoffs.color } : undefined} /><strong>{theme[0].toUpperCase() + theme.slice(1)}</strong><small>{theme === "custom" ? "Use the color picker above" : `${theme[0].toUpperCase() + theme.slice(1)} finish`}</small></button>)}</div></div>
-        <div className="playoff-config-grid expanded">
-          <div><FieldLabel>Bracket type</FieldLabel><CustomSelect label="Bracket type" value={setup.playoffs.bracketType} onChange={(value) => updateBracketType(value as LeagueSetupInput["playoffs"]["bracketType"])} options={bracketOptions} /></div>
-          <div><FieldLabel hint={`2–${maximumFieldSize}`}>Playoff teams</FieldLabel><div className="stepper playoff-field-stepper"><button type="button" aria-label="Remove one playoff team" disabled={setup.playoffs.fieldSize <= 2} onClick={() => updateFieldSize(setup.playoffs.fieldSize - 1)}><Minus /></button><strong>{setup.playoffs.fieldSize}</strong><button type="button" aria-label="Add one playoff team" disabled={setup.playoffs.fieldSize >= maximumFieldSize} onClick={() => updateFieldSize(setup.playoffs.fieldSize + 1)}><Plus /></button></div><small>{byeCount ? `${byeCount} byes go to the top ${byeCount === 1 ? "seed" : "seeds"}.` : "Every qualifying team opens in the first round."} {requiredPlayoffWeeks} of {maximumPlayoffWeeks} available playoff weeks used.</small></div>
-          <div className="playoff-placement-control"><FieldLabel hint={`Recommended: ${playoffPlacementLabel(resolvedPlacement)}`}>Division placement</FieldLabel><CustomSelect label="Division placement" value={setup.playoffs.placementMode === "auto" ? resolvedPlacement : setup.playoffs.placementMode} onChange={(value) => update({ placementMode: value as LeagueSetupInput["playoffs"]["placementMode"], fieldStatus: "live", lockedTeamIds: [] })} options={placementOptions} /></div>
-          <div><FieldLabel>Reseeding</FieldLabel><CustomSelect label="Reseeding mode" value={setup.playoffs.reseedMode} onChange={(value) => update({ reseedMode: value as LeagueSetupInput["playoffs"]["reseedMode"] })} options={reseedOptions} /></div>
-          <div><FieldLabel hint="Earlier rounds always use the higher seed">Championship venue</FieldLabel><CustomSelect label="Championship venue" value={setup.playoffs.championshipVenueMode} onChange={(value) => update({ championshipVenueMode: value as LeagueSetupInput["playoffs"]["championshipVenueMode"] })} options={championshipVenueOptions} /></div>
-          <div><FieldLabel>Seed display</FieldLabel><CustomSelect label="Seed display" value={setup.playoffs.seedDisplayMode} onChange={(value) => update({ seedDisplayMode: value as LeagueSetupInput["playoffs"]["seedDisplayMode"] })} options={seedDisplayOptions} /></div>
-          <div><FieldLabel hint="All placement games stay separate from the title bracket">Consolation format</FieldLabel><CustomSelect label="Consolation format" value={setup.playoffs.consolationMode} onChange={(value) => update({ consolationMode: value as LeagueSetupInput["playoffs"]["consolationMode"], thirdPlaceGame: value !== "off" })} options={consolationOptions} /></div>
-        </div>
-        <div className="playoff-rounds-head"><span><strong>Round names, logos, and dates</strong><small>Rename any round and optionally add its own logo. Empty logo spots are never shown in the bracket.</small></span><em>Field stays live until you lock it in the season workspace.</em></div>
-        <div className="playoff-round-preview">{rounds.map((round, index) => { const week = setup.weeks + index + 1; const abbreviation = round.split(/\s+/).map((word) => word[0]).join("").slice(0, 3).toUpperCase(); return <div key={`${round}-${index}`}><span>{index + 1}</span><IdentityColorPicker compact showColorControl={false} showAbbreviation={false} name={`${round} round`} abbreviation={abbreviation} color={setup.playoffs.color} logoUrl={setup.playoffs.roundLogoUrls?.[index]} onChange={(next) => updateRoundLogo(index, next.logoUrl)} /><input aria-label={`Round ${index + 1} name`} value={round} maxLength={40} onChange={(event) => updateRoundName(index, event.target.value)} /><small>NFL Week {week}</small><b>{getWeekDateLabel(setup.seasonYear, week).replace(`, ${setup.seasonYear}`, "")}</b></div>; })}</div>
-        <div className="playoff-rounds-head playoff-game-branding-head"><span><strong>Specific game names and logos</strong><small>Rename individual matchups and optionally override the round logo.</small></span><em>{gameBrandingSlots.length} playoff games</em></div>
-        <div className="playoff-game-branding-grid">{gameBrandingSlots.map((slot) => {
-          const sameRound = gameBrandingSlots.filter((item) => item.roundIndex === slot.roundIndex);
-          const divisionLabel = resolvedPlacement === "division-halves" && setup.divisions.length === 2 && sameRound.length === 2 && slot.roundIndex < rounds.length - 1
-            ? setup.divisions[slot.gameIndex]?.name
-            : undefined;
-          const fallback = divisionLabel ? `${divisionLabel} ${slot.roundName}` : sameRound.length === 1 ? slot.roundName : `${slot.roundName} · Game ${slot.gameIndex + 1}`;
-          const label = setup.playoffs.gameNames?.[slot.id] || fallback;
-          return <div key={slot.id}><span><input className="text-input" aria-label={`${fallback} name`} defaultValue={label} maxLength={60} onBlur={(event) => updateGameName(slot.id, event.target.value)} /><small>NFL Week {setup.weeks + slot.roundIndex + 1}</small></span><IdentityColorPicker compact showColorControl={false} showAbbreviation={false} name={label} abbreviation={`G${slot.gameIndex + 1}`} color={setup.playoffs.color} logoUrl={setup.playoffs.gameLogoUrls?.[slot.id]} onChange={(next) => updateGameLogo(slot.id, next.logoUrl)} /></div>;
-        })}</div>
-      </fieldset>
-    </div>
-    {!isPro && <div className="playoff-upgrade"><LockKeyhole /><span><strong>Unlock the playoff builder with Pro.</strong><small>Your regular-season schedule stays complete on Free. Upgrade for bracket controls, projections, and live playoff tracking, or skip this step.</small></span><Link href="/pricing" className="button-primary">See Pro plans</Link><button type="button" className="button-secondary" onClick={onSkip}>Skip playoffs</button></div>}
-  </div>;
-}
-
 function ReviewStep({ setup }: { setup: LeagueSetupInput }) {
   const checks = [
     `${setup.teams.length} teams balanced across ${setup.divisions.length} divisions`,
     `${setup.weeks}-week season with one matchup per team each week`,
     `Week 1 ranked by ${setup.weekOne.rankingSource === "draft-day" ? hasCompleteDraftRanking(setup) ? "draft-day place" : "draft-day place (set after the draft)" : "last season’s finish"}`,
-    `${setup.playoffs.fieldSize}-team playoffs finish by NFL Week ${setup.weeks + getPlayoffRoundNames(setup.playoffs, setup.divisions.length).length}`,
     "Every divisional opponent scheduled twice",
     `Home and away streaks capped at ${setup.fairness.maxHomeAwayStreak}`,
   ];
   return (
     <div className="step-stack">
-      <div className="section-heading"><span className="step-kicker">Step 9 of 9</span><h1>Your league is ready to weave.</h1><p>One final check, then we’ll build the complete season.</p></div>
+      <div className="section-heading"><span className="step-kicker">Step 8 of 8</span><h1>Your league is ready to weave.</h1><p>One final check, then we’ll build the complete season.</p></div>
       <div className="review-banner" style={{ borderColor: setup.color }}><EntityLogo className="review-mark" size={54} color={setup.color} logoUrl={setup.logoUrl} monogram={resolveInitials(setup.initials, leagueAcronym(setup.name))} /><div><span>{setup.seasonYear} FANTASY SEASON</span><h2>{setup.name}</h2><p>{setup.description}</p></div></div>
       <div className="review-metrics"><div><strong>{setup.teams.length}</strong><span>Teams</span></div><div><strong>{setup.divisions.length}</strong><span>Divisions</span></div><div><strong>{setup.weeks}</strong><span>Weeks</span></div><div><strong>{setup.teams.length * setup.weeks / 2}</strong><span>Matchups</span></div></div>
       <div className="validation-list">{checks.map((check) => <div key={check}><Check />{check}</div>)}</div>
@@ -589,7 +443,6 @@ export function LeagueBuilder() {
   const [importSource, setImportSource] = useState<ImportSource | null>(null);
   const [savedLeagues, setSavedLeagues] = useState<SavedLeaguePreset[]>([]);
   const [signedIn, setSignedIn] = useState(false);
-  const [plan, setPlan] = useState<"free" | "pro">("free");
   const [leagueSaveState, setLeagueSaveState] = useState<string | null>(null);
   const [activeSavedLeagueId, setActiveSavedLeagueId] = useState<string | null>(null);
   const [connectedSavedLeaguePrompt, setConnectedSavedLeaguePrompt] = useState<SavedLeaguePreset | null>(null);
@@ -610,7 +463,7 @@ export function LeagueBuilder() {
     track.scrollTo({ left: activeStep.offsetLeft - (track.clientWidth - activeStep.offsetWidth) / 2, behavior: "smooth" });
   }, [step]);
   useEffect(() => {
-    fetch("/api/entitlements").then((response) => response.json()).then((payload: { signedIn?: boolean; plan?: "free" | "pro" }) => { setSignedIn(Boolean(payload.signedIn)); setPlan(payload.plan || "free"); }).catch(() => undefined);
+    fetch("/api/entitlements").then((response) => response.json()).then((payload: { signedIn?: boolean }) => { setSignedIn(Boolean(payload.signedIn)); }).catch(() => undefined);
     fetch("/api/saved-leagues").then((response) => response.json()).then((payload: { presets?: Array<{ id: string; name: string; data: unknown; updated_at?: string }> }) => {
       setSavedLeagues((payload.presets ?? []).map(normalizeSavedLeague).filter((preset): preset is SavedLeaguePreset => Boolean(preset)));
     }).catch(() => undefined);
@@ -868,7 +721,7 @@ export function LeagueBuilder() {
           <div aria-hidden="true"><i style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} /></div>
         </div>
         <ol className="wizard-progress-track" ref={progressTrackRef} style={{ "--wizard-progress-ratio": step / (STEPS.length - 1) } as React.CSSProperties}>
-          {STEPS.map((item, index) => <li key={item.label}><button type="button" title={item.label} aria-current={index === step ? "step" : undefined} aria-label={`Step ${index + 1}: ${item.label}${item.pro ? ", Pro feature" : ""}${index < step ? ", complete" : index === step ? ", current" : ", upcoming"}`} disabled={index > step} className={index === step ? "active" : index < step ? "complete" : ""} onClick={() => { setError(null); setStep(index); }}><span>{index < step ? <Check /> : index + 1}</span><em><b>{item.label}</b><small>{item.shortLabel}</small>{item.pro && <ProBadge compact />}</em></button></li>)}
+          {STEPS.map((item, index) => <li key={item.label}><button type="button" title={item.label} aria-current={index === step ? "step" : undefined} aria-label={`Step ${index + 1}: ${item.label}${index < step ? ", complete" : index === step ? ", current" : ", upcoming"}`} disabled={index > step} className={index === step ? "active" : index < step ? "complete" : ""} onClick={() => { setError(null); setStep(index); }}><span>{index < step ? <Check /> : index + 1}</span><em><b>{item.label}</b><small>{item.shortLabel}</small></em></button></li>)}
         </ol>
       </div>
       <div className="page-width builder-layout">
@@ -881,13 +734,12 @@ export function LeagueBuilder() {
             {step === 4 && <SeedingStep setup={setup} setSetup={setSetup} />}
             {step === 5 && <OpeningWeekStep setup={setup} setSetup={setSetup} />}
             {step === 6 && <FairnessStep setup={setup} setSetup={setSetup} />}
-            {step === 7 && <PlayoffsStep setup={setup} setSetup={setSetup} isPro={plan === "pro"} onSkip={next} />}
-            {step === 8 && <ReviewStep setup={setup} />}
+            {step === 7 && <ReviewStep setup={setup} />}
           </div>
           {error && <div className="builder-error" role="alert"><CircleAlert />{error}</div>}
           <div className="builder-actions">
             <button type="button" className="button-secondary" onClick={back} disabled={step === 0}><ArrowLeft />Back</button>
-            {step < STEPS.length - 1 ? <button type="button" className="button-primary" onClick={next}>{step === 7 && plan !== "pro" ? "Skip playoffs" : skipDraftRankForNow ? "Skip draft rank for now" : "Continue"}<ArrowRight /></button> : <button type="button" className="button-primary generate-button" onClick={generate} disabled={generating}>{generating ? <><span className="spinner" />Weaving schedule…</> : <><Sparkles />Generate my season</>}</button>}
+            {step < STEPS.length - 1 ? <button type="button" className="button-primary" onClick={next}>{skipDraftRankForNow ? "Skip draft rank for now" : "Continue"}<ArrowRight /></button> : <button type="button" className="button-primary generate-button" onClick={generate} disabled={generating}>{generating ? <><span className="spinner" />Weaving schedule…</> : <><Sparkles />Generate my season</>}</button>}
           </div>
         </div>
         <LivePreview setup={setup} step={step} />
