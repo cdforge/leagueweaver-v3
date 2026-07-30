@@ -310,6 +310,18 @@ export interface PlatformSyncResult {
   syncedAt: string;
 }
 
+export interface ImportHistoryEvent {
+  id: string;
+  provider: PlatformProvider | "csv" | "paste" | "screenshot" | "leagueweaver";
+  action: string;
+  status: "previewed" | "confirmed" | "failed" | "ready" | "warning" | "idle" | "saved" | "restored";
+  createdAt: string;
+  week?: number;
+  seasonYear?: number;
+  message?: string;
+  revisionId?: string;
+}
+
 export interface SavedSeasonSummary {
   id: string;
   title: string;

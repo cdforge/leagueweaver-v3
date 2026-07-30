@@ -8,6 +8,7 @@ import { EntityLogo } from "@/components/ui/EntityLogo";
 import { ProBadge } from "@/components/ui/ProBadge";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { leagueAcronym, resolveInitials } from "@/lib/monograms";
+import { apiErrorMessage, friendlyAuthMessage } from "@/lib/apiErrors";
 import { normalizeSavedLeague } from "@/lib/savedLeagues";
 import { getNflWeekWindow } from "@/lib/schedule";
 import { createClient } from "@/lib/supabase/client";
@@ -78,6 +79,12 @@ function revisionCountLabel(count?: number) {
   return `${count} revision${count === 1 ? "" : "s"}`;
 }
 
+async function readApiJson<T>(response: Response, fallback: string): Promise<T> {
+  const payload = await response.json().catch(() => ({})) as T & { error?: string };
+  if (!response.ok) throw new Error(apiErrorMessage(response.status, payload.error, fallback));
+  return payload;
+}
+
 export function AccountPanel() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
@@ -103,9 +110,9 @@ export function AccountPanel() {
   useEffect(() => {
     if (!signedInEmail) return;
     Promise.all([
-      fetch("/api/seasons").then((response) => response.json()),
-      fetch("/api/saved-leagues").then((response) => response.json()),
-      fetch("/api/entitlements").then((response) => response.json()),
+      fetch("/api/seasons").then((response) => readApiJson<{ seasons?: SeasonSummary[] }>(response, "Saved seasons could not be loaded.")),
+      fetch("/api/saved-leagues").then((response) => readApiJson<{ presets?: SavedLeaguePreset[] }>(response, "Saved leagues could not be loaded.")),
+      fetch("/api/entitlements").then((response) => readApiJson<{ plan?: "free" | "pro" }>(response, "Account details are temporarily unavailable.")),
     ]).then(([seasonPayload, leaguePayload, entitlementPayload]) => {
       const nextSeasons = seasonPayload.seasons ?? [];
       setSeasons(nextSeasons);
@@ -124,7 +131,7 @@ export function AccountPanel() {
     if (mode === "signin") {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       setLoading(false);
-      if (error) return setMessage(error.message);
+      if (error) return setMessage(friendlyAuthMessage(error.message));
       setSignedInEmail(data.user.email ?? email);
       window.location.assign(next.startsWith("/") ? next : "/");
       return;
@@ -135,7 +142,7 @@ export function AccountPanel() {
       options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
     });
     setLoading(false);
-    setMessage(error ? error.message : "Check your email to confirm your account, then your saved leagues will be ready.");
+    setMessage(error ? friendlyAuthMessage(error.message) : "Check your email to finish setting up your account.");
   };
 
   const signOut = async () => {
@@ -146,19 +153,19 @@ export function AccountPanel() {
   const openBilling = async () => {
     setLoading(true);
     const response = await fetch("/api/billing/portal", { method: "POST" });
-    const payload = await response.json() as { url?: string; error?: string };
+    const payload = await response.json().catch(() => ({})) as { url?: string; error?: string };
     setLoading(false);
     if (payload.url) window.location.assign(payload.url);
-    else setMessage(payload.error || "Billing could not be opened.");
+    else setMessage(apiErrorMessage(response.status, payload.error, "Billing could not be opened."));
   };
 
   const chooseFreeSeason = async () => {
     if (!freeSeasonId) return;
     setLoading(true);
     const response = await fetch("/api/account/free-season", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: freeSeasonId }) });
-    const payload = await response.json() as { error?: string };
+    const payload = await response.json().catch(() => ({})) as { error?: string };
     setLoading(false);
-    setMessage(response.ok ? "Your editable Free season is updated." : payload.error || "The season choice could not be saved.");
+    setMessage(response.ok ? "Your editable Free season is updated." : apiErrorMessage(response.status, payload.error, "The season choice could not be saved."));
     if (response.ok) setSeasons((current) => current.map((season) => ({ ...season, editable: season.id === freeSeasonId })));
   };
 
@@ -168,8 +175,8 @@ export function AccountPanel() {
     setRevisionErrors((current) => ({ ...current, [seasonId]: "" }));
     try {
       const response = await fetch(`/api/seasons/${seasonId}/revisions`);
-      const payload = await response.json() as { revisions?: SeasonRevision[]; error?: string };
-      if (!response.ok) throw new Error(payload.error || "Revision history could not be loaded.");
+      const payload = await response.json().catch(() => ({})) as { revisions?: SeasonRevision[]; error?: string };
+      if (!response.ok) throw new Error(apiErrorMessage(response.status, payload.error, "Revision history could not be loaded."));
       setRevisionsBySeason((current) => ({ ...current, [seasonId]: payload.revisions ?? [] }));
     } catch (error) {
       setRevisionErrors((current) => ({
@@ -196,8 +203,8 @@ export function AccountPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ revisionId: revision.id }),
       });
-      const payload = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(payload.error || "This revision could not be restored.");
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(apiErrorMessage(response.status, payload.error, "This revision could not be restored."));
       await loadRevisions(season.id, true);
       setMessage(`Revision ${revision.revision_number} is now current for ${season.title}.`);
     } catch (error) {

@@ -16,6 +16,7 @@ import {
   FileDown,
   FileSpreadsheet,
   Gamepad2,
+  History,
   ImagePlus,
   LayoutList,
   LoaderCircle,
@@ -51,6 +52,7 @@ import { EntityLogo } from "@/components/ui/EntityLogo";
 import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
 import { ProBadge } from "@/components/ui/ProBadge";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { apiErrorMessage } from "@/lib/apiErrors";
 import { downloadCsv } from "@/lib/csv";
 import { readableTextColor } from "@/lib/colorContrast";
 import { isDivisionHalvesConsolationUsable, projectConsolationBracket } from "@/lib/consolation";
@@ -92,7 +94,7 @@ import { loadSeason, normalizeSeason, saveSeason } from "@/lib/storage";
 import { getNflWeekWindow, getWeekDateLabel, updateGameScore } from "@/lib/schedule";
 import { leagueAcronym, resolveInitials } from "@/lib/monograms";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
-import type { GeneratedSchedule, ImportPreview, LeagueSetupInput, PlatformConnection, PlatformSyncMode, PlayoffGame, ScheduledGame, Team, TiebreakerSettings } from "@/lib/types";
+import type { GeneratedSchedule, ImportHistoryEvent, ImportPreview, LeagueSetupInput, PlatformConnection, PlatformSyncMode, PlayoffGame, ScheduledGame, Team, TiebreakerSettings } from "@/lib/types";
 
 type ViewKey = "league-schedule" | "team-schedule" | "gotw" | "matchup-ratings" | "standings" | "playoffs" | "simulator" | "settings";
 const CLOUD_SCHEDULE_ID = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
@@ -117,6 +119,31 @@ type SeasonSaveConflict = {
   schedule: GeneratedSchedule;
   snapshot: string;
 };
+
+type CloudRetryState = {
+  schedule: GeneratedSchedule;
+  reason: string;
+  retrying: boolean;
+};
+
+function formatHistoryTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Time unavailable";
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
+}
+
+function providerLabel(provider: ImportHistoryEvent["provider"]) {
+  if (provider === "espn") return "ESPN";
+  if (provider === "sleeper") return "Sleeper";
+  if (provider === "leagueweaver") return "League Weaver";
+  if (provider === "csv") return "CSV";
+  if (provider === "paste") return "Pasted roster";
+  return "Screenshot";
+}
+
+function historyStatusLabel(status: ImportHistoryEvent["status"]) {
+  return status.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
 type HighlightedGame = { id: string; medalRank?: number; medalCategory?: string } | null;
 type ImportedScoreRow = { gameId: string; awayTeamId: string; homeTeamId: string; awayName: string; homeName: string; awayScore?: number; homeScore?: number };
@@ -517,7 +544,7 @@ function ScoresView({ schedule, selectedWeek, setSelectedWeek, onScore, onFinali
   </div>;
 }
 
-function ScoreImageImport({ schedule, selectedWeek, onApply }: { schedule: GeneratedSchedule; selectedWeek: number; onApply: (rows: ImportedScoreRow[]) => void }) {
+function ScoreImageImport({ schedule, selectedWeek, onApply, onPendingChange }: { schedule: GeneratedSchedule; selectedWeek: number; onApply: (rows: ImportedScoreRow[]) => void; onPendingChange: (pending: boolean) => void }) {
   const [loading, setLoading] = useState(false);
   const [fileName, setFileName] = useState("");
   const [rows, setRows] = useState<ImportedScoreRow[] | null>(null);
@@ -531,6 +558,9 @@ function ScoreImageImport({ schedule, selectedWeek, onApply }: { schedule: Gener
     setError(null);
     setFileName("");
   }, [selectedWeek]);
+  useEffect(() => {
+    onPendingChange(Boolean(rows?.length));
+  }, [rows, onPendingChange]);
   const normalizeName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
   const findTeam = (city: string | undefined, name: string) => {
     const extracted = [normalizeName(`${city ?? ""}${name}`), normalizeName(name)].filter(Boolean);
@@ -605,7 +635,7 @@ function ScoreImageImport({ schedule, selectedWeek, onApply }: { schedule: Gener
     {loading && <div className="score-image-loading" role="status"><RefreshCw className="spin" /><span><strong>Reading {fileName}</strong><small>Matching team names and Week {selectedWeek} scores…</small></span></div>}
     {error && <div className="score-image-error" role="alert"><span>{error}</span><button type="button" onClick={() => setError(null)}>Dismiss</button></div>}
     {rows && <>
-      <header><span><strong>Review AI score suggestions</strong><small>{fileName} · Week {selectedWeek} · Check every matchup before applying.</small></span><button type="button" onClick={() => { setRows(null); setWarnings([]); setFileName(""); }}><ImagePlus />Choose another</button></header>
+      <header><span><strong>Review AI score suggestions</strong><small>{fileName} · Week {selectedWeek} · Check every matchup before applying.</small></span><button type="button" onClick={() => { setRows(null); setWarnings([]); setFileName(""); onPendingChange(false); }}><ImagePlus />Choose another</button></header>
       <div className="score-image-review-list">{rows.map((row) => {
         const away = teamById.get(row.awayTeamId)!;
         const home = teamById.get(row.homeTeamId)!;
@@ -620,7 +650,7 @@ function ScoreImageImport({ schedule, selectedWeek, onApply }: { schedule: Gener
         </div>;
       })}</div>
       {warnings.length > 0 && <div className="score-image-warnings">{warnings.slice(0, 4).map((warning) => <span key={warning}>{warning}</span>)}</div>}
-      <footer><span><strong>{completeRows.length} of {rows.length} matchups ready</strong><small>Incomplete rows will not be changed.</small></span><button type="button" className="button-primary" disabled={completeRows.length === 0} onClick={() => { onApply(completeRows); setRows(null); setWarnings([]); setFileName(""); }}><Check />Apply reviewed scores</button></footer>
+      <footer><span><strong>{completeRows.length} of {rows.length} matchups ready</strong><small>Incomplete rows will not be changed.</small></span><button type="button" className="button-primary" disabled={completeRows.length === 0} onClick={() => { onApply(completeRows); setRows(null); setWarnings([]); setFileName(""); onPendingChange(false); }}><Check />Apply reviewed scores</button></footer>
     </>}
   </section>;
 }
@@ -977,7 +1007,34 @@ function PlatformSyncCard({
   </div>;
 }
 
-function SettingsView({ schedule, onOpenDraftRanking, canAccessPlatformSync, platformSyncLoading, onRefreshPlatformScores, onSavePlatformConnection, onDisconnectPlatform }: {
+function ImportHistoryPanel({ events, loading, error, onRefresh, scheduleId }: {
+  events: ImportHistoryEvent[];
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+  scheduleId: string;
+}) {
+  return <section className="import-history-panel" aria-labelledby="import-history-title">
+    <header>
+      <span><History /><span><strong id="import-history-title">Import history</strong><small>Recent imports, syncs, and saved revisions for this season.</small></span></span>
+      <button type="button" onClick={onRefresh} disabled={loading}>{loading ? <LoaderCircle className="spin" /> : <RefreshCw />}Refresh history</button>
+    </header>
+    {error ? <div className="import-history-state error" role="alert"><span>{error}</span><button type="button" onClick={onRefresh}>Try again</button></div>
+      : loading && events.length === 0 ? <div className="import-history-state" role="status"><LoaderCircle className="spin" />Loading history…</div>
+        : events.length ? <ol className="import-history-list">{events.map((event) => <li key={event.id}>
+          <span className={`import-history-provider ${event.provider}`}>{providerLabel(event.provider).slice(0, 2).toUpperCase()}</span>
+          <span className="import-history-copy">
+            <strong>{event.action}</strong>
+            <small>{providerLabel(event.provider)} · {historyStatusLabel(event.status)} · {formatHistoryTime(event.createdAt)}{event.week ? ` · Week ${event.week}` : ""}{event.seasonYear ? ` · ${event.seasonYear}` : ""}</small>
+            {event.message && <small>{event.message}</small>}
+          </span>
+          {event.revisionId ? <Link href={`/account?season=${encodeURIComponent(scheduleId)}`} className="import-history-link">View revisions</Link> : <span aria-hidden="true" />}
+        </li>)}</ol>
+          : <div className="import-history-state"><History /><span>No import history is attached to this saved season yet.</span></div>}
+  </section>;
+}
+
+function SettingsView({ schedule, onOpenDraftRanking, canAccessPlatformSync, platformSyncLoading, onRefreshPlatformScores, onSavePlatformConnection, onDisconnectPlatform, importHistory, importHistoryLoading, importHistoryError, onRefreshImportHistory }: {
   schedule: GeneratedSchedule;
   onOpenDraftRanking: () => void;
   canAccessPlatformSync: boolean;
@@ -985,12 +1042,17 @@ function SettingsView({ schedule, onOpenDraftRanking, canAccessPlatformSync, pla
   onRefreshPlatformScores: () => void;
   onSavePlatformConnection: (syncMode: PlatformSyncMode, swid?: string, espnS2?: string) => void;
   onDisconnectPlatform: () => void;
+  importHistory: ImportHistoryEvent[];
+  importHistoryLoading: boolean;
+  importHistoryError: string | null;
+  onRefreshImportHistory: () => void;
 }) {
   const seeding = schedule.setup.priorSeason.entryMode === "manual" ? "Manual order" : schedule.setup.priorSeason.entryMode === "history" ? schedule.setup.priorSeason.source === "playoffs" ? "Last year’s playoff finish" : "Last year’s regular-season finish" : "Not used";
   const draftRankingPending = schedule.setup.weekOne.rankingSource === "draft-day" && getTeamsMissingDraftPlaces(schedule.setup).length > 0;
   return <div className="workspace-stack">
     <div className="settings-band"><div><Pencil /><span><strong>Schedule setup</strong><small>Changing league structure regenerates the complete matchup slate as a new revision.</small></span></div><Link href="/" className="button-secondary"><Pencil />Edit and regenerate</Link></div>
     <PlatformSyncCard schedule={schedule} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshScores={onRefreshPlatformScores} onSaveConnection={onSavePlatformConnection} onDisconnect={onDisconnectPlatform} />
+    <ImportHistoryPanel events={importHistory} loading={importHistoryLoading} error={importHistoryError} onRefresh={onRefreshImportHistory} scheduleId={schedule.id} />
     <div className="settings-list">
       <div><span>League</span><strong>{schedule.setup.name}</strong></div>
       <div><span>Season format</span><strong>{schedule.setup.teams.length} teams · {schedule.setup.divisions.length} divisions · {schedule.setup.weeks} weeks</strong></div>

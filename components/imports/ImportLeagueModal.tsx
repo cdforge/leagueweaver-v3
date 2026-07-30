@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, ArrowLeft, Check, Clock3, FileSpreadsheet, LoaderCircle, RefreshCw, ShieldCheck, Upload, X } from "lucide-react";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
+import { apiErrorMessage } from "@/lib/apiErrors";
 import type { ImportPreview, ImportTeam, LeagueSetupInput } from "@/lib/types";
 
 export type ImportSource = ImportPreview["provider"];
@@ -193,8 +194,8 @@ export function ImportLeagueModal({ source, setup, onClose, onConfirm }: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier, seasonYear: Number(season), swid, espnS2 }),
       });
-      const result = await response.json() as ImportPreview & { error?: string };
-      if (!response.ok) throw new Error(result.error || "The league could not be imported.");
+      const result = await response.json().catch(() => ({})) as ImportPreview & { error?: string };
+      if (!response.ok) throw new Error(apiErrorMessage(response.status, result.error, "The league could not be imported."));
       result.syncMode = syncMode;
       if (source === "espn") setSavedEspnImports(saveEspnImport(identifier.trim(), result));
       setPreview(result);
@@ -221,8 +222,8 @@ export function ImportLeagueModal({ source, setup, onClose, onConfirm }: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageDataUrl, seasonYear: Number(season) }),
       });
-      const result = await response.json() as ImportPreview & { error?: string };
-      if (!response.ok) throw new Error(result.error || "The screenshot could not be read.");
+      const result = await response.json().catch(() => ({})) as ImportPreview & { error?: string };
+      if (!response.ok) throw new Error(apiErrorMessage(response.status, result.error, "The screenshot could not be read."));
       setPreview(result);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The screenshot could not be read.");

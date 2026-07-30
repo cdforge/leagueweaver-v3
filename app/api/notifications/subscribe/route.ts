@@ -22,11 +22,12 @@ export async function POST(request: Request) {
     team_scope: teamScope,
   }).select("unsubscribe_token").single();
   if (error && error.code !== "23505") return NextResponse.json({ error: "Email updates could not be enabled." }, { status: 500 });
-  if (subscription?.unsubscribe_token && process.env.RESEND_API_KEY && process.env.NOTIFICATIONS_FROM_EMAIL) {
+  const fromEmail = process.env.NOTIFICATIONS_FROM_EMAIL || process.env.FEEDBACK_FROM_EMAIL;
+  if (subscription?.unsubscribe_token && process.env.RESEND_API_KEY && fromEmail) {
     const resend = new Resend(process.env.RESEND_API_KEY);
     const origin = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin;
     await resend.emails.send({
-      from: process.env.NOTIFICATIONS_FROM_EMAIL,
+      from: fromEmail,
       to: parsed.data.email,
       subject: `Updates enabled for ${published.title}`,
       html: `<p>You will receive League Weaver schedule updates for <strong>${published.title}</strong>.</p><p><a href="${origin}/unsubscribe/${subscription.unsubscribe_token}">Unsubscribe</a></p>`,

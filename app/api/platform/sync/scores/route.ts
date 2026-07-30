@@ -53,6 +53,41 @@ async function persistScores(schedule: GeneratedSchedule, result: PlatformSyncRe
     .update({ last_sync_at: result.syncedAt, sync_status: result.warnings.length ? "warning" : "ready", sanitized_error: result.warnings[0] ?? null })
     .eq("schedule_id", schedule.id)
     .eq("provider", schedule.setup.platformConnection?.provider);
+  await auth.supabase.from("import_runs").insert({
+    user_id: auth.userId,
+    schedule_id: schedule.id,
+    provider: schedule.setup.platformConnection?.provider,
+    provider_league_id: schedule.setup.platformConnection?.providerLeagueId,
+    status: "confirmed",
+    warning_count: result.warnings.length,
+    sanitized_error: result.warnings[0] ?? null,
+    summary_json: {
+      action: "Platform score sync",
+      week: result.rows[0]?.week,
+      seasonYear: schedule.setup.seasonYear,
+      message: result.rows.length ? `${result.rows.length} score rows refreshed.` : "No matching scores were ready.",
+    },
+    committed_at: result.syncedAt,
+  });
+}
+
+async function persistFailedSync(schedule: GeneratedSchedule, message: string) {
+  const auth = await getAuthenticatedClient();
+  if (!auth || !/^[0-9a-f-]{36}$/i.test(schedule.id)) return;
+  await auth.supabase.from("import_runs").insert({
+    user_id: auth.userId,
+    schedule_id: schedule.id,
+    provider: schedule.setup.platformConnection?.provider,
+    provider_league_id: schedule.setup.platformConnection?.providerLeagueId,
+    status: "failed",
+    warning_count: 1,
+    sanitized_error: message,
+    summary_json: {
+      action: "Platform score sync",
+      seasonYear: schedule.setup.seasonYear,
+      message,
+    },
+  });
 }
 
 export async function POST(request: Request) {
@@ -69,6 +104,7 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (caught) {
     const message = cleanError(caught instanceof Error ? caught.message : "Platform scores could not be refreshed.");
+    await persistFailedSync(schedule, message);
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
