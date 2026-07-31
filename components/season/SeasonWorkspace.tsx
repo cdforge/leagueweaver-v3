@@ -9,7 +9,6 @@ import {
   Bell,
   CalendarDays,
   Check,
-  ChevronDown,
   Cloud,
   Copy,
   Download,
@@ -23,7 +22,6 @@ import {
   LockKeyhole,
   MapPin,
   Medal,
-  MoreHorizontal,
   Pencil,
   Play,
   RefreshCw,
@@ -44,7 +42,7 @@ import { GotwWorkspace } from "@/components/season/GotwWorkspace";
 import { BracketConnectorLayer, type BracketConnection } from "@/components/season/BracketConnectorLayer";
 import { ConsolationBracket, FinalPlacementTable } from "@/components/season/ConsolationBracket";
 import { GameBadgeChip, MatchupCard, MatchupRatingLegend, MatchupSeriesChip, TeamIdentityBlock, WeekMatchupRank } from "@/components/season/MatchupPresentation";
-import { SimulatorWorkspace, type SimulatorOddsView, type SimulatorResultView } from "@/components/season/SimulatorWorkspace";
+import { SimulatorWorkspace, type SimulatorResultView } from "@/components/season/SimulatorWorkspace";
 import { StatsWorkspace } from "@/components/season/StatsWorkspace";
 import { TeamScheduleView } from "@/components/season/TeamSchedulePage";
 import { CustomSelect } from "@/components/ui/CustomSelect";
@@ -68,7 +66,6 @@ import {
   resolvePlayoffPlacementMode,
 } from "@/lib/playoffs";
 import {
-  calculateSeasonOdds,
   clearAllHypotheticalResults,
   clearSimulatedResults,
   createSimulationSandbox,
@@ -395,7 +392,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
     <div className="workspace-stack">
       {weekSelector}
       <div className="schedule-week-panel">
-        <div className={`section-bar schedule-week-header${isThanksgivingWeek ? " is-thanksgiving" : ""}`}><div><span className="bar-number">{String(week.weekNumber).padStart(2, "0")}</span><span><span className="schedule-week-title"><strong>Week {week.weekNumber}</strong>{isThanksgivingWeek && <em className="thanksgiving-week-label">Thanksgiving Week</em>}</span><small>{week.dateLabel}</small></span></div><div className="section-bar-actions"><WeekMatchupRank rank={week.matchupRank} total={schedule.weeks.length} /><button type="button" className={`score-entry-trigger${scoreEntryDue ? " needs-attention" : ""}`} onClick={() => onOpenScores(week.weekNumber)}><LayoutList /><span>{hasEnteredScores ? "Edit scores" : "Add scores"}</span></button><span className="week-markers">{secondaryHolidays.map((holiday) => <em className="holiday-marker" key={holiday}>{holiday}</em>)}{byeTeams.length > 0 && <em className="bye-marker">{byeTeams.length} BYE</em>}</span><span className="rating-tier-filter"><CustomSelect label="Filter matchup rating" value={ratingTier} onChange={setRatingTier} options={ratingOptions} showSelectedDescription={false} /></span><Tooltip label="More week actions"><button type="button" className="section-bar-more" aria-label="More week actions"><MoreHorizontal /></button></Tooltip></div></div>
+        <div className={`section-bar schedule-week-header${isThanksgivingWeek ? " is-thanksgiving" : ""}`}><div><span className="bar-number">{String(week.weekNumber).padStart(2, "0")}</span><span><span className="schedule-week-title"><strong>Week {week.weekNumber}</strong>{isThanksgivingWeek && <em className="thanksgiving-week-label">Thanksgiving Week</em>}</span><small>{week.dateLabel}</small></span></div><div className="section-bar-actions"><WeekMatchupRank rank={week.matchupRank} total={schedule.weeks.length} /><button type="button" className={`score-entry-trigger${scoreEntryDue ? " needs-attention" : ""}`} onClick={() => onOpenScores(week.weekNumber)}><LayoutList /><span>{hasEnteredScores ? "Edit scores" : "Add scores"}</span></button><span className="week-markers">{secondaryHolidays.map((holiday) => <em className="holiday-marker" key={holiday}>{holiday}</em>)}{byeTeams.length > 0 && <em className="bye-marker">{byeTeams.length} BYE</em>}</span><span className="rating-tier-filter"><CustomSelect label="Filter matchup rating" value={ratingTier} onChange={setRatingTier} options={ratingOptions} showSelectedDescription={false} /></span></div></div>
         {gotwOverrideDetails && gotwEntry && visibleGames.some((game) => game.id === gameOfWeekId) && <section className="gotw-selection-reason" aria-label="Why this matchup is Game of the Week">
           <span><Star fill="currentColor" /></span>
           <div><small>LATE-SEASON PLAYOFF IMPACT</small><strong>Why this won the rating tie</strong><p>This {gotwOverrideDetails.featuredRanks} matchup shares the week&apos;s best {gotwEntry.rating.toFixed(1)} rating and crosses the {schedule.setup.playoffs.fieldSize}-team playoff cutline. Playoff impact moved it ahead of <span>{gotwOverrideDetails.pureMatchup}</span> after the rating tie. Lower ratings always remain first.</p></div>
@@ -1180,6 +1177,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const cloudScheduleSnapshot = useRef<string | null>(null);
   const blockedCloudSnapshot = useRef<string | null>(null);
   const latestSchedule = useRef<GeneratedSchedule | null>(null);
+  const scoreModalRef = useRef<HTMLElement | null>(null);
   const autosaveTimer = useRef<number | null>(null);
   const platformAutoRefreshKey = useRef<string | null>(null);
   const applyCloudSchedule = (savedSchedule: GeneratedSchedule, sourceSchedule: GeneratedSchedule) => {
@@ -1315,6 +1313,28 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     };
   }, [scoreModalOpen, scoreImportPending]);
   useEffect(() => {
+    if (!scoreModalOpen) return;
+    const dialog = scoreModalRef.current;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const focusable = () => dialog ? Array.from(dialog.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter((el) => el.offsetParent !== null) : [];
+    const trapTab = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    window.addEventListener("keydown", trapTab);
+    const focusTimer = window.setTimeout(() => { const items = focusable(); (items[0] ?? dialog)?.focus(); }, 0);
+    return () => {
+      window.removeEventListener("keydown", trapTab);
+      window.clearTimeout(focusTimer);
+      if (previouslyFocused && document.body.contains(previouslyFocused)) previouslyFocused.focus();
+    };
+  }, [scoreModalOpen]);
+  useEffect(() => {
     if (!schedule) return;
     latestSchedule.current = schedule;
     saveSeason(schedule);
@@ -1372,21 +1392,6 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const canAccessScorekeeping = true;
   const canAccessPlatformSync = entitlements.plan === "pro" || entitlements.features.includes("platform_sync");
   const activeSchedule = useMemo(() => schedule && simulation ? materializeSimulationSchedule(simulation) : schedule, [schedule, simulation]);
-  const simulatorOdds = useMemo((): SimulatorOddsView[] => {
-    if (!activeSchedule || view !== "simulator") return [];
-    return calculateSeasonOdds(activeSchedule, simulationTrials).map((row) => ({
-      teamId: row.teamId,
-      playoffOdds: row.playoffOdds,
-      divisionOdds: row.divisionOdds,
-      championshipOdds: row.championshipOdds,
-      topSeedOdds: row.topSeedOdds,
-      projectedWins: row.projectedWins,
-      projectedLosses: row.projectedLosses,
-      averageFinish: row.averageFinish,
-      finishDistribution: row.finishDistribution.map((finish) => finish.probability),
-      confidence: row.confidence.score,
-    }));
-  }, [activeSchedule, simulationTrials, view]);
   const simulationResultByGame = useMemo((): Record<string, SimulatorResultView> => {
     if (!simulation) return {};
     return Object.fromEntries(Object.values(simulation.results)
@@ -1701,6 +1706,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const sendNotification = async () => {
     if (actionBusy) return;
     if (!CLOUD_SCHEDULE_ID.test(schedule.id)) return setNotice("This season needs to finish cloud syncing before sending an update.");
+    if (typeof window !== "undefined" && !window.confirm("Send a schedule update email to everyone subscribed to this league?")) return;
     setActionBusy("notify");
     try {
       const response = await fetch("/api/notifications/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: schedule.id }) });
@@ -1749,7 +1755,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     : undefined;
   return <main className={`workspace-page ${simulation ? "simulation-mode" : ""}`}>
     {scoreModalOpen && canAccessScorekeeping && <div className="modal-backdrop score-entry-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeScoreModal(); }}>
-      <section className="score-entry-modal" role="dialog" aria-modal="true" aria-labelledby="score-entry-modal-title">
+      <section className="score-entry-modal" role="dialog" aria-modal="true" aria-labelledby="score-entry-modal-title" tabIndex={-1} ref={scoreModalRef}>
         <header>
           <span className="score-entry-modal-mark"><LayoutList /></span>
           <span><small>LEAGUE SCHEDULE</small><h2 id="score-entry-modal-title">Enter Week {selectedWeek} scores</h2></span>
@@ -1760,7 +1766,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
         <footer><span><ShieldCheck /><small>Scores save automatically as you enter them.</small></span><button type="button" className="button-primary" onClick={() => closeScoreModal(true)}>Done</button></footer>
       </section>
     </div>}
-    <header className="workspace-topbar"><BrandLockup /><div className="workspace-season-switch"><EntityLogo className="mini-league-mark" color={schedule.setup.color} logoUrl={schedule.setup.logoUrl} monogram={resolveInitials(schedule.setup.initials, leagueAcronym(schedule.setup.name))} size={34} /><span><strong>{schedule.setup.name}</strong><small>{schedule.setup.seasonYear} season</small></span><ChevronDown /></div><div className="workspace-top-actions"><Tooltip label="Send schedule update"><button type="button" aria-label="Send schedule update" disabled={actionBusy !== null} onClick={sendNotification}>{actionBusy === "notify" ? <LoaderCircle className="spin" /> : <Bell />}</button></Tooltip><AccountIdentity identity={entitlements} plan={entitlements.plan} /></div></header>
+    <header className="workspace-topbar"><BrandLockup /><div className="workspace-season-switch"><EntityLogo className="mini-league-mark" color={schedule.setup.color} logoUrl={schedule.setup.logoUrl} monogram={resolveInitials(schedule.setup.initials, leagueAcronym(schedule.setup.name))} size={34} /><span><strong>{schedule.setup.name}</strong><small>{schedule.setup.seasonYear} season</small></span></div><div className="workspace-top-actions"><Tooltip label="Send schedule update"><button type="button" aria-label="Send schedule update" disabled={actionBusy !== null} onClick={sendNotification}>{actionBusy === "notify" ? <LoaderCircle className="spin" /> : <Bell />}</button></Tooltip><AccountIdentity identity={entitlements} plan={entitlements.plan} /></div></header>
     <div className="workspace-shell">
       <aside className="workspace-rail"><nav aria-label="Season workspace">{VIEW_ITEMS.map((item) => { const Icon = item.icon; return <button type="button" key={item.key} aria-label={item.label} title={item.label} className={view === item.key ? "active" : ""} onClick={() => selectView(item)}><Icon /><span>{item.label}</span></button>; })}</nav><div className="rail-bottom"><span>MVP ACCESS</span><p>Unlimited saved schedules</p></div></aside>
       <section className={`workspace-main ${selectedTeamColor ? "team-workspace-branded" : ""}`} style={workspaceMainStyle}>
@@ -1805,7 +1811,6 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
             schedule={activeSchedule}
             resultByGame={simulationResultByGame}
             probabilityByGame={simulationProbabilityByGame}
-            odds={simulatorOdds}
             trials={simulationTrials}
             onTrialsChange={setSimulationTrials}
             onSimulateGame={(gameId) => setSimulation((current) => current ? simulateNextGame(current, gameId) : current)}

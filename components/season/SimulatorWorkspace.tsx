@@ -12,6 +12,7 @@ import {
   FastForward,
   Flag,
   Gamepad2,
+  LoaderCircle,
   LockKeyhole,
   Play,
   RefreshCw,
@@ -30,6 +31,7 @@ import { getMatchupRatingRange, getMatchupSignal } from "@/lib/matchups";
 import { calculateStandings, formatRecord, getEnteringWeekRankMap, getEnteringWeekRankSnapshot } from "@/lib/standings";
 import { calculateTeamSeasonStats } from "@/lib/statistics";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
+import { useSeasonOdds } from "@/lib/useSeasonOdds";
 import type { GeneratedSchedule, ScheduledGame } from "@/lib/types";
 
 export interface SimulatorResultView {
@@ -58,7 +60,6 @@ interface SimulatorWorkspaceProps {
   schedule: GeneratedSchedule;
   resultByGame: Record<string, SimulatorResultView>;
   probabilityByGame: Record<string, { away: number; home: number }>;
-  odds: SimulatorOddsView[];
   trials: 500 | 1000 | 2000;
   onTrialsChange: (trials: 500 | 1000 | 2000) => void;
   onSimulateGame: (gameId: string) => void;
@@ -92,7 +93,6 @@ export function SimulatorWorkspace({
   schedule,
   resultByGame,
   probabilityByGame,
-  odds,
   trials,
   onTrialsChange,
   onSimulateGame,
@@ -113,6 +113,19 @@ export function SimulatorWorkspace({
 }: SimulatorWorkspaceProps) {
   const [tab, setTab] = useState<"drive" | "odds">("drive");
   const [rolling, setRolling] = useState(false);
+  const { odds: rawOdds, computing: oddsComputing } = useSeasonOdds(schedule, trials, tab === "odds");
+  const odds: SimulatorOddsView[] = useMemo(() => rawOdds.map((row) => ({
+    teamId: row.teamId,
+    playoffOdds: row.playoffOdds,
+    divisionOdds: row.divisionOdds,
+    championshipOdds: row.championshipOdds,
+    topSeedOdds: row.topSeedOdds,
+    projectedWins: row.projectedWins,
+    projectedLosses: row.projectedLosses,
+    averageFinish: row.averageFinish,
+    finishDistribution: row.finishDistribution.map((finish) => finish.probability),
+    confidence: row.confidence.score,
+  })), [rawOdds]);
   const allGames = useMemo(() => schedule.weeks.flatMap((week) => week.games), [schedule]);
   const controllableGames = allGames.filter((game) =>
     Boolean(probabilityByGame[game.id]) || Boolean(resultByGame[game.id]),
@@ -150,6 +163,7 @@ export function SimulatorWorkspace({
       setRolling(false);
     }, 520);
   };
+  const clampScore = (value: string) => Math.max(0, Math.min(300, Math.round(Number(value) || 0)));
   const restartFromBeginning = () => {
     setFocusGameId(allGames[0]?.id ?? "");
     onRestartFromBeginning();
@@ -266,24 +280,24 @@ export function SimulatorWorkspace({
         <aside className="simulator-commissioner">
           <header><Target /><span><strong>Commissioner control</strong><small>Overrides stay hypothetical until saved</small></span></header>
           {focusGame ? <><div className="simulator-score-override">
-            <label><span>Away score</span><input type="number" min="0" value={awayScore} onChange={(event) => setAwayScore(Number(event.target.value))} /></label>
+            <label><span>Away score</span><input type="number" inputMode="numeric" min="0" max="300" value={awayScore} onChange={(event) => setAwayScore(clampScore(event.target.value))} /></label>
             <span aria-label="at">@</span>
-            <label><span>Home score</span><input type="number" min="0" value={homeScore} onChange={(event) => setHomeScore(Number(event.target.value))} /></label>
+            <label><span>Home score</span><input type="number" inputMode="numeric" min="0" max="300" value={homeScore} onChange={(event) => setHomeScore(clampScore(event.target.value))} /></label>
           </div>
-          <button type="button" className="button-secondary" onClick={() => onOverrideGame(focusGame.id, homeScore, awayScore)} disabled={homeScore === awayScore}><Check />Set score</button>
+          <button type="button" className="button-secondary" onClick={() => onOverrideGame(focusGame.id, homeScore, awayScore)} disabled={rolling || homeScore === awayScore}><Check />Set score</button>
           <div className="winner-nudges">
-            <button type="button" onClick={() => onOverrideGame(focusGame.id, 117, 128)}>Away wins</button>
-            <button type="button" onClick={() => onOverrideGame(focusGame.id, 128, 117)}>Home wins</button>
+            <button type="button" disabled={rolling} onClick={() => onOverrideGame(focusGame.id, 117, 128)}>Away wins</button>
+            <button type="button" disabled={rolling} onClick={() => onOverrideGame(focusGame.id, 128, 117)}>Home wins</button>
           </div></> : <div className="commissioner-empty">No regular-season games remain to control.</div>}
         </aside>
       </div>
 
       <section className="simulator-sandbox-actions">
         <span><ShieldCheck /><span><strong>Hypothetical sandbox</strong><small>Your real results have not changed.</small></span></span>
-        <button type="button" onClick={onClearSimulated}><Eraser />Clear simulated only</button>
-        <button type="button" onClick={onClearAll}><RotateCcw />Clear all sandbox</button>
-        <button type="button" onClick={onDiscard}>Discard run</button>
-        <button type="button" className="button-primary" onClick={onSave}><Save />Save run back</button>
+        <button type="button" disabled={rolling} onClick={onClearSimulated}><Eraser />Clear simulated only</button>
+        <button type="button" disabled={rolling} onClick={onClearAll}><RotateCcw />Clear all sandbox</button>
+        <button type="button" disabled={rolling} onClick={onDiscard}>Discard run</button>
+        <button type="button" className="button-primary" disabled={rolling} onClick={onSave}><Save />Save run back</button>
       </section>
 
       {champion && <section className="simulation-recap">
@@ -308,10 +322,10 @@ export function SimulatorWorkspace({
 
     {tab === "odds" && <div className="simulator-odds">
       <section className="odds-control-band">
-        <span><BarChart3 /><span><strong>Monte Carlo companion</strong><small>Regular season and the configured playoff bracket are simulated together.</small></span></span>
+        <span><BarChart3 /><span><strong>Monte Carlo companion</strong><small>{oddsComputing && odds.length > 0 ? `Updating ${trials.toLocaleString()} simulations…` : "Regular season and the configured playoff bracket are simulated together."}</small></span></span>
         <div className="segmented compact">{([500, 1000, 2000] as const).map((count) => <button type="button" className={trials === count ? "active" : ""} onClick={() => onTrialsChange(count)} key={count}>{count === 1000 ? "1K" : count === 2000 ? "2K" : "500"}</button>)}</div>
       </section>
-      <div className="simulator-odds-table-wrap"><table className="simulator-odds-table">
+      {oddsComputing && odds.length === 0 ? <div className="simulator-odds-loading" role="status"><LoaderCircle className="spin" /><span>Running {trials.toLocaleString()} season simulations…</span></div> : <div className={`simulator-odds-table-wrap${oddsComputing ? " is-updating" : ""}`}><table className="simulator-odds-table">
         <thead><tr><th>TEAM</th><th>MAKE PLAYOFFS</th><th>WIN DIVISION</th><th>WIN TITLE</th><th>TOP SEED</th><th>PROJECTED RECORD</th><th>AVG FINISH</th><th>DISTRIBUTION</th><th>CONFIDENCE</th></tr></thead>
         <tbody>{odds.map((row) => {
           const team = teamById.get(row.teamId)!;
@@ -327,7 +341,7 @@ export function SimulatorWorkspace({
             <td><span className="confidence-meter"><i style={{ width: `${row.confidence * 100}%` }} /><strong>{row.confidence >= .75 ? "High" : row.confidence >= .5 ? "Medium" : "Developing"}</strong></span></td>
           </tr>;
         })}</tbody>
-      </table></div>
+      </table></div>}
     </div>}
   </div>;
 }

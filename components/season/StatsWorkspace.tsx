@@ -208,7 +208,9 @@ function GameHighlightPanel({ title, schedule, items, metric, direction, playoff
 }
 
 function SortHeader({ label, sortKey, active, direction, onSort }: { label: string; sortKey: TeamSortKey; active: TeamSortKey; direction: "asc" | "desc"; onSort: (key: TeamSortKey) => void }) {
-  return <th aria-sort={active === sortKey ? direction === "asc" ? "ascending" : "descending" : "none"}><button type="button" onClick={() => onSort(sortKey)}>{label}<ArrowUpDown /></button></th>;
+  const isActive = active === sortKey;
+  const Icon = isActive ? (direction === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return <th scope="col" aria-sort={isActive ? direction === "asc" ? "ascending" : "descending" : "none"}><button type="button" className={isActive ? "is-sorted" : undefined} onClick={() => onSort(sortKey)}>{label}<Icon /></button></th>;
 }
 
 function RankMovement({ row }: { row: RankedStandingsRow }) {
