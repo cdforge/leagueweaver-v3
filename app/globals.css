@@ -1038,8 +1038,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .workspace-season-switch small { color: var(--muted); font-size: var(--text-2xs); }
 .workspace-season-switch svg { width: 15px; }
 .workspace-top-actions { display: flex; align-items: center; gap: 8px; }
-.workspace-top-actions button, .workspace-top-actions a { min-height: 42px; border: 1px solid var(--line); border-radius: var(--radius); background: white; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; font-size: var(--text-2xs); font-weight: var(--w-bold); transition: border-color var(--transition), background var(--transition); }
-.workspace-top-actions button:hover, .workspace-top-actions a:hover { border-color: var(--line-strong); background: var(--canvas); }
+.workspace-top-actions button, .workspace-top-actions a { min-height: 42px; border: 0; border-radius: var(--radius); background: transparent; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; font-size: var(--text-2xs); font-weight: var(--w-bold); transition: background var(--transition); }
+.workspace-top-actions button:hover, .workspace-top-actions a:hover { background: var(--canvas); }
+.workspace-top-actions .account-link { border: 0; }
+.workspace-top-actions .account-link:hover { border-color: transparent !important; background: var(--canvas); }
 .workspace-top-actions button { width: 42px; padding: 0; }
 .workspace-top-actions svg { width: 18px; }
 .workspace-top-actions .account-identity { min-height: 46px; max-width: 210px; padding: 5px 11px 5px 6px; }
@@ -1062,10 +1064,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 /* Workspace switcher: CRM-style schedule picker pinned to the rail bottom. */
 .workspace-switcher { display: block; width: 100%; }
 .workspace-switcher > .floating-popover-trigger { width: 100%; padding: 0; border: 0; background: transparent; cursor: pointer; }
-.workspace-switcher-face { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 46px; padding: 6px 8px; border: 1px solid rgba(255,255,255,.12); border-radius: var(--radius); background: rgba(255,255,255,.04); color: white; text-align: left; transition: background var(--transition), border-color var(--transition); }
-.workspace-switcher > .floating-popover-trigger:hover .workspace-switcher-face { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.22); }
+.workspace-switcher-face { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 46px; padding: 5px 6px; border: 0; border-radius: var(--radius); background: transparent; color: white; text-align: left; transition: background var(--transition); }
+.workspace-switcher > .floating-popover-trigger:hover .workspace-switcher-face { background: rgba(255,255,255,.07); }
+.workspace-switcher > .floating-popover-trigger[aria-expanded="true"] .workspace-switcher-face { background: rgba(255,255,255,.07); }
 .workspace-switcher > .floating-popover-trigger:focus-visible { outline: none; }
-.workspace-switcher > .floating-popover-trigger:focus-visible .workspace-switcher-face { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(248,231,161,.25); }
+.workspace-switcher > .floating-popover-trigger:focus-visible .workspace-switcher-face { box-shadow: 0 0 0 2px var(--gold); }
 .workspace-switcher-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
 .workspace-switcher-copy strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--text-2xs); font-weight: var(--w-bold); }
 .workspace-switcher-copy small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: rgba(255,255,255,.55); font-size: var(--text-2xs); }
@@ -1195,10 +1198,10 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .schedule-week-header .bar-number { background: rgba(255,255,255,.12); color: white; }
 .schedule-week-header strong { color: white; }
 .schedule-week-header small { color: rgba(255,255,255,.72); }
-.schedule-week-header.is-thanksgiving { background: #712f24; box-shadow: inset 0 -4px #e3b940; }
-.schedule-week-header.is-thanksgiving .bar-number { background: #e3b940; color: #3d2b00; }
+.schedule-week-header.is-thanksgiving { background: #712f24; box-shadow: inset 0 -4px var(--holiday-line); }
+.schedule-week-header.is-thanksgiving .bar-number { background: var(--holiday-line); color: #3d2318; }
 .schedule-week-title { min-width: 0; display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
-.thanksgiving-week-label { width: fit-content; border-radius: var(--radius-chip); background: #f5df9b; color: #552216; padding: 4px 7px; font-size: var(--text-2xs); font-style: normal; font-weight: var(--w-black); line-height: 1; text-transform: uppercase; white-space: nowrap; }
+.thanksgiving-week-label { width: fit-content; border-radius: var(--radius-chip); background: var(--holiday-line); color: #552216; padding: 4px 7px; font-size: var(--text-2xs); font-style: normal; font-weight: var(--w-black); line-height: 1; text-transform: uppercase; white-space: nowrap; }
 .schedule-week-header + .gotw-selection-reason, .schedule-week-header + .matchup-list, .schedule-week-panel > .matchup-list { border-top: 1px solid var(--line); }
 .schedule-week-panel > .matchup-list { border-right: 0; border-bottom: 0; border-left: 0; }
 .section-bar-actions > .tooltip-wrap > .section-bar-more { width: 44px; height: 44px; border: 0; background: transparent; color: white; }
@@ -1324,7 +1327,7 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .schedule-week-card > header small { color: var(--muted); font-size: var(--text-2xs); }
 .week-markers { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
 .week-markers em, .team-schedule-table td:first-child em, .gotw-holiday { border-radius: var(--radius-chip); padding: 4px 6px; font-size: var(--text-2xs); font-style: normal; font-weight: var(--w-black); line-height: 1; text-transform: uppercase; }
-.holiday-marker, .gotw-holiday { background: var(--gold-soft); color: #6b5300; box-shadow: inset 0 0 0 1px #eadb9a; }
+.holiday-marker, .gotw-holiday { background: var(--holiday-soft); color: var(--holiday-ink); box-shadow: inset 0 0 0 1px var(--holiday-line); }
 .bye-marker, .team-schedule-table td:first-child em { background: var(--field-soft); color: var(--field-dark); box-shadow: inset 0 0 0 1px #b9dcc8; }
 .gotw-selection-reason { min-height: 84px; display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: start; gap: 10px; border-left: 4px solid var(--gold); background: #fff8e6; padding: 11px 14px 12px 10px; }
 .gotw-selection-reason > span { width: 34px; height: 34px; display: grid; place-items: center; border-radius: var(--radius-sm); background: var(--gold); color: #4d3b00; }

@@ -53,6 +53,7 @@ import { WeekScoreBar } from "@/components/season/WeekScoreBar";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { Modal } from "@/components/ui/Modal";
 import { EntityLogo } from "@/components/ui/EntityLogo";
+import { WorkspaceSwitcher } from "@/components/season/WorkspaceSwitcher";
 import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { apiErrorMessage } from "@/lib/apiErrors";
@@ -306,6 +307,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
   simulationProbabilities?: Record<string, { away: number; home: number }>;
 }) {
   const [ratingTier, setRatingTier] = useState("all");
+  const weekStripRef = useRef<HTMLDivElement>(null);
   const scheduleSignals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
   const playoffRounds = useMemo(() => projectPlayoffRounds(schedule), [schedule]);
   const selectedPlayoffIndex = canAccessPlayoffs ? playoffRounds.findIndex((round) => round.weekNumber === selectedWeek) : -1;
@@ -315,6 +317,16 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
     const timer = window.setTimeout(() => document.getElementById(gameId)?.scrollIntoView({ behavior: "smooth", block: "center" }), 80);
     return () => window.clearTimeout(timer);
   }, [selectedWeek, highlightedGame?.id]);
+  // Keep the selected week centered in the strip, but only when it's off-screen —
+  // clicking an already-visible week shouldn't make the strip jump (audit #22).
+  useEffect(() => {
+    const container = weekStripRef.current;
+    const active = container?.querySelector<HTMLElement>(".active");
+    if (!container || !active) return;
+    const c = container.getBoundingClientRect();
+    const a = active.getBoundingClientRect();
+    if (a.left < c.left || a.right > c.right) active.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [selectedWeek]);
   const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
   const divisionById = new Map(schedule.setup.divisions.map((division) => [division.id, division]));
   const display = schedule.setup.display ?? { cityNames: true, managers: true, venues: true };
@@ -372,7 +384,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
         pureMatchup: `${teamDisplayName(gotwPureAway, display.cityNames)} vs ${teamDisplayName(gotwPureHome, display.cityNames)}`,
       }
     : undefined;
-  const weekSelector = <div className="week-selector schedule-week-selector" aria-label="Select regular season or playoff week">
+  const weekSelector = <div ref={weekStripRef} className="week-selector schedule-week-selector" aria-label="Select regular season or playoff week">
     {schedule.weeks.map((item) => {
       const isThanksgiving = getNflWeekWindow(schedule.setup.seasonYear, item.weekNumber).holidays.includes("Thanksgiving");
       return <button type="button" aria-current={item.weekNumber === selectedWeek ? "true" : undefined} aria-label={`Week ${item.weekNumber}, ${item.dateLabel}${item.weekNumber === selectedWeek ? ", selected" : ""}${isThanksgiving ? ", Thanksgiving week" : ""}`} className={`${item.weekNumber === selectedWeek ? "active" : ""}${isThanksgiving ? " is-thanksgiving" : ""}`.trim()} key={item.weekNumber} onClick={() => setSelectedWeek(item.weekNumber)}>{isThanksgiving && <span className="week-thanksgiving-mark" title="Thanksgiving week" aria-hidden="true">🦃</span>}<span>W{item.weekNumber}</span><small>{item.dateLabel.split(",")[0]}</small><WeekMatchupRank rank={item.matchupRank} total={schedule.weeks.length} compact /></button>;
@@ -1768,7 +1780,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const scoreBarRankByTeam = new Map((getEnteringWeekRankSnapshot(activeSchedule, selectedWeek)?.rows ?? []).map((row) => [row.teamId, row.rank]));
   const scoreBarDivisionById = new Map(activeSchedule.setup.divisions.map((division) => [division.id, division]));
   const scoreBarWeek = activeSchedule.weeks.find((item) => item.weekNumber === selectedWeek) ?? activeSchedule.weeks[0];
-  return <main className={`workspace-page ${simulation ? "simulation-mode" : ""}`} style={{ "--brand": schedule.setup.color, "--brand-on": readableTextColor(schedule.setup.color) } as CSSProperties}>
+  return <main className={`workspace-page ${simulation ? "simulation-mode" : ""} ${scoreBarWeek ? "has-scorebar" : ""}`} style={{ "--brand": schedule.setup.color, "--brand-on": readableTextColor(schedule.setup.color) } as CSSProperties}>
     {scoreModalOpen && canAccessScorekeeping && <Modal
       className="score-entry-modal"
       backdropClassName="score-entry-modal-backdrop"
