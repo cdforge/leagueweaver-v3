@@ -61,6 +61,23 @@ export function IdentityColorPicker({
     window.addEventListener(IDENTITY_COLOR_MENU_EVENT, closeOtherMenu);
     return () => window.removeEventListener(IDENTITY_COLOR_MENU_EVENT, closeOtherMenu);
   }, [menuId]);
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target || menuRef.current?.contains(target) || paletteRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setOpen(false); paletteRef.current?.focus(); }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
   const upload = async (file?: File) => {
     if (!file) return;
     setBusy(true);
