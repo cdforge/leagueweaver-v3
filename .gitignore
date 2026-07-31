@@ -1,6 +1,9 @@
 node_modules/
 .next/
 .next-qa/
+.next-build/
+*.tsbuildinfo
+.claude/worktrees/
 .vercel/
 .env*
 !.env.example
