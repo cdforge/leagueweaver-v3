@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { LoaderCircle } from "lucide-react";
 
+// NOTE: Pro checkout is intentionally shelved for the MVP (the pricing page is
+// static and does not render this component). Kept ready for re-enable — do not
+// wire it back into /pricing without re-introducing the Pro product decision.
 export function PricingActions() {
   const [loading, setLoading] = useState<"monthly" | "annual" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -23,6 +26,6 @@ export function PricingActions() {
   return <div className="pricing-actions">
     <button type="button" className="button-primary" disabled={Boolean(loading)} onClick={() => checkout("annual")}>{loading === "annual" && <LoaderCircle className="spin" />}Choose annual · $30/year</button>
     <button type="button" className="button-secondary" disabled={Boolean(loading)} onClick={() => checkout("monthly")}>{loading === "monthly" && <LoaderCircle className="spin" />}Choose monthly · $5/month</button>
-    {message && <p role="status">{message}</p>}
+    {message && <p role="alert">{message}</p>}
   </div>;
 }
