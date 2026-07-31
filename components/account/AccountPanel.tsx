@@ -107,12 +107,19 @@ export function AccountPanel() {
   useEffect(() => {
     if (!signedInEmail) return;
     Promise.all([
-      fetch("/api/seasons").then((response) => readApiJson<{ seasons?: SeasonSummary[] }>(response, "Saved seasons could not be loaded.")),
-      fetch("/api/saved-leagues").then((response) => readApiJson<{ presets?: SavedLeaguePreset[] }>(response, "Saved leagues could not be loaded.")),
-      fetch("/api/entitlements").then((response) => readApiJson<{ plan?: "free" | "pro" }>(response, "Account details are temporarily unavailable.")),
-    ]).then(([seasonPayload, leaguePayload, entitlementPayload]) => {
-      const nextSeasons = seasonPayload.seasons ?? [];
-      setSeasons(nextSeasons);
+      fetch("/api/seasons"),
+      fetch("/api/saved-leagues"),
+      fetch("/api/entitlements"),
+    ]).then(async ([seasonResponse, leagueResponse, entitlementResponse]) => {
+      if ([seasonResponse, leagueResponse, entitlementResponse].some((response) => response.status === 401)) {
+        setSignedInEmail(null);
+        setMessage("Your session expired. Sign in again to see your saved seasons.");
+        return;
+      }
+      const seasonPayload = await readApiJson<{ seasons?: SeasonSummary[] }>(seasonResponse, "Saved seasons could not be loaded.");
+      const leaguePayload = await readApiJson<{ presets?: SavedLeaguePreset[] }>(leagueResponse, "Saved leagues could not be loaded.");
+      const entitlementPayload = await readApiJson<{ plan?: "free" | "pro" }>(entitlementResponse, "Account details are temporarily unavailable.");
+      setSeasons(seasonPayload.seasons ?? []);
       setSavedLeagues((leaguePayload.presets ?? []).map(normalizeSavedLeague).filter((preset: SavedLeaguePreset | null): preset is SavedLeaguePreset => Boolean(preset)));
       setPlan(entitlementPayload.plan || "free");
     }).catch(() => setMessage("Account details are temporarily unavailable."));
