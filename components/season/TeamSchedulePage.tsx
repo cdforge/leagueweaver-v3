@@ -15,7 +15,7 @@ import { calculateMatchupRating, formatGameDateTimeOverride, getMatchupRatingRan
 import { getWeekOneRankMap } from "@/lib/rankings";
 import { getNflWeekWindow } from "@/lib/schedule";
 import { formatRecord, getEnteringWeekRankSnapshot, getWeekRankSnapshot } from "@/lib/standings";
-import { calculateTeamSeasonStats, formatSplitRecord, gameOfWeekStatusLabel, getScheduleGameSignals, recordGames, recordPercentage } from "@/lib/statistics";
+import { calculateTeamSeasonStats, formatDifferential, formatPoints, formatSplitRecord, gameOfWeekStatusLabel, getScheduleGameSignals, recordGames, recordPercentage } from "@/lib/statistics";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
 import type { GeneratedSchedule, RankedStandingsRow, Team } from "@/lib/types";
 
@@ -286,6 +286,8 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
     </button>
   );
   const pointDifference = teamStats.pointsFor - teamStats.pointsAgainst;
+  const pointDiff = formatDifferential(pointDifference);
+  const teamHasPlayed = teamStats.wins + teamStats.losses + teamStats.ties > 0;
   const allTeamStats = Array.from(seasonStatsByTeam.values());
   const statRowsByTeam = new Map(allTeamStats.map((row) => [row.teamId, row]));
   const summariesByTeam = new Map(summaries.map((item) => [item.team.id, item]));
@@ -310,10 +312,10 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
       const record = statRowsByTeam.get(id)?.away;
       return record && recordGames(record) ? recordPercentage(record) : 0;
     }) },
-    { label: "Win %", value: statDecimal(teamStats.winPercentage), placement: placement((id) => statRowsByTeam.get(id)?.winPercentage ?? null) },
-    { label: "Points for", value: String(teamStats.pointsFor), placement: placement((id) => statRowsByTeam.get(id)?.pointsFor ?? null) },
-    { label: "Points against", value: String(teamStats.pointsAgainst), placement: placement((id) => statRowsByTeam.get(id)?.pointsAgainst ?? null, "asc") },
-    { label: "Point differential", value: `${pointDifference >= 0 ? "+" : ""}${pointDifference}`, tone: pointDifference >= 0 ? "positive" : "negative", placement: placement((id) => {
+    { label: "Win %", value: teamHasPlayed ? statDecimal(teamStats.winPercentage) : "—", placement: placement((id) => statRowsByTeam.get(id)?.winPercentage ?? null) },
+    { label: "Points for", value: formatPoints(teamStats.pointsFor), placement: placement((id) => statRowsByTeam.get(id)?.pointsFor ?? null) },
+    { label: "Points against", value: formatPoints(teamStats.pointsAgainst), placement: placement((id) => statRowsByTeam.get(id)?.pointsAgainst ?? null, "asc") },
+    { label: "Point differential", value: pointDiff.text, tone: pointDiff.tone, placement: placement((id) => {
       const row = statRowsByTeam.get(id);
       return row ? row.pointsFor - row.pointsAgainst : null;
     }) },
@@ -377,20 +379,21 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
 
       <div className="team-schedule-table-wrap">
         <table className="team-schedule-table">
+          <caption className="sr-only">{teamDisplayName(team, showCity)} full-season schedule</caption>
           <thead>
             <tr>
-              <th className="col-week">WK</th>
-              <th className="col-location">H/A</th>
-              <th className="col-opponent">OPPONENT</th>
-              <th className="col-gotw"><span className="schedule-gotw-header"><Star aria-hidden="true" /><b>GOTW</b></span></th>
-              <th className="col-result">W/L</th>
-              <th className="col-score">SCORE</th>
-              {display.venues && <th className="col-venue">VENUE</th>}
-              {display.matchup && <th className="col-matchup">MATCHUP</th>}
-              {display.rating && <th className="col-rating">RATING</th>}
-              {display.badges && <th className="col-badges">BADGES</th>}
-              {display.details && <th className="col-details">DATE · NOTES</th>}
-              <th className="col-actions"><span className="sr-only">Actions</span></th>
+              <th scope="col" className="col-week">WK</th>
+              <th scope="col" className="col-location">H/A</th>
+              <th scope="col" className="col-opponent">OPPONENT</th>
+              <th scope="col" className="col-gotw"><span className="schedule-gotw-header"><Star aria-hidden="true" /><b>GOTW</b></span></th>
+              <th scope="col" className="col-result">W/L</th>
+              <th scope="col" className="col-score">SCORE</th>
+              {display.venues && <th scope="col" className="col-venue">VENUE</th>}
+              {display.matchup && <th scope="col" className="col-matchup">MATCHUP</th>}
+              {display.rating && <th scope="col" className="col-rating">RATING</th>}
+              {display.badges && <th scope="col" className="col-badges">BADGES</th>}
+              {display.details && <th scope="col" className="col-details">DATE · NOTES</th>}
+              <th scope="col" className="col-actions"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
@@ -417,10 +420,21 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
               }
 
               const isHome = game.homeTeamId === team.id;
-              const opponent = teamById.get(isHome ? game.awayTeamId : game.homeTeamId)!;
+              const opponent = teamById.get(isHome ? game.awayTeamId : game.homeTeamId);
+              const home = teamById.get(game.homeTeamId);
+              const away = teamById.get(game.awayTeamId);
+              if (!opponent || !home || !away) {
+                const spannedColumns = 4 + [display.venues, display.matchup, display.rating, display.badges, display.details].filter(Boolean).length;
+                return (
+                  <tr className="team-bye-row" key={week.weekNumber}>
+                    <td className="col-week">{renderWeekLink(week.weekNumber, week.dateLabel, holidays)}</td>
+                    <td className="col-location">—</td>
+                    <td className="col-opponent"><strong>Opponent unavailable</strong></td>
+                    <td colSpan={spannedColumns}>This matchup references a team that is no longer in the league.</td>
+                  </tr>
+                );
+              }
               const opponentDivision = divisionById.get(opponent.divisionId);
-              const home = teamById.get(game.homeTeamId)!;
-              const away = teamById.get(game.awayTeamId)!;
               const displayedSnapshot = getEnteringWeekRankSnapshot(schedule, week.weekNumber);
               const displayedStandingsByTeam = new Map(displayedSnapshot.rows.map((row) => [row.teamId, row]));
               const opponentStanding = displayedStandingsByTeam.get(opponent.id);
@@ -451,7 +465,7 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
               return (
                 <tr className={[isGameOfWeek ? "is-gotw" : "", simulationResult ? `is-simulated simulation-${simulationResult.source}` : ""].filter(Boolean).join(" ")} key={week.weekNumber}>
                   <td className="col-week">{renderWeekLink(week.weekNumber, week.dateLabel, holidays)}</td>
-                  <td className="col-location"><span className="location-chip">{isHome ? "vs" : "@"}</span></td>
+                  <td className="col-location"><span className="location-chip"><span aria-hidden="true">{isHome ? "vs" : "@"}</span><span className="sr-only">{isHome ? "Home versus" : "Away at"}</span></span></td>
                   <td className="col-opponent">
                     <div className="team-table-opponent">
                       <TeamIdentityBlock
@@ -491,7 +505,7 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
       </div>
 
       <section className="team-performance-panel" aria-label={`${teamDisplayName(team, showCity)} team statistics`}>
-        <header><BarChart3 /><span><strong>Team performance</strong><small>Results through Week {currentSnapshot.weekNumber || 0}</small></span></header>
+        <header><BarChart3 /><span><strong>Team performance</strong><small>{currentSnapshot.weekNumber ? `Results through Week ${currentSnapshot.weekNumber}` : "No results entered yet"}</small></span></header>
         <dl className="team-performance-grid">
           {performanceStats.map((stat) => <div key={stat.label}><dt>{stat.label}</dt><dd className={stat.tone}><strong className="team-stat-value">{stat.value}</strong><small className={`team-stat-placement placement-${stat.placement.tone}`}>{stat.placement.label}</small></dd></div>)}
         </dl>

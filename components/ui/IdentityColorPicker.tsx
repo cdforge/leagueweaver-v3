@@ -2,12 +2,16 @@
 
 import { type MouseEvent, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ImagePlus, LoaderCircle, Palette, Pipette, X } from "lucide-react";
+import { AlertCircle, ImagePlus, LoaderCircle, Palette, Pipette, Trash2, X } from "lucide-react";
 import { analyzeIdentityImage } from "@/lib/imageColors";
 import { readableTextColor, tintColor } from "@/lib/colorContrast";
+import { ColorField } from "./ColorField";
 import { Tooltip } from "./Tooltip";
 
 const EMPTY_COLOR_SUGGESTIONS: string[] = [];
+// Shown when a team has no logo to pull colors from (e.g. every CSV/paste import). Six
+// distinct hues — the old fallback repeated the same blue twice and wasted a slot.
+const DEFAULT_COLOR_CHOICES = ["#117A45", "#E3B940", "#2457A7", "#B42318", "#6D28D9", "#0369A1"];
 const IDENTITY_COLOR_MENU_EVENT = "leagueweaver:identity-color-menu-open";
 
 export function IdentityColorPicker({
@@ -40,7 +44,7 @@ export function IdentityColorPicker({
   const [open, setOpen] = useState(false);
   const [draftColor, setDraftColor] = useState(color);
   const [failedLogo, setFailedLogo] = useState<string | null>(null);
-  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; placement: "below" | "above"; arrowLeft: number }>({ top: 0, left: 0, placement: "below", arrowLeft: 24 });
   const [pickMode, setPickMode] = useState(false);
   const [pickerError, setPickerError] = useState("");
   const paletteRef = useRef<HTMLButtonElement>(null);
@@ -102,12 +106,15 @@ export function IdentityColorPicker({
       const menuHeight = menuRef.current?.offsetHeight || 360;
       const maxLeft = Math.max(12, window.innerWidth - menuWidth - 12);
       const maxTop = Math.max(12, window.innerHeight - menuHeight - 12);
-      const belowTop = rect.bottom + 7;
-      const aboveTop = rect.top - menuHeight - 7;
-      setMenuPosition({
-        top: Math.max(12, Math.min(maxTop, belowTop <= maxTop ? belowTop : aboveTop)),
-        left: Math.max(12, Math.min(maxLeft, rect.left)),
-      });
+      const gap = 9;
+      const belowTop = rect.bottom + gap;
+      const aboveTop = rect.top - menuHeight - gap;
+      const placeBelow = belowTop <= maxTop;
+      const top = Math.max(12, Math.min(maxTop, placeBelow ? belowTop : aboveTop));
+      const left = Math.max(12, Math.min(maxLeft, rect.left - 4));
+      // Point the arrow at the trigger's centre, clamped so it stays on the popover.
+      const arrowLeft = Math.max(16, Math.min(menuWidth - 16, rect.left + rect.width / 2 - left));
+      setMenuPosition({ top, left, placement: placeBelow ? "below" : "above", arrowLeft });
     };
     updatePosition();
     window.addEventListener("resize", updatePosition);
@@ -166,17 +173,26 @@ export function IdentityColorPicker({
   };
 
   const colorMenu = showColorControl && open ? (
-    <div ref={menuRef} className="identity-color-menu" style={{ top: menuPosition.top, left: menuPosition.left }}>
-      <div><strong>Colors from logo</strong><button type="button" aria-label="Close color selector" onClick={() => setOpen(false)}><X /></button></div>
-      <p>{suggestions.length ? "Choose a top image color, enter a custom color, or pick directly from the logo." : "Upload a logo to reveal its top colors."}</p>
-      <div className="suggested-swatches">
-        {suggestions.map((suggestion, index) => <button type="button" aria-label={`Preview image color ${index + 1}: ${suggestion}`} className={draftColor.toUpperCase() === suggestion ? "active" : ""} key={`${suggestion}-${index}`} style={{ background: suggestion }} onClick={() => setDraftColor(suggestion)}><CheckMark /></button>)}
-        {!suggestions.length && ["#117A45", "#E3B940", "#2457A7", "#B42318", "#2457A7"].map((suggestion, index) => <span key={`${suggestion}-${index}`} style={{ background: suggestion }} />)}
+    <div className="identity-color-popover" data-placement={menuPosition.placement} style={{ top: menuPosition.top, left: menuPosition.left }}>
+      <span className="identity-color-arrow" style={{ left: menuPosition.arrowLeft }} aria-hidden="true" />
+      <div ref={menuRef} className="identity-color-menu" role="group" aria-label={`Choose ${name} color`}>
+        <div><strong>{suggestions.length ? "Colors from logo" : "Team color"}</strong><button type="button" aria-label="Close color selector" onClick={() => setOpen(false)}><X /></button></div>
+        <p>{suggestions.length ? "Tap a logo color, tweak the hue, or type a hex." : "Tap a swatch, tweak the hue, or type a hex."}</p>
+        <div className="suggested-swatches">
+          {suggestions.map((suggestion, index) => <button type="button" aria-label={`Preview image color ${index + 1}: ${suggestion}`} className={draftColor.toUpperCase() === suggestion.toUpperCase() ? "active" : ""} key={`${suggestion}-${index}`} style={{ background: suggestion }} onClick={() => setDraftColor(suggestion)}></button>)}
+          {!suggestions.length && DEFAULT_COLOR_CHOICES.map((suggestion, index) => <button type="button" aria-label={`Use color ${index + 1}: ${suggestion}`} className={draftColor.toUpperCase() === suggestion.toUpperCase() ? "active" : ""} key={`${suggestion}-${index}`} style={{ background: suggestion }} onClick={() => setDraftColor(suggestion)}></button>)}
+        </div>
+        {!pickMode && <ColorField value={draftColor} onChange={(hex) => setDraftColor(hex)} />}
+        {visibleLogo && <button type="button" className={`logo-picker-toggle ${pickMode ? "active" : ""}`} aria-pressed={pickMode} onClick={() => setPickMode((current) => !current)}><Pipette />Pick color from logo</button>}
+        {pickMode && visibleLogo && <div className="logo-color-picker">
+          <div className="logo-color-stage"><canvas ref={canvasRef} onClick={pickCanvasColor} aria-label="Pick a color from the logo" /></div>
+          {pickerError
+            ? <span className="logo-color-error"><AlertCircle />{pickerError}</span>
+            : <p className="logo-color-hint"><Pipette />Click anywhere on the logo to sample that exact color.</p>}
+          <button type="button" className="logo-remove-btn" aria-label={`Remove ${name} logo`} onClick={() => { onChange({ logoUrl: "" }); setSuggestions([]); setFailedLogo(null); setPickMode(false); }}><Trash2 />Remove logo</button>
+        </div>}
+        <button type="button" className="confirm-color" onClick={() => { onChange({ color: draftColor }); setOpen(false); }}>Use this color</button>
       </div>
-      <label className="custom-color-row"><span>Custom color</span><span className="custom-color-chip" style={{ background: draftColor }}><Pipette /><input type="color" value={draftColor} onChange={(event) => setDraftColor(event.target.value)} /></span><code>{draftColor.toUpperCase()}</code></label>
-      {visibleLogo && <button type="button" className={`logo-picker-toggle ${pickMode ? "active" : ""}`} onClick={() => setPickMode((current) => !current)}><Pipette />Pick from logo</button>}
-      {pickMode && visibleLogo && <div className="logo-color-picker"><div><canvas ref={canvasRef} onClick={pickCanvasColor} aria-label="Pick a color from the logo" /><button type="button" className="identity-logo-remove" aria-label={`Remove ${name} logo`} onClick={() => { onChange({ logoUrl: "" }); setSuggestions([]); setFailedLogo(null); setPickMode(false); }}><X /></button></div>{pickerError ? <span>{pickerError}</span> : <small>Click any part of the logo to use that exact color.</small>}</div>}
-      <button type="button" className="confirm-color" onClick={() => { onChange({ color: draftColor }); setOpen(false); }}>Use this color</button>
     </div>
   ) : null;
 
@@ -190,17 +206,16 @@ export function IdentityColorPicker({
       </Tooltip>
       {compact && showAbbreviation && <span className="identity-name">{abbreviation}</span>}
       {showColorControl && <Tooltip label={`Choose ${name} color`}>
-        <button ref={paletteRef} type="button" className="identity-palette-toggle" aria-label={`Choose ${name} color`} onClick={() => setOpen((current) => {
-          const next = !current;
+        <button ref={paletteRef} type="button" className="identity-palette-toggle" aria-label={`Choose ${name} color`} onClick={() => {
+          const next = !open;
+          // Telling the other pickers to close is a side effect, so it belongs in the event
+          // handler — not inside the setOpen updater, which must stay pure. Dispatching there
+          // synchronously set state on sibling pickers mid-render (the console warning).
           if (next) window.dispatchEvent(new CustomEvent(IDENTITY_COLOR_MENU_EVENT, { detail: { id: menuId } }));
-          return next;
-        })}><span style={{ background: color }}><Palette /></span></button>
+          setOpen(next);
+        }}><span style={{ background: color, color: readableTextColor(color) }}><Palette /></span></button>
       </Tooltip>}
       {colorMenu && createPortal(colorMenu, document.body)}
     </div>
   );
-}
-
-function CheckMark() {
-  return <span aria-hidden="true">✓</span>;
 }

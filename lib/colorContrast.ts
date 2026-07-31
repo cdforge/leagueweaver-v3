@@ -57,11 +57,22 @@ export function accessibleTeamColor(color: string, background = "#FFFFFF") {
   return "#15231C";
 }
 
+/**
+ * Pick a foreground (text/logo) colour to sit ON a solid `background` fill,
+ * guaranteeing ≥4.5:1 whenever it is mathematically possible. Prefers the soft
+ * ink (#15231C) or white when either already clears AA; on a mid-tone where
+ * neither soft option does, it escalates to the higher-contrast pure extreme
+ * (black/white) — which always clears AA — rather than returning an unverified
+ * bare #000. Uses the symmetric contrast ratio so dark backgrounds are handled
+ * correctly (the old directional formula under-counted ink contrast on darks).
+ */
 export function readableTextColor(background: string) {
-  const backgroundLuminance = luminance(background);
-  const whiteContrast = 1.05 / (backgroundLuminance + 0.05);
-  const inkLuminance = luminance("#15231C");
-  const inkContrast = (backgroundLuminance + 0.05) / (inkLuminance + 0.05);
-  if (Math.max(whiteContrast, inkContrast) >= 4.5) return whiteContrast >= inkContrast ? "#FFFFFF" : "#15231C";
-  return "#000000";
+  const ink = "#15231C";
+  const inkContrast = contrastRatio(ink, background);
+  const whiteContrast = contrastRatio("#FFFFFF", background);
+  const softBest = inkContrast >= whiteContrast ? ink : "#FFFFFF";
+  if (Math.max(inkContrast, whiteContrast) >= 4.5) return softBest;
+  // Mid-tone: neither soft option clears AA. Fall back to the pure extreme with
+  // the most contrast — one of pure black / white always exceeds 4.5:1.
+  return contrastRatio("#000000", background) >= whiteContrast ? "#000000" : "#FFFFFF";
 }

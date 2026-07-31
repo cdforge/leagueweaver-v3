@@ -156,10 +156,10 @@ export async function POST(request: Request) {
       authType: auth ? "private-cookie" : "public",
       syncMode: "manual",
       warnings: [
-        auth ? "ESPN private access is active for this preview. League Weaver never asks for your ESPN password." : "ESPN Public Import is in beta. Confirm every team name and division before continuing.",
-        ...(ruleMatchedTeamNames ? ["League Weaver used ESPN name-splitting rules to keep known cities and team names in the right columns."] : []),
-        ...(inferredTeamNames ? ["ESPN sent combined team names, so League Weaver split each name into City and Team columns for easier review."] : []),
-        ...(dataFound.blockedHistoryYears.length && !auth ? ["Some older seasons are blocked by ESPN. Public league imports work best for MVP."] : []),
+        auth
+          ? "ESPN private access is active — League Weaver never asks for your ESPN password."
+          : "Double-check each team name and division below before continuing.",
+        ...(inferredTeamNames || ruleMatchedTeamNames ? ["ESPN combines city and team in one field — we've split them for you, so give each a quick look."] : []),
       ],
       requiresConfirmation: true,
     };

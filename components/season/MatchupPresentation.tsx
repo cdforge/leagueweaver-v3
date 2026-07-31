@@ -64,11 +64,13 @@ export function WeekMatchupRank({ rank, total, compact = false }: { rank?: numbe
   if (rank == null || rank < 1 || total < 1) return null;
   const signal = getWeeklyMatchupSignal(rank, total);
   const tier = signal.label.toLowerCase();
+  // One monotone strength scale: 1 = strongest slate, 0 = regular. Never "bad".
+  const strength = 1 - signal.normalized;
   const label = `Weekly matchup rank ${rank} of ${total}. ${signal.label} slate; lower rank is better.`;
-  return <span className={`week-matchup-rank signal-${tier} ${compact ? "compact" : ""}`} aria-label={label} title={label}>
-    <span className="signal-bars" aria-hidden="true">{[1, 2, 3].map((bar) => <i className={bar <= signal.bars ? "active" : ""} key={bar} />)}</span>
+  return <span className={`week-matchup-rank signal-${tier} ${compact ? "compact" : ""}`} style={{ "--sig-t": strength } as React.CSSProperties} aria-label={label} title={label}>
+    {!compact && <span className="signal-bars" aria-hidden="true">{[1, 2, 3].map((bar) => <i className={bar <= signal.bars ? "active" : ""} key={bar} />)}</span>}
     {compact
-      ? <strong>#{rank}/{total}</strong>
+      ? <strong>#{rank}</strong>
       : <span className="week-matchup-rank-copy"><strong>#{rank}</strong><small>of {total}</small></span>}
   </span>;
 }
@@ -99,7 +101,7 @@ export function GameBadgeChip({ badge, title, className = "" }: { badge: GameBad
 
 function SignalBars({ signal, awayRank, homeRank }: { signal: MatchupSignal; awayRank: number; homeRank: number }) {
   const rating = signal.rating.toFixed(1);
-  return <span className={`matchup-signal signal-${signal.label.toLowerCase()}`} aria-label={`${signal.label} matchup, rating ${rating}; away rank ${awayRank}, home rank ${homeRank}; lower is better`} title={`${signal.label} · rating ${rating} · #${awayRank} vs #${homeRank} (lower is better)`}>
+  return <span className={`matchup-signal signal-${signal.label.toLowerCase()}`} style={{ "--sig-t": 1 - signal.normalized } as React.CSSProperties} aria-label={`${signal.label} matchup, rating ${rating}; away rank ${awayRank}, home rank ${homeRank}; lower is better`} title={`${signal.label} · rating ${rating} · #${awayRank} vs #${homeRank} (lower is better)`}>
     <span className="matchup-signal-main">
       <span className="signal-bars" aria-hidden="true">{[1, 2, 3].map((bar) => <i className={bar <= signal.bars ? "active" : ""} key={bar} />)}</span>
       <b>{rating}</b>

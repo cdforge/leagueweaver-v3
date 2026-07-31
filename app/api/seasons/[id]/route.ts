@@ -22,3 +22,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const { error } = await auth.supabase.from("schedules").update({ status: body.status }).eq("id", id);
   return error ? NextResponse.json({ error: "The season could not be updated." }, { status: 500 }) : NextResponse.json({ updated: true });
 }
+
+export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
+  const auth = await getAuthenticatedClient();
+  if (!auth) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
+  const { id } = await context.params;
+  // RLS scopes the delete to the signed-in user's own schedules; revisions cascade.
+  const { error } = await auth.supabase.from("schedules").delete().eq("id", id);
+  return error ? NextResponse.json({ error: "This schedule could not be deleted." }, { status: 500 }) : NextResponse.json({ deleted: true });
+}

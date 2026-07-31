@@ -1,8 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import Script from "next/script";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { AuthModalProvider } from "@/components/account/AuthModalProvider";
 import "./globals.css";
+
+const adsenseClientId = process.env.NEXT_PUBLIC_ADSENSE_CLIENT_ID;
 
 const archivo = localFont({
   src: "../public/fonts/Archivo-Variable.ttf",
@@ -20,9 +24,14 @@ const barlowCondensed = localFont({
   display: "swap",
 });
 
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000");
+
 export const metadata: Metadata = {
-  title: "League Weaver | Fair fantasy schedules",
-  description: "Build a fair fantasy football schedule and run your season from one commissioner workspace.",
+  metadataBase: new URL(siteUrl),
+  title: "League Weaver | NFL-style fantasy schedules",
+  description: "Build an NFL-style fantasy football schedule — seeded off last season, with rivalry weeks and marquee games — and run your season from one commissioner workspace.",
 };
 
 export const viewport: Viewport = {
@@ -36,7 +45,16 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <body className={`${archivo.variable} ${barlowCondensed.variable}`}>
-        {children}
+        <AuthModalProvider>{children}</AuthModalProvider>
+        {adsenseClientId && (
+          <Script
+            id="adsbygoogle-init"
+            strategy="afterInteractive"
+            async
+            crossOrigin="anonymous"
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsenseClientId}`}
+          />
+        )}
         <Analytics />
         <SpeedInsights />
       </body>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CircleUserRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useAuthModal } from "@/components/account/AuthModalProvider";
 
 export type AccountIdentityData = {
   signedIn: boolean;
@@ -42,6 +43,7 @@ function identityFromUser(user: { email?: string; user_metadata?: Record<string,
 export function AccountIdentity({ identity, plan }: { identity?: AccountIdentityData; plan?: "free" | "pro" }) {
   const [resolved, setResolved] = useState<AccountIdentityData>(identity ?? { signedIn: false });
   const [loading, setLoading] = useState(identity === undefined);
+  const { openSignIn } = useAuthModal();
 
   useEffect(() => {
     if (identity !== undefined) {
@@ -73,7 +75,7 @@ export function AccountIdentity({ identity, plan }: { identity?: AccountIdentity
     };
   }, [identity]);
 
-  if (!resolved.signedIn) return <Link href="/account" className={`account-link account-identity${loading ? " loading" : ""}`} aria-label="Sign in to League Weaver"><CircleUserRound aria-hidden="true" /><span><strong>{loading ? "Account" : "Sign in"}</strong></span></Link>;
+  if (!resolved.signedIn) return <button type="button" onClick={() => openSignIn()} className={`account-link account-identity${loading ? " loading" : ""}`} aria-label="Sign in to League Weaver"><CircleUserRound aria-hidden="true" /><span><strong>{loading ? "Account" : "Sign in"}</strong></span></button>;
 
   const name = resolved.displayName || friendlyEmailName(resolved.email);
   return <Link href="/account" className="account-link account-identity" aria-label={`Open account for ${name}`} title={resolved.email}>

@@ -60,7 +60,7 @@ export function FloatingPopover({
 
   useEffect(() => {
     if (!open) return;
-    const close = (event: MouseEvent) => {
+    const close = (event: Event) => {
       const target = event.target as Node;
       if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
     };
@@ -70,10 +70,10 @@ export function FloatingPopover({
         triggerRef.current?.focus();
       }
     };
-    document.addEventListener("mousedown", close);
+    document.addEventListener("pointerdown", close);
     document.addEventListener("keydown", escape);
     return () => {
-      document.removeEventListener("mousedown", close);
+      document.removeEventListener("pointerdown", close);
       document.removeEventListener("keydown", escape);
     };
   }, [open]);
@@ -85,7 +85,7 @@ export function FloatingPopover({
         type="button"
         className="floating-popover-trigger"
         aria-label={label}
-        aria-haspopup="menu"
+        aria-haspopup="true"
         aria-expanded={open}
         aria-controls={open ? id : undefined}
         title={label}
@@ -98,7 +98,8 @@ export function FloatingPopover({
           ref={menuRef}
           id={id}
           className={`floating-layer-menu ${menuClassName}`.trim()}
-          role="menu"
+          role="group"
+          aria-label={label}
           style={{ left: position.left, top: position.top, maxHeight: position.maxHeight, visibility: position.ready ? "visible" : "hidden" }}
           onClick={(event) => {
             if (closeOnSelect && (event.target as HTMLElement).closest("a, button, [role='menuitem']")) setOpen(false);

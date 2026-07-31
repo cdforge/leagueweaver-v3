@@ -32,7 +32,7 @@ export function Tooltip({ label, children }: { label: string; children: ReactNod
   }, [open]);
 
   return (
-    <span ref={anchor} className="tooltip-wrap" aria-describedby={open ? id : undefined} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)} onFocus={() => setOpen(true)} onBlur={() => setOpen(false)}>
+    <span ref={anchor} className="tooltip-wrap" aria-describedby={open ? id : undefined} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)} onFocus={() => setOpen(true)} onBlur={() => setOpen(false)} onKeyDown={(event) => { if (event.key === "Escape" && open) setOpen(false); }}>
       {children}
       {open && typeof document !== "undefined" && createPortal(
         <span ref={bubble} id={id} className={`tooltip-bubble tooltip-bubble-portal ${position.below ? "below" : ""}`} role="tooltip" style={{ left: position.left, top: position.top, visibility: position.ready ? "visible" : "hidden" }}>{label}</span>,

@@ -38,7 +38,69 @@ export function normalizeSetup(setup: LeagueSetupInput): LeagueSetupInput {
 }
 
 const SETUP_KEY = "leagueweaver:v3:setup";
+/** Legacy single-slot season key. Read once and migrated into SEASONS_KEY. */
 const SEASON_KEY = "leagueweaver:v3:season";
+/** Keyed store of every schedule saved on this device, indexed by schedule id. */
+const SEASONS_KEY = "leagueweaver:v3:seasons";
+
+type StoredSeason = { schedule: GeneratedSchedule; savedAt: number };
+type SeasonStore = Record<string, StoredSeason>;
+
+export type LocalSeasonSummary = {
+  id: string;
+  name: string;
+  seasonYear: number;
+  teamCount: number;
+  savedAt: number;
+};
+
+/**
+ * A device-local id for a guest schedule. It deliberately does NOT look like a
+ * cloud UUID so the workspace keeps treating it as local-only until the owner
+ * signs in and it is claimed into their account.
+ */
+export function createLocalSeasonId(): string {
+  const random = typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
+  return `local-${random}`;
+}
+
+function readSeasonStore(): SeasonStore {
+  if (typeof window === "undefined") return {};
+  let store: SeasonStore = {};
+  try {
+    const raw = window.localStorage.getItem(SEASONS_KEY);
+    if (raw) store = JSON.parse(raw) as SeasonStore;
+  } catch {
+    store = {};
+  }
+  // One-time migration: fold the legacy single-slot season into the keyed store
+  // so nobody loses the schedule they had open when this shipped.
+  try {
+    const legacy = window.localStorage.getItem(SEASON_KEY);
+    if (legacy) {
+      const schedule = JSON.parse(legacy) as GeneratedSchedule;
+      if (schedule?.id && !store[schedule.id]) {
+        store[schedule.id] = { schedule, savedAt: Date.now() };
+        window.localStorage.setItem(SEASONS_KEY, JSON.stringify(store));
+      }
+      window.localStorage.removeItem(SEASON_KEY);
+    }
+  } catch {
+    // Ignore migration failures; the legacy key is left in place to retry later.
+  }
+  return store;
+}
+
+function writeSeasonStore(store: SeasonStore) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SEASONS_KEY, JSON.stringify(store));
+  } catch {
+    // Ignore quota failures; the in-memory schedule stays usable this session.
+  }
+}
 
 export function normalizeSeason(schedule: GeneratedSchedule): GeneratedSchedule {
   const hadTiebreakerSettings = Boolean(schedule.setup.tiebreakers);
@@ -71,18 +133,43 @@ export function loadSetup(): LeagueSetupInput | null {
 export function saveSeason(schedule: GeneratedSchedule) {
   if (typeof window === "undefined") return;
   const normalized = normalizeSeason(schedule);
-  window.localStorage.setItem(SEASON_KEY, JSON.stringify(normalized));
+  const store = readSeasonStore();
+  store[normalized.id] = { schedule: normalized, savedAt: Date.now() };
+  writeSeasonStore(store);
   saveSetup(normalized.setup);
 }
 
-export function loadSeason(): GeneratedSchedule | null {
-  if (typeof window === "undefined") return null;
+/** Loads a single device-saved schedule by id, or null if none is stored. */
+export function loadSeasonById(id: string): GeneratedSchedule | null {
+  if (typeof window === "undefined" || !id) return null;
+  const entry = readSeasonStore()[id];
+  if (!entry) return null;
   try {
-    const stored = window.localStorage.getItem(SEASON_KEY);
-    if (!stored) return null;
-    const schedule = JSON.parse(stored) as GeneratedSchedule;
-    return freezeCompletedRankHistory(normalizeSeason(schedule));
+    return freezeCompletedRankHistory(normalizeSeason(entry.schedule));
   } catch {
     return null;
+  }
+}
+
+/** Lightweight summaries of every schedule saved on this device, newest first. */
+export function listLocalSeasons(): LocalSeasonSummary[] {
+  return Object.values(readSeasonStore())
+    .map(({ schedule, savedAt }) => ({
+      id: schedule.id,
+      name: schedule.setup?.name?.trim() || "Untitled league",
+      seasonYear: schedule.setup?.seasonYear ?? 0,
+      teamCount: schedule.setup?.teams?.length ?? 0,
+      savedAt,
+    }))
+    .sort((a, b) => b.savedAt - a.savedAt);
+}
+
+/** Removes a single device-saved schedule by id. */
+export function removeLocalSeason(id: string) {
+  if (typeof window === "undefined" || !id) return;
+  const store = readSeasonStore();
+  if (store[id]) {
+    delete store[id];
+    writeSeasonStore(store);
   }
 }

@@ -20,6 +20,7 @@ import {
   LayoutList,
   LoaderCircle,
   LockKeyhole,
+  LogIn,
   MapPin,
   Medal,
   Pencil,
@@ -30,13 +31,16 @@ import {
   Share2,
   ShieldCheck,
   SlidersHorizontal,
+  Sparkles,
   Star,
   Trophy,
   UsersRound,
   X,
 } from "lucide-react";
 import { BrandLockup } from "@/components/AppHeader";
+import { GenerationReveal } from "@/components/builder/GenerationReveal";
 import { AccountIdentity } from "@/components/account/AccountIdentity";
+import { useAuthModal } from "@/components/account/AuthModalProvider";
 import { AdUnit } from "@/components/ads/AdUnit";
 import { GotwWorkspace } from "@/components/season/GotwWorkspace";
 import { BracketConnectorLayer, type BracketConnection } from "@/components/season/BracketConnectorLayer";
@@ -45,7 +49,9 @@ import { GameBadgeChip, MatchupCard, MatchupRatingLegend, MatchupSeriesChip, Tea
 import { SimulatorWorkspace, type SimulatorResultView } from "@/components/season/SimulatorWorkspace";
 import { StatsWorkspace } from "@/components/season/StatsWorkspace";
 import { TeamScheduleView } from "@/components/season/TeamSchedulePage";
+import { WeekScoreBar } from "@/components/season/WeekScoreBar";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { Modal } from "@/components/ui/Modal";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -86,9 +92,8 @@ import {
 import { calculateStandings, formatRecord, freezeCompletedRankHistory, getEnteringWeekRankSnapshot } from "@/lib/standings";
 import { gameOfWeekStatusLabel, getScheduleGameSignals } from "@/lib/statistics";
 import { formatDraftPlace, getTeamsMissingDraftPlaces, getWeekOneRankMap, getWeekOneTeamOrder, hasCompleteDraftRanking } from "@/lib/rankings";
-import { loadSeason, normalizeSeason, saveSeason } from "@/lib/storage";
+import { loadSeasonById, normalizeSeason, removeLocalSeason, saveSeason } from "@/lib/storage";
 import { getNflWeekWindow, getWeekDateLabel, updateGameScore } from "@/lib/schedule";
-import { leagueAcronym, resolveInitials } from "@/lib/monograms";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
 import type { GeneratedSchedule, ImportHistoryEvent, ImportPreview, LeagueSetupInput, PlatformConnection, PlatformSyncMode, PlayoffGame, ScheduledGame, Team, TiebreakerSettings } from "@/lib/types";
 
@@ -351,7 +356,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
   const scoreEntryDue = openScoreCount > 0 && Date.now() >= new Date(nflWeekWindow.endsAt).getTime();
   const playingTeamIds = new Set(week.games.flatMap((game) => [game.homeTeamId, game.awayTeamId]));
   const byeTeams = schedule.setup.teams.filter((team) => !playingTeamIds.has(team.id));
-  const orderedGames = sortGamesForDisplay(week.games, displayedRanks);
+  const orderedGames = sortGamesForDisplay(week.games.filter((game) => teamById.has(game.homeTeamId) && teamById.has(game.awayTeamId)), displayedRanks);
   const visibleGames = ratingTier === "all" ? orderedGames : orderedGames.filter((game) => getMatchupSignal(game, displayedRanks, ratingRange).label.toLowerCase() === ratingTier);
   const ratingOptions = [
     { value: "all", label: "All matchups", description: "Show the complete week" },
@@ -359,14 +364,19 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
     { value: "neutral", label: "Neutral", description: "Middle third of this schedule" },
     { value: "lopsided", label: "Lopsided", description: "Widest ranking gaps" },
   ];
-  const gotwOverrideDetails = gotwEntry?.playoffImplication && gotwEntry.pureGame.id !== gotwEntry.game.id
+  const gotwPureAway = gotwEntry ? teamById.get(gotwEntry.pureGame.awayTeamId) : undefined;
+  const gotwPureHome = gotwEntry ? teamById.get(gotwEntry.pureGame.homeTeamId) : undefined;
+  const gotwOverrideDetails = gotwEntry?.playoffImplication && gotwEntry.pureGame.id !== gotwEntry.game.id && gotwPureAway && gotwPureHome
     ? {
         featuredRanks: `#${gotwEntry.ranks.get(gotwEntry.game.awayTeamId) ?? "—"} vs #${gotwEntry.ranks.get(gotwEntry.game.homeTeamId) ?? "—"}`,
-        pureMatchup: `${teamDisplayName(teamById.get(gotwEntry.pureGame.awayTeamId)!, display.cityNames)} vs ${teamDisplayName(teamById.get(gotwEntry.pureGame.homeTeamId)!, display.cityNames)}`,
+        pureMatchup: `${teamDisplayName(gotwPureAway, display.cityNames)} vs ${teamDisplayName(gotwPureHome, display.cityNames)}`,
       }
     : undefined;
   const weekSelector = <div className="week-selector schedule-week-selector" aria-label="Select regular season or playoff week">
-    {schedule.weeks.map((item) => <button type="button" className={item.weekNumber === selectedWeek ? "active" : ""} key={item.weekNumber} onClick={() => setSelectedWeek(item.weekNumber)}><span>W{item.weekNumber}</span><small>{item.dateLabel.split(",")[0]}</small><WeekMatchupRank rank={item.matchupRank} total={schedule.weeks.length} compact /></button>)}
+    {schedule.weeks.map((item) => {
+      const isThanksgiving = getNflWeekWindow(schedule.setup.seasonYear, item.weekNumber).holidays.includes("Thanksgiving");
+      return <button type="button" aria-current={item.weekNumber === selectedWeek ? "true" : undefined} aria-label={`Week ${item.weekNumber}, ${item.dateLabel}${item.weekNumber === selectedWeek ? ", selected" : ""}${isThanksgiving ? ", Thanksgiving week" : ""}`} className={`${item.weekNumber === selectedWeek ? "active" : ""}${isThanksgiving ? " is-thanksgiving" : ""}`.trim()} key={item.weekNumber} onClick={() => setSelectedWeek(item.weekNumber)}>{isThanksgiving && <span className="week-thanksgiving-mark" title="Thanksgiving week" aria-hidden="true">🦃</span>}<span>W{item.weekNumber}</span><small>{item.dateLabel.split(",")[0]}</small><WeekMatchupRank rank={item.matchupRank} total={schedule.weeks.length} compact /></button>;
+    })}
     {canAccessPlayoffs && <span className="week-selector-divider" aria-hidden="true" />}
     {canAccessPlayoffs && playoffRounds.map((round) => <Tooltip key={round.weekNumber} label={`${round.name}, NFL Week ${round.weekNumber}`}>
       <button
@@ -404,7 +414,9 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
           const isHighlighted = highlightedGame?.id === game.id;
           const highlightedMedalLabel = isHighlighted && highlightedGame?.medalRank ? ["Gold", "Silver", "Bronze"][highlightedGame.medalRank - 1] : undefined;
           return <MatchupCard key={game.id} {...presentationFor(game, week.weekNumber)} featured={featured} featuredLabel={featured && gotwEntry ? gameOfWeekStatusLabel(gotwEntry.status) : undefined} gameLabel={featured ? undefined : `Game ${game.gameNumber}`} badges={analytics?.badges} medalRank={isHighlighted ? highlightedGame?.medalRank : analytics?.qualityRank} medalLabel={highlightedMedalLabel ? `${highlightedMedalLabel} · ${highlightedGame?.medalCategory || "League leader"}` : undefined} highlighted={isHighlighted} simulationSource={simulationResult?.source} simulationLocked={simulationResult?.locked} winProbability={simulationProbabilities[game.id]} teamHrefBase={`/season/${schedule.id}/team`} />;
-        })}{visibleGames.length === 0 && <div className="rating-filter-empty"><strong>No {ratingTier} matchups this week.</strong><button type="button" onClick={() => setRatingTier("all")}>Show all matchups</button></div>}</div>
+        })}{visibleGames.length === 0 && (ratingTier !== "all"
+          ? <div className="rating-filter-empty"><strong>No {ratingTier} matchups this week.</strong><button type="button" onClick={() => setRatingTier("all")}>Show all matchups</button></div>
+          : <div className="rating-filter-empty"><strong>No games scheduled this week.</strong>{byeTeams.length > 0 && <span>Every team is on a bye this week.</span>}</div>)}</div>
       </div>
       <MatchupRatingLegend />
       {byeTeams.length > 0 && <div className="week-bye-list"><strong>Bye</strong>{byeTeams.map((team) => <span key={team.id}><EntityLogo size={32} color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} />{teamDisplayName(team, display.cityNames)}</span>)}</div>}
@@ -1148,6 +1160,8 @@ function SimulatorLaunch({ hasSavedRun, onPlay, onStartFromReal }: { hasSavedRun
 export function SeasonWorkspace({ initialView = "league-schedule" }: { initialView?: ViewKey }) {
   const params = useParams<{ id: string; teamId?: string }>();
   const router = useRouter();
+  const { openSignIn } = useAuthModal();
+  const [saveNudgeDismissed, setSaveNudgeDismissed] = useState(true);
   const searchParams = useSearchParams();
   const [schedule, setSchedule] = useState<GeneratedSchedule | null>(null);
   const [seasonLoadState, setSeasonLoadState] = useState<"loading" | "ready" | "error">("loading");
@@ -1170,6 +1184,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const [scoreDiscardConfirmOpen, setScoreDiscardConfirmOpen] = useState(false);
   const [platformSyncLoading, setPlatformSyncLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState<"share" | "notify" | null>(null);
+  const [showRecap, setShowRecap] = useState(false);
   const [cloudRetry, setCloudRetry] = useState<CloudRetryState | null>(null);
   const [importHistory, setImportHistory] = useState<ImportHistoryEvent[]>([]);
   const [importHistoryLoading, setImportHistoryLoading] = useState(false);
@@ -1177,7 +1192,6 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const cloudScheduleSnapshot = useRef<string | null>(null);
   const blockedCloudSnapshot = useRef<string | null>(null);
   const latestSchedule = useRef<GeneratedSchedule | null>(null);
-  const scoreModalRef = useRef<HTMLElement | null>(null);
   const autosaveTimer = useRef<number | null>(null);
   const platformAutoRefreshKey = useRef<string | null>(null);
   const applyCloudSchedule = (savedSchedule: GeneratedSchedule, sourceSchedule: GeneratedSchedule) => {
@@ -1194,6 +1208,9 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       latestSchedule.current = synced;
       setSchedule(synced);
     }
+    // Once claimed into the account, drop the device-only copy so it stops
+    // counting as unsaved guest work (and nudging) under its old local id.
+    if (sourceSchedule.id !== synced.id) removeLocalSeason(sourceSchedule.id);
     const nextPath = window.location.pathname.replace(`/season/${sourceSchedule.id}`, `/season/${synced.id}`);
     window.history.replaceState(null, "", `${nextPath}${window.location.search}${window.location.hash}`);
     return synced;
@@ -1223,8 +1240,8 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     setScoreModalOpen(false);
   };
   useEffect(() => {
-    const local = loadSeason();
-    if (local && (params.id === local.id || params.id === "local-season")) {
+    const local = loadSeasonById(params.id);
+    if (local) {
       latestSchedule.current = local;
       cloudScheduleSnapshot.current = CLOUD_SCHEDULE_ID.test(local.id) ? JSON.stringify(local) : null;
       setSchedule(local);
@@ -1252,6 +1269,22 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     }
     fetch(`/api/entitlements${params.id ? `?scheduleId=${encodeURIComponent(params.id)}` : ""}`).then((response) => response.json()).then(setEntitlements).catch(() => undefined);
   }, [params.id]);
+  // Surface the "save to an account" nudge for device-only schedules unless this
+  // one was already dismissed. Cloud schedules are safe, so they never nudge.
+  useEffect(() => {
+    if (!schedule || CLOUD_SCHEDULE_ID.test(schedule.id)) { setSaveNudgeDismissed(true); return; }
+    try {
+      setSaveNudgeDismissed(window.localStorage.getItem(`leagueweaver:v3:save-nudge:${schedule.id}`) === "dismissed");
+    } catch {
+      setSaveNudgeDismissed(false);
+    }
+  }, [schedule?.id]);
+  const dismissSaveNudge = () => {
+    setSaveNudgeDismissed(true);
+    if (schedule) {
+      try { window.localStorage.setItem(`leagueweaver:v3:save-nudge:${schedule.id}`, "dismissed"); } catch { /* ignore quota */ }
+    }
+  };
   const loadImportHistory = async () => {
     if (!schedule || !CLOUD_SCHEDULE_ID.test(schedule.id)) {
       setImportHistory([]);
@@ -1301,39 +1334,9 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     if (!schedule || !selectedTeamId || schedule.setup.teams.some((team) => team.id === selectedTeamId)) return;
     setSelectedTeamId(schedule.setup.teams[0]?.id ?? "");
   }, [schedule, selectedTeamId]);
-  useEffect(() => {
-    if (!scoreModalOpen) return;
-    const previousOverflow = document.body.style.overflow;
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") closeScoreModal(); };
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [scoreModalOpen, scoreImportPending]);
-  useEffect(() => {
-    if (!scoreModalOpen) return;
-    const dialog = scoreModalRef.current;
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    const focusable = () => dialog ? Array.from(dialog.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter((el) => el.offsetParent !== null) : [];
-    const trapTab = (event: KeyboardEvent) => {
-      if (event.key !== "Tab") return;
-      const items = focusable();
-      if (!items.length) return;
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    };
-    window.addEventListener("keydown", trapTab);
-    const focusTimer = window.setTimeout(() => { const items = focusable(); (items[0] ?? dialog)?.focus(); }, 0);
-    return () => {
-      window.removeEventListener("keydown", trapTab);
-      window.clearTimeout(focusTimer);
-      if (previouslyFocused && document.body.contains(previouslyFocused)) previouslyFocused.focus();
-    };
-  }, [scoreModalOpen]);
+  // Focus trap, scroll lock, focus restore, and Escape are handled by <Modal>.
+  // Escape routing between the score sheet and its nested discard prompt lives in
+  // the modal's onClose handler below.
   useEffect(() => {
     if (!schedule) return;
     latestSchedule.current = schedule;
@@ -1753,25 +1756,50 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const workspaceMainStyle = selectedTeamColor
     ? ({ "--workspace-team-wash": selectedTeamColor } as CSSProperties)
     : undefined;
-  return <main className={`workspace-page ${simulation ? "simulation-mode" : ""}`}>
-    {scoreModalOpen && canAccessScorekeeping && <div className="modal-backdrop score-entry-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeScoreModal(); }}>
-      <section className="score-entry-modal" role="dialog" aria-modal="true" aria-labelledby="score-entry-modal-title" tabIndex={-1} ref={scoreModalRef}>
+  const scoreBarTeamById = new Map(activeSchedule.setup.teams.map((team) => [team.id, team]));
+  const scoreBarRankByTeam = new Map((getEnteringWeekRankSnapshot(activeSchedule, selectedWeek)?.rows ?? []).map((row) => [row.teamId, row.rank]));
+  const scoreBarDivisionById = new Map(activeSchedule.setup.divisions.map((division) => [division.id, division]));
+  const scoreBarWeek = activeSchedule.weeks.find((item) => item.weekNumber === selectedWeek) ?? activeSchedule.weeks[0];
+  return <main className={`workspace-page ${simulation ? "simulation-mode" : ""}`} style={{ "--brand": schedule.setup.color, "--brand-on": readableTextColor(schedule.setup.color) } as CSSProperties}>
+    {scoreModalOpen && canAccessScorekeeping && <Modal
+      className="score-entry-modal"
+      backdropClassName="score-entry-modal-backdrop"
+      labelledBy="score-entry-modal-title"
+      onClose={() => { if (scoreDiscardConfirmOpen) setScoreDiscardConfirmOpen(false); else closeScoreModal(); }}
+    >
         <header>
           <span className="score-entry-modal-mark"><LayoutList /></span>
           <span><small>LEAGUE SCHEDULE</small><h2 id="score-entry-modal-title">Enter Week {selectedWeek} scores</h2></span>
           <button type="button" aria-label="Close score entry" onClick={() => closeScoreModal()}><X /></button>
         </header>
         <div className="score-entry-modal-body"><ScoresView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} onScore={onScore} onFinalizeScores={onFinalizeScores} simulationActive={Boolean(simulation)} simulationResults={simulationResultByGame} /></div>
-        {scoreDiscardConfirmOpen && <div className="score-entry-discard-warning" role="alert"><span><strong>Discard imported score suggestions?</strong><small>Apply the reviewed scores first, or discard the suggestions and close this panel.</small></span><button type="button" onClick={() => setScoreDiscardConfirmOpen(false)}>Keep reviewing</button><button type="button" onClick={discardScoreSuggestions}>Discard</button></div>}
+        {scoreDiscardConfirmOpen && <div className="score-entry-discard-warning" role="alertdialog" aria-modal="true" aria-labelledby="score-discard-title" aria-describedby="score-discard-desc"><span><strong id="score-discard-title">Discard imported score suggestions?</strong><small id="score-discard-desc">Apply the reviewed scores first, or discard the suggestions and close this panel.</small></span><button type="button" autoFocus onClick={() => setScoreDiscardConfirmOpen(false)}>Keep reviewing</button><button type="button" onClick={discardScoreSuggestions}>Discard</button></div>}
         <footer><span><ShieldCheck /><small>Scores save automatically as you enter them.</small></span><button type="button" className="button-primary" onClick={() => closeScoreModal(true)}>Done</button></footer>
-      </section>
-    </div>}
-    <header className="workspace-topbar"><BrandLockup /><div className="workspace-season-switch"><EntityLogo className="mini-league-mark" color={schedule.setup.color} logoUrl={schedule.setup.logoUrl} monogram={resolveInitials(schedule.setup.initials, leagueAcronym(schedule.setup.name))} size={34} /><span><strong>{schedule.setup.name}</strong><small>{schedule.setup.seasonYear} season</small></span></div><div className="workspace-top-actions"><Tooltip label="Send schedule update"><button type="button" aria-label="Send schedule update" disabled={actionBusy !== null} onClick={sendNotification}>{actionBusy === "notify" ? <LoaderCircle className="spin" /> : <Bell />}</button></Tooltip><AccountIdentity identity={entitlements} plan={entitlements.plan} /></div></header>
+    </Modal>}
+    {showRecap && <GenerationReveal schedule={schedule} mode="replay" onComplete={() => setShowRecap(false)} />}
+    <header className="workspace-topbar"><BrandLockup /><div className="workspace-top-actions"><Tooltip label="Send schedule update"><button type="button" aria-label="Send schedule update" disabled={actionBusy !== null} onClick={sendNotification}>{actionBusy === "notify" ? <LoaderCircle className="spin" /> : <Bell />}</button></Tooltip><AccountIdentity identity={entitlements} plan={entitlements.plan} /></div></header>
+    {scoreBarWeek && <WeekScoreBar
+      week={scoreBarWeek}
+      weekCount={activeSchedule.weeks.length}
+      seasonYear={activeSchedule.setup.seasonYear}
+      getTeam={(id) => scoreBarTeamById.get(id)}
+      getDivision={(id) => scoreBarDivisionById.get(id)}
+      getRank={(id) => scoreBarRankByTeam.get(id)}
+      displayCityNames={activeSchedule.setup.display?.cityNames !== false}
+      onSelectWeek={setSelectedWeek}
+      onSelectGame={(gameId) => { openLeagueScheduleWeek(scoreBarWeek.weekNumber); setHighlightedGame({ id: gameId }); }}
+    />}
     <div className="workspace-shell">
-      <aside className="workspace-rail"><nav aria-label="Season workspace">{VIEW_ITEMS.map((item) => { const Icon = item.icon; return <button type="button" key={item.key} aria-label={item.label} title={item.label} className={view === item.key ? "active" : ""} onClick={() => selectView(item)}><Icon /><span>{item.label}</span></button>; })}</nav><div className="rail-bottom"><span>MVP ACCESS</span><p>Unlimited saved schedules</p></div></aside>
+      <aside className="workspace-rail"><nav aria-label="Season workspace">{VIEW_ITEMS.map((item) => { const Icon = item.icon; return <button type="button" key={item.key} aria-label={item.label} title={item.label} className={view === item.key ? "active" : ""} onClick={() => selectView(item)}><Icon /><span>{item.label}</span></button>; })}</nav><div className="rail-bottom"><WorkspaceSwitcher current={{ id: schedule.id, name: schedule.setup.name, seasonYear: schedule.setup.seasonYear, color: schedule.setup.color, logoUrl: schedule.setup.logoUrl, initials: schedule.setup.initials }} signedIn={Boolean(entitlements.signedIn)} /></div></aside>
       <section className={`workspace-main ${selectedTeamColor ? "team-workspace-branded" : ""}`} style={workspaceMainStyle}>
-        <div className="workspace-toolbar"><div><span className="workspace-breadcrumb">{schedule.setup.abbreviation} / {schedule.setup.seasonYear}</span><h1>{currentTitle}</h1></div><div className="toolbar-actions"><button type="button" title={simulation ? "Export simulated CSV" : "Export CSV"} onClick={() => downloadCsv(activeSchedule)}><Download />CSV</button><button type="button" title={simulation ? "Print simulated ESPN entry sheet" : "Print ESPN entry sheet"} onClick={() => downloadSchedulePdf(activeSchedule)}><FileDown />ESPN PDF</button><button type="button" title={simulation ? "Share the real schedule" : "Share schedule"} disabled={actionBusy !== null} onClick={share}>{actionBusy === "share" ? <LoaderCircle className="spin" /> : <Share2 />}Share</button></div></div>
+        <div className="workspace-toolbar"><div><span className="workspace-breadcrumb">{schedule.setup.abbreviation} / {schedule.setup.seasonYear}</span><h1>{currentTitle}</h1></div><div className="toolbar-actions"><button type="button" title="Replay the season recap" onClick={() => setShowRecap(true)}><Sparkles />Recap</button><button type="button" title={simulation ? "Export simulated CSV" : "Export CSV"} onClick={() => downloadCsv(activeSchedule)}><Download />CSV</button><button type="button" title={simulation ? "Print simulated ESPN entry sheet" : "Print ESPN entry sheet"} onClick={() => downloadSchedulePdf(activeSchedule)}><FileDown />ESPN PDF</button><button type="button" title={simulation ? "Share the real schedule" : "Share schedule"} disabled={actionBusy !== null} onClick={share}>{actionBusy === "share" ? <LoaderCircle className="spin" /> : <Share2 />}Share</button></div></div>
         {notice && <div className="workspace-notice"><Cloud />{notice}</div>}
+        {!entitlements.signedIn && !CLOUD_SCHEDULE_ID.test(schedule.id) && !saveNudgeDismissed && <section className="cloud-retry-banner save-nudge-banner" role="status" aria-label="Save this schedule to an account">
+          <ShieldCheck />
+          <span><strong>This schedule is saved on this device only.</strong><small>Create a free account so you never lose it and can open it on any device.</small></span>
+          <button type="button" onClick={() => openSignIn("signup")}><LogIn />Create free account</button>
+          <button type="button" className="save-nudge-dismiss" aria-label="Dismiss save reminder" onClick={dismissSaveNudge}><X /></button>
+        </section>}
         {cloudRetry && <section className="cloud-retry-banner" role="status" aria-label="Cloud autosave needs attention">
           <Cloud />
           <span><strong>Saved on this device.</strong><small>{cloudRetry.reason}</small></span>

@@ -68,6 +68,22 @@ export function formatSplitRecord(record: SplitRecord) {
   return record.ties ? `${record.wins}-${record.losses}-${record.ties}` : `${record.wins}-${record.losses}`;
 }
 
+/** Format an accumulated/derived point figure for display. Fantasy scores are
+ *  commonly decimals, and summing/subtracting them accrues floating-point drift
+ *  (e.g. 1217.3999999999999). Round to a single decimal and group thousands. */
+export function formatPoints(value: number) {
+  return value.toLocaleString("en-US", { maximumFractionDigits: 1 });
+}
+
+/** Format a point differential with an explicit sign and a tone for styling.
+ *  A value that rounds to zero is neutral (plain "0", no "+"), never green. */
+export function formatDifferential(value: number): { text: string; tone: "positive" | "negative" | "neutral" } {
+  const rounded = Math.round(value * 10) / 10;
+  if (rounded === 0) return { text: "0", tone: "neutral" };
+  if (rounded > 0) return { text: `+${formatPoints(rounded)}`, tone: "positive" };
+  return { text: formatPoints(rounded), tone: "negative" };
+}
+
 function updateRecord(record: SplitRecord, score: number, opponentScore: number) {
   if (score === opponentScore) record.ties += 1;
   else if (score > opponentScore) record.wins += 1;
