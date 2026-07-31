@@ -1185,6 +1185,14 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const [platformSyncLoading, setPlatformSyncLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState<"share" | "notify" | null>(null);
   const [showRecap, setShowRecap] = useState(false);
+  // Deep link from the account page (?recap=1) opens the recap straight away.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("recap") !== "1") return;
+    setShowRecap(true);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("recap");
+    window.history.replaceState({}, "", url);
+  }, []);
   const [cloudRetry, setCloudRetry] = useState<CloudRetryState | null>(null);
   const [importHistory, setImportHistory] = useState<ImportHistoryEvent[]>([]);
   const [importHistoryLoading, setImportHistoryLoading] = useState(false);

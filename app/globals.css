@@ -780,6 +780,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .reveal-team { display: inline-flex; flex-direction: column; align-items: center; gap: 10px; max-width: min(92vw, 460px); }
 .reveal-team b { filter: brightness(1.55) saturate(1.1); line-height: 1.04; }
 .reveal-crest { border-radius: var(--radius-lg); font-size: var(--text-3xl); box-shadow: 0 0 0 3px rgba(255, 255, 255, .16), 0 14px 30px rgba(0, 0, 0, .38); animation: revealCrest 560ms cubic-bezier(.34, 1.56, .64, 1) both; }
+/* Monogram font must scale with the crest box, or 3-letter marks clip in the smaller crests. */
+.reveal-matchup-sm .reveal-crest { font-size: var(--text-md); box-shadow: 0 0 0 2px rgba(255, 255, 255, .16), 0 8px 20px rgba(0, 0, 0, .34); }
+.reveal-solo .reveal-crest { font-size: var(--text-2xl); }
 .reveal-matchup em { align-self: center; font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-lg); font-style: normal; font-weight: var(--w-bold); color: rgba(255, 255, 255, .55); }
 /* Small headliner (slate cards): compact side-by-side row. */
 .reveal-matchup-sm { flex-direction: row; flex-wrap: wrap; gap: 6px 18px; }
@@ -799,7 +802,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .reveal-statline-teams { display: inline-flex; }
 .reveal-statline-teams > span + span { margin-left: -10px; }
 .reveal-statline .reveal-tag { grid-column: 1 / -1; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .13em; text-transform: uppercase; color: var(--gold); }
-.reveal-statline .reveal-crest { border-radius: 8px; box-shadow: none; animation: none; }
+.reveal-statline .reveal-crest { border-radius: 8px; box-shadow: none; animation: none; font-size: var(--text-2xs); }
 .reveal-statline b { font-size: var(--text-xl); font-weight: var(--w-bold); color: #fff; line-height: 1.1; }
 .reveal-metric { justify-self: end; font-size: var(--text-sm); font-weight: var(--w-medium); color: rgba(255, 255, 255, .68); white-space: nowrap; }
 .reveal-solo { display: inline-flex; flex-direction: column; align-items: center; gap: 12px; }
@@ -837,7 +840,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .reveal-field-div { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .reveal-field-div-name { font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .14em; text-transform: uppercase; }
 .reveal-field-div-teams { display: inline-flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
-.reveal-field-div-teams .reveal-crest { box-shadow: none; animation: none; }
+.reveal-field-div-teams .reveal-crest { box-shadow: none; animation: none; font-size: var(--text-xs); }
 /* Persistent left / right story navigation. */
 .reveal-arrow { position: fixed; top: 50%; transform: translateY(-50%); z-index: 4; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .22); background: rgba(255, 255, 255, .08); color: #fff; cursor: pointer; transition: background var(--transition); }
 .reveal-arrow:hover:not(:disabled) { background: rgba(255, 255, 255, .2); }
@@ -851,6 +854,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   /* safe-center + scroll so a tall slate card never clips off the top of a short phone */
   .reveal-overlay { padding: 16px 14px 88px; align-items: safe center; overflow-y: auto; }
   .reveal-stage { gap: 20px; }
+  .reveal-matchup-sm { flex-direction: column; gap: 6px; }
+  .reveal-matchup-sm .reveal-team { max-width: 82vw; }
   .reveal-segments { width: min(320px, 88%); }
   .reveal-value { font-size: clamp(30px, 8.5vw, 46px); }
   .reveal-window-range { gap: 8px 12px; }
