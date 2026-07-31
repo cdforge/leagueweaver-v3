@@ -633,6 +633,18 @@ export function LeagueBuilder() {
   const [avatarNudgeState, setAvatarNudgeState] = useState<"idle" | "saving" | "saved">("idle");
   const avatarNudgeDismissed = useRef(false);
 
+  const startNewLeague = () => {
+    const blankSetup = createBlankSetup();
+    setSetup(blankSetup);
+    logoBaseline.current = new Map(setupLogoEntries(blankSetup));
+    setActiveSavedLeagueId(null);
+    setLoadedPreset(null);
+    dismissedLogoFingerprint.current = null;
+    savePromptResolved.current = false;
+    setLeagueSaveState(null);
+    setStep(1);
+  };
+
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("start") === "new") {
       startNewLeague();
@@ -773,17 +785,6 @@ export function LeagueBuilder() {
       return;
     }
     applySavedLeaguePreset(preset, false);
-  };
-  const startNewLeague = () => {
-    const blankSetup = createBlankSetup();
-    setSetup(blankSetup);
-    logoBaseline.current = new Map(setupLogoEntries(blankSetup));
-    setActiveSavedLeagueId(null);
-    setLoadedPreset(null);
-    dismissedLogoFingerprint.current = null;
-    savePromptResolved.current = false;
-    setLeagueSaveState(null);
-    setStep(1);
   };
   // Soft nudge: a signed-in commissioner with no avatar just uploaded a league logo — offer it as their profile image.
   const suggestAvatarFromLogo = (logoUrl: string) => {
