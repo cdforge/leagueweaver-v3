@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -23,6 +23,13 @@ const barlowCondensed = localFont({
 export const metadata: Metadata = {
   title: "League Weaver | Fair fantasy schedules",
   description: "Build a fair fantasy football schedule and run your season from one commissioner workspace.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#117a45",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

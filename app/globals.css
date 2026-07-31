@@ -47,9 +47,9 @@ body {
 .not-found-copy > span { color: var(--field-dark); font-size: 12px; font-weight: 850; text-transform: uppercase; }
 .not-found-copy h1 { margin: 7px 0 10px; font-family: var(--font-barlow-condensed), sans-serif; font-size: 46px; line-height: .98; }
 .not-found-copy p { max-width: 450px; margin: 0; color: var(--muted); font-size: 15px; line-height: 1.55; }
-.not-found-copy a { width: fit-content; min-height: 46px; display: inline-flex; align-items: center; gap: 8px; margin-top: 24px; border-radius: 6px; background: var(--field); color: white; padding: 0 16px; font-size: 13px; font-weight: 800; }
-.not-found-copy a:hover { background: var(--field-dark); }
-.not-found-copy a svg { width: 18px; height: 18px; }
+.not-found-copy a, .not-found-copy button { width: fit-content; min-height: 46px; display: inline-flex; align-items: center; gap: 8px; margin-top: 24px; border: 0; border-radius: 6px; background: var(--field); color: white; padding: 0 16px; font-size: 13px; font-weight: 800; cursor: pointer; }
+.not-found-copy a:hover, .not-found-copy button:hover { background: var(--field-dark); }
+.not-found-copy a svg, .not-found-copy button svg { width: 18px; height: 18px; }
 button, input, textarea, select { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button { letter-spacing: 0; }
@@ -99,10 +99,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .wizard-progress-summary > em { color: var(--muted); font-size: 9px; font-style: normal; font-weight: 750; white-space: nowrap; }
 .wizard-progress-summary > div { grid-column: 1 / -1; height: 5px; overflow: hidden; border-radius: 3px; background: var(--line); }
 .wizard-progress-summary > div > i { display: block; height: 100%; border-radius: inherit; background: var(--field); transition: width 220ms ease; }
-.wizard-progress-track { --wizard-progress-ratio: 0; position: relative; display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); list-style: none; margin: 0; padding: 0; white-space: nowrap; }
-.wizard-progress-track::before, .wizard-progress-track::after { content: ""; position: absolute; top: 20px; left: 5.555%; height: 3px; border-radius: 2px; }
-.wizard-progress-track::before { right: 5.555%; background: var(--line); }
-.wizard-progress-track::after { z-index: 1; width: calc((100% - 11.11%) * var(--wizard-progress-ratio)); background: var(--field); transition: width 220ms ease; }
+.wizard-progress-track { --wizard-progress-ratio: 0; position: relative; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); list-style: none; margin: 0; padding: 0; white-space: nowrap; }
+.wizard-progress-track::before, .wizard-progress-track::after { content: ""; position: absolute; top: 20px; left: 6.25%; height: 3px; border-radius: 2px; }
+.wizard-progress-track::before { right: 6.25%; background: var(--line); }
+.wizard-progress-track::after { z-index: 1; width: calc((100% - 12.5%) * var(--wizard-progress-ratio)); background: var(--field); transition: width 220ms ease; }
 .wizard-progress-track li { min-width: 0; }
 .wizard-progress-track button { position: relative; z-index: 2; width: 100%; min-width: 0; min-height: 66px; border: 0; background: transparent; color: var(--muted); display: grid; align-content: start; justify-items: center; gap: 7px; padding: 3px 4px 0; font-family: inherit; cursor: default; }
 .wizard-progress-track button.complete, .wizard-progress-track button.active { cursor: pointer; }
@@ -2092,7 +2092,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .icon-button:hover { border-color: var(--line); background: var(--surface); color: var(--ink); }
 .icon-button svg { width: 19px; }
 .import-modal-body { min-height: 290px; overflow: auto; padding: 26px 28px; }
-.sync-mode-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+.sync-mode-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 320px)); gap: 9px; }
 .sync-mode-grid button { min-height: 74px; border: 1px solid var(--line); border-radius: var(--radius); background: white; padding: 10px; display: flex; align-items: center; gap: 9px; text-align: left; cursor: pointer; }
 .sync-mode-grid button.active { border-color: var(--field); background: var(--field-soft); box-shadow: inset 0 0 0 1px rgba(17, 122, 69, .14); }
 .sync-mode-grid svg { width: 20px; color: var(--field); }
@@ -2608,12 +2608,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .not-found-mark strong { font-size: 36px; }
   .not-found-copy h1 { font-size: 39px; }
   .not-found-copy p { font-size: 14px; }
-  .not-found-copy a { width: 100%; justify-content: center; }
+  .not-found-copy a, .not-found-copy button { width: 100%; justify-content: center; }
   .page-width { width: min(100% - 24px, 600px); }
   .topbar-row { min-height: 60px; }
   .brand-lockup img { width: 34px; height: 34px; }
   .brand-lockup strong { font-size: 18px; }
-  .topnav > a:first-child { display: none; }
   .topnav .account-identity { width: 44px; padding: 0; justify-content: center; }
   .topnav .account-link.account-identity > span { display: none; }
   .topnav .account-identity span:not(.account-avatar) { display: none !important; }
@@ -2624,7 +2623,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .builder-heading-row h2 { font-size: 34px; }
   .builder-heading-row > p { margin-top: 8px; text-align: left; }
   .wizard-progress { overflow: hidden; margin-top: 22px; border: 1px solid var(--line); border-radius: 6px; background: white; padding-top: 12px; }
-  .wizard-progress-track { width: 100%; min-width: 0; grid-template-columns: repeat(9, minmax(56px, 1fr)); overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; scroll-snap-type: x proximity; }
+  .wizard-progress-track { width: 100%; min-width: 0; grid-template-columns: repeat(8, minmax(56px, 1fr)); overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; scroll-snap-type: x proximity; }
   .wizard-progress-track::before, .wizard-progress-track::after { top: 18px; left: 28px; }
   .wizard-progress-track::before { right: 28px; }
   .wizard-progress-track::after { width: calc((100% - 56px) * var(--wizard-progress-ratio)); }
@@ -2993,7 +2992,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .season-save-conflict { width: 100%; border-width: 1px 0 0; border-radius: 8px 8px 0 0; }
   .season-save-conflict > div { padding: 22px 16px; }
   .season-save-conflict > footer { display: grid; grid-template-columns: 1fr 1fr; padding-inline: 12px; }
-  .import-modal { width: 100%; height: 100%; max-height: none; border: 0; border-radius: 0; }
+  .import-modal { width: 100%; height: 100dvh; max-height: none; border: 0; border-radius: 0; }
+  .import-modal-actions { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
   .import-modal-body { padding: 20px 16px; }
   .sync-mode-grid { grid-template-columns: 1fr; }
   .import-form-grid { grid-template-columns: 1fr; }
@@ -3007,7 +3007,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .import-review-row input { min-height: 44px; }
 }
 
-@media (max-width: 390px) {
+@media (max-width: 560px) {
   .matchup-card-main { grid-template-columns: minmax(0, 1fr); gap: 9px; }
   .matchup-card-main > .team-identity-block { min-height: 56px; border: 1px solid var(--line); border-radius: 6px; background: rgba(255,255,255,.72); padding: 7px; }
   .team-identity-block, .team-identity-block.without-record,
@@ -3183,4 +3183,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .workspace-topbar, .workspace-rail, .workspace-toolbar, .ad-wrap { display: none !important; }
   .workspace-shell { display: block; }
   .workspace-content { width: 100%; margin: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
