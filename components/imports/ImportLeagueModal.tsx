@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowLeft, Check, FileSpreadsheet, LoaderCircle, RefreshCw, ShieldCheck, Upload, X } from "lucide-react";
+import { AlertCircle, ArrowLeft, Check, FileSpreadsheet, LoaderCircle, Plus, RefreshCw, ShieldCheck, Trash2, Upload, X } from "lucide-react";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
 import { apiErrorMessage } from "@/lib/apiErrors";
@@ -15,8 +15,8 @@ const MAX_PASTE_IMPORT_CHARS = 50_000;
 const MAX_IMPORT_TEAMS = 16;
 
 const SOURCE_META: Record<ImportSource, { title: string; description: string; icon: React.ReactNode }> = {
-  sleeper: { title: "Import from Sleeper", description: "Use a league ID or Sleeper username. No password needed.", icon: <img src="/providers/sleeper.ico" alt="" /> },
-  espn: { title: "Connect ESPN", description: "Paste a league URL or ID. Public leagues work first; private history can use guided cookie permission.", icon: <img src="/providers/espn.ico" alt="" /> },
+  sleeper: { title: "Import from Sleeper", description: "Use a league ID or Sleeper username. No password needed.", icon: <img src="/providers/sleeper.png" alt="" /> },
+  espn: { title: "Connect ESPN", description: "Paste a league URL or ID. Public leagues work first; private history can use guided cookie permission.", icon: <img src="/providers/espn.png" alt="" /> },
   csv: { title: "Import CSV roster", description: "Paste rows from a spreadsheet. Headers are optional.", icon: <FileSpreadsheet /> },
   paste: { title: "Paste a team list", description: "Use one team per line or comma-separated rows.", icon: <FileSpreadsheet /> },
   screenshot: { title: "Import a screenshot", description: "Upload a clear league or weekly-score screenshot, then review every result.", icon: <Upload /> },
@@ -55,7 +55,11 @@ function saveEspnImport(identifier: string, preview: ImportPreview) {
     updatedAt: new Date().toISOString(),
   };
   const next = [saved, ...loadSavedEspnImports().filter((item) => item.id !== saved.id && item.identifier !== identifier)].slice(0, 5);
-  window.localStorage.setItem(ESPN_IMPORT_HISTORY_KEY, JSON.stringify(next));
+  try {
+    window.localStorage.setItem(ESPN_IMPORT_HISTORY_KEY, JSON.stringify(next));
+  } catch {
+    // Ignore quota / private-mode write failures — the import still succeeds.
+  }
   return next;
 }
 
@@ -117,17 +121,18 @@ function cleanDivisionName(value?: string) {
   return value?.replace(/\s+division$/i, "").trim() || "";
 }
 
-function TeamPreviewRow({ team, index, source, onChange }: { team: ImportTeam; index: number; source: ImportSource; onChange: (next: ImportTeam) => void }) {
+function TeamPreviewRow({ team, index, source, onChange, onRemove, canRemove }: { team: ImportTeam; index: number; source: ImportSource; onChange: (next: ImportTeam) => void; onRemove: () => void; canRemove: boolean }) {
   const abbreviation = team.name.split(/\s+/).filter(Boolean).slice(0, 3).map((word) => word[0]).join("").toUpperCase() || `T${index + 1}`;
   const showVenue = source !== "espn";
   return (
     <div className="import-review-row">
       <IdentityColorPicker compact showAbbreviation={false} name={team.name} abbreviation={abbreviation} color={team.color ?? TEAM_COLORS[index % TEAM_COLORS.length]} colorSuggestions={team.colorSuggestions} logoUrl={team.logoUrl} onChange={(identity) => onChange({ ...team, ...identity })} />
       <input aria-label={`Imported team ${index + 1} city`} value={team.city ?? ""} placeholder="City" onChange={(event) => onChange({ ...team, city: event.target.value })} />
-      <input aria-label={`Imported team ${index + 1} name`} value={team.name} onChange={(event) => onChange({ ...team, name: event.target.value })} />
+      <input aria-label={`Imported team ${index + 1} name`} value={team.name} placeholder="Team name" onChange={(event) => onChange({ ...team, name: event.target.value })} />
       <input aria-label={`${team.name} manager`} value={team.manager ?? ""} placeholder="Manager" onChange={(event) => onChange({ ...team, manager: event.target.value })} />
       <input aria-label={`${team.name} division`} value={cleanDivisionName(team.division)} placeholder="Division" onChange={(event) => onChange({ ...team, division: cleanDivisionName(event.target.value) })} />
       {showVenue && <input aria-label={`${team.name} venue`} value={team.stadium ?? ""} placeholder="Home venue" onChange={(event) => onChange({ ...team, stadium: event.target.value })} />}
+      <button type="button" className="import-review-remove" aria-label={`Remove ${team.name || `team ${index + 1}`}`} title={canRemove ? "Remove team" : "Keep at least 8 teams"} disabled={!canRemove} onClick={onRemove}><Trash2 /></button>
     </div>
   );
 }
@@ -148,19 +153,38 @@ export function ImportLeagueModal({ source, setup, onClose, onConfirm }: {
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [savedEspnImports, setSavedEspnImports] = useState<SavedEspnImport[]>([]);
   const [loading, setLoading] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const manualIdCounter = useRef(0);
   const meta = SOURCE_META[source];
+  const dismiss = () => { abortRef.current?.abort(); onClose(); };
 
   useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
     closeRef.current?.focus();
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const handleKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { abortRef.current?.abort(); onClose(); return; }
+      if (event.key !== "Tab") return;
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const items = Array.from(dialog.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter((el) => el.offsetParent !== null);
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
     window.addEventListener("keydown", handleKey);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKey);
+      abortRef.current?.abort();
+      if (previouslyFocused && document.body.contains(previouslyFocused)) previouslyFocused.focus();
     };
   }, [onClose]);
   useEffect(() => {
@@ -176,13 +200,15 @@ export function ImportLeagueModal({ source, setup, onClose, onConfirm }: {
   const duplicateMessage = duplicatePreviewNames.length ? "Rename duplicate teams before importing. Duplicate names make score entry, standings, and exports confusing." : null;
   const canStart = source === "csv" || source === "paste" ? pasteValue.trim().length > 0 : source === "screenshot" ? true : identifier.trim().length > 0;
   const reviewColumns = preview?.provider === "espn"
-    ? "78px 115px minmax(150px,1.2fr) minmax(120px,.9fr) minmax(110px,.8fr)"
-    : "78px 115px minmax(150px,1.2fr) minmax(120px,.9fr) minmax(110px,.8fr) minmax(140px,1fr)";
+    ? "78px 115px minmax(150px,1.2fr) minmax(120px,.9fr) minmax(110px,.8fr) 40px"
+    : "78px 115px minmax(150px,1.2fr) minmax(120px,.9fr) minmax(110px,.8fr) minmax(140px,1fr) 40px";
 
   const createPreview = async () => {
     if (loading) return;
     setLoading(true);
     setError(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       if (source === "csv" || source === "paste") {
         setPreview(parsePastedRoster(pasteValue, source));
@@ -193,6 +219,7 @@ export function ImportLeagueModal({ source, setup, onClose, onConfirm }: {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier, seasonYear: Number(season), swid, espnS2 }),
+        signal: controller.signal,
       });
       const result = await response.json().catch(() => ({})) as ImportPreview & { error?: string };
       if (!response.ok) throw new Error(apiErrorMessage(response.status, result.error, "The league could not be imported."));
@@ -200,9 +227,10 @@ export function ImportLeagueModal({ source, setup, onClose, onConfirm }: {
       if (source === "espn") setSavedEspnImports(saveEspnImport(identifier.trim(), result));
       setPreview(result);
     } catch (caught) {
+      if (controller.signal.aborted) return;
       setError(caught instanceof Error ? caught.message : "The league could not be imported.");
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   };
 
@@ -215,33 +243,48 @@ export function ImportLeagueModal({ source, setup, onClose, onConfirm }: {
     }
     setLoading(true);
     setError(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       const imageDataUrl = await readImage(file);
       const response = await fetch("/api/import/screenshot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageDataUrl, seasonYear: Number(season) }),
+        signal: controller.signal,
       });
       const result = await response.json().catch(() => ({})) as ImportPreview & { error?: string };
       if (!response.ok) throw new Error(apiErrorMessage(response.status, result.error, "The screenshot could not be read."));
       setPreview(result);
     } catch (caught) {
+      if (controller.signal.aborted) return;
       setError(caught instanceof Error ? caught.message : "The screenshot could not be read.");
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   };
 
   const updateTeam = (index: number, next: ImportTeam) => setPreview((current) => current ? ({ ...current, teams: current.teams.map((team, teamIndex) => teamIndex === index ? next : team) }) : current);
-  const customYearOptions = useMemo(() => [setup.seasonYear - 1, setup.seasonYear, setup.seasonYear + 1].map((year) => ({ value: String(year), label: `${year} season` })), [setup.seasonYear]);
+  const removeTeam = (index: number) => setPreview((current) => current ? ({ ...current, teams: current.teams.filter((_, teamIndex) => teamIndex !== index) }) : current);
+  const addTeam = () => setPreview((current) => {
+    if (!current || current.teams.length >= MAX_IMPORT_TEAMS) return current;
+    const position = current.teams.length;
+    const blank: ImportTeam = { providerId: `manual-${manualIdCounter.current++}`, city: "", name: "", manager: "", division: "", rank: position + 1, stadium: "", color: TEAM_COLORS[position % TEAM_COLORS.length] };
+    return { ...current, teams: [...current.teams, blank] };
+  });
+  const customYearOptions = useMemo(() => {
+    const years: number[] = [];
+    for (let year = setup.seasonYear + 1; year >= setup.seasonYear - 9; year -= 1) years.push(year);
+    return years.map((year) => ({ value: String(year), label: `${year} season` }));
+  }, [setup.seasonYear]);
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !loading && onClose()}>
-      <section className="import-modal" role="dialog" aria-modal="true" aria-labelledby="import-modal-title">
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) dismiss(); }}>
+      <section className="import-modal" role="dialog" aria-modal="true" aria-labelledby="import-modal-title" aria-busy={loading} ref={dialogRef}>
         <header className="import-modal-head">
           <span className={`import-provider-mark ${source}`}>{meta.icon}</span>
           <div><span className="step-kicker">League import</span><h2 id="import-modal-title">{meta.title}</h2><p>{meta.description}</p></div>
-          <button ref={closeRef} type="button" className="icon-button" aria-label="Close import" onClick={onClose}><X /></button>
+          <button ref={closeRef} type="button" className="icon-button" aria-label="Close import" onClick={dismiss}><X /></button>
         </header>
 
         {!preview ? (
@@ -272,7 +315,12 @@ export function ImportLeagueModal({ source, setup, onClose, onConfirm }: {
 
             {(source === "csv" || source === "paste") && <label className="paste-field"><span>Roster rows</span><textarea autoFocus value={pasteValue} onChange={(event) => setPasteValue(event.target.value)} placeholder={"City, Team, Manager, Division, Rank, Venue\nBrooklyn, Sunday Architects, Anthony, North, 1, Foundry Field"} /><small>Tip: paste directly from Google Sheets or Excel. Tabs and commas both work.</small></label>}
 
-            {source === "screenshot" && <div className="screenshot-drop">
+            {source === "screenshot" && <div
+              className={`screenshot-drop${dragging ? " is-dragging" : ""}`}
+              onDragOver={(event) => { event.preventDefault(); if (!loading) setDragging(true); }}
+              onDragLeave={(event) => { if (event.currentTarget === event.target) setDragging(false); }}
+              onDrop={(event) => { event.preventDefault(); setDragging(false); if (!loading) handleScreenshot(event.dataTransfer.files?.[0]); }}
+            >
               <input id="screenshot-file" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => handleScreenshot(event.target.files?.[0])} />
               <label htmlFor="screenshot-file"><Upload /><strong>Choose a league screenshot</strong><span>PNG, JPG, or WebP up to 8 MB</span></label>
               <div className="screenshot-safety"><ShieldCheck />Nothing is saved until you review and confirm.</div>
@@ -295,14 +343,18 @@ export function ImportLeagueModal({ source, setup, onClose, onConfirm }: {
             </div>}
             {(rosterMessage || duplicateMessage || preview.warnings.length > 0 || preview.provider === "espn") && <div className="import-warning"><AlertCircle /><div>{rosterMessage && <strong>{rosterMessage}</strong>}{duplicateMessage && <strong>{duplicateMessage}</strong>}{preview.provider === "espn" && <strong>Home venues are added after import on the Teams step.</strong>}{preview.warnings.map((warning) => <span key={warning}>{warning}</span>)}</div></div>}
             <div className="import-review-table" style={{ "--import-review-columns": reviewColumns } as React.CSSProperties}>
-              <div className="import-review-head"><span>Logo/color</span><span>City</span><span>Team name</span><span>Manager</span><span>Division</span>{preview.provider !== "espn" && <span>Venue</span>}</div>
-              <div className="import-review-list">{preview.teams.map((team, index) => <TeamPreviewRow key={team.providerId ?? index} team={team} index={index} source={preview.provider} onChange={(next) => updateTeam(index, next)} />)}</div>
+              <div className="import-review-head"><span>Logo/color</span><span>City</span><span>Team name</span><span>Manager</span><span>Division</span>{preview.provider !== "espn" && <span>Venue</span>}<span aria-hidden="true" /></div>
+              <div className="import-review-list">{preview.teams.map((team, index) => <TeamPreviewRow key={team.providerId ?? index} team={team} index={index} source={preview.provider} onChange={(next) => updateTeam(index, next)} onRemove={() => removeTeam(index)} canRemove={preview.teams.length > 8} />)}</div>
+            </div>
+            <div className="import-review-foot">
+              <button type="button" className="import-review-add" disabled={preview.teams.length >= MAX_IMPORT_TEAMS} onClick={addTeam}><Plus />Add a team</button>
+              <small>{preview.teams.length} of 8–16 teams · League Weaver needs an even roster.</small>
             </div>
           </div>
         )}
 
         <footer className="import-modal-actions">
-          <button type="button" className="button-secondary visible" disabled={loading} onClick={preview ? () => setPreview(null) : onClose}>{preview ? <><ArrowLeft />Back</> : "Cancel"}</button>
+          <button type="button" className="button-secondary visible" disabled={loading} onClick={preview ? () => setPreview(null) : dismiss}>{preview ? <><ArrowLeft />Back</> : "Cancel"}</button>
           {!preview && source !== "screenshot" && <button type="button" className="button-primary" disabled={!canStart || loading} onClick={createPreview}>{loading ? <><LoaderCircle className="spin" />Importing…</> : "Review import"}</button>}
           {preview && <button type="button" className="button-primary" disabled={!supported || Boolean(duplicateMessage) || preview.teams.some((team) => !team.name.trim())} onClick={() => onConfirm(preview)}><Check />Use this roster</button>}
         </footer>

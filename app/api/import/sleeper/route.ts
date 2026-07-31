@@ -45,6 +45,9 @@ export async function POST(request: Request) {
     };
     return NextResponse.json(preview);
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "The Sleeper import failed." }, { status: 400 });
+    const raw = error instanceof Error ? error.message : "";
+    const looksTechnical = !raw || /fetch|json|token|undefined|network|econn|timeout|failed to|cannot read|is not |\bat \b/i.test(raw);
+    const message = looksTechnical ? "That Sleeper league could not be imported. Check the league ID or username and try again." : raw;
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 }
