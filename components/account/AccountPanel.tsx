@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CreditCard, Eye, EyeOff, FolderHeart, History, ImagePlus, LoaderCircle, LogOut, Pencil, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CreditCard, Eye, EyeOff, FolderHeart, History, ImagePlus, LoaderCircle, LogOut, Pencil, RotateCcw, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
 import { analyzeIdentityImage } from "@/lib/imageColors";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -358,7 +358,6 @@ export function AccountPanel() {
           </span>
           <div className="account-league-actions">
             <button type="button" className="button-secondary account-edit-league" onClick={() => setEditingPreset(preset)}><Pencil />Edit</button>
-            <Link href={`/?savedLeague=${encodeURIComponent(preset.id)}`} className="button-secondary account-use-league">Use in builder</Link>
           </div>
         </article>;
       })}</div>{renderPagination(leaguePage, savedLeagues.length, setLeaguePage)}</> : <div className="account-empty"><FolderHeart /><span><strong>No saved leagues yet.</strong><small>Save one from the builder after confirming its teams and divisions.</small></span></div>}
@@ -381,6 +380,7 @@ export function AccountPanel() {
               </span>
             </Link>
             <div className="account-season-actions">
+              <Link className="account-season-recap" href={`/season/${season.id}?recap=1`} aria-label={`Play the season recap for ${season.title}`}><Sparkles aria-hidden="true" />Recap</Link>
               <em className={season.editable ? "editable" : "view-only"}>{season.editable ? "EDITABLE" : "VIEW ONLY"}</em>
               <button
                 type="button"
