@@ -3335,6 +3335,10 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .workspace-top-actions .account-identity-copy { display: none; }
   .workspace-shell { display: block; }
   .workspace-rail { position: fixed; z-index: 25; top: auto; bottom: 0; left: 0; right: 0; width: auto; height: calc(62px + env(safe-area-inset-bottom)); border-right: 0; border-top: 1px solid #23362c; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); }
+  /* The score-bar sticky-sidebar override (`.has-scorebar .workspace-rail`, top/height for
+     the desktop rail) also wins here and would blow the mobile bottom bar back to full height,
+     covering the content — pin it back to the bottom bar. */
+  .workspace-page.has-scorebar .workspace-rail { top: auto; height: calc(62px + env(safe-area-inset-bottom)); }
   .workspace-rail nav { width: 100%; display: flex; gap: 1px; overflow-x: auto; }
   .workspace-rail nav button { min-width: 44px; min-height: 48px; flex: 0 0 44px; flex-direction: column; gap: 2px; }
   .workspace-rail nav button.active { flex-basis: 88px; }
