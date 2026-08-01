@@ -6,7 +6,7 @@ import { CheckCircle2, FileDown, RefreshCw, Trophy } from "lucide-react";
 
 export default function BuildPage() {
   return (
-    <main>
+    <main className="build-page">
       <WelcomeGate />
       <AppHeader />
       <LeagueBuilder />

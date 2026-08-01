@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { MatchupCard } from "@/components/season/MatchupPresentation";
 import { WeekSelector } from "@/components/season/WeekSelector";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { getMatchupRatingRange, getMatchupSignal } from "@/lib/matchups";
 import type { Division, ScheduledGame, Team } from "@/lib/types";
@@ -103,7 +105,10 @@ const WEEK_RANK = (() => {
 const PRESEASON_RECORD = { overall: "0-0", division: "0-0" };
 
 export function SchedulePreview() {
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"week" | "team">("week");
   const [week, setWeek] = useState(1);
+  const [teamId, setTeamId] = useState(TEAMS.Decoupes.id);
   const games = SCHEDULE[week - 1];
   const teamById = useMemo(() => new Map(Object.values(TEAMS).map((team) => [team.id, team])), []);
   const weeks = useMemo(() => SCHEDULE.map((_, index) => ({
@@ -112,54 +117,104 @@ export function SchedulePreview() {
     matchupRank: WEEK_RANK.get(index),
     isThanksgiving: index + 1 === THANKSGIVING_WEEK,
   })), []);
+  // Teams as select options (seed order) and one selected team's game each week.
+  const teamOptions = useMemo(() => Object.values(TEAMS)
+    .sort((left, right) => left.overallRank - right.overallRank)
+    .map((team) => ({ value: team.id, label: `${team.city} ${team.name}`, logoUrl: team.logoUrl, swatch: team.color, monogram: `${team.city[0] ?? ""}${team.name[0] ?? ""}`.toUpperCase() })), []);
+  const teamGames = useMemo(() => SCHEDULE
+    .map((weekGames, index) => {
+      const game = weekGames.find((entry) => entry.homeTeamId === teamId || entry.awayTeamId === teamId);
+      return game ? { week: index + 1, game } : null;
+    })
+    .filter((entry): entry is { week: number; game: ScheduledGame } => entry !== null), [teamId]);
+
+  const renderGame = (game: ScheduledGame, weekLabel?: string) => {
+    const away = teamById.get(game.awayTeamId)!;
+    const home = teamById.get(game.homeTeamId)!;
+    const featured = !weekLabel && game.gameNumber === 1;
+    return (
+      <MatchupCard
+        key={game.id}
+        game={game}
+        away={away}
+        home={home}
+        awayDivision={DIVISIONS[away.divisionId as DivisionKey]}
+        homeDivision={DIVISIONS[home.divisionId as DivisionKey]}
+        awayRank={away.overallRank}
+        homeRank={home.overallRank}
+        awayRecord={PRESEASON_RECORD}
+        homeRecord={PRESEASON_RECORD}
+        signal={getMatchupSignal(game, undefined, RATING_RANGE)}
+        featured={featured}
+        featuredLabel={week === THANKSGIVING_WEEK && featured ? "Thanksgiving" : "GOTW"}
+        gameLabel={weekLabel ?? (featured ? undefined : `Game ${game.gameNumber}`)}
+        showCity
+        showVenue
+      />
+    );
+  };
+
+  const featuredGame = games.find((game) => game.gameNumber === 1) ?? games[0];
+
   return (
-    <div className="welcome-showcase-frame" role="group" aria-label="Prodigies vs Esteemed FFL 2026 schedule — select a week to preview its matchups">
+    <div className={`welcome-showcase-frame ${open ? "is-open" : "is-collapsed"}`} role="group" aria-label="Prodigies vs Esteemed FFL 2026 schedule — open to preview each week's matchups">
       <span className="welcome-showcase-bar" aria-hidden="true"><i></i><i></i><i></i></span>
       <div className="welcome-preview">
         <div className="wp-topline">
           <EntityLogo className="wp-league-mark" color={LEAGUE.color} logoUrl={LEAGUE.logo} monogram="PVE" size={32} />
           <strong>{LEAGUE.name}</strong>
           <span>2026 &middot; 14 weeks</span>
+          <button type="button" className="wp-preview-toggle" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+            {open ? "Close" : "Preview"}
+            <ChevronDown aria-hidden="true" />
+          </button>
         </div>
-        <WeekSelector
-          weeks={weeks}
-          totalWeeks={SCHEDULE.length}
-          selectedWeek={week}
-          onSelect={setWeek}
-          ariaLabel="Schedule week"
-        />
-        <div className="wp-weekhead">
-          <b>{String(week).padStart(2, "0")}</b>
-          <span><strong>Week {week}{week === THANKSGIVING_WEEK ? " · Thanksgiving" : ""}</strong><small>{WEEK_DATES[week - 1]} &middot; 2026</small></span>
-          <em>{games.length} games</em>
-        </div>
-        <div className="matchup-list matchup-card-list">
-          {games.map((game) => {
-            const away = teamById.get(game.awayTeamId)!;
-            const home = teamById.get(game.homeTeamId)!;
-            const featured = game.gameNumber === 1;
-            return (
-              <MatchupCard
-                key={game.id}
-                game={game}
-                away={away}
-                home={home}
-                awayDivision={DIVISIONS[away.divisionId as DivisionKey]}
-                homeDivision={DIVISIONS[home.divisionId as DivisionKey]}
-                awayRank={away.overallRank}
-                homeRank={home.overallRank}
-                awayRecord={PRESEASON_RECORD}
-                homeRecord={PRESEASON_RECORD}
-                signal={getMatchupSignal(game, undefined, RATING_RANGE)}
-                featured={featured}
-                featuredLabel={week === THANKSGIVING_WEEK && featured ? "Thanksgiving" : "GOTW"}
-                gameLabel={featured ? undefined : `Game ${game.gameNumber}`}
-                showCity
-                showVenue
-              />
-            );
-          })}
-        </div>
+        {open ? (
+          <>
+            <div className="wp-viewmode" role="tablist" aria-label="Preview mode">
+              <button type="button" role="tab" aria-selected={mode === "week"} className={mode === "week" ? "on" : ""} onClick={() => setMode("week")}>By week</button>
+              <button type="button" role="tab" aria-selected={mode === "team"} className={mode === "team" ? "on" : ""} onClick={() => setMode("team")}>By team</button>
+            </div>
+            {mode === "week" ? (
+              <>
+                <WeekSelector
+                  weeks={weeks}
+                  totalWeeks={SCHEDULE.length}
+                  selectedWeek={week}
+                  onSelect={setWeek}
+                  ariaLabel="Schedule week"
+                />
+                <div className="wp-weekhead">
+                  <b>{String(week).padStart(2, "0")}</b>
+                  <span><strong>Week {week}{week === THANKSGIVING_WEEK ? " · Thanksgiving" : ""}</strong><small>{WEEK_DATES[week - 1]} &middot; 2026</small></span>
+                  <em>{games.length} games</em>
+                </div>
+                <div className="matchup-list matchup-card-list">
+                  {games.map((game) => renderGame(game))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="wp-teampick">
+                  <CustomSelect label="Preview a team's schedule" value={teamId} onChange={setTeamId} options={teamOptions} showSelectedDescription={false} />
+                  <span className="wp-teampick-hint">{teamGames.length} games &middot; every week</span>
+                </div>
+                <div className="matchup-list matchup-card-list">
+                  {teamGames.map((entry) => renderGame(entry.game, `Week ${entry.week}`))}
+                </div>
+              </>
+            )}
+          </>
+        ) : (
+          <div className="wp-teaser">
+            {renderGame(featuredGame)}
+            <p className="wp-teaser-hint">Week {week}&rsquo;s Game of the Week &middot; {SCHEDULE.length} weeks and {SCHEDULE.flat().length} games inside.</p>
+            <button type="button" className="wp-teaser-cta" onClick={() => setOpen(true)}>
+              Explore every week
+              <ChevronDown aria-hidden="true" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

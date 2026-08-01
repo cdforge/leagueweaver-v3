@@ -223,7 +223,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .image-color-note strong { font-size: var(--text-2xs); }
 .image-color-note small { color: #6f5c1e; font-size: var(--text-2xs); line-height: 1.4; }
 .sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
-.entity-logo { --entity-color: #117a45; min-width: 32px; min-height: 32px; flex: 0 0 auto; border: 0; border-radius: var(--radius-sm); display: grid; place-items: center; overflow: hidden; font-size: var(--text-2xs); font-weight: var(--w-black); line-height: 1; font-variant-numeric: tabular-nums; }
+.entity-logo { --entity-color: #117a45; min-width: 32px; min-height: 32px; flex: 0 0 auto; border: 0; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; overflow: hidden; font-size: var(--text-2xs); font-weight: var(--w-black); line-height: 1; font-variant-numeric: tabular-nums; }
 .entity-logo > img { width: 100%; height: 100%; object-fit: contain; background: transparent; }
 .entity-logo-has-image { padding: 3px; }
 .entity-logo-has-image > img { border-radius: var(--radius-chip); }
@@ -457,7 +457,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .preview-empty-body p { margin: 0; max-width: 230px; color: #b8c7c0; font-size: var(--text-2xs); line-height: 1.55; }
 
 /* Pinned blueprint bar — replaces the side rail below 980px (see media query). */
-.builder-blueprint-bar { display: none; position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; background: var(--ink); color: white; box-shadow: 0 -8px 26px rgba(21, 35, 28, .3); padding-bottom: env(safe-area-inset-bottom); }
+.builder-blueprint-bar { display: none; position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; background: var(--ink); color: white; box-shadow: 0 -8px 26px rgba(21, 35, 28, .3); padding-bottom: max(env(safe-area-inset-bottom), 10px); }
 .blueprint-bar-backdrop { position: fixed; inset: 0; z-index: 39; background: rgba(10, 16, 8, .5); }
 .blueprint-bar-sheet { max-height: min(62vh, 520px); overflow: auto; overscroll-behavior: contain; border-bottom: 1px solid rgba(255, 255, 255, .12); padding-top: 8px; }
 .blueprint-bar-sheet[hidden] { display: none; }
@@ -475,6 +475,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .blueprint-bar-chevron.flip { transform: rotate(180deg); }
 .blueprint-bar-actions { display: flex; align-items: center; gap: 8px; }
 .blueprint-bar-actions .button-secondary, .blueprint-bar-actions .button-primary { min-height: 44px; }
+/* The bar sits on --ink (dark green): the standard --field green button is too
+   close in value to read, so brighten the primary CTA and use dark-on-light text. */
+.builder-blueprint-bar .button-primary { background: #35b874; border-color: #35b874; color: #06210f; }
+.builder-blueprint-bar .button-primary:hover:not(:disabled) { background: #40c884; border-color: #40c884; box-shadow: none; }
+.builder-blueprint-bar .button-primary:disabled { background: rgba(255, 255, 255, .16); border-color: transparent; color: rgba(255, 255, 255, .5); }
+.builder-blueprint-bar .button-secondary { background: transparent; border-color: rgba(255, 255, 255, .3); color: white; }
 @media (max-width: 560px) {
   /* Stack the summary over full-width actions so nothing gets squeezed. */
   .blueprint-bar-row { grid-template-columns: 1fr; gap: 8px; }
@@ -556,7 +562,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .ranking-head p { margin: 0; color: var(--muted); font-size: var(--text-2xs); }
 .ranking-head > span { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 9px; color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-black); white-space: nowrap; }
 .ranking-list { min-width: 0; max-width: 100%; max-height: 382px; overflow: auto; }
-.ranking-row { min-width: 580px; min-height: 52px; display: grid; grid-template-columns: 30px 88px 34px minmax(180px, 1fr) 78px; align-items: center; gap: 8px; padding: 5px 9px; border-bottom: 1px solid var(--line); background: white; }
+.ranking-row { min-width: 0; min-height: 52px; display: grid; grid-template-columns: 26px minmax(116px, 136px) 30px minmax(96px, 1fr) 66px; align-items: center; gap: 8px; padding: 5px 9px; border-bottom: 1px solid var(--line); background: white; }
 .ranking-row:last-child { border-bottom: 0; }
 .ranking-row.dragging { opacity: .55; background: var(--field-soft); }
 .ranking-grip { width: 18px; color: var(--muted); cursor: grab; }
@@ -648,7 +654,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .week-chip-grid span { min-width: 0; min-height: 64px; border: 1px solid var(--line); border-radius: var(--radius-sm); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: var(--muted); font-size: var(--text-2xs); font-variant-numeric: tabular-nums; }
 .week-chip-grid strong { color: var(--ink); font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-lg); }
 .week-chip-grid span.holiday, .playoff-week-grid > span.holiday { border-color: #dfcb82; background: var(--gold-soft); }
-.week-chip-grid em, .playoff-week-grid em { border-radius: var(--radius-chip); background: #806000; color: white; margin-top: 2px; padding: 2px 4px; font-size: var(--text-2xs); font-style: normal; font-weight: var(--w-black); line-height: 1; text-transform: uppercase; }
+.week-chip-grid em, .playoff-week-grid em { max-width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: var(--radius-chip); background: #806000; color: white; margin-top: 2px; padding: 2px 3px; font-size: var(--text-2xs); font-style: normal; font-weight: var(--w-black); line-height: 1; letter-spacing: -0.02em; text-transform: uppercase; }
 .playoff-window { border: 1px solid #dfcb82; border-top-width: 3px; border-radius: var(--radius); padding-top: 0; }
 .playoff-window .week-window-head { min-height: 52px; background: var(--gold-soft); margin: 0; padding: 10px 13px; }
 .playoff-window .week-window-head svg { color: #806000; }
@@ -961,6 +967,27 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .wp-league-mark { flex: 0 0 auto; }
 .wp-topline strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); color: var(--ink); }
 .wp-topline > span { color: var(--muted); font-size: var(--text-2xs); }
+/* Disclosure: the finished-season preview opens on demand rather than sitting
+   fully expanded. Collapsed = one teaser card; open = the full week explorer. */
+.wp-preview-toggle { margin-left: auto; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line-strong); border-radius: var(--radius-pill); background: var(--surface); color: var(--field-dark); padding: 6px 12px; font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: .03em; cursor: pointer; transition: background var(--transition), border-color var(--transition); }
+.wp-preview-toggle:hover { background: var(--field-soft); border-color: var(--field); }
+.wp-preview-toggle svg { width: 14px; height: 14px; transition: transform .2s ease; }
+.welcome-showcase-frame.is-open .wp-preview-toggle svg { transform: rotate(180deg); }
+.wp-teaser { display: grid; gap: 12px; }
+.wp-teaser-hint { margin: 0; color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-bold); }
+.wp-teaser-cta { display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 46px; border: 1px dashed var(--line-strong); border-radius: var(--radius); background: var(--surface); color: var(--field-dark); font-size: var(--text-sm); font-weight: var(--w-black); cursor: pointer; transition: background var(--transition), border-color var(--transition); }
+.wp-teaser-cta:hover { background: var(--field-soft); border-color: var(--field); }
+.wp-teaser-cta svg { width: 16px; height: 16px; }
+/* Preview mode toggle (By week / By team) + team picker for the team schedule. */
+.wp-viewmode { display: inline-flex; gap: 3px; margin-bottom: 12px; padding: 3px; border-radius: var(--radius-pill); background: var(--canvas); border: 1px solid var(--line); }
+.wp-viewmode button { border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--muted); padding: 6px 14px; font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: .03em; cursor: pointer; transition: background var(--transition), color var(--transition); }
+.wp-viewmode button.on { background: var(--field); color: white; }
+.wp-teampick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.wp-teampick > :first-child { min-width: 220px; max-width: 300px; }
+.wp-teampick-hint { color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-bold); }
+/* The cards read as their own objects — drop the inset gray fill/box the shared
+   list uses in the workspace so the preview cards sit cleanly on the section. */
+.welcome-preview .matchup-card-list { background: transparent; padding: 0; }
 .wp-weekhead { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; border-radius: var(--radius); background: var(--ink); color: white; padding: 9px 13px; }
 .wp-weekhead > b { flex: 0 0 auto; color: var(--gold); font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); line-height: 1; }
 .wp-weekhead > span { display: flex; flex-direction: column; gap: 1px; }
@@ -1017,6 +1044,26 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .wp-team.wp-right { flex-direction: row-reverse; justify-content: flex-end; }
   .wp-team.wp-right .wp-name { align-items: flex-start; text-align: left; }
   .wp-center { align-items: flex-start; padding-left: 40px; }
+  /* Give the preview week chips room and let the date range wrap instead of
+     squeezing/clipping out of the button at phone widths. */
+  .welcome-preview .week-selector button { width: 72px; min-width: 72px; }
+  .welcome-preview .week-selector button > small { white-space: normal; text-align: center; line-height: 1.12; overflow: hidden; }
+}
+
+/* Wizard mobile polish: long team lists should flow with the page rather than
+   scroll inside a fixed-height box, and the marketing footer/proof band are
+   dropped so they stop colliding with the dark sticky action bar. */
+@media (max-width: 720px) {
+  .division-assignments > div:last-child { max-height: none; overflow: visible; grid-template-columns: 1fr; }
+  .division-assign-row:nth-child(odd) { border-right: 0; }
+  .team-editor-list { max-height: none; overflow: visible; }
+  .ranking-list, .draft-ranking-list { max-height: none; overflow: visible; }
+  /* Placing teams into divisions on a phone: the city won't fit, so show the team
+     name only (the manager line is kept). */
+  .division-assign-row .team-city { display: none; }
+}
+@media (max-width: 980px) {
+  .build-page .proof-band, .build-page .site-footer { display: none; }
 }
 
 /* Season workspace */
@@ -3377,7 +3424,9 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .brand-lockup img { width: 34px; height: 34px; }
   .brand-lockup strong { font-size: var(--text-lg); }
   .topnav .account-identity { width: 44px; padding: 0; justify-content: center; }
-  .topnav .account-link.account-identity > span { display: none; }
+  /* Keep the avatar/profile icon — only the text copy collapses on mobile.
+     (This selector previously hit `.account-avatar` too, leaving an empty pill.) */
+  .topnav .account-link.account-identity > span:not(.account-avatar) { display: none; }
   .topnav .account-identity span:not(.account-avatar) { display: none !important; }
   .topnav .account-identity > span:not(.account-avatar):not(.account-identity-copy) { display: none; }
   .topnav .account-identity-copy { display: none; }
@@ -3422,16 +3471,20 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .division-assign-head { align-items: flex-start; flex-direction: column; }
   .prior-data-empty { grid-template-columns: 30px 1fr; }
   .seeding-methods, .opening-rank-methods { grid-template-columns: 1fr; }
-  .ranking-row { min-width: 0; grid-template-columns: 58px 32px minmax(0, 1fr) 91px; gap: 5px; padding-inline: 6px; }
+  /* Touch has no drag (grip hidden) and the rank dropdown already sets any rank,
+     so drop the redundant up/down nudge buttons on mobile. The closed dropdown
+     shows just the rank number (its "Strongest finish" description appears once
+     you expand it), keeping the trigger tight so the team name gets real width. */
+  .ranking-row { min-width: 0; grid-template-columns: 70px 30px minmax(0, 1fr); gap: 8px; padding-inline: 6px; }
   .ranking-grip { display: none; }
-  .ranking-actions { gap: 3px; }
+  .ranking-actions { display: none; }
   .ranking-row .custom-select-trigger { min-height: 44px; }
-  .ranking-actions button { width: 44px; height: 44px; }
+  .ranking-row .custom-select-trigger small { display: none; }
   .draft-ranking-row { grid-template-columns: 34px 32px minmax(0, 1fr); }
   .draft-ranking-row > .custom-select { grid-column: 1 / -1; width: 100%; }
   .prior-data-empty .button-secondary { grid-column: 1 / -1; width: 100%; }
   .source-choice { grid-template-columns: 1fr; padding-left: 14px; }
-  .week-chip-grid { grid-template-columns: repeat(4, 1fr); }
+  .week-chip-grid { grid-template-columns: repeat(2, 1fr); }
   .playoff-week-grid, .playoff-config-grid, .playoff-round-preview { grid-template-columns: 1fr; }
   .playoff-week-grid > span, .playoff-round-preview > div { border-right: 0; border-bottom: 1px solid var(--line); }
   .playoff-week-grid > span:last-child, .playoff-round-preview > div:last-child { border-bottom: 0; }
@@ -3934,6 +3987,12 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
    page zoom and reflow when tapped. Raise the sub-16px inputs to 16px on phones
    (the 20px score/override inputs are already immune and left as-is). */
 @media (max-width: 560px) {
+  .text-input,
+  .textarea,
+  .editor-field input,
+  .saved-league-editor-body input,
+  .ppw-round-name input,
+  .ppw-game input,
   .division-identity-edit > div:last-child input,
   .division-identity-edit > div:last-child input + input,
   .team-editor-row input,
