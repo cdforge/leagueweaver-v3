@@ -46,11 +46,19 @@ import { getNflWeeks, getNflWeekWindow, getWeekDateLabel } from "@/lib/schedule"
 import { generateScheduleAsync } from "@/lib/generateScheduleAsync";
 import { createLocalSeasonId, listLocalSeasons, loadSetup, saveSeason, saveSetup } from "@/lib/storage";
 import { divisionAcronym, entityMonogram, leagueAcronym, resolveInitials } from "@/lib/monograms";
-import { accessibleAccentColor } from "@/lib/colorContrast";
+import { accessibleAccentColor, readableTextColor } from "@/lib/colorContrast";
 import { formatDraftPlace, getTeamsMissingDraftPlaces, getWeekOneTeamOrder, hasCompleteDraftRanking } from "@/lib/rankings";
 import {
   getMaximumPlayoffFieldSize,
+  getPlayoffByeCount,
+  getPlayoffGameBrandingSlots,
+  getPlayoffRoundNames,
+  isPlayoffPlacementUsable,
+  normalizePlayoffSettings,
+  PLAYOFF_THEME_COLORS,
 } from "@/lib/playoffs";
+import { projectConsolationBracket } from "@/lib/consolation";
+import { BracketConnectorLayer, type BracketConnection } from "@/components/season/BracketConnectorLayer";
 import { teamDisplayName, teamInitials, teamMonogram } from "@/lib/teamIdentity";
 import type { Division, GeneratedSchedule, ImportPreview, LeagueSetupInput, SavedLeagueIdentity, SavedLeaguePreset, Team } from "@/lib/types";
 import { GenerationReveal } from "@/components/builder/GenerationReveal";
@@ -64,6 +72,7 @@ const STEPS = [
   { label: "Seeding", shortLabel: "Seeding" },
   { label: "Week 1 Ranking", shortLabel: "Week 1" },
   { label: "Schedule Rules", shortLabel: "Rules" },
+  { label: "Playoffs", shortLabel: "Playoffs" },
   { label: "Review & Generate", shortLabel: "Review" },
 ];
 
@@ -202,7 +211,7 @@ function SourceStep({ onManual, onImport }: { onManual: () => void; onImport: (s
   return (
     <div className="step-stack">
       <div className="section-heading">
-        <span className="step-kicker">Step 1 of 9</span>
+        <span className="step-kicker">Step 1 of 10</span>
         <h1>How do you want to enter your data?</h1>
         <p>Build from scratch, or bring in your teams from ESPN, Sleeper, or a CSV. You’ll confirm every step before we generate the schedule.</p>
       </div>
@@ -248,7 +257,7 @@ function LeagueStep({ setup, setSetup, presets, loadedPreset, onQuickImport, onS
   return (
     <div className="step-stack">
       <div className="section-heading">
-        <span className="step-kicker">Step 2 of 9</span>
+        <span className="step-kicker">Step 2 of 10</span>
         <h1>Start with your league.</h1>
         <p>{presets.length ? "Pick up where you left off, or just fill in the form to start fresh." : "Name it, then set its colors and logo."}</p>
       </div>
@@ -361,7 +370,7 @@ function TeamsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; s
 
   return (
     <div className="step-stack">
-      <div className="section-heading"><span className="step-kicker">Step 3 of 9</span><h1>Add every team.</h1><p>Confirm team identities now. You’ll organize divisions on the next step.</p></div>
+      <div className="section-heading"><span className="step-kicker">Step 3 of 10</span><h1>Add every team.</h1><p>Confirm team identities now. You’ll organize divisions on the next step.</p></div>
       <div className="team-details-stage">
         <div className="team-meta-controls"><div><FieldLabel>Teams</FieldLabel><div className="stepper"><button type="button" aria-label="Remove two teams" onClick={() => setTeamCount(setup.teams.length - 2)}><Minus /></button><strong>{setup.teams.length}</strong><button type="button" aria-label="Add two teams" onClick={() => setTeamCount(setup.teams.length + 2)}><Plus /></button></div></div><div><FieldLabel>Optional team details</FieldLabel><div className="field-switches"><FieldSwitch checked={setup.display.cityNames} onChange={(cityNames) => updateDisplay({ cityNames })} label="City names" /><FieldSwitch checked={setup.display.managers} onChange={(managers) => updateDisplay({ managers })} label="Managers" /><FieldSwitch checked={setup.display.venues} onChange={(venues) => updateDisplay({ venues })} label="Venues" /></div></div></div>
         <div className="team-editor-table" style={{ "--team-columns": teamColumns } as React.CSSProperties}>
@@ -395,7 +404,7 @@ function DivisionsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInpu
   const counts = setup.divisions.map((division) => setup.teams.filter((team) => team.divisionId === division.id).length);
   const balanced = Math.max(...counts) - Math.min(...counts) <= 1;
   return <div className="step-stack">
-    <div className="section-heading"><span className="step-kicker">Step 4 of 9</span><h1>Build the divisions.</h1><p>Name each group, keep its color and logo visible, then place every team.</p></div>
+    <div className="section-heading"><span className="step-kicker">Step 4 of 10</span><h1>Build the divisions.</h1><p>Name each group, keep its color and logo visible, then place every team.</p></div>
     <div className="division-stage">
       <div className="compact-controls division-controls"><div><FieldLabel>Divisions</FieldLabel><div className="segmented segmented-wrap">{divisionCountOptions(setup.teams.length).map((count) => { const schedulable = divisionCountSchedulable(setup.teams.length, count); return <button key={count} type="button" disabled={!schedulable} title={schedulable ? undefined : `${setup.teams.length} teams can’t split into ${count} balanced divisions within a 14-week season`} className={setup.divisions.length === count ? "active" : ""} onClick={() => setDivisionCount(count)}>{count}</button>; })}</div></div><div className={`roster-status ${balanced ? "" : "warning"}`}>{balanced ? <Check /> : <CircleAlert />}<span><strong>{balanced ? "Balanced divisions" : "Divisions need rebalancing"}</strong><small>{counts.join(" · ")} teams</small></span></div></div>
       <div className="division-strip">{setup.divisions.map((division) => <div className="division-identity-edit" key={division.id}><IdentityColorPicker compact name={`${division.name} division`} abbreviation={resolveInitials(division.initials, divisionAcronym(division.name))} color={division.color} logoUrl={division.logoUrl} onChange={(next) => updateDivision(division.id, next)} /><div><input aria-label={`${division.name} division name`} aria-invalid={showErrors && !division.name.trim()} value={division.name} onChange={(event) => updateDivision(division.id, { name: event.target.value })} /><input aria-label={`${division.name} division initials override`} maxLength={4} placeholder={`Auto: ${divisionAcronym(division.name)}`} value={division.initials ?? ""} onChange={(event) => updateDivision(division.id, { initials: event.target.value || undefined })} /></div></div>)}</div>
@@ -427,7 +436,7 @@ function SeasonStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: Re
   }, [requiresFourteenWeeks, setSetup, setup.weeks]);
   return (
     <div className="step-stack">
-      <div className="section-heading"><span className="step-kicker">Step 5 of 9</span><h1>Frame the season.</h1><p>League Weaver uses real NFL week windows for the regular season.</p></div>
+      <div className="section-heading"><span className="step-kicker">Step 5 of 10</span><h1>Frame the season.</h1><p>League Weaver uses real NFL week windows for the regular season.</p></div>
       <div className="field-grid two-col season-controls">
         <div><FieldLabel>Regular-season length</FieldLabel><div className="choice-row"><button type="button" disabled={requiresFourteenWeeks} className={setup.weeks === 13 ? "active" : ""} onClick={() => setRegularSeasonWeeks(13)}><strong>13 weeks</strong><small>{requiresFourteenWeeks ? "Unavailable for this division shape" : "Compact regular season"}</small></button><button type="button" className={setup.weeks === 14 ? "active" : ""} onClick={() => setRegularSeasonWeeks(14)}><strong>14 weeks</strong><small>Extra regular-season week</small></button></div></div>
         <div><FieldLabel>NFL season</FieldLabel><CustomSelect label="NFL season" value={String(setup.seasonYear)} onChange={(seasonYear) => setSetup((current) => ({ ...current, seasonYear: Number(seasonYear) }))} options={[2025, 2026, 2027].map((year) => ({ value: String(year), label: `${year} season`, description: year === 2026 ? "Current planning year" : "NFL week calendar" }))} /></div>
@@ -453,7 +462,7 @@ function SeedingStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: R
     setSetup((current) => ({ ...current, teams: ordered.map((item, index) => ({ ...item, overallRank: index + 1 })) }));
   };
   return <div className="step-stack">
-    <div className="section-heading"><span className="step-kicker">Step 6 of 9</span><h1>Set last season’s order.</h1><p>Seeding is optional. Use it only when prior-season results should shape cross-division matchups.</p></div>
+    <div className="section-heading"><span className="step-kicker">Step 6 of 10</span><h1>Set last season’s order.</h1><p>Seeding is optional. Use it only when prior-season results should shape cross-division matchups.</p></div>
     <div className="seeding-methods" role="group" aria-label="Seeding method">
       <button type="button" className={setup.priorSeason.entryMode === "manual" ? "active" : ""} onClick={() => setSetup((current) => ({ ...current, priorSeason: { ...current.priorSeason, enabled: true, entryMode: "manual" } }))}><span><GripVertical /></span><strong>Enter order manually</strong><small>Recommended for most leagues. Drag teams or choose each rank.</small></button>
       <button type="button" disabled={!setup.priorSeason.hasData} className={setup.priorSeason.entryMode === "history" && setup.priorSeason.source === "playoffs" ? "active" : ""} onClick={() => setSetup((current) => ({ ...current, priorSeason: { ...current.priorSeason, enabled: true, entryMode: "history", source: "playoffs" } }))}><span><Trophy /></span><strong>Last year’s playoff finish</strong><small>{setup.priorSeason.hasData ? "Use imported or saved playoff placement." : "No imported history available."}</small></button>
@@ -496,7 +505,7 @@ function OpeningWeekStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetu
   });
   const chooseSource = (rankingSource: LeagueSetupInput["weekOne"]["rankingSource"]) => setSetup((current) => ({ ...current, weekOne: { rankingSource } }));
   return <div className="step-stack">
-    <div className="section-heading"><span className="step-kicker">Step 7 of 9</span><h1>Rank the opening week.</h1><p>Choose what should shape Week 1 marquee matchups and the first Game of the Week.</p></div>
+    <div className="section-heading"><span className="step-kicker">Step 7 of 10</span><h1>Rank the opening week.</h1><p>Choose what should shape Week 1 marquee matchups and the first Game of the Week.</p></div>
     <div className="opening-rank-methods" role="group" aria-label="Week 1 ranking source">
       <button type="button" className={setup.weekOne.rankingSource === "prior-season" ? "active" : ""} onClick={() => chooseSource("prior-season")}><span><Medal /></span><strong>Last season’s finish</strong><small>Use the order from the Seeding step. This remains the recommended default.</small></button>
       <button type="button" className={setup.weekOne.rankingSource === "draft-day" ? "active" : ""} onClick={() => chooseSource("draft-day")}><span><FileSpreadsheet /></span><strong>Draft-day place</strong><small>Choose who drafted first through last to set the Week 1 order and Game of the Week.</small></button>
@@ -520,7 +529,7 @@ function FairnessStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   const thanksgivingWeek = getNflWeeks(setup.seasonYear, 14).find((week) => week.holidays.includes("Thanksgiving"))?.week;
   return (
     <div className="step-stack">
-      <div className="section-heading"><span className="step-kicker">Step 8 of 9</span><h1>Set your schedule rules.</h1><p>Every rule is checked before the schedule is shown. These controls shape the feel and highlights of the season.</p></div>
+      <div className="section-heading"><span className="step-kicker">Step 8 of 10</span><h1>Set your schedule rules.</h1><p>Every rule is checked before the schedule is shown. These controls shape the feel and highlights of the season.</p></div>
       <div className="rule-group">
         <div className="rule-group-title"><ShieldCheck /><span><strong>Ground rules</strong><small>Always applied to every schedule</small></span></div>
         <Toggle checked={setup.fairness.preventImmediateRematches} onChange={(value) => update({ preventImmediateRematches: value })} label="Space out repeat opponents" description="Avoid playing the same team in consecutive weeks." />
@@ -537,6 +546,400 @@ function FairnessStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   );
 }
 
+function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: React.Dispatch<React.SetStateAction<LeagueSetupInput>> }) {
+  const p = setup.playoffs;
+  const [subPage, setSubPage] = useState<"format" | "rules" | "brand" | "logos">("format");
+  const [expandedRounds, setExpandedRounds] = useState<number[]>([]);
+  const [previewView, setPreviewView] = useState<"championship" | "consolation">("championship");
+  const divisionCount = setup.divisions.length;
+  const maxFieldSize = getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, p.bracketType);
+  const patch = (next: Partial<LeagueSetupInput["playoffs"]>) =>
+    setSetup((current) => ({ ...current, playoffs: { ...current.playoffs, ...next } }));
+
+  const setFieldSize = (fieldSize: number) => {
+    const halvesUsable = isPlayoffPlacementUsable("division-halves", divisionCount, fieldSize);
+    patch({
+      fieldSize,
+      placementMode: p.placementMode === "division-halves" && !halvesUsable ? "overall" : p.placementMode,
+      consolationMode: p.consolationMode === "division-halves" && !halvesUsable ? "standard" : p.consolationMode,
+      thirdPlaceGame: p.consolationMode !== "off" && fieldSize >= 4,
+      fieldStatus: "live",
+      lockedTeamIds: [],
+    });
+  };
+  const setTheme = (theme: LeagueSetupInput["playoffs"]["theme"]) =>
+    patch(theme === "custom" ? { theme } : { theme, color: PLAYOFF_THEME_COLORS[theme] });
+  const setConsolation = (consolationMode: LeagueSetupInput["playoffs"]["consolationMode"]) =>
+    patch({ consolationMode, thirdPlaceGame: consolationMode !== "off" && p.fieldSize >= 4 });
+
+  // Division halves is the recommended default for eligible builds: pre-select it
+  // once on mount when the league is still on "auto" and halves are usable.
+  useEffect(() => {
+    // "auto" is no longer a user-facing option — resolve it to a concrete mode (halves preferred).
+    if (p.placementMode === "auto") {
+      patch({ placementMode: isPlayoffPlacementUsable("division-halves", divisionCount, p.fieldSize) ? "division-halves" : isPlayoffPlacementUsable("division-leaders", divisionCount, p.fieldSize) ? "division-leaders" : "overall" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const byeCount = getPlayoffByeCount(p.fieldSize);
+  const fieldSizeOptions: number[] = [];
+  for (let n = 2; n <= maxFieldSize; n += 2) fieldSizeOptions.push(n);
+  if (!fieldSizeOptions.includes(maxFieldSize)) fieldSizeOptions.push(maxFieldSize);
+
+  const halvesUsable = isPlayoffPlacementUsable("division-halves", divisionCount, p.fieldSize);
+  const placementOptions = [
+    ...(halvesUsable
+      ? [{ value: "division-halves", label: "Division halves (Recommended)", description: "NFL-style — each half runs its own tournament to the final" }] : []),
+    ...(isPlayoffPlacementUsable("division-leaders", divisionCount, p.fieldSize)
+      ? [{ value: "division-leaders", label: "Division leaders protected", description: "Classic fantasy — each division winner is guaranteed a top seed on its own side" }] : []),
+    { value: "overall", label: "Overall standings", description: "Simple — top finishers qualify by overall seed, regardless of division" },
+  ];
+  const consolationOptions = [
+    { value: "off", label: "No consolation bracket", description: "Championship bracket only" },
+    { value: "standard", label: "Standard placement", description: "Placement bracket for non-qualifiers" },
+    ...(isPlayoffPlacementUsable("division-halves", divisionCount, p.fieldSize)
+      ? [{ value: "division-halves", label: "Division-halves placement", description: "Open inside the division, then cross over" }] : []),
+  ];
+  const themes: Array<LeagueSetupInput["playoffs"]["theme"]> = ["gold", "silver", "bronze", "custom"];
+
+  // Presets set several fields at once; the form remains the "customize" fallback.
+
+  // Round & game branding — the slots derive from the format choices, so they exist before generation.
+  const normalized = normalizePlayoffSettings(p, setup.teams.length, setup.color, setup.weeks);
+  const roundNames = getPlayoffRoundNames(normalized, divisionCount);
+  const gameSlots = getPlayoffGameBrandingSlots(normalized, divisionCount);
+  // Consolation slots derive from a stubbed schedule (structure is deterministic from settings).
+  const consolationSlots: Array<{ id: string; label: string; roundName: string; roundIndex: number }> = (() => {
+    if (p.consolationMode === "off") return [];
+    try {
+      const stub = { id: "wizard-preview", seed: "0", createdAt: "", setup: { ...setup, playoffs: normalized }, weeks: [], playoffGames: [], revision: 0, fairness: {} } as unknown as GeneratedSchedule;
+      const bracket = projectConsolationBracket(stub);
+      return bracket?.rounds.flatMap((round) => round.games.map((game) => ({ id: game.id, label: game.label, roundName: round.name, roundIndex: round.roundIndex }))) ?? [];
+    } catch { return []; }
+  })();
+  const updateRoundName = (roundIndex: number, name: string) => {
+    const next = [...(p.roundNames ?? roundNames)];
+    next[roundIndex] = name.slice(0, 40);
+    patch({ roundNames: next });
+  };
+  const updateRoundLogo = (roundIndex: number, logoUrl?: string) => {
+    const next = [...(p.roundLogoUrls ?? Array(roundNames.length).fill(""))];
+    next[roundIndex] = logoUrl || "";
+    patch({ roundLogoUrls: next });
+  };
+  const updateGameName = (gameId: string, name: string) => {
+    const next = { ...(p.gameNames ?? {}) };
+    if (name.trim()) next[gameId] = name.slice(0, 60); else delete next[gameId];
+    patch({ gameNames: next });
+  };
+  const updateGameLogo = (gameId: string, logoUrl?: string) => {
+    const next = { ...(p.gameLogoUrls ?? {}) };
+    if (logoUrl) next[gameId] = logoUrl; else delete next[gameId];
+    patch({ gameLogoUrls: next });
+  };
+
+  // Live preview — a real left-to-right bracket (one column per round) with connector lines,
+  // structural slots (seed + division, not sample teams), division logos/colors, and a
+  // championship ↔ consolation toggle.
+  const divisions = setup.divisions;
+  const divById = new Map(divisions.map((d) => [d.id, d]));
+  const seeded = [...setup.teams].sort((a, b) => (a.overallRank ?? 99) - (b.overallRank ?? 99));
+  const divOfSeed = (seed: number) => { const t = seeded[seed - 1]; return t ? divById.get(t.divisionId) : undefined; };
+  const divInitials = (d?: Division) => (d?.initials?.trim() || d?.name || "D").slice(0, 3).toUpperCase();
+  const previewHalves = p.placementMode === "division-halves" && halvesUsable && divisions.length >= 2;
+
+  type PSlot = { division?: Division; seed?: number; feederId?: string; text?: string };
+  type PMatch = { id: string; accent?: string; gold?: boolean; gameNo?: number; slots: PSlot[] };
+  type PRound = { name: string; matches: PMatch[] };
+  type PBracket = { rounds: PRound[]; connections: BracketConnection[]; gameNo: Record<string, number> };
+
+  // Number every game across the bracket (round order, top to bottom) so later rounds can
+  // reference "Winner · Game N".
+  const numberGames = (rounds: PRound[]): Record<string, number> => {
+    const map: Record<string, number> = {}; let g = 0;
+    rounds.forEach((round) => round.matches.forEach((m) => { g += 1; m.gameNo = g; map[m.id] = g; }));
+    return map;
+  };
+
+  const buildPool = (kind: "championship" | "consolation"): PBracket => {
+    const rounds: PRound[] = []; const conns: BracketConnection[] = [];
+    const link = (source: string, target: string, color?: string) => conns.push({ id: `k-${source}-${target}`, sourceGameId: source, targetGameId: target, outcome: "winner", color });
+    const n = p.fieldSize;
+    const isCons = kind === "consolation";
+    const total = seeded.length;
+
+    // General single-elimination sub-bracket for a seeded list (any size; top seeds get byes when
+    // the count isn't a power of two). Returns the games per round + the id of its final game.
+    const buildSeedBracket = (seeds: number[], prefix: string, slotFor: (s: number) => PSlot): { rounds: PMatch[][]; championId: string } => {
+      const size = seeds.length;
+      if (size <= 1) return { rounds: [], championId: `${prefix}-solo` };
+      let bracketSize = 1; while (bracketSize < size) bracketSize *= 2;
+      // Standard bracket-seeding permutation of positions 1..bracketSize so #1 and #2
+      // always sit in opposite halves and byes attach to the correct top seeds.
+      let order = [1, 2];
+      while (order.length < bracketSize) {
+        const s = order.length * 2; const next: number[] = [];
+        for (const x of order) { next.push(x); next.push(s + 1 - x); }
+        order = next;
+      }
+      // When both slots of a game belong to the same division, the winner is guaranteed to
+      // come from that division — so the winner-feeder inherits its color + icon.
+      const guar = (x?: PSlot, y?: PSlot) => (x?.division && y?.division && x.division.id === y.division.id ? x.division : undefined);
+      // Each bracket slot holds a seed (1..size) or null when that rank is a bye.
+      const slotAt = order.map((rank) => (rank <= size ? seeds[rank - 1] : null));
+      const out: PMatch[][] = [];
+      const r1: PMatch[] = [];
+      let advancers: PSlot[] = [];
+      for (let j = 0; j < bracketSize / 2; j++) {
+        const a = slotAt[2 * j], b = slotAt[2 * j + 1];
+        if (a != null && b != null) {
+          const id = `${prefix}-r1-${j}`;
+          const sa = slotFor(a), sb = slotFor(b);
+          r1.push({ id, accent: sa.division?.color, slots: [sa, sb] });
+          advancers.push({ feederId: id, division: guar(sa, sb) });
+        } else {
+          const s = (a != null ? a : b) as number; // bye — present seed advances
+          advancers.push(slotFor(s));
+        }
+      }
+      if (r1.length) out.push(r1);
+      let ri = out.length;
+      while (advancers.length > 1) {
+        const matches: PMatch[] = []; const next: PSlot[] = [];
+        for (let k = 0; k < Math.floor(advancers.length / 2); k++) {
+          const s1 = advancers[2 * k], s2 = advancers[2 * k + 1];
+          const id = `${prefix}-r${ri + 1}-${k}`;
+          const gd = guar(s1, s2);
+          if (s1?.feederId) link(s1.feederId, id, s1.division?.color);
+          if (s2?.feederId) link(s2.feederId, id, s2.division?.color);
+          matches.push({ id, accent: gd?.color ?? s1?.division?.color ?? s2?.division?.color, slots: [s1, s2] });
+          next.push({ feederId: id, division: gd });
+        }
+        out.push(matches); advancers = next; ri += 1;
+      }
+      return { rounds: out, championId: out.length ? out[out.length - 1][0].id : `${prefix}-r1-0` };
+    };
+
+    if (previewHalves) {
+      const per = Math.ceil(n / 2);
+      const divCount = (d?: Division) => seeded.filter((t) => divById.get(t.divisionId)?.id === d?.id).length;
+      const offset = isCons ? per : 0; // consolation continues each division's seed ranking below the qualifiers
+      const counts = [0, 1].map((hi) => (isCons ? Math.max(0, divCount(divisions[hi]) - per) : per));
+      if (counts[0] + counts[1] >= 2 && counts[0] >= 1 && counts[1] >= 1) {
+        const champLabel = (d?: Division) => { const nm = d?.name ?? "Division"; return nm.length <= 11 ? `${nm} champ` : "Div champ"; };
+        const halves = [0, 1].map((hi) => {
+          const d = divisions[hi] ?? divisions[0];
+          const localSeeds = Array.from({ length: counts[hi] }, (_, i) => i + 1);
+          return { d, count: counts[hi], ...buildSeedBracket(localSeeds, `pv-h${hi}`, (s) => ({ division: d, seed: offset + s })) };
+        });
+        const maxRounds = Math.max(halves[0].rounds.length, halves[1].rounds.length);
+        for (let r = 0; r < maxRounds; r++) {
+          const name = isCons
+            ? (r === maxRounds - 1 ? "Division consolation" : `Consolation round ${r + 1}`)
+            : (roundNames[r] ?? (r === 0 ? "Wild Card" : "Divisional Championship"));
+          rounds.push({ name, matches: halves.flatMap((h) => h.rounds[r] ?? []) });
+        }
+        const finalSlots: PSlot[] = isCons
+          ? halves.map((h) => (h.count >= 2 ? { feederId: h.championId } : { division: h.d, seed: offset + 1 }))
+          : [{ division: divisions[0], text: champLabel(divisions[0]) }, { division: divisions[1], text: champLabel(divisions[1]) }];
+        const final: PMatch = { id: isCons ? "pv-cons-final" : "pv-final", gold: !isCons, slots: finalSlots };
+        halves.forEach((h, hi) => { if (h.count >= 2) link(h.championId, final.id, divisions[hi]?.color); });
+        rounds.push({ name: isCons ? "Consolation final" : (roundNames[maxRounds] ?? "Championship"), matches: [final] });
+        return { rounds, connections: conns, gameNo: numberGames(rounds) };
+      }
+      // consolation leftovers too small/uneven to split by division — fall through to a plain seed list
+    }
+
+    // Overall / division-leaders championship, or a plain seed-ordered consolation of the teams
+    // that missed the field (seeds n+1 … total). Consolation always uses pure overall seeds.
+    const isOverall = p.placementMode === "overall";
+    const leaderLabel = divisions.length === 2 ? "#1 / #2 seed" : `#1–${divisions.length} seed`;
+    // In division-leaders, only the protected leaders take fixed top seeds; every wild-card
+    // seed below them shifts with the leaders' records, so pair them off (#3 / #4, #5 / #6…).
+    const wildStart = divisions.length + 1;
+    const seedPairLabel = (s: number): string => {
+      const lo = wildStart + Math.floor((s - wildStart) / 2) * 2;
+      return `#${lo} / #${lo + 1} seed`;
+    };
+    const poolSeeds = isCons
+      ? Array.from({ length: Math.max(0, total - n) }, (_, i) => n + 1 + i)
+      : Array.from({ length: n }, (_, i) => i + 1);
+    if (poolSeeds.length < 2) return { rounds: [], connections: [], gameNo: {} };
+    const slotFor = (s: number): PSlot => isCons
+      ? { seed: s }
+      : (isOverall ? { seed: s } : (s <= divisions.length ? { division: divOfSeed(s), text: leaderLabel } : { text: seedPairLabel(s) }));
+    const { rounds: bracketRounds } = buildSeedBracket(poolSeeds, isCons ? "pv-c" : "pv", slotFor);
+    bracketRounds.forEach((matches, i) => {
+      const last = i === bracketRounds.length - 1;
+      const name = isCons ? (last ? "Consolation final" : `Consolation round ${i + 1}`) : (roundNames[i] ?? (last ? "Championship" : `Round ${i + 1}`));
+      rounds.push({ name, matches });
+    });
+    const lastRound = rounds[rounds.length - 1];
+    if (lastRound?.matches.length === 1 && !isCons) { lastRound.matches[0].gold = true; lastRound.name = roundNames[rounds.length - 1] ?? "Championship"; }
+    return { rounds, connections: conns, gameNo: numberGames(rounds) };
+  };
+  const buildChampionship = (): PBracket => buildPool("championship");
+  const buildConsolation = (): PBracket => buildPool("consolation");
+
+  const consolationAvailable = consolationSlots.length > 0 && (seeded.length - p.fieldSize) >= 2;
+  const showConsolationView = previewView === "consolation" && consolationAvailable;
+  const bracketSignature = [
+    showConsolationView, p.fieldSize, p.bracketType, p.placementMode, byeCount, previewHalves,
+    roundNames.join("~"),
+    divisions.map((d) => `${d.id}:${d.color}:${d.logoUrl ?? ""}`).join(","),
+    setup.teams.map((t) => `${t.id}:${t.overallRank}:${t.divisionId}`).join(","),
+    consolationSlots.map((s) => s.id).join(","),
+  ].join("|");
+  // Stabilize the bracket (and its connections array) so BracketConnectorLayer measures once
+  // instead of churning on every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const previewBracket = useMemo(() => (showConsolationView ? buildConsolation() : buildChampionship()), [bracketSignature]);
+
+  const renderSlot = (slot: PSlot, gameNo: Record<string, number>, key: number) => {
+    const d = slot.division;
+    const color = d?.color ?? "#586761";
+    const label = slot.text ?? (slot.seed != null ? `#${slot.seed} seed` : slot.feederId ? `Winner · Game ${gameNo[slot.feederId] ?? "?"}` : "TBD");
+    return <span key={key} className="ppw-slot" style={{ "--slot-c": color, color: accessibleAccentColor(color, "#161d18") } as React.CSSProperties}>
+      {d?.logoUrl ? <img className="ppw-slogo" src={d.logoUrl} alt="" /> : <b className="ppw-dchip" style={{ background: color, color: readableTextColor(color) } as React.CSSProperties}>{d ? divInitials(d) : "#"}</b>}
+      <span className="ppw-name">{label}</span>
+    </span>;
+  };
+  const renderBracket = (data: PBracket) => (
+    <BracketConnectorLayer className="ppw-bracket" connections={data.connections}>
+      {data.rounds.map((round, ri) => <div key={ri} className={`ppw-col ${ri === data.rounds.length - 1 ? "ppw-final" : ""}`}>
+        <span className="ppw-rh">{round.name}</span>
+        <div className="ppw-col-games">{round.matches.map((m) => <div key={m.id} data-bracket-game-id={m.id} className={`ppw-match ${m.gold ? "ppw-gold" : ""}`} style={{ "--ppw-accent": m.gold ? "var(--gold)" : (m.accent ?? "#3fbf7f") } as React.CSSProperties}>
+          {m.slots.length === 2 && <span className="ppw-gameno">Game {m.gameNo}</span>}
+          {m.slots.map((s, i) => renderSlot(s, data.gameNo, i))}
+        </div>)}</div>
+      </div>)}
+    </BracketConnectorLayer>
+  );
+
+  const subPages: Array<{ key: typeof subPage; label: string; sub: string }> = [
+    { key: "format", label: "Format", sub: "Field & bracket" },
+    { key: "rules", label: "Rules", sub: "Seeding & venue" },
+    { key: "brand", label: "Branding", sub: "Name & trophy" },
+    { key: "logos", label: "Logos", sub: "Optional" },
+  ];
+
+  return <div className="step-stack playoff-wizard">
+    <div className="section-heading"><span className="step-kicker">Step 9 of 10</span><h1>Shape the playoffs.</h1><p>Set the field and format, fine-tune the rules, then brand every round. You can change any of this later on the Playoffs page.</p></div>
+
+    <div className="playoff-wizard-subnav" role="tablist" aria-label="Playoff setup sections">
+      {subPages.map((sp, i) => <button key={sp.key} type="button" role="tab" aria-selected={subPage === sp.key} className={subPage === sp.key ? "active" : ""} onClick={() => setSubPage(sp.key)}><span className="ppw-n">{i + 1}</span><span className="ppw-lab"><strong>{sp.label}</strong><small>{sp.sub}</small></span></button>)}
+    </div>
+
+    <div className="playoff-wizard-layout">
+      <div className="playoff-wizard-form">
+        {subPage === "format" && <>
+          <div className="ppw-group"><FieldLabel hint={byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"} for the top seed${byeCount === 1 ? "" : "s"}` : "every qualifier opens play"}>Playoff teams</FieldLabel>
+            <CustomSelect label="Playoff field size" value={String(p.fieldSize)} onChange={(value) => setFieldSize(Number(value))} options={fieldSizeOptions.map((n) => ({ value: String(n), label: `${n} teams`, description: getPlayoffByeCount(n) ? `${getPlayoffByeCount(n)} bye${getPlayoffByeCount(n) === 1 ? "" : "s"}` : "No byes" }))} />
+          </div>
+          <div className="ppw-group"><FieldLabel>Qualification</FieldLabel>
+            <CustomSelect label="Playoff qualification" value={p.placementMode} onChange={(value) => patch({ placementMode: value as LeagueSetupInput["playoffs"]["placementMode"] })} options={placementOptions} />
+          </div>
+        </>}
+
+        {subPage === "rules" && <>
+          <div className="ppw-group"><FieldLabel>Reseeding</FieldLabel>
+            <CustomSelect label="Reseeding" value={p.reseedMode} onChange={(value) => patch({ reseedMode: value as LeagueSetupInput["playoffs"]["reseedMode"] })} options={[
+              { value: "protected", label: "Protected reseed (Recommended)", description: "Reseed while protecting bracket halves" },
+              { value: "fixed", label: "Fixed bracket", description: "Winners follow set bracket paths" },
+              { value: "each-round", label: "Reseed each round", description: "Top remaining seed always hosts the lowest" },
+            ]} />
+          </div>
+          <div className="ppw-group"><FieldLabel>Championship venue</FieldLabel>
+            <div className="choice-row">
+              <button type="button" className={p.championshipVenueMode === "higher-seed" ? "active" : ""} onClick={() => patch({ championshipVenueMode: "higher-seed" })}><strong>Higher seed hosts</strong><small>Top seed keeps home field</small></button>
+              <button type="button" className={p.championshipVenueMode === "neutral-site" ? "active" : ""} onClick={() => patch({ championshipVenueMode: "neutral-site" })}><strong>Neutral site</strong><small>Title game at a set venue</small></button>
+            </div>
+          </div>
+          <div className="ppw-group"><FieldLabel>Seed labels</FieldLabel>
+            <div className="choice-row">
+              <button type="button" className={p.seedDisplayMode === "reranked" ? "active" : ""} onClick={() => patch({ seedDisplayMode: "reranked" })}><strong>Bracket seeds</strong><small>1…N by playoff seeding</small></button>
+              <button type="button" className={p.seedDisplayMode === "standings-finish" ? "active" : ""} onClick={() => patch({ seedDisplayMode: "standings-finish" })}><strong>Standings finish</strong><small>Show regular-season place</small></button>
+            </div>
+          </div>
+          <div className="ppw-group"><FieldLabel>Consolation bracket</FieldLabel>
+            <CustomSelect label="Consolation bracket" value={p.consolationMode} onChange={(value) => setConsolation(value as LeagueSetupInput["playoffs"]["consolationMode"])} options={consolationOptions} />
+          </div>
+        </>}
+
+        {subPage === "brand" && <>
+          <div className="ppw-group"><FieldLabel>Playoff identity</FieldLabel>
+            <div className="playoff-branding-row">
+              <IdentityColorPicker name={p.name || "Championship Playoffs"} abbreviation="PO" color={p.color} logoUrl={p.logoUrl} showColorControl={p.theme === "custom"} onChange={(next) => patch({ ...(p.theme === "custom" ? { color: next.color } : {}), logoUrl: next.logoUrl })} />
+              <div className="playoff-name-field"><FieldLabel>Playoff name</FieldLabel><input aria-label="Playoff name" value={p.name} maxLength={40} placeholder="Championship Playoffs" onChange={(event) => patch({ name: event.target.value })} /></div>
+            </div>
+          </div>
+          <div className="ppw-group"><FieldLabel>Trophy theme</FieldLabel>
+            <div className="choice-row playoff-theme-row">
+              {themes.map((t) => <button key={t} type="button" className={p.theme === t ? "active" : ""} onClick={() => setTheme(t)}><span className="playoff-theme-swatch" style={{ background: t === "custom" ? p.color : PLAYOFF_THEME_COLORS[t] }} /><strong>{t.charAt(0).toUpperCase() + t.slice(1)}</strong></button>)}
+            </div>
+          </div>
+        </>}
+
+        {subPage === "logos" && <>
+          <div className="ppw-optional"><span className="ppw-optional-tag">Optional</span><span>Add custom art — divisional logos, bowl-game badges, whatever your league runs. Skip it and every round falls back to your playoff logo.</span></div>
+          <div className="ppw-group"><FieldLabel>Championship bracket</FieldLabel>
+            <p className="ppw-rgnote">Name and badge each round. Multi-game rounds — like division halves — expand to logo each game.</p>
+            <div className="ppw-rounds">{roundNames.map((round, roundIndex) => {
+              const slots = gameSlots.filter((slot) => slot.roundIndex === roundIndex);
+              const expanded = expandedRounds.includes(roundIndex);
+              const brandedGames = slots.filter((slot) => p.gameLogoUrls?.[slot.id] || p.gameNames?.[slot.id]).length;
+              return <div className="ppw-round" key={roundIndex}>
+                <div className="ppw-round-head">
+                  <IdentityColorPicker compact showColorControl={false} showAbbreviation={false} imagePresentation="bare" name={`${round} round`} abbreviation={(round || "R").slice(0, 3).toUpperCase()} color={p.color} logoUrl={p.roundLogoUrls?.[roundIndex]} onChange={(next) => updateRoundLogo(roundIndex, next.logoUrl)} />
+                  <label className="ppw-round-name"><input aria-label={`Round ${roundIndex + 1} name`} defaultValue={round} maxLength={40} onBlur={(event) => updateRoundName(roundIndex, event.target.value)} /><small>{slots.length} game{slots.length === 1 ? "" : "s"}{brandedGames ? ` · ${brandedGames} branded` : ""}</small></label>
+                  {slots.length > 1 && <button type="button" className="ppw-expand" aria-expanded={expanded} onClick={() => setExpandedRounds((cur) => cur.includes(roundIndex) ? cur.filter((x) => x !== roundIndex) : [...cur, roundIndex])}>{expanded ? "Hide games" : "Logo each game"}</button>}
+                </div>
+                {slots.length > 1 && expanded && <div className="ppw-games">{slots.map((slot) => {
+                  const fallback = `${round} · Game ${slot.gameIndex + 1}`;
+                  return <div className="ppw-game" key={slot.id}>
+                    <IdentityColorPicker compact showColorControl={false} showAbbreviation={false} imagePresentation="bare" name={fallback} abbreviation={`G${slot.gameIndex + 1}`} color={p.color} logoUrl={p.gameLogoUrls?.[slot.id]} onChange={(next) => updateGameLogo(slot.id, next.logoUrl)} />
+                    <input aria-label={`${fallback} name`} defaultValue={p.gameNames?.[slot.id] ?? fallback} maxLength={60} onBlur={(event) => updateGameName(slot.id, event.target.value)} />
+                  </div>;
+                })}</div>}
+              </div>;
+            })}</div>
+          </div>
+          {consolationSlots.length > 0 && <div className="ppw-group"><FieldLabel>Consolation bracket</FieldLabel>
+            <p className="ppw-rgnote">Placement and bowl games for the teams outside the title hunt — each gets its own logo.</p>
+            <div className="ppw-rounds">{[...new Map(consolationSlots.map((s) => [s.roundIndex, s.roundName])).entries()].map(([roundIndex, roundName]) => {
+              const slots = consolationSlots.filter((s) => s.roundIndex === roundIndex);
+              return <div className="ppw-round" key={`cons-${roundIndex}`}>
+                <div className="ppw-round-head ppw-round-head-plain"><span className="ppw-cons-round">{roundName}</span><small>{slots.length} game{slots.length === 1 ? "" : "s"}</small></div>
+                <div className="ppw-games ppw-games-flush">{slots.map((slot) => <div className="ppw-game" key={slot.id}>
+                  <IdentityColorPicker compact showColorControl={false} showAbbreviation={false} imagePresentation="bare" name={slot.label} abbreviation="CG" color={p.color} logoUrl={p.gameLogoUrls?.[slot.id]} onChange={(next) => updateGameLogo(slot.id, next.logoUrl)} />
+                  <input aria-label={`${slot.label} name`} defaultValue={p.gameNames?.[slot.id] ?? slot.label} maxLength={60} onBlur={(event) => updateGameName(slot.id, event.target.value)} />
+                </div>)}</div>
+              </div>;
+            })}</div>
+          </div>}
+        </>}
+      </div>
+
+      <aside className="playoff-wizard-preview" aria-label="Live bracket preview">
+        <div className="ppw-preview-head"><span className="ppw-preview-eyebrow">Live preview</span><span className="ppw-preview-live">Updates as you set</span></div>
+        {consolationAvailable && <div className="ppw-preview-toggle" role="tablist" aria-label="Preview bracket">
+          <button type="button" role="tab" aria-selected={!showConsolationView} className={!showConsolationView ? "active" : ""} onClick={() => setPreviewView("championship")}>Championship</button>
+          <button type="button" role="tab" aria-selected={showConsolationView} className={showConsolationView ? "active" : ""} onClick={() => setPreviewView("consolation")}>Consolation</button>
+        </div>}
+        <strong className="ppw-preview-title">{showConsolationView ? "Placement bracket" : p.bracketType === "ladder" ? "The playoff ladder" : "Road to the title"}</strong>
+        <small className="ppw-preview-sub">{showConsolationView ? `${Math.max(0, setup.teams.length - p.fieldSize)} teams outside the title hunt` : `${p.fieldSize} teams · ${previewHalves ? "division halves" : p.placementMode === "overall" ? "overall seeds" : "auto seeding"} · ${byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"}` : "no byes"}`}</small>
+        {renderBracket(previewBracket)}
+        <div className="ppw-facts">
+          <span className="ppw-fact">🏟 <b>{p.championshipVenueMode === "neutral-site" ? "Neutral site" : "Higher seed hosts"}</b></span>
+          <span className="ppw-fact">🔀 <b>{p.reseedMode === "each-round" ? "Reseed each round" : p.reseedMode === "protected" ? "Protected" : "Fixed bracket"}</b></span>
+          {byeCount > 0 && <span className="ppw-fact">🎫 <b>{byeCount} bye{byeCount === 1 ? "" : "s"}</b></span>}
+        </div>
+      </aside>
+    </div>
+  </div>;
+}
+
 function ReviewStep({ setup }: { setup: LeagueSetupInput }) {
   const checks = [
     `${setup.teams.length} teams balanced across ${setup.divisions.length} divisions`,
@@ -547,7 +950,7 @@ function ReviewStep({ setup }: { setup: LeagueSetupInput }) {
   ];
   return (
     <div className="step-stack">
-      <div className="section-heading"><span className="step-kicker">Step 9 of 9</span><h1>Your league is ready to weave.</h1><p>One final check, then we’ll build the complete season.</p></div>
+      <div className="section-heading"><span className="step-kicker">Step 10 of 10</span><h1>Your league is ready to weave.</h1><p>One final check, then we’ll build the complete season.</p></div>
       <div className="review-banner" style={{ borderColor: setup.color }}><EntityLogo className="review-mark" size={54} color={setup.color} logoUrl={setup.logoUrl} monogram={resolveInitials(setup.initials, leagueAcronym(setup.name))} /><div><span>{setup.seasonYear} FANTASY SEASON</span><h2>{setup.name}</h2><p>{setup.description}</p></div></div>
       <div className="review-metrics"><div><strong>{setup.teams.length}</strong><span>Teams</span></div><div><strong>{setup.divisions.length}</strong><span>Divisions</span></div><div><strong>{setup.weeks}</strong><span>Weeks</span></div><div><strong>{setup.teams.length * setup.weeks / 2}</strong><span>Matchups</span></div></div>
       <div className="validation-list">{checks.map((check) => <div key={check}><Check />{check}</div>)}</div>
@@ -1045,7 +1448,6 @@ export function LeagueBuilder() {
     <section className="builder-section" aria-label="League schedule builder">
       <div className="page-width builder-heading-row">
         <div><p className="eyebrow">Fantasy football schedule maker</p><h2>Build the season your league deserves.</h2></div>
-        <p>Results-based matchups. Marquee weeks. Real rivalries.</p>
       </div>
       <div className="page-width wizard-progress" aria-label="Setup progress">
         <div className="wizard-progress-summary">
@@ -1069,7 +1471,8 @@ export function LeagueBuilder() {
             {step === 5 && <SeedingStep setup={setup} setSetup={setSetup} />}
             {step === 6 && <OpeningWeekStep setup={setup} setSetup={setSetup} />}
             {step === 7 && <FairnessStep setup={setup} setSetup={setSetup} />}
-            {step === 8 && <ReviewStep setup={setup} />}
+            {step === 8 && <PlayoffsStep setup={setup} setSetup={setSetup} />}
+            {step === 9 && <ReviewStep setup={setup} />}
           </div>
           {error && <div className="builder-error" role="alert"><CircleAlert />{error}</div>}
           {step > 0 && <div className="builder-actions">
