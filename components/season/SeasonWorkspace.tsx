@@ -51,7 +51,7 @@ import { StatsWorkspace } from "@/components/season/StatsWorkspace";
 import { TeamScheduleView } from "@/components/season/TeamSchedulePage";
 import { WeekScoreBar } from "@/components/season/WeekScoreBar";
 import { CustomSelect } from "@/components/ui/CustomSelect";
-import { Modal } from "@/components/ui/Modal";
+import { Modal, ConfirmDialog } from "@/components/ui/Modal";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { WorkspaceSwitcher } from "@/components/season/WorkspaceSwitcher";
 import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
@@ -1034,9 +1034,10 @@ function ImportHistoryPanel({ events, loading, error, onRefresh, scheduleId }: {
   </section>;
 }
 
-function SettingsView({ schedule, onOpenDraftRanking, canAccessPlatformSync, platformSyncLoading, onRefreshPlatformScores, onSavePlatformConnection, onDisconnectPlatform, importHistory, importHistoryLoading, importHistoryError, onRefreshImportHistory }: {
+function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, canAccessPlatformSync, platformSyncLoading, onRefreshPlatformScores, onSavePlatformConnection, onDisconnectPlatform, importHistory, importHistoryLoading, importHistoryError, onRefreshImportHistory }: {
   schedule: GeneratedSchedule;
   onOpenDraftRanking: () => void;
+  onRegenerate: () => void;
   canAccessPlatformSync: boolean;
   platformSyncLoading: boolean;
   onRefreshPlatformScores: () => void;
@@ -1050,7 +1051,7 @@ function SettingsView({ schedule, onOpenDraftRanking, canAccessPlatformSync, pla
   const seeding = schedule.setup.priorSeason.entryMode === "manual" ? "Manual order" : schedule.setup.priorSeason.entryMode === "history" ? schedule.setup.priorSeason.source === "playoffs" ? "Last year’s playoff finish" : "Last year’s regular-season finish" : "Not used";
   const draftRankingPending = schedule.setup.weekOne.rankingSource === "draft-day" && getTeamsMissingDraftPlaces(schedule.setup).length > 0;
   return <div className="workspace-stack">
-    <div className="settings-band"><div><Pencil /><span><strong>Schedule setup</strong><small>Changing league structure regenerates the complete matchup slate as a new revision.</small></span></div><Link href="/" className="button-secondary"><Pencil />Edit and regenerate</Link></div>
+    <div className="settings-band"><div><Pencil /><span><strong>Schedule setup</strong><small>Changing league structure regenerates the complete matchup slate as a new revision.</small></span></div><button type="button" className="button-secondary" onClick={onRegenerate}><Pencil />Edit and regenerate</button></div>
     <PlatformSyncCard schedule={schedule} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshScores={onRefreshPlatformScores} onSaveConnection={onSavePlatformConnection} onDisconnect={onDisconnectPlatform} />
     <ImportHistoryPanel events={importHistory} loading={importHistoryLoading} error={importHistoryError} onRefresh={onRefreshImportHistory} scheduleId={schedule.id} />
     <div className="settings-list">
@@ -1196,6 +1197,10 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const [scoreDiscardConfirmOpen, setScoreDiscardConfirmOpen] = useState(false);
   const [platformSyncLoading, setPlatformSyncLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState<"share" | "notify" | null>(null);
+  // H1: irreversible actions (publish, save-run-back, regenerate) open this
+  // confirm gate before running, so a reflexive click can't publish private data,
+  // overwrite real scores, or wipe the slate.
+  const [confirmAction, setConfirmAction] = useState<null | "share" | "commit" | "regenerate">(null);
   const [showRecap, setShowRecap] = useState(false);
   // Deep link from the account page (?recap=1) opens the recap straight away.
   useEffect(() => {
@@ -1812,8 +1817,8 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     <div className="workspace-shell">
       <aside className="workspace-rail"><nav aria-label="Season workspace">{VIEW_ITEMS.map((item) => { const Icon = item.icon; return <button type="button" key={item.key} aria-label={item.label} title={item.label} className={view === item.key ? "active" : ""} onClick={() => selectView(item)}><Icon /><span>{item.label}</span></button>; })}</nav><div className="rail-bottom"><WorkspaceSwitcher current={{ id: schedule.id, name: schedule.setup.name, seasonYear: schedule.setup.seasonYear, color: schedule.setup.color, logoUrl: schedule.setup.logoUrl, initials: schedule.setup.initials }} signedIn={Boolean(entitlements.signedIn)} /></div></aside>
       <section className={`workspace-main ${selectedTeamColor ? "team-workspace-branded" : ""}`} style={workspaceMainStyle}>
-        <div className="workspace-toolbar"><div><span className="workspace-breadcrumb">{schedule.setup.abbreviation} / {schedule.setup.seasonYear}</span><h1>{currentTitle}</h1></div><div className="toolbar-actions"><button type="button" title="Replay the season recap" onClick={() => setShowRecap(true)}><Sparkles />Recap</button><button type="button" title={simulation ? "Export simulated CSV" : "Export CSV"} onClick={() => downloadCsv(activeSchedule)}><Download />CSV</button><button type="button" title={simulation ? "Print simulated ESPN entry sheet" : "Print ESPN entry sheet"} onClick={() => downloadSchedulePdf(activeSchedule)}><FileDown />ESPN PDF</button><button type="button" title={simulation ? "Share the real schedule" : "Share schedule"} disabled={actionBusy !== null} onClick={share}>{actionBusy === "share" ? <LoaderCircle className="spin" /> : <Share2 />}Share</button></div></div>
-        {notice && <div className="workspace-notice"><Cloud />{notice}</div>}
+        <div className="workspace-toolbar"><div><span className="workspace-breadcrumb">{schedule.setup.abbreviation} / {schedule.setup.seasonYear}</span><h1>{currentTitle}</h1></div><div className="toolbar-actions"><button type="button" title="Replay the season recap" onClick={() => setShowRecap(true)}><Sparkles />Recap</button><button type="button" title={simulation ? "Export simulated CSV" : "Export CSV"} onClick={() => downloadCsv(activeSchedule)}><Download />CSV</button><button type="button" title={simulation ? "Print simulated ESPN entry sheet" : "Print ESPN entry sheet"} onClick={() => downloadSchedulePdf(activeSchedule)}><FileDown />ESPN PDF</button><button type="button" title={simulation ? "Share the real schedule" : "Share schedule"} disabled={actionBusy !== null} onClick={() => setConfirmAction("share")}>{actionBusy === "share" ? <LoaderCircle className="spin" /> : <Share2 />}Share</button></div></div>
+        <div className="workspace-notice" role="status" aria-live="polite">{notice && <><Cloud />{notice}</>}</div>
         {!entitlements.signedIn && !CLOUD_SCHEDULE_ID.test(schedule.id) && !saveNudgeDismissed && <section className="cloud-retry-banner save-nudge-banner" role="status" aria-label="Save this schedule to an account">
           <ShieldCheck />
           <span><strong>This schedule is saved on this device only.</strong><small>Create a free account so you never lose it and can open it on any device.</small></span>
@@ -1844,7 +1849,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
           <em>{Object.values(simulation.results).filter((result) => result.source !== "recorded").length} simulated</em>
           <button type="button" onClick={() => { setView("simulator"); router.push(`/season/${schedule.id}?view=simulator`); }}>Open simulator</button>
           <button type="button" onClick={discardSimulation}>Discard</button>
-          <button type="button" className="save-simulation" onClick={commitSimulation}><Save />Save run back</button>
+          <button type="button" className="save-simulation" onClick={() => setConfirmAction("commit")}><Save />Save run back</button>
         </div>}
         <DraftRankingReminder schedule={schedule} onSave={onSaveDraftPlaces} openRequest={draftRankingRequest} onOpenSettings={openDraftRankingSettings} />
         <div className="workspace-content">
@@ -1873,14 +1878,53 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
             onPlayToChampion={() => setSimulation((current) => current ? simulateToChampion(current) : current)}
             onClearSimulated={() => setSimulation((current) => current ? clearSimulatedResults(current) : current)}
             onClearAll={() => setSimulation((current) => current ? clearAllHypotheticalResults(current) : current)}
-            onSave={commitSimulation}
+            onSave={() => setConfirmAction("commit")}
             onDiscard={discardSimulation}
             onOpenSchedule={openLeagueScheduleWeek}
           />}
-          {view === "settings" && <SettingsView schedule={activeSchedule} onOpenDraftRanking={() => setDraftRankingRequest((current) => current + 1)} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshPlatformScores={refreshPlatformScores} onSavePlatformConnection={savePlatformConnection} onDisconnectPlatform={disconnectPlatform} importHistory={importHistory} importHistoryLoading={importHistoryLoading} importHistoryError={importHistoryError} onRefreshImportHistory={loadImportHistory} />}
+          {view === "settings" && <SettingsView schedule={activeSchedule} onOpenDraftRanking={() => setDraftRankingRequest((current) => current + 1)} onRegenerate={() => setConfirmAction("regenerate")} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshPlatformScores={refreshPlatformScores} onSavePlatformConnection={savePlatformConnection} onDisconnectPlatform={disconnectPlatform} importHistory={importHistory} importHistoryLoading={importHistoryLoading} importHistoryError={importHistoryError} onRefreshImportHistory={loadImportHistory} />}
         </div>
         {entitlements.plan !== "pro" && <AdUnit placement="workspace" />}
       </section>
     </div>
+    {confirmAction && (() => {
+      const recordedScoreCount = schedule.weeks.reduce((sum, week) => sum + week.games.filter((game) => game.homeScore != null && game.awayScore != null).length, 0);
+      const configs = {
+        share: {
+          icon: <Share2 />, kicker: "Publish publicly",
+          title: "Publish this schedule to a public page?",
+          body: <p>This publishes your full schedule <strong>and manager names</strong> to a public web page anyone with the link can open.</p>,
+          confirmLabel: "Publish & copy link", confirmIcon: <Share2 />,
+          run: () => { void share(); },
+        },
+        commit: {
+          icon: <Save />, kicker: "Save simulation",
+          title: "Save simulated results to the real season?",
+          body: <p>This replaces <strong>{recordedScoreCount} real game {recordedScoreCount === 1 ? "score" : "scores"}</strong> with your simulated results. This can’t be undone.</p>,
+          confirmLabel: "Replace real scores", confirmIcon: <Save />,
+          run: () => commitSimulation(),
+        },
+        regenerate: {
+          icon: <Pencil />, kicker: "Regenerate",
+          title: "Build a new matchup slate?",
+          body: <p>This builds a new matchup slate and <strong>clears any entered scores and standings.</strong></p>,
+          confirmLabel: "Edit & regenerate", confirmIcon: <Pencil />,
+          run: () => router.push("/"),
+        },
+      };
+      const config = configs[confirmAction];
+      return <ConfirmDialog
+        tone="danger"
+        role="alertdialog"
+        icon={config.icon}
+        kicker={config.kicker}
+        title={config.title}
+        onClose={() => setConfirmAction(null)}
+        actions={[
+          { label: "Cancel", variant: "secondary", autoFocus: true, onClick: () => setConfirmAction(null) },
+          { label: config.confirmLabel, variant: "danger", icon: config.confirmIcon, onClick: () => { setConfirmAction(null); config.run(); } },
+        ]}
+      >{config.body}</ConfirmDialog>;
+    })()}
   </main>;
 }

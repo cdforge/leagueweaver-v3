@@ -573,11 +573,24 @@ export function StatsWorkspace({ schedule, onUpdateTiebreakers, readOnly = false
   const divisionById = new Map(schedule.setup.divisions.map((division) => [division.id, division]));
   const selectedDivision = divisionId === "all" ? undefined : divisionById.get(divisionId);
   const preseasonRankByTeam = new Map(selectedRankSnapshot.rows.map((row) => [row.teamId, row.preseasonRank]));
+  // `preseasonRankByTeam` is always the league-wide seed (rank history only runs
+  // league scope). In a division view a row's live `rank` is its within-division
+  // rank, so comparing it to a league seed makes the PRE RK cell and FROM-PRE
+  // movement nonsense (an eliminated last-place team could show a green ↑). Re-rank
+  // the division's teams by their league preseason seed so both are division-relative. (H10)
+  const scopedPreseasonRankByTeam = divisionId === "all"
+    ? preseasonRankByTeam
+    : new Map(
+        selectedResolution.rows
+          .map((row) => ({ teamId: row.teamId, seed: preseasonRankByTeam.get(row.teamId) ?? Number.POSITIVE_INFINITY }))
+          .sort((left, right) => left.seed - right.seed)
+          .map((entry, index) => [entry.teamId, index + 1] as [string, number]),
+      );
   const previousRankByTeam = new Map(previousResolution.rows.map((row, index) => [row.teamId, index + 1]));
   const visibleStandings: RankedStandingsRow[] = selectedResolution.rows.map((row, index) => {
     const rank = index + 1;
     const previousRank = previousRankByTeam.get(row.teamId) ?? rank;
-    return { ...row, rank, previousRank, rankChange: previousRank - rank, preseasonRank: preseasonRankByTeam.get(row.teamId) ?? rank, tiebreaker: selectedResolution.explanationsByTeam[row.teamId] };
+    return { ...row, rank, previousRank, rankChange: previousRank - rank, preseasonRank: scopedPreseasonRankByTeam.get(row.teamId) ?? rank, tiebreaker: selectedResolution.explanationsByTeam[row.teamId] };
   });
   const visibleOdds = divisionId === "all" ? odds : odds.filter((row) => teamById.get(row.teamId)?.divisionId === divisionId);
   const filterOptions = [{ value: "all", label: "League standings", description: `${schedule.setup.teams.length} teams`, swatch: schedule.setup.color, logoUrl: schedule.setup.logoUrl, monogram: resolveInitials(schedule.setup.initials, leagueAcronym(schedule.setup.name)) }, ...schedule.setup.divisions.map((division) => ({ value: division.id, label: division.name, description: `${schedule.setup.teams.filter((team) => team.divisionId === division.id).length} teams`, swatch: division.color, logoUrl: division.logoUrl, monogram: resolveInitials(division.initials, divisionAcronym(division.name)) }))];
