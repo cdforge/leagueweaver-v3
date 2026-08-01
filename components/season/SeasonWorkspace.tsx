@@ -67,7 +67,7 @@ import { accessibleAccentColor, readableTextColor } from "@/lib/colorContrast";
 import { DivisionMark } from "@/components/ui/DivisionIdentity";
 import { isDivisionHalvesConsolationUsable, projectConsolationBracket } from "@/lib/consolation";
 import { downloadSchedulePdf } from "@/lib/pdf";
-import { getMatchupRatingRange, getMatchupSignal, matchupRating, sortGamesForDisplay, toMatchupScore10 } from "@/lib/matchups";
+import { getMatchupRatingRange, getMatchupSignal, matchupRating, sortGamesForDisplay, toMatchupScore10, weekSlateScore10 } from "@/lib/matchups";
 import {
   getPlayoffByeCount,
   getPlayoffGameBrandingSlots,
@@ -497,7 +497,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
   const weekSelector = <WeekSelector
     stripRef={weekStripRef}
     ariaLabel="Select regular season or playoff week"
-    weeks={schedule.weeks.map((item) => ({ weekNumber: item.weekNumber, dateLabel: item.dateLabel, matchupRank: item.matchupRank, isThanksgiving: getNflWeekWindow(schedule.setup.seasonYear, item.weekNumber).holidays.includes("Thanksgiving") }))}
+    weeks={schedule.weeks.map((item) => ({ weekNumber: item.weekNumber, dateLabel: item.dateLabel, matchupRank: item.matchupRank, slateScore: weekSlateScore10(item.averageMatchupRating, schedule.setup.teams.length), isThanksgiving: getNflWeekWindow(schedule.setup.seasonYear, item.weekNumber).holidays.includes("Thanksgiving") }))}
     totalWeeks={schedule.weeks.length}
     selectedWeek={selectedWeek}
     onSelect={setSelectedWeek}
@@ -537,7 +537,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
             </span>
           </div>
           <div className="week-status">
-            <WeekMatchupRank rank={week.matchupRank} total={schedule.weeks.length} withLabel />
+            <WeekMatchupRank rank={week.matchupRank} total={schedule.weeks.length} score={weekSlateScore10(week.averageMatchupRating, schedule.setup.teams.length)} withLabel />
             {weekPhase.phase !== "pre" && <span className={`week-phase-pill phase-${weekPhase.phase}`}>
               {weekPhase.phase === "live" && <i className="live-dot" aria-hidden="true" />}
               <span>{weekPhase.phase === "live" ? "Live" : weekPhase.label}</span>
@@ -607,7 +607,7 @@ function MatchupRatingsView({ schedule }: { schedule: GeneratedSchedule }) {
   return <div className="matchup-ratings-view">
     <div className="matchup-ratings-summary">
       <span><small>Rating range</small><strong>{toMatchupScore10(ratingRange.max, teamCount).toFixed(1)}–{toMatchupScore10(ratingRange.min, teamCount).toFixed(1)}</strong></span>
-      <span><small>Strongest week</small>{strongestWeek ? <span className="strongest-week-value"><strong>Week {strongestWeek.weekNumber}</strong><WeekMatchupRank rank={strongestWeek.matchupRank} total={schedule.weeks.length} compact /></span> : <strong>—</strong>}</span>
+      <span><small>Strongest week</small>{strongestWeek ? <span className="strongest-week-value"><strong>Week {strongestWeek.weekNumber}</strong><WeekMatchupRank rank={strongestWeek.matchupRank} total={schedule.weeks.length} score={weekSlateScore10(strongestWeek.averageMatchupRating, teamCount)} compact /></span> : <strong>—</strong>}</span>
       <span><small>Games shown</small><strong>{visibleGames.length}</strong></span>
     </div>
     <div className="matchup-ratings-controls">
@@ -2137,6 +2137,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       displayCityNames={activeSchedule.setup.display?.cityNames !== false}
       onSelectGame={(gameId) => { const gameWeek = activeSchedule.weeks.find((item) => item.games.some((game) => game.id === gameId)); if (gameWeek) openLeagueScheduleWeek(gameWeek.weekNumber); setHighlightedGame({ id: gameId }); }}
       onCollapsedChange={setScorebarCollapsed}
+      teamCount={activeSchedule.setup.teams.length}
     />}
     <div className="workspace-shell">
       <aside className="workspace-rail"><nav aria-label="Season workspace">{VIEW_ITEMS.map((item) => { const Icon = item.icon; return <button type="button" key={item.key} aria-label={item.label} title={item.label} className={view === item.key ? "active" : ""} onClick={() => selectView(item)}><Icon /><span>{item.label}</span></button>; })}</nav><div className="rail-bottom"><WorkspaceSwitcher current={{ id: schedule.id, name: schedule.setup.name, seasonYear: schedule.setup.seasonYear, color: schedule.setup.color, logoUrl: schedule.setup.logoUrl, initials: schedule.setup.initials }} signedIn={Boolean(entitlements.signedIn)} /></div></aside>

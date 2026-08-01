@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type CSSProperties } from "react";
-import { BarChart3, MapPin, MoreHorizontal, SlidersHorizontal, Star } from "lucide-react";
+import { useMemo, type CSSProperties } from "react";
+import { BarChart3, MapPin, MoreHorizontal, Star } from "lucide-react";
 import { ClinchBadges } from "@/components/season/ClinchBadges";
-import { GameBadgeChip, MatchupRatingLegend, MatchupSeriesChip, TeamIdentityBlock } from "@/components/season/MatchupPresentation";
+import { GameBadgeChip, MatchupCard, MatchupRatingLegend, MatchupSeriesChip, TeamIdentityBlock } from "@/components/season/MatchupPresentation";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { DivisionIdentity } from "@/components/ui/DivisionIdentity";
 import { FloatingPopover } from "@/components/ui/FloatingPopover";
@@ -12,7 +12,7 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
 import { getTeamClinchTimelines, type TeamClinchTimeline } from "@/lib/clinch";
 import { isGamePlayed } from "@/lib/game";
-import { calculateMatchupRating, formatGameDateTimeOverride, getMatchupRatingRange, getMatchupSignal } from "@/lib/matchups";
+import { calculateMatchupRating, formatGameDateTimeOverride, getMatchupRatingRange, getMatchupSignal, toMatchupScore10 } from "@/lib/matchups";
 import { getWeekOneRankMap } from "@/lib/rankings";
 import { getNflWeekWindow } from "@/lib/schedule";
 import { formatRecord, getEnteringWeekRankSnapshot, getWeekRankSnapshot } from "@/lib/standings";
@@ -40,15 +40,6 @@ interface TeamScheduleSummary {
   averageOpponentSeed: number;
   sosRank: number;
 }
-
-const DISPLAY_OPTIONS: Array<{ key: DisplayKey; label: string }> = [
-  { key: "cityNames", label: "City names" },
-  { key: "venues", label: "Venues" },
-  { key: "matchup", label: "Matchup type" },
-  { key: "rating", label: "Ratings" },
-  { key: "badges", label: "Game badges" },
-  { key: "details", label: "Date and notes" },
-];
 
 function average(values: number[]) {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
@@ -108,6 +99,7 @@ function teamBrandStyle(color: string) {
 
 function buildTeamScheduleSummaries(schedule: GeneratedSchedule): TeamScheduleSummary[] {
   const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
+  const teamCount = schedule.setup.teams.length;
   const preseasonRanks = getWeekOneRankMap(schedule.setup);
   const currentSnapshot = getWeekRankSnapshot(schedule, schedule.setup.weeks);
   const currentByTeam = new Map(currentSnapshot.rows.map((row) => [row.teamId, row]));
@@ -251,18 +243,21 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
   const summaries = useMemo(() => buildTeamScheduleSummaries(schedule), [schedule]);
   const seasonStatsByTeam = useMemo(() => new Map(calculateTeamSeasonStats(schedule).map((row) => [row.teamId, row])), [schedule]);
   const currentClinches = useMemo(() => new Map(getTeamClinchTimelines(schedule).map((timeline) => [timeline.teamId, timeline])), [schedule]);
-  const [display, setDisplay] = useState<Record<DisplayKey, boolean>>({
+  // Field visibility is fixed to the league's display settings (the per-view
+  // "Display" toggle button was removed by request).
+  const display: Record<DisplayKey, boolean> = {
     cityNames: schedule.setup.display?.cityNames !== false,
     venues: schedule.setup.display?.venues !== false,
     matchup: true,
     rating: true,
     badges: true,
     details: false,
-  });
+  };
   const team = schedule.setup.teams.find((item) => item.id === teamId);
   if (!team) return <TeamScheduleDirectory schedule={schedule} summaries={summaries} clinches={currentClinches} onSelectTeam={onSelectTeam} />;
 
   const teamById = new Map(schedule.setup.teams.map((item) => [item.id, item]));
+  const teamCount = schedule.setup.teams.length;
   const divisionById = new Map(schedule.setup.divisions.map((division) => [division.id, division]));
   const planningRatingRange = getMatchupRatingRange(schedule.weeks.flatMap((week) => week.games));
   const currentSnapshot = getWeekRankSnapshot(schedule, schedule.setup.weeks);
@@ -281,7 +276,6 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
   const summary = summaries.find((item) => item.team.id === team.id)!;
   const teamStats = seasonStatsByTeam.get(team.id)!;
   const showCity = display.cityNames;
-  const toggleDisplay = (key: DisplayKey) => setDisplay((current) => ({ ...current, [key]: !current[key] }));
   const renderWeekLink = (weekNumber: number, dateLabel: string, holidays: string[]) => (
     <button type="button" className="team-week-link" onClick={() => onSelectWeek(weekNumber)} aria-label={`Open the full league schedule for Week ${weekNumber}`}>
       <strong>W{weekNumber}</strong>
@@ -328,7 +322,7 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
     { label: "Streak", value: teamStats.streak, placement: placement((id) => streakValue(statRowsByTeam.get(id)?.streak ?? "—")) },
     { label: "GOTW wins", value: String(teamStats.featuredWins), placement: placement((id) => statRowsByTeam.get(id)?.featuredWins ?? null) },
     { label: "Byes", value: String(summary.byes), placement: placement((id) => summariesByTeam.get(id)?.byes ?? null, "desc", "neutral") },
-    { label: "Average rating", value: summary.averageRating.toFixed(1), placement: placement((id) => summariesByTeam.get(id)?.averageRating ?? null, "asc", "best-bad") },
+    { label: "Average rating", value: `${toMatchupScore10(summary.averageRating, teamCount).toFixed(1)}/10`, placement: placement((id) => summariesByTeam.get(id)?.averageRating ?? null, "asc", "best-bad") },
   ];
 
   return (
@@ -371,16 +365,6 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
               schedule.setup.display?.venues !== false ? team.stadium : "",
             ].filter(Boolean).join(" · ")}</small>
           </span>
-        </div>
-        <div className="team-schedule-controls">
-          <FloatingPopover className="team-display-menu" label="Choose schedule fields" trigger={<><SlidersHorizontal />Display</>} closeOnSelect={false} menuClassName="team-display-menu-panel">
-              {DISPLAY_OPTIONS.map((option) => (
-                <label key={option.key}>
-                  <input type="checkbox" checked={display[option.key]} onChange={() => toggleDisplay(option.key)} />
-                  <span>{option.label}</span>
-                </label>
-              ))}
-          </FloatingPopover>
         </div>
       </section>
 
@@ -459,7 +443,7 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
               const awayScoreClass = isTied ? "score-tied" : game.awayScore! > game.homeScore! ? "score-winner" : "score-loser";
               const homeScoreClass = isTied ? "score-tied" : game.homeScore! > game.awayScore! ? "score-winner" : "score-loser";
               const gotwEntry = scheduleSignals.gotwByWeek.get(week.weekNumber);
-              const signal = getMatchupSignal(game, undefined, planningRatingRange);
+              const signal = getMatchupSignal(game, undefined, planningRatingRange, teamCount);
               const simulationResult = simulationResults[game.id];
               const simulationLabel = simulationResult
                 ? `${simulationResult.source === "override" ? "Commissioner result" : "Simulated"}${simulationResult.locked ? " · Locked" : ""}`
@@ -494,7 +478,7 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
                   </td>
                   {display.venues && <td className="col-venue"><span className="table-venue"><MapPin />{home.logoUrl && <img src={home.logoUrl} alt="" />}<strong>{game.stadium}</strong></span></td>}
                   {display.matchup && <td className="col-matchup"><MatchupSeriesChip game={game} division={opponentDivision} /></td>}
-                  {display.rating && <td className="col-rating"><span className="table-rating-cell"><span className={`table-signal signal-${signal.label.toLowerCase()}`} aria-label={`${signal.label} matchup, rating ${signal.rating.toFixed(1)}; lower is better`} title={`${signal.label} · rating ${signal.rating.toFixed(1)}; lower is better`}>{Array.from({ length: 3 }, (_, index) => <i className={index < signal.bars ? "active" : ""} key={index} />)}<strong>{signal.rating.toFixed(1)}</strong></span><small className="table-rating-ranks" aria-label={`${team.name} entered Week ${week.weekNumber} ranked ${teamRank}; opponent ranked ${opponentRank}. Away rank ${awayRank} versus home rank ${homeRank}.`}>{!isHome ? <Tooltip label={`${team.name}'s Week ${week.weekNumber} rank`}><span className="is-schedule-team-rank">#{awayRank}</span></Tooltip> : <span>#{awayRank}</span>}<em aria-hidden="true">vs</em>{isHome ? <Tooltip label={`${team.name}'s Week ${week.weekNumber} rank`}><span className="is-schedule-team-rank">#{homeRank}</span></Tooltip> : <span>#{homeRank}</span>}</small></span></td>}
+                  {display.rating && <td className="col-rating"><span className="table-rating-cell"><span className={`table-signal signal-${signal.label.toLowerCase()}`} aria-label={`${signal.label} matchup, rated ${signal.score10.toFixed(1)} out of 10; higher is better`} title={`${signal.label} · ${signal.score10.toFixed(1)}/10; higher is better`}>{Array.from({ length: 3 }, (_, index) => <i className={index < signal.bars ? "active" : ""} key={index} />)}<strong>{signal.score10.toFixed(1)}</strong></span><small className="table-rating-ranks" aria-label={`${team.name} entered Week ${week.weekNumber} ranked ${teamRank}; opponent ranked ${opponentRank}. Away rank ${awayRank} versus home rank ${homeRank}.`}>{!isHome ? <Tooltip label={`${team.name}'s Week ${week.weekNumber} rank`}><span className="is-schedule-team-rank">#{awayRank}</span></Tooltip> : <span>#{awayRank}</span>}<em aria-hidden="true">vs</em>{isHome ? <Tooltip label={`${team.name}'s Week ${week.weekNumber} rank`}><span className="is-schedule-team-rank">#{homeRank}</span></Tooltip> : <span>#{homeRank}</span>}</small></span></td>}
                   {display.badges && <td className="col-badges">{badges.length ? <span className="game-badge-row">{badges.map((badge) => <GameBadgeChip badge={badge} key={badge} />)}</span> : "—"}</td>}
                   {display.details && <td className="col-details"><span className="team-game-details">{game.dateTimeOverride && <strong>{formatGameDateTimeOverride(game.dateTimeOverride)}</strong>}{metadata && <small>{metadata}</small>}{!game.dateTimeOverride && !metadata && "—"}</span></td>}
                   <td className="col-actions">
@@ -514,69 +498,62 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
       {/* Mobile-only card view of the same per-week data. The wide table can't
           show opponent + result together on a phone, so ≤560px swaps to cards
           (CSS toggles which of the two is visible; desktop table is untouched). */}
-      <ul className="team-schedule-cards" aria-label={`${teamDisplayName(team, showCity)} schedule, card view`}>
+      {/* Card view (≤560px) renders the SAME shared <MatchupCard> the League
+          Schedule uses, so the team schedule's match cards match it exactly. The
+          week is carried on the card's own label slots (chip + date). */}
+      <div className="team-schedule-cards" aria-label={`${teamDisplayName(team, showCity)} schedule, card view`}>
         {schedule.weeks.map((week) => {
           const game = week.games.find((item) => item.homeTeamId === team.id || item.awayTeamId === team.id);
-          const holidays = getNflWeekWindow(schedule.setup.seasonYear, week.weekNumber).holidays;
           if (!game) {
             return (
-              <li className="team-week-card is-bye" key={week.weekNumber}>
-                <div className="twc-top">{renderWeekLink(week.weekNumber, week.dateLabel, holidays)}<span className="result-chip bye">BYE</span></div>
-                <div className="twc-body"><strong className="twc-bye-label">Bye week</strong></div>
-              </li>
+              <article className="matchup-card matchup-card-standard team-week-bye-card" key={week.weekNumber}>
+                <div className="matchup-card-badges"><div className="matchup-card-chips"><span className="game-order-chip">Week {week.weekNumber}</span></div><div className="matchup-card-meta"><span className="result-chip bye">BYE</span></div></div>
+                <div className="matchup-card-main team-week-bye-main"><strong>Bye week</strong><small>{week.dateLabel}</small></div>
+              </article>
             );
           }
-          const isHome = game.homeTeamId === team.id;
-          const opponent = teamById.get(isHome ? game.awayTeamId : game.homeTeamId);
-          if (!opponent) return null;
-          const opponentDivision = divisionById.get(opponent.divisionId);
-          const enteringSnapshot = getEnteringWeekRankSnapshot(schedule, week.weekNumber);
-          const opponentRank = enteringSnapshot.rows.find((row) => row.teamId === opponent.id)?.rank ?? opponent.overallRank;
-          const played = isGamePlayed(game);
-          const ownScore = isHome ? game.homeScore : game.awayScore;
-          const opponentScore = isHome ? game.awayScore : game.homeScore;
-          const result = !played ? "—" : ownScore === opponentScore ? "T" : ownScore! > opponentScore! ? "W" : "L";
-          const ownScoreClass = !played ? "" : result === "W" ? "score-winner" : result === "L" ? "score-loser" : "score-tied";
-          const opponentScoreClass = !played ? "" : result === "L" ? "score-winner" : result === "W" ? "score-loser" : "score-tied";
+          const away = teamById.get(game.awayTeamId);
+          const home = teamById.get(game.homeTeamId);
+          if (!away || !home) return null;
+          // Record + rank are shown "through this game" — the state AFTER that week's
+          // result (a finished Week 1 win shows 1-0 in Week 1), like a running game log.
+          // Unplayed future weeks resolve to the current record (no games beyond the last
+          // played week count), so the tally freezes at "now" and doesn't pre-fill ahead.
+          const throughSnapshot = getWeekRankSnapshot(schedule, week.weekNumber);
+          const rowById = new Map(throughSnapshot.rows.map((row) => [row.teamId, row]));
+          const rankFor = (id: string, fallback: number) => rowById.get(id)?.rank ?? fallback;
+          const recordThroughWeek = (id: string) => {
+            const row = rowById.get(id);
+            if (!row) return { overall: "0-0", division: "0-0" };
+            return { overall: row.wins === 0 && row.losses === 0 ? "0-0" : formatRecord(row), division: `${row.divisionWins}-${row.divisionLosses}` };
+          };
           const gotwEntry = scheduleSignals.gotwByWeek.get(week.weekNumber);
           const isGameOfWeek = gotwEntry?.game.id === game.id;
-          const gotwLabel = gotwEntry ? gameOfWeekStatusLabel(gotwEntry.status) : "GOTW";
-          const signal = getMatchupSignal(game, undefined, planningRatingRange);
           return (
-            <li className={`team-week-card${isGameOfWeek ? " is-gotw" : ""}`} key={week.weekNumber}>
-              <div className="twc-top">
-                {renderWeekLink(week.weekNumber, week.dateLabel, holidays)}
-                <span className="twc-tags">{isGameOfWeek && <GameBadgeChip badge="GOTW" title={gotwLabel} />}<MatchupSeriesChip game={game} division={opponentDivision} /></span>
-              </div>
-              <div className="twc-body">
-                <span className="location-chip"><span aria-hidden="true">{isHome ? "vs" : "@"}</span><span className="sr-only">{isHome ? "Home versus" : "Away at"}</span></span>
-                <TeamIdentityBlock
-                  compact
-                  showRecord={false}
-                  team={opponent}
-                  division={opponentDivision}
-                  leagueRank={opponentRank}
-                  record={{ overall: "0-0" }}
-                  showCity={showCity}
-                  href={`/season/${schedule.id}/team/${opponent.id}`}
-                />
-                <span className="twc-result">
-                  {played
-                    ? <>
-                        <span className={`result-chip result-${result.toLowerCase()}`}>{result}</span>
-                        <span className="twc-score" aria-label={`${team.name} ${ownScore}, ${opponent.name} ${opponentScore}`}><strong className={ownScoreClass}>{ownScore}</strong><i aria-hidden="true">–</i><strong className={opponentScoreClass}>{opponentScore}</strong></span>
-                      </>
-                    : <span className="twc-scheduled"><small>Scheduled</small></span>}
-                </span>
-              </div>
-              <div className="twc-meta">
-                {schedule.setup.display?.venues !== false && <span><MapPin aria-hidden="true" />{game.stadium}</span>}
-                <span className="twc-rating">Rating {signal.rating.toFixed(1)}</span>
-              </div>
-            </li>
+            <MatchupCard
+              key={week.weekNumber}
+              game={game}
+              away={away}
+              home={home}
+              awayDivision={divisionById.get(away.divisionId)}
+              homeDivision={divisionById.get(home.divisionId)}
+              awayRank={rankFor(away.id, away.overallRank)}
+              homeRank={rankFor(home.id, home.overallRank)}
+              awayRecord={recordThroughWeek(away.id)}
+              homeRecord={recordThroughWeek(home.id)}
+              signal={getMatchupSignal(game, undefined, planningRatingRange, teamCount)}
+              featured={isGameOfWeek}
+              featuredLabel={gotwEntry ? gameOfWeekStatusLabel(gotwEntry.status) : "GOTW"}
+              gameLabel={`Week ${week.weekNumber}`}
+              dateLabel={week.dateLabel}
+              showCity={showCity}
+              showVenue={schedule.setup.display?.venues !== false}
+              badges={scheduleSignals.byGameId.get(game.id)?.badges ?? []}
+              teamHrefBase={`/season/${schedule.id}/team`}
+            />
           );
         })}
-      </ul>
+      </div>
 
       <section className="team-performance-panel" aria-label={`${teamDisplayName(team, showCity)} team statistics`}>
         <header><BarChart3 /><span><strong>Team performance</strong><small>{currentSnapshot.weekNumber ? `Results through Week ${currentSnapshot.weekNumber}` : "No results entered yet"}</small></span></header>

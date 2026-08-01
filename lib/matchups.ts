@@ -3,6 +3,12 @@ import type { ScheduleWeek, ScheduledGame } from "./types";
 export interface MatchupSignal {
   rating: number;
   normalized: number;
+  /**
+   * User-facing 0.1–10.0 rating (one decimal, higher is better) derived from `rating`.
+   * `rating` stays the raw lower-is-better figure used for sorting, GOTW selection, and
+   * the engine; `score10` is display-only. See {@link toMatchupScore10}.
+   */
+  score10: number;
   bars: 1 | 2 | 3;
   label: "Competitive" | "Neutral" | "Lopsided";
 }
@@ -10,6 +16,35 @@ export interface MatchupSignal {
 export interface MatchupRatingRange {
   min: number;
   max: number;
+}
+
+// The raw matchup rating is "lower is better" and league-size dependent: the best
+// possible game (ranks #1 vs #2) is always 3.7, and the worst (rank #1 vs #N) grows with
+// the league. We surface a recognizable 0.1–10.0 score where 10 = the best matchup the
+// league can produce, anchored to that theoretical span so a given score means the same
+// thing across weeks and across leagues of the same size (never a hard 0 — floored at 0.1).
+export const MATCHUP_SCORE10_FLOOR = 0.1;
+const MATCHUP_BEST_RAW = 3.7; // ranks #1 vs #2: (1 + 2) / 2 + 2.2 * 1
+
+export function matchupScoreBounds(teamCount: number) {
+  const teams = Math.max(2, Math.round(teamCount));
+  return { best: MATCHUP_BEST_RAW, worst: (1 + teams) / 2 + 2.2 * (teams - 1) };
+}
+
+export function toMatchupScore10(raw: number, teamCount: number): number {
+  const { best, worst } = matchupScoreBounds(teamCount);
+  const span = worst - best;
+  const strength = span > 0 ? (worst - raw) / span : 1; // 1 = best possible, 0 = worst possible
+  const score = Math.max(MATCHUP_SCORE10_FLOOR, Math.min(10, strength * 10));
+  return Math.round(score * 10) / 10;
+}
+
+// A week's 0.1–10.0 slate score, on the SAME scale as individual matchups. Computed from the
+// AVERAGE of the week's matchups so it reflects the whole slate, not just its best game. The
+// slate RANK is ordered by this same average (see normalizeScheduleMatchups), so the score and
+// the rank never disagree (better rank ⇒ higher score). Returns undefined for un-normalized weeks.
+export function weekSlateScore10(averageMatchupRating: number | undefined, teamCount: number): number | undefined {
+  return averageMatchupRating == null ? undefined : toMatchupScore10(averageMatchupRating, teamCount);
 }
 
 export interface GameOfWeekContext {
@@ -44,23 +79,28 @@ export function getMatchupRatingRange(games: ScheduledGame[], ranks?: Map<string
   return ratings.length ? { min: Math.min(...ratings), max: Math.max(...ratings) } : { min: 0, max: 0 };
 }
 
-export function getMatchupSignal(game: ScheduledGame, ranks?: Map<string, number>, range?: MatchupRatingRange): MatchupSignal {
+export function getMatchupSignal(game: ScheduledGame, ranks?: Map<string, number>, range?: MatchupRatingRange, teamCount?: number): MatchupSignal {
   const rating = matchupRating(game, ranks);
   const resolvedRange = range ?? getMatchupRatingRange([game], ranks);
   const span = resolvedRange.max - resolvedRange.min;
   const normalized = span > 0 ? Math.max(0, Math.min(1, (rating - resolvedRange.min) / span)) : 0.5;
-  if (normalized <= 1 / 3) return { rating, normalized, bars: 3, label: "Competitive" };
-  if (normalized <= 2 / 3) return { rating, normalized, bars: 2, label: "Neutral" };
-  return { rating, normalized, bars: 1, label: "Lopsided" };
+  // teamCount anchors the absolute 0–10 score; fall back to the rank map's size, then 12.
+  const score10 = toMatchupScore10(rating, teamCount ?? ranks?.size ?? 12);
+  if (normalized <= 1 / 3) return { rating, normalized, score10, bars: 3, label: "Competitive" };
+  if (normalized <= 2 / 3) return { rating, normalized, score10, bars: 2, label: "Neutral" };
+  return { rating, normalized, score10, bars: 1, label: "Lopsided" };
 }
 
 export function getWeeklyMatchupSignal(rank: number, totalWeeks: number): MatchupSignal {
   const total = Math.max(1, Math.round(totalWeeks));
   const safeRank = Math.max(1, Math.min(total, Math.round(rank)));
   const normalized = total > 1 ? (safeRank - 1) / (total - 1) : 0;
-  if (normalized <= 1 / 3) return { rating: safeRank, normalized, bars: 3, label: "Competitive" };
-  if (normalized <= 2 / 3) return { rating: safeRank, normalized, bars: 2, label: "Neutral" };
-  return { rating: safeRank, normalized, bars: 1, label: "Lopsided" };
+  // Slate strength on a 0.1–10 scale (higher = stronger slate); this signal is rank-based,
+  // so the score is relative to the season rather than league-anchored like game scores.
+  const score10 = Math.round(Math.max(0.1, Math.min(10, (1 - normalized) * 10)) * 10) / 10;
+  if (normalized <= 1 / 3) return { rating: safeRank, normalized, score10, bars: 3, label: "Competitive" };
+  if (normalized <= 2 / 3) return { rating: safeRank, normalized, score10, bars: 2, label: "Neutral" };
+  return { rating: safeRank, normalized, score10, bars: 1, label: "Lopsided" };
 }
 
 function matchupTypeOrder(game: ScheduledGame) {
@@ -110,9 +150,12 @@ export function normalizeScheduleMatchups(weeks: ScheduleWeek[], ranksForWeek: (
     const averageMatchupRating = Math.round((ratings.reduce((sum, rating) => sum + rating, 0) / Math.max(1, ratings.length)) * 10) / 10;
     return { weekNumber: week.weekNumber, bestMatchupRating, averageMatchupRating };
   });
+  // Rank weeks by AVERAGE matchup rating (lower raw = stronger slate = rank #1), with the best
+  // single matchup as the tiebreak. The slate score (weekSlateScore10) uses the same average, so
+  // rank and score stay consistent, and this matches the home-page preview's average-based rank.
   const ranked = [...metrics].sort((left, right) =>
-    left.bestMatchupRating - right.bestMatchupRating
-    || left.averageMatchupRating - right.averageMatchupRating
+    left.averageMatchupRating - right.averageMatchupRating
+    || left.bestMatchupRating - right.bestMatchupRating
     || left.weekNumber - right.weekNumber,
   );
   const matchupRankByWeek = new Map(ranked.map((week, index) => [week.weekNumber, index + 1]));

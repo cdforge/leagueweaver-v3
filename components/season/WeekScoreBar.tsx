@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Division, ScheduledGame, ScheduleWeek, Team } from "@/lib/types";
 import { readableTextColor, tintColor } from "@/lib/colorContrast";
 import { isGamePlayed } from "@/lib/game";
-import { formatGameDateTimeOverride } from "@/lib/matchups";
+import { formatGameDateTimeOverride, weekSlateScore10 } from "@/lib/matchups";
 import { getCurrentSlateWeek, getNflWeekWindow } from "@/lib/schedule";
 import { getWeekPhase, type WeekPhaseState } from "@/lib/weekPhase";
 import { formatPoints } from "@/lib/statistics";
@@ -58,6 +58,8 @@ export interface WeekScoreBarProps {
   onOpenPlayoffPicture?: () => void;
   /** Notified when the collapsed state changes, so the layout can reclaim the strip height. */
   onCollapsedChange?: (collapsed: boolean) => void;
+  /** League team count — anchors the 0.1–10.0 slate score shown beside the slate rank. */
+  teamCount?: number;
   className?: string;
 }
 
@@ -221,6 +223,7 @@ export function WeekScoreBar({
   playoffPictureSummary,
   onOpenPlayoffPicture,
   onCollapsedChange,
+  teamCount,
   className = "",
 }: WeekScoreBarProps) {
   // On phones the strip is tight, so team labels drop the city and show just
@@ -256,6 +259,8 @@ export function WeekScoreBar({
     return firstOpen?.weekNumber ?? weeks[weekCount - 1]?.weekNumber ?? 1;
   }, [effectiveNow, seasonYear, weekCount, weeks]);
   const week = weeks.find((w) => w.weekNumber === currentWeekNumber) ?? weeks[0];
+  const slateScore = teamCount != null ? weekSlateScore10(week?.averageMatchupRating, teamCount) : undefined;
+  const slateScoreText = slateScore != null ? slateScore.toFixed(1) : null;
 
   const games = useMemo(() => week?.games ?? [], [week]);
   const allPlayed = games.length > 0 && games.every(isGamePlayed);
@@ -439,7 +444,7 @@ export function WeekScoreBar({
           {isThanksgiving && <span className="sb-turkey" aria-hidden="true">🦃</span>}
           <span className="sb-collapsed-title">Week {n}</span>
           {badge}
-          {week.matchupRank != null && <span className="sb-collapsed-rank">Slate <b>#{week.matchupRank}</b></span>}
+          {week.matchupRank != null && <span className="sb-collapsed-rank">Slate <b>#{week.matchupRank}</b>{slateScoreText && <em className="sb-collapsed-score">{slateScoreText}<small>/10</small></em>}</span>}
           <span className="sb-collapsed-hint">{games.length} {games.length === 1 ? "matchup" : "matchups"}</span>
           {pictureChip}
         </div>
@@ -460,9 +465,10 @@ export function WeekScoreBar({
         </div>
         <div className="sb-state">
           {week.matchupRank != null && (
-            <span className="sb-slate" title={`This week's slate ranks ${week.matchupRank} of ${weekCount} by matchup rating`}>
+            <span className="sb-slate" title={`This week's slate ranks ${week.matchupRank} of ${weekCount}${slateScoreText ? `, slate score ${slateScoreText} out of 10` : ""}`}>
               <span className="sb-slate-num">#{week.matchupRank}</span>
               <span className="sb-slate-label"><b>Slate rank</b><span>of {weekCount}</span></span>
+              {slateScoreText && <span className="sb-slate-score">{slateScoreText}<small>/10</small></span>}
             </span>
           )}
           {badge}

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { calculateTeamClinchStates, getTeamClinchTimelines } from "../lib/clinch";
 import { createDefaultSetup } from "../lib/defaults";
-import { calculateMatchupRating, getGameOfWeekId, getGameOfWeekSelection, getMatchupRatingRange, getMatchupSignal, getWeeklyMatchupSignal, normalizeScheduleMatchups, orderWeekGamesByMatchupRating, sortGamesForDisplay } from "../lib/matchups";
+import { calculateMatchupRating, getGameOfWeekId, getGameOfWeekSelection, getMatchupRatingRange, getMatchupSignal, getWeeklyMatchupSignal, normalizeScheduleMatchups, orderWeekGamesByMatchupRating, sortGamesForDisplay, toMatchupScore10 } from "../lib/matchups";
 import { updateGameScore } from "../lib/schedule";
 import { calculateDivisionStandings, calculateStandings, getEnteringWeekRankSnapshot, getLiveRankHistory, resolveStandings, tiebreakerContextSignature } from "../lib/standings";
 import { calculateGameAnalytics, calculateTeamSeasonStats, formatSplitRecord, getGameOfWeekTimeline, recordPercentage } from "../lib/statistics";
@@ -182,6 +182,14 @@ assert.equal(getMatchupSignal(ratingCandidates[1], gotwRanks, ratingRange).label
 assert.equal(getMatchupSignal(ratingCandidates[2], gotwRanks, ratingRange).label, "Lopsided");
 assert.equal(getMatchupSignal(ratingCandidates[0], gotwRanks, ratingRange).bars, 3);
 assert.equal(getMatchupSignal(ratingCandidates[2], gotwRanks, ratingRange).bars, 1);
+// 0.1–10.0 display score: best possible raw (3.7) = 10.0, theoretical worst is floored at 0.1,
+// higher is better, and a better (lower) raw never maps below a worse (higher) raw.
+assert.equal(toMatchupScore10(3.7, 10), 10);
+assert.equal(toMatchupScore10(25.3, 10), 0.1); // #1 vs #10 blowout — the 10-team worst case
+assert.equal(toMatchupScore10(999, 10), 0.1); // missing-rank sentinel clamps to the floor
+assert.ok(toMatchupScore10(3.7, 10) > toMatchupScore10(8.7, 10));
+assert.ok(toMatchupScore10(8.7, 10) > toMatchupScore10(19.9, 10));
+assert.equal(getMatchupSignal(ratingCandidates[0], gotwRanks, ratingRange, 8).score10, toMatchupScore10(3.7, 8));
 const orderedRatingGames = orderWeekGamesByMatchupRating([...ratingCandidates].reverse(), gotwRanks);
 assert.deepEqual(orderedRatingGames.map((game) => game.id), ["rating-top", "rating-middle", "rating-bottom"]);
 assert.deepEqual(orderedRatingGames.map((game) => game.gameNumber), [1, 2, 3]);
@@ -192,9 +200,12 @@ const rankedRatingWeeks = normalizeScheduleMatchups([
   { weekNumber: 1, dateLabel: "Week 1", games: [ratingCandidates[2], ratingCandidates[0]] },
   { weekNumber: 2, dateLabel: "Week 2", games: [{ ...ratingCandidates[1], week: 2 }] },
 ], () => gotwRanks);
-assert.equal(rankedRatingWeeks[0].matchupRank, 1);
-assert.equal(rankedRatingWeeks[1].matchupRank, 2);
+// Weeks rank by AVERAGE matchup rating (lower = stronger slate), best game as tiebreak. Week 1
+// has the best single game (3.7) but a worse average (11.8) than Week 2 (8.7), so Week 2 ranks #1.
+assert.equal(rankedRatingWeeks[0].matchupRank, 2);
+assert.equal(rankedRatingWeeks[1].matchupRank, 1);
 assert.equal(rankedRatingWeeks[0].bestMatchupRating, 3.7);
+assert.equal(rankedRatingWeeks[0].averageMatchupRating, 11.8);
 assert.deepEqual([1, 5, 6, 9, 10, 14].map((rank) => getWeeklyMatchupSignal(rank, 14).bars), [3, 3, 2, 2, 1, 1]);
 
 const timelineSchedule: GeneratedSchedule = {

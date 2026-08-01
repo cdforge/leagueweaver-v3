@@ -6,7 +6,7 @@ import { MatchupCard } from "@/components/season/MatchupPresentation";
 import { WeekSelector } from "@/components/season/WeekSelector";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { EntityLogo } from "@/components/ui/EntityLogo";
-import { getMatchupRatingRange, getMatchupSignal } from "@/lib/matchups";
+import { getMatchupRatingRange, getMatchupSignal, weekSlateScore10 } from "@/lib/matchups";
 import type { Division, ScheduledGame, Team } from "@/lib/types";
 
 type DivisionKey = "prodigy" | "esteemed";
@@ -111,10 +111,11 @@ export function SchedulePreview() {
   const [teamId, setTeamId] = useState(TEAMS.Decoupes.id);
   const games = SCHEDULE[week - 1];
   const teamById = useMemo(() => new Map(Object.values(TEAMS).map((team) => [team.id, team])), []);
-  const weeks = useMemo(() => SCHEDULE.map((_, index) => ({
+  const weeks = useMemo(() => SCHEDULE.map((games, index) => ({
     weekNumber: index + 1,
     dateLabel: `${WEEK_DATES[index]}, 2026`,
     matchupRank: WEEK_RANK.get(index),
+    slateScore: weekSlateScore10(games.reduce((sum, game) => sum + (game.matchupRating ?? 0), 0) / games.length, Object.keys(TEAMS).length),
     isThanksgiving: index + 1 === THANKSGIVING_WEEK,
   })), []);
   // Teams as select options (seed order) and one selected team's game each week.
@@ -144,7 +145,7 @@ export function SchedulePreview() {
         homeRank={home.overallRank}
         awayRecord={PRESEASON_RECORD}
         homeRecord={PRESEASON_RECORD}
-        signal={getMatchupSignal(game, undefined, RATING_RANGE)}
+        signal={getMatchupSignal(game, undefined, RATING_RANGE, Object.keys(TEAMS).length)}
         featured={featured}
         featuredLabel={week === THANKSGIVING_WEEK && featured ? "Thanksgiving" : "GOTW"}
         gameLabel={weekLabel ?? (featured ? undefined : `Game ${game.gameNumber}`)}

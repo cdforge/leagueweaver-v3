@@ -53,6 +53,7 @@ const WEEK7: ScheduleWeek = {
   weekNumber: 7,
   dateLabel: "Oct 16 – 20",
   matchupRank: 3,
+  averageMatchupRating: 10.5,
   games: [
     game("g3", "rk", "tw", 1, { matchupType: "division", seriesGame: 2, seriesLength: 2, homeScore: 71, awayScore: 74 }), // GOTW, division series
     game("g1", "gg", "mm", 2, { matchupType: "division", homeScore: 104, awayScore: 118 }),
@@ -69,6 +70,7 @@ const WEEK6: ScheduleWeek = {
   weekNumber: 6,
   dateLabel: "Oct 9 – 13",
   matchupRank: 9,
+  averageMatchupRating: 14.0,
   games: [
     game("w6a", "mm", "bc", 1, { week: 6, homeScore: 88, awayScore: 120 }),
     game("w6b", "tw", "gg", 2, { week: 6, homeScore: 141, awayScore: 133 }),
@@ -80,6 +82,7 @@ const WEEK8: ScheduleWeek = {
   weekNumber: 8,
   dateLabel: "Oct 23 – 27",
   matchupRank: 1,
+  averageMatchupRating: 7.0,
   games: [
     game("w8a", "mm", "tw", 1, { week: 8 }),
     game("w8b", "ha", "rk", 2, { week: 8, matchupType: "division" }),
@@ -166,6 +169,7 @@ export default function ScorebarPreview() {
         getRank={(id) => teamById.get(id)?.overallRank}
         gameOfWeekId="g3"
         displayCityNames
+        teamCount={TEAMS.length}
         onSelectGame={(id) => console.log("open game", id)}
       />
 

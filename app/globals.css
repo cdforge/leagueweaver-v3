@@ -1837,6 +1837,13 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .week-matchup-rank em { padding-left: 6px; border-left: 1px solid color-mix(in srgb, currentColor 18%, transparent); font-size: var(--text-2xs); font-style: normal; font-weight: var(--w-black); }
 .week-matchup-rank.compact { min-height: 18px; gap: 4px; border-radius: var(--radius-chip); padding: 2px 5px; }
 .week-matchup-rank.compact strong { font-size: var(--text-2xs); }
+/* Slate score (0–10, same scale as matchups) shown beside the rank; tracks the strength color. */
+.week-matchup-rank-score { display: inline-flex; align-items: baseline; gap: 1px; padding-left: 6px; border-left: 1px solid color-mix(in srgb, currentColor 18%, transparent); font-family: var(--font-barlow-condensed), sans-serif; font-variant-numeric: tabular-nums; font-size: var(--text-lg); font-weight: var(--w-black); line-height: 1; color: color-mix(in srgb, var(--field-dark) calc(var(--sig-t) * 100%), var(--strength-fg)); }
+.week-matchup-rank-score small { font-size: var(--text-micro); font-weight: var(--w-black); color: var(--muted); }
+.week-matchup-rank.compact .week-matchup-rank-score { padding-left: 4px; font-size: var(--text-2xs); }
+.week-matchup-rank.compact .week-matchup-rank-score small { display: none; }
+.schedule-week-header .week-matchup-rank-score { color: white; border-left-color: rgba(255,255,255,.24); }
+.schedule-week-header .week-matchup-rank-score small { color: rgba(255,255,255,.78); }
 .strongest-week-value { display: flex; align-items: center; gap: 7px; }
 .matchup-ratings-summary .strongest-week-value > strong { font-size: var(--text-xl); }
 .matchup-rating-legend { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1px solid var(--line); background: white; padding: 6px 10px; }
@@ -4761,6 +4768,8 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .sb-slate-label { display: flex; flex-direction: column; line-height: 1.05; }
 .sb-slate-label b { font-family: var(--font-barlow-condensed), sans-serif; font-weight: var(--w-bold); font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--gold-mid); }
 .sb-slate-label span { font-size: 9.5px; color: var(--muted); font-weight: var(--w-medium); }
+.sb-slate-score { display: inline-flex; align-items: baseline; gap: 1px; padding-left: 8px; margin-left: 1px; border-left: 1px solid var(--gold); font-family: var(--font-barlow-condensed), sans-serif; font-variant-numeric: tabular-nums; font-weight: var(--w-bold); font-size: 16px; line-height: 1; color: var(--gold-mid); }
+.sb-slate-score small { font-size: 9.5px; font-weight: var(--w-bold); color: var(--muted); }
 .sb-badge { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-barlow-condensed), sans-serif; font-weight: var(--w-bold); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; }
 .sb-badge small { font-family: var(--font-archivo), sans-serif; font-weight: var(--w-medium); font-size: 10px; letter-spacing: 0; text-transform: none; color: var(--muted); }
 .sb-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); }
@@ -4840,6 +4849,8 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .sb-collapsed-title { font-family: var(--font-barlow-condensed), sans-serif; font-weight: var(--w-bold); font-size: 16px; letter-spacing: -.01em; color: var(--ink); white-space: nowrap; }
 .sb-collapsed-rank { font-size: 11px; color: var(--muted); font-weight: var(--w-medium); white-space: nowrap; }
 .sb-collapsed-rank b { color: var(--gold-mid); font-weight: var(--w-bold); }
+.sb-collapsed-score { margin-left: 5px; font-style: normal; color: var(--gold-mid); font-weight: var(--w-bold); }
+.sb-collapsed-score small { color: var(--muted); font-weight: var(--w-medium); font-size: 9px; }
 .sb-collapsed-hint { font-size: 11px; color: var(--muted); font-weight: var(--w-medium); white-space: nowrap; }
 
 /* Thanksgiving week — warm styling on the header/rail only */

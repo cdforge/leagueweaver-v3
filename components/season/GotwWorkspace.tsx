@@ -64,7 +64,7 @@ export function GotwWorkspace({ schedule, simulationResults = {}, simulationProb
             homeRank={entry.ranks.get(home.id) ?? home.overallRank}
             awayRecord={recordFor(away.id)}
             homeRecord={recordFor(home.id)}
-            signal={getMatchupSignal(entry.game, entry.ranks, ratingRange)}
+            signal={getMatchupSignal(entry.game, entry.ranks, ratingRange, schedule.setup.teams.length)}
             featured
             featuredLabel={statusLabel}
             badges={signals.byGameId.get(entry.game.id)?.badges}

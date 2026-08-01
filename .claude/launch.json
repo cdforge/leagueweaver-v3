@@ -15,6 +15,22 @@
       "env": { "NEXT_DIST_DIR": ".next-qa" },
       "port": 3200,
       "autoPort": true
+    },
+    {
+      "name": "leagueweaver-verify",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["next", "dev", "--port", "3400"],
+      "env": { "NEXT_DIST_DIR": ".next-verify2" },
+      "port": 3400,
+      "autoPort": true
+    },
+    {
+      "name": "leagueweaver-verify3",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["next", "dev", "--port", "3600"],
+      "env": { "NEXT_DIST_DIR": ".next-verify3" },
+      "port": 3600,
+      "autoPort": true
     }
   ]
 }

@@ -53,8 +53,8 @@ export function TeamIdentityBlock({ team, division, leagueRank, record, showCity
 }
 
 export function MatchupRatingLegend() {
-  return <div className="matchup-rating-legend" aria-label="Matchup rating scale. Lower ratings are better.">
-    <span className="matchup-scale-title"><SlidersHorizontal aria-hidden="true" /><span><strong>Matchup scale</strong><small>Lower is better</small></span></span>
+  return <div className="matchup-rating-legend" aria-label="Matchup rating scale, 0 to 10. Higher ratings are better.">
+    <span className="matchup-scale-title"><SlidersHorizontal aria-hidden="true" /><span><strong>Matchup scale</strong><small>Rated out of 10</small></span></span>
     <div>
       <span className="legend-competitive"><span className="signal-bars" aria-hidden="true">{[1, 2, 3].map((bar) => <i className="active" key={bar} />)}</span><b>Competitive</b><small>Best third</small></span>
       <span className="legend-neutral"><span className="signal-bars" aria-hidden="true">{[1, 2, 3].map((bar) => <i className={bar <= 2 ? "active" : ""} key={bar} />)}</span><b>Neutral</b><small>Middle third</small></span>
@@ -63,19 +63,23 @@ export function MatchupRatingLegend() {
   </div>;
 }
 
-export function WeekMatchupRank({ rank, total, compact = false, withLabel = false }: { rank?: number; total: number; compact?: boolean; withLabel?: boolean }) {
+export function WeekMatchupRank({ rank, total, score, compact = false, withLabel = false }: { rank?: number; total: number; score?: number; compact?: boolean; withLabel?: boolean }) {
   if (rank == null || rank < 1 || total < 1) return null;
   const signal = getWeeklyMatchupSignal(rank, total);
   const tier = signal.label.toLowerCase();
   // One monotone strength scale: 1 = strongest slate, 0 = regular. Never "bad".
   const strength = 1 - signal.normalized;
-  const label = `Slate rank ${rank} of ${total}. ${signal.label} slate; lower rank is better.`;
+  // Slate score shares the 0–10 game scale (higher is better); it tracks the rank, since both
+  // key off the week's best matchup. Shown alongside the rank when provided.
+  const scoreText = score != null ? score.toFixed(1) : null;
+  const label = `Slate rank ${rank} of ${total}${scoreText ? `, slate score ${scoreText} out of 10` : ""}. ${signal.label} slate.`;
   return <span className={`week-matchup-rank signal-${tier} ${compact ? "compact" : ""}`} style={{ "--sig-t": strength } as React.CSSProperties} aria-label={label} title={label}>
     {withLabel && !compact && <b className="week-matchup-rank-label" aria-hidden="true">Slate rank</b>}
     {!compact && <span className="signal-bars" aria-hidden="true">{[1, 2, 3].map((bar) => <i className={bar <= signal.bars ? "active" : ""} key={bar} />)}</span>}
     {compact
       ? <strong>#{rank}</strong>
       : <span className="week-matchup-rank-copy"><strong>#{rank}</strong><small>of {total}</small></span>}
+    {scoreText && <span className="week-matchup-rank-score" aria-hidden="true">{scoreText}<small>/10</small></span>}
   </span>;
 }
 
@@ -107,11 +111,11 @@ export function GameBadgeChip({ badge, title, className = "" }: { badge: GameBad
 }
 
 function SignalBars({ signal, awayRank, homeRank }: { signal: MatchupSignal; awayRank: number; homeRank: number }) {
-  const rating = signal.rating.toFixed(1);
-  return <span className={`matchup-signal signal-${signal.label.toLowerCase()}`} style={{ "--sig-t": 1 - signal.normalized } as React.CSSProperties} aria-label={`${signal.label} matchup, rating ${rating}; away rank ${awayRank}, home rank ${homeRank}; lower is better`} title={`${signal.label} · rating ${rating} · #${awayRank} vs #${homeRank} (lower is better)`}>
+  const score = signal.score10.toFixed(1);
+  return <span className={`matchup-signal signal-${signal.label.toLowerCase()}`} style={{ "--sig-t": 1 - signal.normalized } as React.CSSProperties} aria-label={`${signal.label} matchup, rated ${score} out of 10; away rank ${awayRank}, home rank ${homeRank}; higher is better`} title={`${signal.label} · ${score}/10 · #${awayRank} vs #${homeRank} (higher is better)`}>
     <span className="matchup-signal-main">
       <span className="signal-bars" aria-hidden="true">{[1, 2, 3].map((bar) => <i className={bar <= signal.bars ? "active" : ""} key={bar} />)}</span>
-      <b>{rating}</b>
+      <b>{score}</b>
     </span>
     <small className="matchup-signal-ranks">#{awayRank} vs #{homeRank}</small>
   </span>;

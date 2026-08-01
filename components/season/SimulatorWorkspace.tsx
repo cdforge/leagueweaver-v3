@@ -197,7 +197,7 @@ export function SimulatorWorkspace({
       homeRank: ranks.get(home.id) ?? home.overallRank,
       awayRecord: record(away.id),
       homeRecord: record(home.id),
-      signal: getMatchupSignal(focusGame, ranks, ratingRange),
+      signal: getMatchupSignal(focusGame, ranks, ratingRange, schedule.setup.teams.length),
       featured: false,
       showCity,
       showVenue,
