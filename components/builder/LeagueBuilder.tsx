@@ -40,7 +40,8 @@ import { ConfirmDialog } from "@/components/ui/Modal";
 import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { createBlankSetup, createDefaultSetup, createDivisions, createTeams } from "@/lib/defaults";
+import { createBlankSetup, createConferences, createDefaultSetup, createDivisions, createTeams } from "@/lib/defaults";
+import { defaultConferenceAssignment } from "@/lib/conferences";
 import { identityFromSetup, normalizeSavedLeague } from "@/lib/savedLeagues";
 import { getNflWeeks, getNflWeekWindow, getWeekDateLabel } from "@/lib/schedule";
 import { generateScheduleAsync } from "@/lib/generateScheduleAsync";
@@ -57,10 +58,10 @@ import {
   normalizePlayoffSettings,
   PLAYOFF_THEME_COLORS,
 } from "@/lib/playoffs";
-import { projectConsolationBracket } from "@/lib/consolation";
+import { projectConsolationBracket, projectPlacementChart } from "@/lib/consolation";
 import { BracketConnectorLayer, type BracketConnection } from "@/components/season/BracketConnectorLayer";
 import { teamDisplayName, teamInitials, teamMonogram } from "@/lib/teamIdentity";
-import type { Division, GeneratedSchedule, ImportPreview, LeagueSetupInput, SavedLeagueIdentity, SavedLeaguePreset, Team } from "@/lib/types";
+import type { Conference, Division, GeneratedSchedule, ImportPreview, LeagueSetupInput, SavedLeagueIdentity, SavedLeaguePreset, Team } from "@/lib/types";
 import { GenerationReveal } from "@/components/builder/GenerationReveal";
 
 const STEPS = [
@@ -413,16 +414,23 @@ function TeamsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; s
 
 function DivisionsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; setSetup: React.Dispatch<React.SetStateAction<LeagueSetupInput>>; showErrors: boolean }) {
   const setDivisionCount = (count: number) => {
+    // Even division counts (4/6/8) split into two conferences; 2 or odd counts have none.
+    const even = count >= 4 && count % 2 === 0;
+    const conferences = even ? createConferences(2) : undefined;
     setSetup((current) => {
-      const divisions = resizeDivisions(current.divisions, count);
+      const resized = resizeDivisions(current.divisions, count);
+      const divisions = even ? defaultConferenceAssignment(resized, conferences!) : resized.map((division) => ({ ...division, conferenceId: undefined }));
       return {
         ...current,
         divisions,
+        conferences,
         teams: current.teams.map((team, index) => ({ ...team, divisionId: divisions[index % count].id })),
         playoffs: { ...current.playoffs, placementMode: "auto", fieldStatus: "live", lockedTeamIds: [] },
       };
     });
   };
+  const updateConference = (id: string, patch: Partial<Conference>) => setSetup((current) => ({ ...current, conferences: current.conferences?.map((conference) => conference.id === id ? { ...conference, ...patch } : conference) }));
+  const assignDivisionConference = (divisionId: string, conferenceId: string) => setSetup((current) => ({ ...current, divisions: current.divisions.map((division) => division.id === divisionId ? { ...division, conferenceId } : division) }));
   const updateDivision = (id: string, patch: Partial<Division>) => setSetup((current) => ({ ...current, divisions: current.divisions.map((division) => division.id === id ? { ...division, ...patch } : division) }));
   const updateTeam = (id: string, divisionId: string) => setSetup((current) => ({ ...current, teams: current.teams.map((team) => team.id === id ? { ...team, divisionId } : team) }));
   const counts = setup.divisions.map((division) => setup.teams.filter((team) => team.divisionId === division.id).length);
@@ -432,6 +440,16 @@ function DivisionsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInpu
     <div className="division-stage">
       <div className="compact-controls division-controls"><div><FieldLabel>Divisions</FieldLabel><div className="segmented segmented-wrap">{divisionCountOptions(setup.teams.length).map((count) => { const schedulable = divisionCountSchedulable(setup.teams.length, count); return <button key={count} type="button" disabled={!schedulable} title={schedulable ? undefined : `${setup.teams.length} teams can’t split into ${count} balanced divisions within a 14-week season`} className={setup.divisions.length === count ? "active" : ""} onClick={() => setDivisionCount(count)}>{count}</button>; })}</div></div><div className={`roster-status ${balanced ? "" : "warning"}`}>{balanced ? <Check /> : <CircleAlert />}<span><strong>{balanced ? "Balanced divisions" : "Divisions need rebalancing"}</strong><small>{counts.join(" · ")} teams</small></span></div></div>
       <div className="division-strip">{setup.divisions.map((division) => <div className="division-identity-edit" key={division.id}><IdentityColorPicker compact name={`${division.name} division`} abbreviation={resolveInitials(division.initials, divisionAcronym(division.name))} color={division.color} logoUrl={division.logoUrl} onChange={(next) => updateDivision(division.id, next)} /><div><input aria-label={`${division.name} division name`} aria-invalid={showErrors && !division.name.trim()} value={division.name} onChange={(event) => updateDivision(division.id, { name: event.target.value })} /><input aria-label={`${division.name} division initials override`} maxLength={4} placeholder={`Auto: ${divisionAcronym(division.name)}`} value={division.initials ?? ""} onChange={(event) => updateDivision(division.id, { initials: event.target.value || undefined })} /></div></div>)}</div>
+      {setup.conferences?.length === 2 && (() => {
+        const confCounts = setup.conferences.map((conference) => setup.divisions.filter((division) => division.conferenceId === conference.id).length);
+        const confBalanced = confCounts[0] === confCounts[1];
+        return <div className="conference-stage">
+          <div className="division-assign-head"><strong>Conferences</strong><span>Split the divisions into two balanced conferences — each becomes half of the playoff bracket.</span></div>
+          <div className="division-strip">{setup.conferences.map((conference) => <div className="division-identity-edit" key={conference.id}><IdentityColorPicker compact name={conference.name} abbreviation={resolveInitials(conference.initials, conference.name.slice(0, 3).toUpperCase())} color={conference.color} logoUrl={conference.logoUrl} onChange={(next) => updateConference(conference.id, next)} /><div><input aria-label={`${conference.name} name`} value={conference.name} onChange={(event) => updateConference(conference.id, { name: event.target.value })} /><input aria-label={`${conference.name} initials override`} maxLength={4} value={conference.initials ?? ""} onChange={(event) => updateConference(conference.id, { initials: event.target.value || undefined })} /></div></div>)}</div>
+          <div className={`roster-status ${confBalanced ? "" : "warning"}`}>{confBalanced ? <Check /> : <CircleAlert />}<span><strong>{confBalanced ? "Balanced conferences" : "Conferences need balancing"}</strong><small>{setup.conferences.map((conference, index) => `${conference.name}: ${confCounts[index]}`).join(" · ")}</small></span></div>
+          <div className="division-assignments"><div>{setup.divisions.map((division) => <div className="division-assign-row" key={division.id}><EntityLogo color={division.color} logoUrl={division.logoUrl} monogram={resolveInitials(division.initials, divisionAcronym(division.name))} /><span><strong>{division.name}</strong></span><CustomSelect label={`${division.name} conference`} value={division.conferenceId ?? ""} onChange={(conferenceId) => assignDivisionConference(division.id, conferenceId)} options={setup.conferences!.map((conference) => ({ value: conference.id, label: conference.name, swatch: conference.color, logoUrl: conference.logoUrl, monogram: resolveInitials(conference.initials, conference.name.slice(0, 3).toUpperCase()) }))} /></div>)}</div></div>
+        </div>;
+      })()}
       <div className="division-assignments"><div className="division-assign-head"><strong>Place each team</strong><span>Keep each division within one team of the others.</span></div><div>{setup.teams.map((team) => <div className="division-assign-row" key={team.id}><EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} /><span>{setup.display.cityNames && team.city && <small className="team-city">{team.city}</small>}<strong>{team.name}</strong>{setup.display.managers && <small>{team.manager || "No manager"}</small>}</span><CustomSelect label={`${teamDisplayName(team)} division`} value={team.divisionId} onChange={(divisionId) => updateTeam(team.id, divisionId)} options={setup.divisions.map((division) => ({ value: division.id, label: division.name, swatch: division.color, logoUrl: division.logoUrl, monogram: resolveInitials(division.initials, divisionAcronym(division.name)) }))} /></div>)}</div></div>
     </div>
   </div>;
@@ -442,12 +460,15 @@ function SeasonStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: Re
   const divisionSizes = setup.divisions.map((division) => setup.teams.filter((team) => team.divisionId === division.id).length);
   const requiresFourteenWeeks = (setup.divisions.length === 3 && setup.teams.length === 10) || divisionSizes.some((size) => 2 * (size - 1) > 13 || (size % 2 === 1 && 13 < 2 * size));
   const setRegularSeasonWeeks = (regularSeasonWeeks: 13 | 14) => setSetup((current) => {
-    const maximumFieldSize = getMaximumPlayoffFieldSize(current.teams.length, regularSeasonWeeks, current.playoffs.bracketType);
+    // 14-week seasons only have 3 open weeks, so a chosen 4-week playoff no longer applies.
+    const nextPlayoffWeeks = regularSeasonWeeks === 14 ? undefined : current.playoffs.playoffWeeks;
+    const maximumFieldSize = getMaximumPlayoffFieldSize(current.teams.length, regularSeasonWeeks, current.playoffs.bracketType, nextPlayoffWeeks);
     return {
       ...current,
       weeks: regularSeasonWeeks,
       playoffs: {
         ...current.playoffs,
+        playoffWeeks: nextPlayoffWeeks,
         fieldSize: Math.min(current.playoffs.fieldSize, maximumFieldSize),
         fieldStatus: "live",
         lockedTeamIds: [],
@@ -574,9 +595,11 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   const p = setup.playoffs;
   const [subPage, setSubPage] = useState<"format" | "rules" | "brand" | "logos">("format");
   const [expandedRounds, setExpandedRounds] = useState<number[]>([]);
-  const [previewView, setPreviewView] = useState<"championship" | "consolation">("championship");
+  const [previewView, setPreviewView] = useState<"championship" | "consolation" | "placement">("championship");
   const divisionCount = setup.divisions.length;
-  const maxFieldSize = getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, p.bracketType);
+  const maxFieldSize = getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, p.bracketType, p.playoffWeeks);
+  const canChoosePlayoffLength = setup.weeks === 13; // 14-week seasons only have 3 open weeks
+  const effectivePlayoffWeeks = setup.weeks === 14 ? 3 : (p.playoffWeeks ?? 4);
   const patch = (next: Partial<LeagueSetupInput["playoffs"]>) =>
     setSetup((current) => ({ ...current, playoffs: { ...current.playoffs, ...next } }));
 
@@ -640,6 +663,13 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
       const stub = { id: "wizard-preview", seed: "0", createdAt: "", setup: { ...setup, playoffs: normalized }, weeks: [], playoffGames: [], revision: 0, fairness: {} } as unknown as GeneratedSchedule;
       const bracket = projectConsolationBracket(stub);
       return bracket?.rounds.flatMap((round) => round.games.map((game) => ({ id: game.id, label: game.label, roundName: round.name, roundIndex: round.roundIndex }))) ?? [];
+    } catch { return []; }
+  })();
+  // Projected finishing chart (exact places up top, ranges + tail once the calendar runs out).
+  const placementChart = (() => {
+    try {
+      const stub = { id: "wizard-preview", seed: "0", createdAt: "", setup: { ...setup, playoffs: normalized }, weeks: [], playoffGames: [], revision: 0, fairness: {} } as unknown as GeneratedSchedule;
+      return projectPlacementChart(stub);
     } catch { return []; }
   })();
   const updateRoundName = (roundIndex: number, name: string) => {
@@ -808,6 +838,7 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
 
   const consolationAvailable = consolationSlots.length > 0 && (seeded.length - p.fieldSize) >= 2;
   const showConsolationView = previewView === "consolation" && consolationAvailable;
+  const showPlacementView = previewView === "placement" && placementChart.length > 0;
   const bracketSignature = [
     showConsolationView, p.fieldSize, p.bracketType, p.placementMode, byeCount, previewHalves,
     roundNames.join("~"),
@@ -858,6 +889,12 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
     <div className="playoff-wizard-layout">
       <div className="playoff-wizard-form">
         {subPage === "format" && <>
+          {canChoosePlayoffLength && <div className="ppw-group"><FieldLabel hint="a 13-week season leaves room for a longer playoff">Playoff length</FieldLabel>
+            <div className="choice-row">{[3, 4].map((wk) => <button key={wk} type="button" className={effectivePlayoffWeeks === wk ? "active" : ""} onClick={() => {
+              const nextMax = getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, p.bracketType, wk as 3 | 4);
+              patch({ playoffWeeks: wk as 3 | 4, fieldSize: Math.min(p.fieldSize, nextMax) });
+            }}><strong>{wk} weeks</strong><small>{wk === 3 ? "up to 8 seeds" : "up to 16 seeds"}</small></button>)}</div>
+          </div>}
           <div className="ppw-group"><FieldLabel hint={byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"} for the top seed${byeCount === 1 ? "" : "s"}` : "every qualifier opens play"}>Playoff teams</FieldLabel>
             <CustomSelect label="Playoff field size" value={String(p.fieldSize)} onChange={(value) => setFieldSize(Number(value))} options={fieldSizeOptions.map((n) => ({ value: String(n), label: `${n} teams`, description: getPlayoffByeCount(n) ? `${getPlayoffByeCount(n)} bye${getPlayoffByeCount(n) === 1 ? "" : "s"}` : "No byes" }))} />
           </div>
@@ -946,14 +983,20 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
       </div>
 
       <aside className="playoff-wizard-preview" aria-label="Live bracket preview">
-        <div className="ppw-preview-head"><span className="ppw-preview-eyebrow">Live preview</span><span className="ppw-preview-live">Updates as you set</span></div>
-        {consolationAvailable && <div className="ppw-preview-toggle" role="tablist" aria-label="Preview bracket">
-          <button type="button" role="tab" aria-selected={!showConsolationView} className={!showConsolationView ? "active" : ""} onClick={() => setPreviewView("championship")}>Championship</button>
-          <button type="button" role="tab" aria-selected={showConsolationView} className={showConsolationView ? "active" : ""} onClick={() => setPreviewView("consolation")}>Consolation</button>
+        <div className="ppw-preview-head"><span className="ppw-preview-eyebrow">Live preview</span></div>
+        {(consolationAvailable || placementChart.length > 0) && <div className="ppw-preview-toggle" role="tablist" aria-label="Preview view">
+          <button type="button" role="tab" aria-selected={previewView === "championship"} className={previewView === "championship" ? "active" : ""} onClick={() => setPreviewView("championship")}>Championship</button>
+          {consolationAvailable && <button type="button" role="tab" aria-selected={previewView === "consolation"} className={previewView === "consolation" ? "active" : ""} onClick={() => setPreviewView("consolation")}>Consolation</button>}
+          {placementChart.length > 0 && <button type="button" role="tab" aria-selected={previewView === "placement"} className={previewView === "placement" ? "active" : ""} onClick={() => setPreviewView("placement")}>Placement chart</button>}
         </div>}
-        <strong className="ppw-preview-title">{showConsolationView ? "Placement bracket" : p.bracketType === "ladder" ? "The playoff ladder" : "Road to the title"}</strong>
-        <small className="ppw-preview-sub">{showConsolationView ? `${Math.max(0, setup.teams.length - p.fieldSize)} teams outside the title hunt` : `${p.fieldSize} teams · ${previewHalves ? "division halves" : p.placementMode === "overall" ? "overall seeds" : "auto seeding"} · ${byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"}` : "no byes"}`}</small>
-        {renderBracket(previewBracket)}
+        <strong className="ppw-preview-title">{showPlacementView ? "Where everyone finishes" : showConsolationView ? "Placement bracket" : p.bracketType === "ladder" ? "The playoff ladder" : "Road to the title"}</strong>
+        <small className="ppw-preview-sub">{showPlacementView ? `Projected final order · ${setup.teams.length} teams` : showConsolationView ? `${Math.max(0, setup.teams.length - p.fieldSize)} teams outside the title hunt` : `${p.fieldSize} teams · ${previewHalves ? "division halves" : p.placementMode === "overall" ? "overall seeds" : "auto seeding"} · ${byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"}` : "no byes"}`}</small>
+        {showPlacementView
+          ? <ol className="ppw-chart">{placementChart.map((slot) => <li key={slot.placeStart} className={`ppw-chart-row ${slot.exact ? "exact" : "range"}`}>
+              <span className="ppw-chart-place">{slot.label}</span>
+              <span className="ppw-chart-teams">{slot.source}</span>
+            </li>)}</ol>
+          : renderBracket(previewBracket)}
         <div className="ppw-facts">
           <span className="ppw-fact">🏟 <b>{p.championshipVenueMode === "neutral-site" ? "Neutral site" : "Higher seed hosts"}</b></span>
           <span className="ppw-fact">🔀 <b>{p.reseedMode === "each-round" ? "Reseed each round" : p.reseedMode === "protected" ? "Protected" : "Fixed bracket"}</b></span>

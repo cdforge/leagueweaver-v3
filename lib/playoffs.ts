@@ -1,3 +1,4 @@
+import { conferenceDivisionGroups, conferencesApply, hasConferences } from "./conferences";
 import { calculateDivisionStandings, calculateStandings, formatRecord } from "./standings";
 import type {
   GeneratedSchedule,
@@ -27,16 +28,27 @@ export function getMaximumPlayoffWeeks(regularSeasonWeeks: 13 | 14) {
   return 17 - regularSeasonWeeks;
 }
 
+/**
+ * How many weeks the playoff actually runs. A 14-week season has only 3 open weeks; a 13-week
+ * season has 4 and the commissioner may cap it at 3. Clamped to the season's ceiling.
+ */
+export function resolvePlayoffWeeks(regularSeasonWeeks: 13 | 14, chosen?: 3 | 4): 3 | 4 {
+  const ceiling = getMaximumPlayoffWeeks(regularSeasonWeeks); // 3 for 14-week, 4 for 13-week
+  if (!chosen) return ceiling as 3 | 4;
+  return Math.min(chosen, ceiling) as 3 | 4;
+}
+
 export function getRequiredPlayoffWeeks(fieldSize: number, bracketType: PlayoffSettings["bracketType"] = "single-elimination") {
   const singleEliminationRounds = Math.max(1, Math.ceil(Math.log2(Math.max(2, fieldSize))));
   if (bracketType === "ladder") return Math.max(1, fieldSize - 1);
   return singleEliminationRounds;
 }
 
-export function getMaximumPlayoffFieldSize(teamCount: number, regularSeasonWeeks: 13 | 14, bracketType: PlayoffSettings["bracketType"] = "single-elimination") {
+export function getMaximumPlayoffFieldSize(teamCount: number, regularSeasonWeeks: 13 | 14, bracketType: PlayoffSettings["bracketType"] = "single-elimination", playoffWeeks?: 3 | 4) {
+  const availableWeeks = resolvePlayoffWeeks(regularSeasonWeeks, playoffWeeks);
   let maximum = 2;
   for (let fieldSize = 2; fieldSize <= teamCount; fieldSize += 1) {
-    if (getRequiredPlayoffWeeks(fieldSize, bracketType) <= getMaximumPlayoffWeeks(regularSeasonWeeks)) maximum = fieldSize;
+    if (getRequiredPlayoffWeeks(fieldSize, bracketType) <= availableWeeks) maximum = fieldSize;
   }
   return Math.min(teamCount, maximum);
 }
@@ -66,11 +78,12 @@ export function createDefaultPlayoffSettings(teamCount: number, _leagueColor = "
 export function normalizePlayoffSettings(value: LegacyPlayoffSettings | undefined, teamCount: number, leagueColor: string, regularSeasonWeeks: 13 | 14 = 14): PlayoffSettings {
   const defaults = createDefaultPlayoffSettings(teamCount, leagueColor, regularSeasonWeeks);
   if (!value) return defaults;
+  const playoffWeeks = resolvePlayoffWeeks(regularSeasonWeeks, value.playoffWeeks === 3 || value.playoffWeeks === 4 ? value.playoffWeeks : undefined);
   let bracketType: PlayoffSettings["bracketType"] = value.bracketType === "ladder" ? "ladder" : "single-elimination";
-  let maximumFieldSize = getMaximumPlayoffFieldSize(teamCount, regularSeasonWeeks, bracketType);
+  let maximumFieldSize = getMaximumPlayoffFieldSize(teamCount, regularSeasonWeeks, bracketType, playoffWeeks);
   if (maximumFieldSize < 2) {
     bracketType = "single-elimination";
-    maximumFieldSize = getMaximumPlayoffFieldSize(teamCount, regularSeasonWeeks, bracketType);
+    maximumFieldSize = getMaximumPlayoffFieldSize(teamCount, regularSeasonWeeks, bracketType, playoffWeeks);
   }
   const requestedFieldSize = Math.round(Number(value.fieldSize) || defaults.fieldSize);
   const fieldSize = Math.max(2, Math.min(maximumFieldSize, requestedFieldSize));
@@ -86,6 +99,7 @@ export function normalizePlayoffSettings(value: LegacyPlayoffSettings | undefine
     : defaults.consolationMode;
   return {
     fieldSize,
+    playoffWeeks,
     bracketType,
     placementMode: ["auto", "division-halves", "division-leaders", "overall"].includes(value.placementMode || "") ? value.placementMode! : defaults.placementMode,
     reseedMode,
@@ -127,24 +141,33 @@ export function getPlayoffByeCount(fieldSize: PlayoffFieldSize) {
 
 export function isPlayoffPlacementUsable(mode: Exclude<PlayoffPlacementMode, "auto">, divisionCount: number, fieldSize: PlayoffFieldSize) {
   if (mode === "overall") return true;
-  if (mode === "division-halves") return (divisionCount === 2 || divisionCount === 4) && fieldSize % 2 === 0 && fieldSize >= divisionCount;
+  // Grouped "halves" is structurally possible for any EVEN division count (2/4/6/8): two
+  // divisions split by division, 4/6/8 split into two conferences. The conference *assignment*
+  // itself is checked in resolvePlayoffPlacementMode (which sees the full setup).
+  if (mode === "division-halves") return divisionCount >= 2 && divisionCount % 2 === 0 && fieldSize % 2 === 0 && fieldSize >= divisionCount;
   return divisionCount > 1 && fieldSize >= divisionCount;
 }
 
-export function resolvePlayoffPlacementMode(setup: Pick<LeagueSetupInput, "divisions" | "playoffs">): ResolvedPlayoffPlacementMode {
+export function resolvePlayoffPlacementMode(setup: Pick<LeagueSetupInput, "divisions" | "conferences" | "playoffs">): ResolvedPlayoffPlacementMode {
   const divisionCount = setup.divisions.length;
   const requested = setup.playoffs.placementMode;
+  const fieldSize = setup.playoffs.fieldSize;
   if (setup.playoffs.bracketType === "ladder") return "overall";
+  // Halves needs two real sides: 2 divisions always have them; 4/6/8 need a conference assignment.
+  const halvesReady = isPlayoffPlacementUsable("division-halves", divisionCount, fieldSize)
+    && (divisionCount === 2 || hasConferences(setup));
+  const leadersReady = divisionCount >= 3 && isPlayoffPlacementUsable("division-leaders", divisionCount, fieldSize);
   if (requested !== "auto") {
-    return isPlayoffPlacementUsable(requested, divisionCount, setup.playoffs.fieldSize) ? requested : "overall";
+    if (requested === "division-halves") return halvesReady ? "division-halves" : leadersReady ? "division-leaders" : "overall";
+    return isPlayoffPlacementUsable(requested, divisionCount, fieldSize) ? requested : "overall";
   }
-  if (divisionCount === 2 && isPlayoffPlacementUsable("division-halves", divisionCount, setup.playoffs.fieldSize)) return "division-halves";
-  if (divisionCount >= 3 && divisionCount <= 4 && isPlayoffPlacementUsable("division-leaders", divisionCount, setup.playoffs.fieldSize)) return "division-leaders";
+  if (halvesReady) return "division-halves";
+  if (leadersReady) return "division-leaders";
   return "overall";
 }
 
-export function playoffPlacementLabel(mode: ResolvedPlayoffPlacementMode) {
-  if (mode === "division-halves") return "Division Halves";
+export function playoffPlacementLabel(mode: ResolvedPlayoffPlacementMode, conferences = false) {
+  if (mode === "division-halves") return conferences ? "Conference Halves" : "Division Halves";
   if (mode === "division-leaders") return "Division Leaders Priority";
   return "Overall Standings";
 }
@@ -152,15 +175,16 @@ export function playoffPlacementLabel(mode: ResolvedPlayoffPlacementMode) {
 function singleEliminationRoundNames(settings: Pick<PlayoffSettings, "bracketType" | "fieldSize" | "placementMode">, divisionCount: number) {
   const count = getRequiredPlayoffWeeks(settings.fieldSize, "single-elimination");
   const hasFirstRoundByes = getPlayoffByeCount(settings.fieldSize) > 0;
-  const usesTwoDivisionHalves = divisionCount === 2
+  const usesTwoHalves = (divisionCount === 2 || conferencesApply(divisionCount))
     && settings.bracketType === "single-elimination"
     && (settings.placementMode === "auto" || settings.placementMode === "division-halves")
     && isPlayoffPlacementUsable("division-halves", divisionCount, settings.fieldSize);
+  const penultimateGroupedName = conferencesApply(divisionCount) ? "Conference Championship" : "Divisional Championship";
 
   return Array.from({ length: count }, (_, index) => {
     if (index === count - 1) return "Championship";
     if (index === 0 && hasFirstRoundByes) return "Wild Card";
-    if (index === count - 2) return usesTwoDivisionHalves ? "Divisional Championship" : "Semifinals";
+    if (index === count - 2) return usesTwoHalves ? penultimateGroupedName : "Semifinals";
     return `Round ${index + 1}`;
   });
 }
@@ -246,7 +270,7 @@ export function projectPlayoffSeeds(schedule: GeneratedSchedule, fieldSize = sch
     .sort((left, right) => (standingsPosition.get(left.teamId) ?? Infinity) - (standingsPosition.get(right.teamId) ?? Infinity));
   const leaderIds = new Set(leaders.map((row) => row.teamId));
   const byeCount = getPlayoffByeCount(normalizedFieldSize);
-  const placementMode = resolvePlayoffPlacementMode({ divisions: schedule.setup.divisions, playoffs: { ...schedule.setup.playoffs, fieldSize: normalizedFieldSize } });
+  const placementMode = resolvePlayoffPlacementMode({ divisions: schedule.setup.divisions, conferences: schedule.setup.conferences, playoffs: { ...schedule.setup.playoffs, fieldSize: normalizedFieldSize } });
 
   const toSeed = (teamId: string, seed: number, bracketSide?: "A" | "B"): PlayoffSeed => {
     const row = standingsById.get(teamId)!;
@@ -283,10 +307,8 @@ export function projectPlayoffSeeds(schedule: GeneratedSchedule, fieldSize = sch
     return ordered.map((row, index) => toSeed(row.teamId, index + 1));
   }
 
-  const divisionIds = schedule.setup.divisions.map((division) => division.id);
-  const divisionGroups = divisionIds.length === 2
-    ? [[divisionIds[0]], [divisionIds[1]]]
-    : [[divisionIds[0], divisionIds[1]], [divisionIds[2], divisionIds[3]]];
+  // Two bracket sides: conferences (even ≥4 divisions) or the two divisions (2 divisions).
+  const divisionGroups = conferenceDivisionGroups(schedule.setup);
   const selectedSides = divisionGroups.map((group) => {
     const groupSet = new Set(group);
     const groupRows = standings.filter((row) => groupSet.has(teamById.get(row.teamId)?.divisionId || ""));
@@ -368,7 +390,7 @@ export function projectPlayoffRounds(schedule: GeneratedSchedule): ProjectedPlay
     });
   }
 
-  const placement = resolvePlayoffPlacementMode({ divisions: schedule.setup.divisions, playoffs: settings });
+  const placement = resolvePlayoffPlacementMode({ divisions: schedule.setup.divisions, conferences: schedule.setup.conferences, playoffs: settings });
   const openingPairs = getFirstRoundSeedPairs(settings.fieldSize);
   const openingMatchups: ProjectedPlayoffMatchup[] = openingPairs.map(([homeSeed, awaySeed]) => ({
     homeSeed,

@@ -65,6 +65,7 @@ import { downloadCsv } from "@/lib/csv";
 import { accessibleAccentColor, readableTextColor } from "@/lib/colorContrast";
 import { DivisionMark } from "@/components/ui/DivisionIdentity";
 import { isDivisionHalvesConsolationUsable, projectConsolationBracket } from "@/lib/consolation";
+import { conferenceOfDivision, hasConferences } from "@/lib/conferences";
 import { downloadSchedulePdf } from "@/lib/pdf";
 import { getMatchupRatingRange, getMatchupSignal, matchupRating, sortGamesForDisplay } from "@/lib/matchups";
 import {
@@ -797,7 +798,7 @@ function PlayoffsView({
     return () => window.clearTimeout(timer);
   }, [highlightedGame?.id]);
   const mainGameBrandingSlots = getPlayoffGameBrandingSlots(settings, schedule.setup.divisions.length);
-  const placement = resolvePlayoffPlacementMode({ divisions: schedule.setup.divisions, playoffs: settings });
+  const placement = resolvePlayoffPlacementMode({ divisions: schedule.setup.divisions, conferences: schedule.setup.conferences, playoffs: settings });
   const byeCount = getPlayoffByeCount(fieldSize);
   const roundDate = (index: number) => getWeekDateLabel(schedule.setup.seasonYear, schedule.setup.weeks + index + 1).replace(`, ${schedule.setup.seasonYear}`, "");
   const displayedSeed = (item: NonNullable<ReturnType<typeof seed>>) => settings.seedDisplayMode === "standings-finish" ? item.standingsPosition : item.seed;
@@ -810,6 +811,11 @@ function PlayoffsView({
   };
   const RoundHeading = ({ index }: { index: number }) => <h3 className="playoff-round-heading">{settings.roundLogoUrls?.[index] && <img src={settings.roundLogoUrls[index]} alt="" />}<span className="playoff-round-heading-copy"><span>{rounds[index] || `Round ${index + 1}`}</span><small>NFL Week {schedule.setup.weeks + index + 1} · {roundDate(index)}</small></span></h3>;
   const sideName = (side: "A" | "B") => {
+    if (hasConferences(schedule.setup)) {
+      const entry = seeds.find((item) => item.bracketSide === side);
+      const conference = entry ? conferenceOfDivision(schedule.setup, entry.divisionId) : undefined;
+      if (conference) return conference.name;
+    }
     const divisionNames = [...new Set(seeds.filter((item) => item.bracketSide === side).map((item) => divisionById.get(item.divisionId)?.name).filter(Boolean))];
     return divisionNames.length ? divisionNames.join(" + ") : `Half ${side}`;
   };
@@ -819,8 +825,8 @@ function PlayoffsView({
   };
   const mainGameBrandingLabel = (slot: typeof mainGameBrandingSlots[number]) => {
     const sameRound = mainGameBrandingSlots.filter((item) => item.roundIndex === slot.roundIndex);
-    if (placement === "division-halves" && schedule.setup.divisions.length === 2 && sameRound.length === 2 && slot.roundIndex < rounds.length - 1) {
-      return `${schedule.setup.divisions[slot.gameIndex]?.name ?? `Half ${slot.gameIndex + 1}`} ${slot.roundName}`;
+    if (placement === "division-halves" && (schedule.setup.divisions.length === 2 || hasConferences(schedule.setup)) && sameRound.length === 2 && slot.roundIndex < rounds.length - 1) {
+      return `${sideName(slot.gameIndex === 0 ? "A" : "B")} ${slot.roundName}`;
     }
     return sameRound.length === 1 ? slot.roundName : `${slot.roundName} · Game ${slot.gameIndex + 1}`;
   };
