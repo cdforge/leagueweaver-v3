@@ -1731,6 +1731,24 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       setActionBusy(null);
     }
   };
+  // Publish (saving to the cloud first if needed) and return the public link + slug
+  // so the recap's Share button can hand them to the native share sheet.
+  const shareForReveal = async (): Promise<{ url?: string; slug?: string; error?: string }> => {
+    let cloudSchedule = schedule;
+    try {
+      if (!CLOUD_SCHEDULE_ID.test(schedule.id)) {
+        const saved = await save();
+        if (!saved) return { error: "Sign in and save this schedule to share it." };
+        cloudSchedule = saved;
+      }
+      const response = await fetch("/api/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: cloudSchedule.id }) });
+      const payload = await response.json().catch(() => ({})) as { url?: string; slug?: string; error?: string };
+      if (!response.ok || !payload.url) return { error: apiErrorMessage(response.status, payload.error, "This schedule could not be published.") };
+      return { url: payload.url, slug: payload.slug };
+    } catch {
+      return { error: "Something went wrong publishing your schedule." };
+    }
+  };
   const sendNotification = async () => {
     if (actionBusy) return;
     if (!CLOUD_SCHEDULE_ID.test(schedule.id)) return setNotice("This season needs to finish cloud syncing before sending an update.");
@@ -1801,7 +1819,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
         {scoreDiscardConfirmOpen && <div className="score-entry-discard-warning" role="alertdialog" aria-modal="true" aria-labelledby="score-discard-title" aria-describedby="score-discard-desc"><span><strong id="score-discard-title">Discard imported score suggestions?</strong><small id="score-discard-desc">Apply the reviewed scores first, or discard the suggestions and close this panel.</small></span><button type="button" autoFocus onClick={() => setScoreDiscardConfirmOpen(false)}>Keep reviewing</button><button type="button" onClick={discardScoreSuggestions}>Discard</button></div>}
         <footer><span><ShieldCheck /><small>Scores save automatically as you enter them.</small></span><button type="button" className="button-primary" onClick={() => closeScoreModal(true)}>Done</button></footer>
     </Modal>}
-    {showRecap && <GenerationReveal schedule={schedule} mode="replay" onComplete={() => setShowRecap(false)} />}
+    {showRecap && <GenerationReveal schedule={schedule} mode="replay" onComplete={() => setShowRecap(false)} onShare={shareForReveal} />}
     <header className="workspace-topbar"><BrandLockup /><div className="workspace-top-actions"><Tooltip label="Send schedule update"><button type="button" aria-label="Send schedule update" disabled={actionBusy !== null} onClick={sendNotification}>{actionBusy === "notify" ? <LoaderCircle className="spin" /> : <Bell />}</button></Tooltip><AccountIdentity identity={entitlements} plan={entitlements.plan} /></div></header>
     {scoreBarWeek && <WeekScoreBar
       week={scoreBarWeek}
