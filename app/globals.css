@@ -1082,7 +1082,6 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .workspace-switcher-item .workspace-switcher-copy strong { color: var(--ink); font-size: var(--text-xs); }
 .workspace-switcher-item .workspace-switcher-copy small { color: var(--muted); }
 .workspace-switcher-item > svg { flex: 0 0 auto; width: 16px; height: 16px; color: var(--field); }
-.switcher-mark-plain { width: 32px; height: 32px; background: var(--canvas); color: var(--muted); border: 1px solid var(--line); font-size: var(--text-2xs); }
 .workspace-switcher-foot { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
 .workspace-switcher-all { display: flex; align-items: center; gap: 9px; padding: 8px; border-radius: var(--radius-sm); color: var(--ink); font-size: var(--text-xs); font-weight: var(--w-bold); text-decoration: none; transition: background var(--transition); }
 .workspace-switcher-all:hover { background: var(--canvas); }
