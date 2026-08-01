@@ -1,3 +1,4 @@
+import { isGamePlayed } from "./game";
 import { calculateMatchupRating, getGameOfWeekSelection } from "./matchups";
 import { calculateTeamClinchStates } from "./clinch";
 import { getWeekOneRankMap } from "./rankings";
@@ -113,7 +114,7 @@ export function calculateTeamSeasonStats(schedule: GeneratedSchedule, playoffOdd
 
   for (const week of [...schedule.weeks].sort((left, right) => left.weekNumber - right.weekNumber)) {
     for (const game of week.games) {
-      if (game.homeScore == null || game.awayScore == null) continue;
+      if (!isGamePlayed(game)) continue;
       updateRecord(home.get(game.homeTeamId)!, game.homeScore, game.awayScore);
       updateRecord(away.get(game.awayTeamId)!, game.awayScore, game.homeScore);
       for (const [teamId, won] of [
@@ -185,7 +186,7 @@ export function gameOfWeekStatusLabel(status: GameOfWeekStatus) {
 
 export function getGameOfWeekTimeline(schedule: GeneratedSchedule): GameOfWeekTimelineEntry[] {
   const orderedWeeks = [...schedule.weeks].sort((left, right) => left.weekNumber - right.weekNumber);
-  const completedWeeks = new Set(orderedWeeks.filter((week) => week.games.length > 0 && week.games.every((game) => game.homeScore != null && game.awayScore != null)).map((week) => week.weekNumber));
+  const completedWeeks = new Set(orderedWeeks.filter((week) => week.games.length > 0 && week.games.every(isGamePlayed)).map((week) => week.weekNumber));
   const currentWeek = orderedWeeks.find((week) => !completedWeeks.has(week.weekNumber))?.weekNumber;
   const openingWeekRanks = getWeekOneRankMap(schedule.setup);
   const preseasonRanks = new Map(schedule.setup.teams.map((team) => [team.id, team.overallRank]));
@@ -255,7 +256,7 @@ export function isUpsetResult(game: ScheduledGame, ranks?: Map<string, number>) 
 }
 
 export function calculateGameAnalytics(games: ScheduledGame[], gotwIds = new Set<string>(), ranksByGameId = new Map<string, Map<string, number>>()) {
-  const played = games.filter((game) => game.homeScore != null && game.awayScore != null);
+  const played = games.filter(isGamePlayed);
   const margin = (game: ScheduledGame) => Math.abs(game.homeScore! - game.awayScore!);
   const total = (game: ScheduledGame) => game.homeScore! + game.awayScore!;
   const marginRanks = competitionRanks(played, margin, "asc");

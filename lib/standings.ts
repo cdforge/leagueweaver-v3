@@ -1,3 +1,4 @@
+import { isGamePlayed } from "./game";
 import { getWeekOneRankMap } from "./rankings";
 import { normalizeTiebreakerSettings, TIEBREAKER_RULE_LABELS } from "./tiebreakers";
 import type {
@@ -57,7 +58,7 @@ function buildRawStandings(schedule: GeneratedSchedule, throughWeek: number) {
     for (const game of week.games) {
       // A 0-0 "result" is never a real fantasy score — it means the game hasn't
       // been played, so it must not count as a played tie (or any result).
-      if (game.homeScore == null || game.awayScore == null || (game.homeScore === 0 && game.awayScore === 0)) continue;
+      if (!isGamePlayed(game)) continue;
       const home = rows.get(game.homeTeamId);
       const away = rows.get(game.awayTeamId);
       if (!home || !away) continue;
@@ -318,13 +319,17 @@ export function getLiveRankHistory(schedule: GeneratedSchedule): RankHistorySnap
     buildSnapshot(0, true, 0);
   }
   for (const week of [...schedule.weeks].sort((left, right) => left.weekNumber - right.weekNumber)) {
-    const savedSnapshot = savedSnapshots.get(week.weekNumber);
+    const playedGames = week.games.filter(isGamePlayed).length;
+    // Only trust a persisted snapshot for a week that actually has a played game.
+    // A saved "week complete" snapshot whose games are all unplayed (e.g. a 0-0
+    // preseason slate) would otherwise resurrect phantom records/ties/movement that
+    // the recompute correctly zeroes out.
+    const savedSnapshot = playedGames > 0 ? savedSnapshots.get(week.weekNumber) : undefined;
     if (savedSnapshot) {
       snapshots.push(savedSnapshot);
       previousRanks = new Map(savedSnapshot.rows.map((row) => [row.teamId, row.rank]));
       continue;
     }
-    const playedGames = week.games.filter((game) => game.homeScore != null && game.awayScore != null).length;
     buildSnapshot(week.weekNumber, week.games.length > 0 && playedGames === week.games.length, playedGames);
   }
   return snapshots;

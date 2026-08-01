@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Division, ScheduledGame, ScheduleWeek, Team } from "@/lib/types";
 import { readableTextColor, tintColor } from "@/lib/colorContrast";
+import { isGamePlayed } from "@/lib/game";
 import { formatGameDateTimeOverride } from "@/lib/matchups";
 import { getCurrentSlateWeek, getNflWeekWindow } from "@/lib/schedule";
 import { getWeekPhase, type WeekPhaseState } from "@/lib/weekPhase";
@@ -165,7 +166,7 @@ function GameCard({
   const away = getTeam(game.awayTeamId);
   if (!home || !away) return null;
 
-  const played = game.homeScore != null && game.awayScore != null;
+  const played = isGamePlayed(game);
   const live = !played && phase === "live";
   const hs = game.homeScore ?? null;
   const as = game.awayScore ?? null;
@@ -251,13 +252,13 @@ export function WeekScoreBar({
   const weekCount = weeks.length;
   const currentWeekNumber = useMemo(() => {
     if (effectiveNow && seasonYear) return getCurrentSlateWeek(effectiveNow, seasonYear, weekCount);
-    const firstOpen = weeks.find((w) => w.games.some((g) => g.homeScore == null || g.awayScore == null));
+    const firstOpen = weeks.find((w) => w.games.some((g) => !isGamePlayed(g)));
     return firstOpen?.weekNumber ?? weeks[weekCount - 1]?.weekNumber ?? 1;
   }, [effectiveNow, seasonYear, weekCount, weeks]);
   const week = weeks.find((w) => w.weekNumber === currentWeekNumber) ?? weeks[0];
 
   const games = useMemo(() => week?.games ?? [], [week]);
-  const allPlayed = games.length > 0 && games.every((g) => g.homeScore != null && g.awayScore != null);
+  const allPlayed = games.length > 0 && games.every(isGamePlayed);
   const window_ = useMemo(
     () => (seasonYear && week ? getNflWeekWindow(seasonYear, week.weekNumber) : null),
     [seasonYear, week],

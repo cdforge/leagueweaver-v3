@@ -11,6 +11,7 @@ import { FloatingPopover } from "@/components/ui/FloatingPopover";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
 import { getTeamClinchTimelines, type TeamClinchTimeline } from "@/lib/clinch";
+import { isGamePlayed } from "@/lib/game";
 import { calculateMatchupRating, formatGameDateTimeOverride, getMatchupRatingRange, getMatchupSignal } from "@/lib/matchups";
 import { getWeekOneRankMap } from "@/lib/rankings";
 import { getNflWeekWindow } from "@/lib/schedule";
@@ -19,7 +20,6 @@ import { calculateTeamSeasonStats, formatDifferential, formatPoints, formatSplit
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
 import type { GeneratedSchedule, RankedStandingsRow, Team } from "@/lib/types";
 
-type DirectorySortKey = "team" | "group" | "home" | "away" | "byes" | "division" | "rating" | "sos";
 type DisplayKey = "cityNames" | "venues" | "matchup" | "rating" | "badges" | "details";
 type PlacementTone = "positive" | "neutral" | "negative";
 
@@ -40,17 +40,6 @@ interface TeamScheduleSummary {
   averageOpponentSeed: number;
   sosRank: number;
 }
-
-const DIRECTORY_SORT_OPTIONS = [
-  { value: "team", label: "Team A–Z", description: "Alphabetical by team name" },
-  { value: "group", label: "Division and seed", description: "Division, then preseason seed" },
-  { value: "home", label: "Most home games", description: "Highest home-game count first" },
-  { value: "away", label: "Most away games", description: "Highest away-game count first" },
-  { value: "byes", label: "Most byes", description: "Highest bye-week count first" },
-  { value: "division", label: "Most divisional", description: "Highest division-game count first" },
-  { value: "rating", label: "Toughest avg rating", description: "Lower matchup rating first" },
-  { value: "sos", label: "Hardest SOS", description: "Toughest opponent list first" },
-];
 
 const DISPLAY_OPTIONS: Array<{ key: DisplayKey; label: string }> = [
   { key: "cityNames", label: "City names" },
@@ -166,79 +155,84 @@ function TeamScheduleDirectory({ schedule, summaries, clinches, onSelectTeam }: 
   clinches: Map<string, TeamClinchTimeline>;
   onSelectTeam: (teamId: string) => void;
 }) {
-  const [sortKey, setSortKey] = useState<DirectorySortKey>("team");
   const divisionById = new Map(schedule.setup.divisions.map((division) => [division.id, division]));
   const showCity = schedule.setup.display?.cityNames !== false;
-  const sortedSummaries = useMemo(() => [...summaries].sort((left, right) => {
-    if (sortKey === "team") return teamDisplayName(left.team, showCity).localeCompare(teamDisplayName(right.team, showCity));
-    if (sortKey === "group") {
-      const divisionDifference = (divisionById.get(left.team.divisionId)?.name ?? "").localeCompare(divisionById.get(right.team.divisionId)?.name ?? "");
-      return divisionDifference || left.divisionSeed - right.divisionSeed;
-    }
-    if (sortKey === "home") return right.homeGames - left.homeGames || left.team.name.localeCompare(right.team.name);
-    if (sortKey === "away") return right.awayGames - left.awayGames || left.team.name.localeCompare(right.team.name);
-    if (sortKey === "byes") return right.byes - left.byes || left.team.name.localeCompare(right.team.name);
-    if (sortKey === "division") return right.divisionGames - left.divisionGames || left.team.name.localeCompare(right.team.name);
-    if (sortKey === "rating") return left.averageRating - right.averageRating || left.team.name.localeCompare(right.team.name);
-    return left.sosRank - right.sosRank || left.team.name.localeCompare(right.team.name);
-  }), [divisionById, showCity, sortKey, summaries]);
+  const sortedSummaries = useMemo(() => [...summaries].sort((left, right) =>
+    teamDisplayName(left.team, showCity).localeCompare(teamDisplayName(right.team, showCity)),
+  ), [showCity, summaries]);
+
+  const renderCard = (summary: TeamScheduleSummary) => {
+    const division = divisionById.get(summary.team.divisionId);
+    return (
+      <div className="team-directory-card" style={teamBrandStyle(summary.team.color)} key={summary.team.id}>
+        {/* H6 — the click is a stretched empty button (no flow content inside a
+            button); the name + stats stay in the DOM and are read by AT. */}
+        <button
+          type="button"
+          className="team-directory-open"
+          onClick={() => onSelectTeam(summary.team.id)}
+          aria-label={`Open ${teamDisplayName(summary.team, showCity)} schedule`}
+        />
+        <TeamIdentityBlock
+          team={summary.team}
+          division={division}
+          leagueRank={summary.liveRank}
+          record={summary.record}
+          showCity={showCity}
+        />
+        {/* Dedicated badge row — playoff / division-title / #1-seed / eliminated.
+            Collapses to nothing (CSS :empty) when the team has no clinch status. */}
+        <div className="team-directory-badges">
+          <ClinchBadges timeline={clinches.get(summary.team.id)} division={division} compact />
+        </div>
+        <dl className="team-directory-stats">
+          <div><dt>H/A</dt><dd>{summary.homeGames}-{summary.awayGames}</dd></div>
+          <div><dt>Div</dt><dd>{summary.divisionGames}</dd></div>
+          <div><dt>SOS</dt><dd>{ordinal(summary.sosRank)}</dd></div>
+        </dl>
+      </div>
+    );
+  };
+
+  // Group by division. Conferences are not a first-class entity yet (Division has no
+  // conferenceId), so no conference dividers are shown — matching "if there are no
+  // conferences, don't divide by conference." When a `conferences` grouping is added
+  // to the setup, wrap these division sections under conference headers here.
+  const showDivisionGroups = schedule.setup.divisions.length > 1;
+  const divisionGroups = schedule.setup.divisions
+    .map((division) => ({
+      division,
+      teams: summaries
+        .filter((summary) => summary.team.divisionId === division.id)
+        .sort((left, right) => left.liveRank - right.liveRank),
+    }))
+    .filter((group) => group.teams.length > 0);
+  const orphanTeams = summaries
+    .filter((summary) => !divisionById.has(summary.team.divisionId))
+    .sort((left, right) => left.liveRank - right.liveRank);
 
   return (
     <div className="team-schedule-directory">
-      <section className="team-directory-toolbar">
-        <span>
-          <strong>All team schedules</strong>
-          <small>Compare schedule shape, opponent strength, and current results before opening a team.</small>
-        </span>
-        <CustomSelect
-          label="Sort team schedules"
-          value={sortKey}
-          onChange={(value) => setSortKey(value as DirectorySortKey)}
-          options={DIRECTORY_SORT_OPTIONS}
-        />
-      </section>
-
-      <div className="team-directory-grid">
-        {sortedSummaries.map((summary) => {
-          const division = divisionById.get(summary.team.divisionId);
-          return (
-            <div
-              className="team-directory-card"
-              style={teamBrandStyle(summary.team.color)}
-              key={summary.team.id}
-            >
-              {/* H6 — the click is a stretched empty button (no flow content inside a
-                  button); the name + stats stay in the DOM and are read by AT. */}
-              <button
-                type="button"
-                className="team-directory-open"
-                onClick={() => onSelectTeam(summary.team.id)}
-                aria-label={`Open ${teamDisplayName(summary.team, showCity)} schedule`}
-              />
-              <TeamIdentityBlock
-                team={summary.team}
-                division={division}
-                leagueRank={summary.liveRank}
-                record={summary.record}
-                showCity={showCity}
-              />
-              <span className="team-directory-group">
-                {division ? <DivisionIdentity division={division} detail={`Division seed #${summary.divisionSeed}`} /> : <strong>Independent</strong>}
-                <small>League rank #{summary.liveRank}</small>
-                <ClinchBadges timeline={clinches.get(summary.team.id)} division={division} compact />
-              </span>
-              <dl className="team-directory-stats">
-                <div><dt>Home</dt><dd>{summary.homeGames}</dd></div>
-                <div><dt>Away</dt><dd>{summary.awayGames}</dd></div>
-                <div><dt>Byes</dt><dd>{summary.byes}</dd></div>
-                <div><dt>Divisional</dt><dd>{summary.divisionGames}</dd></div>
-                <div><dt>Avg rating</dt><dd>{summary.averageRating.toFixed(1)}</dd></div>
-                <div><dt>SOS</dt><dd>{ordinal(summary.sosRank)} hardest</dd></div>
-              </dl>
-            </div>
-          );
-        })}
-      </div>
+      {showDivisionGroups ? (
+        <>
+          {divisionGroups.map((group) => (
+            <section className="team-directory-division-group" key={group.division.id}>
+              <header className="team-directory-division-head">
+                <DivisionIdentity division={group.division} detail={`${group.teams.length} team${group.teams.length === 1 ? "" : "s"}`} />
+              </header>
+              <div className="team-directory-grid">{group.teams.map(renderCard)}</div>
+            </section>
+          ))}
+          {orphanTeams.length > 0 && (
+            <section className="team-directory-division-group">
+              <header className="team-directory-division-head"><strong>Independent</strong></header>
+              <div className="team-directory-grid">{orphanTeams.map(renderCard)}</div>
+            </section>
+          )}
+        </>
+      ) : (
+        <div className="team-directory-grid">{sortedSummaries.map(renderCard)}</div>
+      )}
     </div>
   );
 }
@@ -457,7 +451,7 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
               const homeRank = homeStanding?.rank ?? home.overallRank;
               const teamRank = isHome ? homeRank : awayRank;
               const opponentRank = isHome ? awayRank : homeRank;
-              const played = game.homeScore != null && game.awayScore != null;
+              const played = isGamePlayed(game);
               const ownScore = isHome ? game.homeScore : game.awayScore;
               const opponentScore = isHome ? game.awayScore : game.homeScore;
               const result = !played ? "—" : ownScore === opponentScore ? "T" : ownScore! > opponentScore! ? "W" : "L";
@@ -538,7 +532,7 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
           const opponentDivision = divisionById.get(opponent.divisionId);
           const enteringSnapshot = getEnteringWeekRankSnapshot(schedule, week.weekNumber);
           const opponentRank = enteringSnapshot.rows.find((row) => row.teamId === opponent.id)?.rank ?? opponent.overallRank;
-          const played = game.homeScore != null && game.awayScore != null;
+          const played = isGamePlayed(game);
           const ownScore = isHome ? game.homeScore : game.awayScore;
           const opponentScore = isHome ? game.awayScore : game.homeScore;
           const result = !played ? "—" : ownScore === opponentScore ? "T" : ownScore! > opponentScore! ? "W" : "L";
