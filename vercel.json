@@ -1,9 +1,11 @@
 {
   "crons": [
-    { "path": "/api/cron/sync-scores", "schedule": "*/15 0-5 * * 5" },
-    { "path": "/api/cron/sync-scores", "schedule": "*/15 13-23 * * 0" },
-    { "path": "/api/cron/sync-scores", "schedule": "*/15 0-5 * * 1" },
-    { "path": "/api/cron/sync-scores", "schedule": "*/15 0-5 * * 2" },
-    { "path": "/api/cron/sync-scores", "schedule": "*/15 18-23 * * 6" }
+    { "path": "/api/cron/sync-scores", "schedule": "30 4,5 * * 5" },
+    { "path": "/api/cron/sync-scores", "schedule": "45 20,21 * * 0" },
+    { "path": "/api/cron/sync-scores", "schedule": "0 0,1 * * 1" },
+    { "path": "/api/cron/sync-scores", "schedule": "30 4,5 * * 1" },
+    { "path": "/api/cron/sync-scores", "schedule": "30 4,5 * * 2" },
+    { "path": "/api/cron/sync-scores", "schedule": "0 8,9 * * 2" },
+    { "path": "/api/cron/sync-scores", "schedule": "30 3,4 * * 0" }
   ]
 }

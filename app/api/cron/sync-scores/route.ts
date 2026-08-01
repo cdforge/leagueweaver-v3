@@ -6,6 +6,15 @@ import type { GeneratedSchedule } from "@/lib/types";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+// vercel.json fires this once ~15 min after each NFL slate ends — each schedule
+// lists two UTC hours so it lands at the right ET time in both EDT and EST:
+//   Fri 04:30/05:30  → Thursday Night Football
+//   Sun 20:45/21:45  → Sunday 1pm ET early slate
+//   Mon 00:00/01:00  → Sunday 4pm ET afternoon slate
+//   Mon 04:30/05:30  → Sunday Night Football
+//   Tue 04:30/05:30  → Monday Night Football
+//   Tue 08:00/09:00  → Tuesday 4am ET end-of-week catch-all (after stat corrections)
+//   Sun 03:30/04:30  → late-season Saturday evening games
 // Cap per run so one invocation can't fan out into unbounded upstream fetches
 // (ESPN/Sleeper are unofficial APIs). Remaining links get picked up next tick.
 const MAX_LINKS_PER_RUN = 100;
