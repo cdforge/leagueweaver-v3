@@ -1300,14 +1300,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .start-option--saved .start-option-copy strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-2xl); line-height: 1; }
 
 /* Saved-league picker modal (B1). */
-.saved-league-modal { width: min(520px, 92vw); max-height: min(80vh, 640px); display: flex; flex-direction: column; padding: 0; overflow: hidden; border: 1px solid rgba(255, 255, 255, .35); border-radius: var(--radius); background: white; box-shadow: 0 24px 70px rgba(7, 20, 13, .35); }
-.saved-league-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
-.saved-league-modal-head strong { display: block; font-size: var(--text-lg); }
-.saved-league-modal-head small { color: var(--muted); font-size: var(--text-xs); }
-.saved-league-modal-head .modal-close { flex: 0 0 auto; display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: white; color: var(--muted); cursor: pointer; transition: border-color var(--transition), color var(--transition); }
-.saved-league-modal-head .modal-close:hover { border-color: var(--field); color: var(--ink); }
-.saved-league-modal-head .modal-close svg { width: 18px; }
-.saved-league-modal-list { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; }
+/* Saved-league picker modal (B1) — reuses the import (Connect ESPN) modal chrome
+   (.import-modal head/body/footer grid); these are the only deltas. */
+.import-modal.saved-league-modal { width: min(560px, 100%); }
+.import-provider-mark.saved { background: var(--field); }
+.saved-league-pager .button-secondary { display: inline-flex; align-items: center; gap: 6px; }
+.saved-league-pager .button-secondary svg { width: 16px; }
+.saved-league-pager .button-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
+.saved-league-pager-count { color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-bold); font-variant-numeric: tabular-nums; }
 
 /* Quick-create ⁄ Customize fork card on the League step (B2). Customize is the
    emphasized primary; Quick create is the secondary shortcut with a settings
@@ -4802,6 +4802,18 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .sb-slate-label { display: none; }
   .sb-game { flex-basis: 172px; }
   .sb-collapsed-hint { display: none; }
+}
+
+@media (max-width: 560px) {
+  /* Stack the rail above the slate so the games strip spans the full screen
+     width and scrolls comfortably, instead of being crammed into ~half the
+     width beside the rail (where it barely reads as scrollable). */
+  .sb { flex-direction: column; align-items: stretch; }
+  .sb-rail { justify-content: space-between; border-right: 0; border-bottom: 1px solid var(--line); }
+  .sb-rail::after { top: auto; bottom: 0; left: 0; width: 100%; height: 3px; }
+  .sb-state { flex-direction: row; align-items: center; gap: 9px; }
+  .sb-games-wrap { width: 100%; }
+  .sb-toggle { width: 100%; height: 30px; border-left: 0; border-top: 1px solid var(--line); }
 }
 
 /* ============ PLAYOFF PICTURE — dark broadcast panel ============ */
