@@ -5248,3 +5248,6 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .ppw-chart-row.range .ppw-chart-place { color: var(--pk-mut, #94a49c); }
 .ppw-chart-teams { min-width: 0; color: var(--pk-mut, #94a49c); font-size: var(--text-xs); line-height: 1.4; overflow: hidden; text-overflow: ellipsis; }
 .ppw-chart-row.exact .ppw-chart-teams { color: #dfe7e3; }
+
+/* conference assignment section in the Divisions step */
+.conference-stage { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; padding-top: 18px; border-top: 1px solid rgba(0,0,0,.08); }
