@@ -22,6 +22,8 @@ export interface TeamSeasonStats extends StandingsRow {
   strengthOfSchedule: number | null;
   playoffOdds: number;
   featuredWins: number;
+  featuredLosses: number;
+  featuredTies: number;
 }
 
 export type GameOfWeekStatus = "previous" | "current" | "projected";
@@ -108,6 +110,8 @@ export function calculateTeamSeasonStats(schedule: GeneratedSchedule, playoffOdd
   const opponents = new Map(schedule.setup.teams.map((team) => [team.id, [] as string[]]));
   const defeated = new Map(schedule.setup.teams.map((team) => [team.id, [] as string[]]));
   const featuredWins = new Map(schedule.setup.teams.map((team) => [team.id, 0]));
+  const featuredLosses = new Map(schedule.setup.teams.map((team) => [team.id, 0]));
+  const featuredTies = new Map(schedule.setup.teams.map((team) => [team.id, 0]));
   const activeWinStreak = new Map(schedule.setup.teams.map((team) => [team.id, 0]));
   const bestWinStreak = new Map(schedule.setup.teams.map((team) => [team.id, 0]));
   const gotwIds = getRegularSeasonGotwIds(schedule);
@@ -129,9 +133,16 @@ export function calculateTeamSeasonStats(schedule: GeneratedSchedule, playoffOdd
       opponents.get(game.awayTeamId)!.push(game.homeTeamId);
       if (game.homeScore > game.awayScore) defeated.get(game.homeTeamId)!.push(game.awayTeamId);
       if (game.awayScore > game.homeScore) defeated.get(game.awayTeamId)!.push(game.homeTeamId);
-      if (gotwIds.has(game.id) && game.homeScore !== game.awayScore) {
-        const winnerId = game.homeScore > game.awayScore ? game.homeTeamId : game.awayTeamId;
-        featuredWins.set(winnerId, (featuredWins.get(winnerId) ?? 0) + 1);
+      if (gotwIds.has(game.id)) {
+        if (game.homeScore === game.awayScore) {
+          featuredTies.set(game.homeTeamId, (featuredTies.get(game.homeTeamId) ?? 0) + 1);
+          featuredTies.set(game.awayTeamId, (featuredTies.get(game.awayTeamId) ?? 0) + 1);
+        } else {
+          const winnerId = game.homeScore > game.awayScore ? game.homeTeamId : game.awayTeamId;
+          const loserId = game.homeScore > game.awayScore ? game.awayTeamId : game.homeTeamId;
+          featuredWins.set(winnerId, (featuredWins.get(winnerId) ?? 0) + 1);
+          featuredLosses.set(loserId, (featuredLosses.get(loserId) ?? 0) + 1);
+        }
       }
       if (teamById.get(game.homeTeamId)?.divisionId === teamById.get(game.awayTeamId)?.divisionId) {
         divisionPoints.get(game.homeTeamId)!.for += game.homeScore;
@@ -158,6 +169,8 @@ export function calculateTeamSeasonStats(schedule: GeneratedSchedule, playoffOdd
       strengthOfSchedule: average(opponentStrengths),
       playoffOdds: playoffOdds.get(row.teamId) ?? 0,
       featuredWins: featuredWins.get(row.teamId) ?? 0,
+      featuredLosses: featuredLosses.get(row.teamId) ?? 0,
+      featuredTies: featuredTies.get(row.teamId) ?? 0,
     };
   });
 }
