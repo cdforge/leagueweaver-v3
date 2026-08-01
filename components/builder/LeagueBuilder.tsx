@@ -44,7 +44,7 @@ import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { createBlankSetup, createConferences, createDefaultSetup, createDivisions, createTeams } from "@/lib/defaults";
-import { conferencesApply, defaultConferenceAssignment } from "@/lib/conferences";
+import { conferencesApply, defaultConferenceAssignment, hasConferences } from "@/lib/conferences";
 import { identityFromSetup, normalizeSavedLeague } from "@/lib/savedLeagues";
 import { getNflWeeks, getNflWeekWindow, getWeekDateLabel } from "@/lib/schedule";
 import { generateScheduleAsync } from "@/lib/generateScheduleAsync";
@@ -895,7 +895,7 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   const halvesUsable = isPlayoffPlacementUsable("division-halves", divisionCount, p.fieldSize);
   const placementOptions = [
     ...(halvesUsable
-      ? [{ value: "division-halves", label: "Division halves (Recommended)", description: "NFL-style — each half runs its own tournament to the final" }] : []),
+      ? [{ value: "division-halves", label: `${hasConferences(setup) ? "Conference" : "Division"} halves (Recommended)`, description: "NFL-style — each half runs its own tournament to the final" }] : []),
     ...(isPlayoffPlacementUsable("division-leaders", divisionCount, p.fieldSize)
       ? [{ value: "division-leaders", label: "Division leaders protected", description: "Classic fantasy — each division winner is guaranteed a top seed on its own side" }] : []),
     { value: "overall", label: "Overall standings", description: "Simple — top finishers qualify by overall seed, regardless of division" },
@@ -959,6 +959,17 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   const seeded = [...setup.teams].sort((a, b) => (a.overallRank ?? 99) - (b.overallRank ?? 99));
   const divOfSeed = (seed: number) => { const t = seeded[seed - 1]; return t ? divById.get(t.divisionId) : undefined; };
   const divInitials = (d?: Division) => (d?.initials?.trim() || d?.name || "D").slice(0, 3).toUpperCase();
+  // The bracket splits into two halves. For 4/6/8-division leagues with a conference assignment the
+  // two sides are the two CONFERENCES (each pools all its divisions' teams) — mirroring the engine's
+  // `conferenceDivisionGroups` seeding; for a 2-division league the two sides are the divisions.
+  const conferencesActive = hasConferences(setup);
+  const halfIdentities: Array<Conference | Division | undefined> = conferencesActive
+    ? [setup.conferences![0], setup.conferences![1]]
+    : [divisions[0], divisions[1]];
+  const halfDivisionIds: Array<Set<string>> = conferencesActive
+    ? [0, 1].map((hi) => new Set(divisions.filter((d) => d.conferenceId === setup.conferences![hi].id).map((d) => d.id)))
+    : [new Set([divisions[0]?.id]), new Set([divisions[1]?.id])];
+  const teamInHalf = (hi: number, divisionId: string) => halfDivisionIds[hi]?.has(divisionId) ?? false;
   const previewHalves = p.placementMode === "division-halves" && halvesUsable && divisions.length >= 2;
 
   type PSlot = { division?: Division; seed?: number; feederId?: string; text?: string };
@@ -1035,28 +1046,36 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
 
     if (previewHalves) {
       const per = Math.ceil(n / 2);
-      const divCount = (d?: Division) => seeded.filter((t) => divById.get(t.divisionId)?.id === d?.id).length;
-      const offset = isCons ? per : 0; // consolation continues each division's seed ranking below the qualifiers
-      const counts = [0, 1].map((hi) => (isCons ? Math.max(0, divCount(divisions[hi]) - per) : per));
+      const halfTeamCount = (hi: number) => seeded.filter((t) => teamInHalf(hi, t.divisionId)).length;
+      const offset = isCons ? per : 0; // consolation continues each side's seed ranking below the qualifiers
+      const counts = [0, 1].map((hi) => (isCons ? Math.max(0, halfTeamCount(hi) - per) : per));
       if (counts[0] + counts[1] >= 2 && counts[0] >= 1 && counts[1] >= 1) {
-        const champLabel = (d?: Division) => { const nm = d?.name ?? "Division"; return nm.length <= 11 ? `${nm} champ` : "Div champ"; };
+        // Each side is a conference (4/6/8-div) or a division (2-div); label by its name, or its
+        // initials when the name is too long for the slot (e.g. "Conference A" → "A champ").
+        const champLabel = (idn?: { name?: string; initials?: string }) => {
+          const nm = idn?.name?.trim();
+          if (nm && nm.length <= 11) return `${nm} champ`;
+          const ini = idn?.initials?.trim();
+          return ini ? `${ini} champ` : "Champ";
+        };
         const halves = [0, 1].map((hi) => {
-          const d = divisions[hi] ?? divisions[0];
+          const side = halfIdentities[hi] ?? halfIdentities[0];
           const localSeeds = Array.from({ length: counts[hi] }, (_, i) => i + 1);
-          return { d, count: counts[hi], ...buildSeedBracket(localSeeds, `pv-h${hi}`, (s) => ({ division: d, seed: offset + s })) };
+          return { side, count: counts[hi], ...buildSeedBracket(localSeeds, `pv-h${hi}`, (s) => ({ division: side as Division | undefined, seed: offset + s })) };
         });
+        const roundLeaf = conferencesActive ? "Conference Championship" : "Divisional Championship";
         const maxRounds = Math.max(halves[0].rounds.length, halves[1].rounds.length);
         for (let r = 0; r < maxRounds; r++) {
           const name = isCons
-            ? (r === maxRounds - 1 ? "Division consolation" : `Consolation round ${r + 1}`)
-            : (roundNames[r] ?? (r === 0 ? "Wild Card" : "Divisional Championship"));
+            ? (r === maxRounds - 1 ? "Consolation" : `Consolation round ${r + 1}`)
+            : (roundNames[r] ?? (r === 0 ? "Wild Card" : roundLeaf));
           rounds.push({ name, matches: halves.flatMap((h) => h.rounds[r] ?? []) });
         }
         const finalSlots: PSlot[] = isCons
-          ? halves.map((h) => (h.count >= 2 ? { feederId: h.championId } : { division: h.d, seed: offset + 1 }))
-          : [{ division: divisions[0], text: champLabel(divisions[0]) }, { division: divisions[1], text: champLabel(divisions[1]) }];
+          ? halves.map((h) => (h.count >= 2 ? { feederId: h.championId } : { division: h.side as Division | undefined, seed: offset + 1 }))
+          : [{ division: halfIdentities[0] as Division | undefined, text: champLabel(halfIdentities[0]) }, { division: halfIdentities[1] as Division | undefined, text: champLabel(halfIdentities[1]) }];
         const final: PMatch = { id: isCons ? "pv-cons-final" : "pv-final", gold: !isCons, slots: finalSlots };
-        halves.forEach((h, hi) => { if (h.count >= 2) link(h.championId, final.id, divisions[hi]?.color); });
+        halves.forEach((h, hi) => { if (h.count >= 2) link(h.championId, final.id, halfIdentities[hi]?.color); });
         rounds.push({ name: isCons ? "Consolation final" : (roundNames[maxRounds] ?? "Championship"), matches: [final] });
         return { rounds, connections: conns, gameNo: numberGames(rounds) };
       }
@@ -1248,7 +1267,7 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
           {placementChart.length > 0 && <button type="button" role="tab" aria-selected={previewView === "placement"} className={previewView === "placement" ? "active" : ""} onClick={() => setPreviewView("placement")}>Placement chart</button>}
         </div>}
         <strong className="ppw-preview-title">{showPlacementView ? "Where everyone finishes" : showConsolationView ? "Placement bracket" : p.bracketType === "ladder" ? "The playoff ladder" : "Road to the title"}</strong>
-        <small className="ppw-preview-sub">{showPlacementView ? `Projected final order · ${setup.teams.length} teams` : showConsolationView ? `${Math.max(0, setup.teams.length - p.fieldSize)} teams outside the title hunt` : `${p.fieldSize} teams · ${previewHalves ? "division halves" : p.placementMode === "overall" ? "overall seeds" : "auto seeding"} · ${byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"}` : "no byes"}`}</small>
+        <small className="ppw-preview-sub">{showPlacementView ? `Projected final order · ${setup.teams.length} teams` : showConsolationView ? `${Math.max(0, setup.teams.length - p.fieldSize)} teams outside the title hunt` : `${p.fieldSize} teams · ${previewHalves ? (conferencesActive ? "conference halves" : "division halves") : p.placementMode === "overall" ? "overall seeds" : "auto seeding"} · ${byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"}` : "no byes"}`}</small>
         {showPlacementView
           ? <ol className="ppw-chart">{placementChart.map((slot) => <li key={slot.placeStart} className={`ppw-chart-row ${slot.exact ? "exact" : "range"}`}>
               <span className="ppw-chart-place">{slot.label}</span>
@@ -1394,6 +1413,11 @@ export function LeagueBuilder() {
   const builderContentRef = useRef<HTMLDivElement>(null);
   const stepMountedRef = useRef(false);
   const [setup, setSetup] = useState<LeagueSetupInput>(createDefaultSetup);
+  // Sub-tab walking order for the two grouped steps — Continue advances through these in turn (and
+  // Back reverses) before the wizard moves to the next top-level step. The Conferences sub-tab is
+  // only in the order for 4/6/8-division leagues.
+  const teamsTabOrder: string[] = conferencesApply(setup.divisions.length) ? ["teams", "divisions", "conferences"] : ["teams", "divisions"];
+  const seasonTabOrder: string[] = ["season", "seeding", "week1", "rules"];
   const logoBaseline = useRef<Map<string, string>>(new Map(setupLogoEntries(setup)));
   const [generating, setGenerating] = useState(false);
   const [blueprintOpen, setBlueprintOpen] = useState(false);
@@ -1514,29 +1538,51 @@ export function LeagueBuilder() {
 
   // Validation is keyed to the six grouped steps. For a grouped step it also reports which
   // sub-tab owns the failing field, so `next()` can switch to it before highlighting the error.
-  const validation = useMemo<{ error: string; teamsTab?: TeamsTab; seasonTab?: SeasonTab } | null>(() => {
+  // Validate a step. `only` restricts the check to one grouped-step sub-tab (used while walking the
+  // sub-tabs); with no `only` the whole step is checked (used when leaving it / on non-grouped steps).
+  type ValidationResult = { error: string; teamsTab?: TeamsTab; seasonTab?: SeasonTab } | null;
+  const validateStep = (only?: { teamsTab?: TeamsTab; seasonTab?: SeasonTab }): ValidationResult => {
     if (step === 1 && !setup.name.trim()) return { error: "Enter a league name before continuing." };
     if (step === 2) {
-      // Teams sub-tab
-      if (setup.teams.length < 8 || setup.teams.length > 32 || setup.teams.length % 2) return { error: "Use an even number of teams from 8 through 32.", teamsTab: "teams" };
-      const missingTeam = setup.teams.findIndex((team) => !team.name.trim());
-      if (missingTeam >= 0) return { error: "Enter a name for every team before continuing — the missing one is highlighted below.", teamsTab: "teams" };
-      // Divisions sub-tab
-      if (setup.divisions.some((division) => !division.name.trim())) return { error: "Give every division a name before continuing.", teamsTab: "divisions" };
-      if (setup.teams.some((team) => !setup.divisions.some((division) => division.id === team.divisionId))) return { error: "Place every team in a division before continuing.", teamsTab: "divisions" };
-      const counts = setup.divisions.map((division) => setup.teams.filter((team) => team.divisionId === division.id).length);
-      if (Math.max(...counts) - Math.min(...counts) > 1) return { error: `Rebalance the divisions. Current team counts are ${counts.join(", ")}.`, teamsTab: "divisions" };
+      if (!only || only.teamsTab === "teams") {
+        if (setup.teams.length < 8 || setup.teams.length > 32 || setup.teams.length % 2) return { error: "Use an even number of teams from 8 through 32.", teamsTab: "teams" };
+        const missingTeam = setup.teams.findIndex((team) => !team.name.trim());
+        if (missingTeam >= 0) return { error: "Enter a name for every team before continuing — the missing one is highlighted below.", teamsTab: "teams" };
+      }
+      if (!only || only.teamsTab === "divisions") {
+        if (setup.divisions.some((division) => !division.name.trim())) return { error: "Give every division a name before continuing.", teamsTab: "divisions" };
+        if (setup.teams.some((team) => !setup.divisions.some((division) => division.id === team.divisionId))) return { error: "Place every team in a division before continuing.", teamsTab: "divisions" };
+        const counts = setup.divisions.map((division) => setup.teams.filter((team) => team.divisionId === division.id).length);
+        if (Math.max(...counts) - Math.min(...counts) > 1) return { error: `Rebalance the divisions. Current team counts are ${counts.join(", ")}.`, teamsTab: "divisions" };
+      }
     }
-    if (step === 3 && setup.weekOne.rankingSource === "draft-day") {
+    if (step === 3 && (!only || only.seasonTab === "week1") && setup.weekOne.rankingSource === "draft-day") {
       const selectedPlaces = setup.teams.filter((team) => Number.isInteger(team.draftPlace));
       if (selectedPlaces.length > 0 && selectedPlaces.length < setup.teams.length) return { error: `Finish the draft order for all ${setup.teams.length} teams, or clear every draft place to skip it for now.`, seasonTab: "week1" };
       if (selectedPlaces.length === setup.teams.length && new Set(selectedPlaces.map((team) => team.draftPlace)).size !== setup.teams.length) return { error: "Give every team a unique draft place before continuing.", seasonTab: "week1" };
     }
     return null;
-  }, [setup, step]);
-  const validationError = validation?.error ?? null;
-  const advanceToStep = (nextStep: number) => {
-    setStep(Math.min(STEPS.length - 1, nextStep));
+  };
+  const showValidationError = (result: NonNullable<ValidationResult>) => {
+    if (result.teamsTab) setTeamsTab(result.teamsTab);
+    if (result.seasonTab) setSeasonTab(result.seasonTab);
+    setError(result.error);
+    setShowFieldErrors(true);
+    requestAnimationFrame(() => {
+      const invalid = builderContentRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+      if (invalid) {
+        invalid.scrollIntoView({ block: "center", behavior: "smooth" });
+        invalid.focus({ preventScroll: true });
+      }
+    });
+  };
+  // When the wizard moves to a grouped step, land on the entry sub-tab: the first when arriving
+  // forward, the last when arriving via Back — so the sequential walk reads naturally either way.
+  const advanceToStep = (nextStep: number, entry: "first" | "last" = "first") => {
+    const target = Math.min(STEPS.length - 1, nextStep);
+    if (target === 2) setTeamsTab(entry === "last" ? (teamsTabOrder[teamsTabOrder.length - 1] as TeamsTab) : "teams");
+    if (target === 3) setSeasonTab(entry === "last" ? (seasonTabOrder[seasonTabOrder.length - 1] as SeasonTab) : "season");
+    setStep(target);
     setBlueprintOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -1566,19 +1612,27 @@ export function LeagueBuilder() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   const next = () => {
-    if (validation) {
-      if (validation.teamsTab) setTeamsTab(validation.teamsTab);
-      if (validation.seasonTab) setSeasonTab(validation.seasonTab);
-      setError(validation.error);
-      setShowFieldErrors(true);
-      requestAnimationFrame(() => {
-        const invalid = builderContentRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
-        if (invalid) {
-          invalid.scrollIntoView({ block: "center", behavior: "smooth" });
-          invalid.focus({ preventScroll: true });
-        }
-      });
-      return;
+    // Grouped steps (Teams & Divisions, Season & Rules) are walked one sub-tab at a time: Continue
+    // validates the current sub-tab and moves to the next one; only from the last sub-tab does it
+    // leave the step (re-validating the whole step first so nothing skipped slips through).
+    const order = step === 2 ? teamsTabOrder : step === 3 ? seasonTabOrder : null;
+    const current = step === 2 ? teamsTab : step === 3 ? seasonTab : null;
+    if (order && current) {
+      const index = order.indexOf(current);
+      const leaving = index >= order.length - 1;
+      const result = leaving ? validateStep() : validateStep(step === 2 ? { teamsTab: current as TeamsTab } : { seasonTab: current as SeasonTab });
+      if (result) { showValidationError(result); return; }
+      if (!leaving) {
+        setError(null);
+        setShowFieldErrors(false);
+        if (step === 2) setTeamsTab(order[index + 1] as TeamsTab); else setSeasonTab(order[index + 1] as SeasonTab);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+      // leaving the grouped step — fall through to the logo prompt + step advance below
+    } else {
+      const result = validateStep();
+      if (result) { showValidationError(result); return; }
     }
     setError(null);
     setShowFieldErrors(false);
@@ -1601,7 +1655,24 @@ export function LeagueBuilder() {
   };
 
   const skipDraftRankForNow = step === 3 && seasonTab === "week1" && setup.weekOne.rankingSource === "draft-day" && getTeamsMissingDraftPlaces(setup).length === setup.teams.length;
-  const back = () => { setError(null); setStep((current) => Math.max(0, current - 1)); setBlueprintOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const back = () => {
+    setError(null);
+    setShowFieldErrors(false);
+    // Inside a grouped step, Back steps to the previous sub-tab before leaving the step.
+    const order = step === 2 ? teamsTabOrder : step === 3 ? seasonTabOrder : null;
+    const current = step === 2 ? teamsTab : step === 3 ? seasonTab : null;
+    if (order && current) {
+      const index = order.indexOf(current);
+      if (index > 0) {
+        if (step === 2) setTeamsTab(order[index - 1] as TeamsTab); else setSeasonTab(order[index - 1] as SeasonTab);
+        setBlueprintOpen(false);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+    }
+    if (step === 0) return;
+    advanceToStep(step - 1, "last");
+  };
   const quickImportSavedLeague = (preset: SavedLeaguePreset) => {
     if (preset.data.platformConnection) {
       setConnectedSavedLeaguePrompt(preset);
