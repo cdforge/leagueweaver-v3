@@ -823,15 +823,16 @@ function PlayoffsView({
     const nextRound = projectedMainRounds[round.roundIndex + 1];
     if (!nextRound) return [];
     return round.matchups.flatMap((matchup, gameIndex) => {
-      const projectedWinner = Math.min(matchup.homeSeed, matchup.awaySeed);
-      const targetIndex = nextRound.matchups.findIndex((next) => next.homeSeed === projectedWinner || next.awaySeed === projectedWinner);
-      // No matching next-round slot (e.g. the projected winner drew a bye or the
-      // lookup fails): draw nothing rather than a confidently-wrong line to game 1.
-      if (targetIndex < 0) return [];
       const sourceId = `main-r${round.roundIndex + 1}-g${gameIndex + 1}`;
       const recorded = (schedule.playoffGames ?? []).find((game) => game.bracket === "main" && game.id === sourceId);
       const decided = recorded != null && recorded.homeScore != null && recorded.awayScore != null && recorded.homeScore !== recorded.awayScore;
       const winnerTeam = decided ? teamById.get(recorded!.homeScore! > recorded!.awayScore! ? recorded!.homeTeamId : recorded!.awayTeamId) : undefined;
+      // Follow the actual advancer — a fixed-bracket upset keeps a lower seed in its slot —
+      // falling back to the projected better seed while the game is unplayed.
+      const advancerSeed = winnerTeam ? seeds.find((item) => item.teamId === winnerTeam.id)?.seed ?? Math.min(matchup.homeSeed, matchup.awaySeed) : Math.min(matchup.homeSeed, matchup.awaySeed);
+      const targetIndex = nextRound.matchups.findIndex((next) => next.homeSeed === advancerSeed || next.awaySeed === advancerSeed);
+      // No matching next-round slot: draw nothing rather than a confidently-wrong line to game 1.
+      if (targetIndex < 0) return [];
       return [{
         id: `main-winner-r${round.roundIndex + 1}-g${gameIndex + 1}`,
         sourceGameId: sourceId,
