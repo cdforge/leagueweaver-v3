@@ -4338,3 +4338,17 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 @keyframes champion-sweep { to { transform: translateX(120%); } }
 @media (prefers-reduced-motion: reduce) { .champion-capstone.is-crowned .champion-capstone-glow { animation: none; opacity: 0; } }
 @media (max-width: 560px) { .champion-copy strong { white-space: normal; } .champion-trophy { display: none; } }
+
+/* Mobile: stack the bracket into a vertical round-by-round list (no horizontal scroll) */
+@media (max-width: 640px) {
+  .pp-board .postseason-map-canvas,
+  .pp-board .postseason-map-canvas.rounds-4 { min-width: 0; padding: 12px; }
+  .pp-board .championship-bracket-grid { grid-template-columns: 1fr !important; gap: 22px; padding: 12px; }
+  .pp-board .championship-bracket-grid > section { min-width: 0; }
+  .pp-board .championship-bracket-grid .playoff-round-heading { padding-bottom: 8px; border-bottom: 1px solid var(--pk-line); }
+  /* connectors are meaningless once the rounds stack vertically */
+  .pp-board .bracket-connector-layer svg { display: none; }
+  /* consolation board: stack its rounds too */
+  .pp-board .postseason-map-canvas .consolation-board { grid-auto-flow: row; grid-auto-columns: auto; grid-template-columns: 1fr; }
+  .pp-board .champion-capstone { flex-wrap: wrap; }
+}
