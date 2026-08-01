@@ -37,6 +37,7 @@ export function calculateTeamClinchStates(schedule: GeneratedSchedule, throughWe
   const fieldSize = Math.max(2, Math.min(schedule.setup.teams.length, Math.round(schedule.setup.playoffs.fieldSize)));
   const placementMode = resolvePlayoffPlacementMode({
     divisions: schedule.setup.divisions,
+    conferences: schedule.setup.conferences,
     playoffs: { ...schedule.setup.playoffs, fieldSize },
   });
   const hasDivisions = schedule.setup.divisions.length > 1;

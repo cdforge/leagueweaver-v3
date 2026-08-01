@@ -19,12 +19,27 @@ export interface TiebreakerSettings {
   manualOverrides: Record<string, string[]>;
 }
 
+/**
+ * A conference groups divisions into (exactly two) halves of the playoff bracket.
+ * Only present for even division counts (4/6/8); a first-class identity like a division
+ * (name + initials + color + logo) so it can be branded in setup.
+ */
+export interface Conference {
+  id: string;
+  name: string;
+  initials?: string;
+  color: string;
+  logoUrl?: string;
+}
+
 export interface Division {
   id: string;
   name: string;
   initials?: string;
   color: string;
   logoUrl?: string;
+  /** Assigned conference id — set only for even division counts; undefined otherwise. */
+  conferenceId?: string;
 }
 
 export interface Team {
@@ -77,6 +92,8 @@ export interface LeagueSetupInput {
   seasonYear: number;
   weeks: 13 | 14;
   divisions: Division[];
+  /** Present (exactly two) only for even division counts; empty/undefined otherwise. */
+  conferences?: Conference[];
   teams: Team[];
   display: {
     cityNames: boolean;
@@ -95,6 +112,8 @@ export interface LeagueSetupInput {
   tiebreakers?: TiebreakerSettings;
   playoffs: {
     fieldSize: PlayoffFieldSize;
+    /** How many weeks the playoff runs. 14-week seasons are always 3; 13-week seasons may pick 3 or 4. */
+    playoffWeeks?: 3 | 4;
     bracketType: PlayoffBracketType;
     placementMode: PlayoffPlacementMode;
     reseedMode: PlayoffReseedMode;
@@ -335,6 +354,7 @@ export interface SavedLeagueIdentity {
   version: 3;
   league: Pick<LeagueSetupInput, "name" | "abbreviation" | "initials" | "description" | "color" | "logoUrl">;
   divisions: Division[];
+  conferences?: Conference[];
   teams: Team[];
   display: LeagueSetupInput["display"];
   priorSeason?: LeagueSetupInput["priorSeason"];

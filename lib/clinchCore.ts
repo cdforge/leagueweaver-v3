@@ -1,3 +1,4 @@
+import { conferenceDivisionGroups } from "./conferences";
 import { isGamePlayed } from "./game";
 import { projectPlayoffSeeds, resolvePlayoffPlacementMode } from "./playoffs";
 import { calculateDivisionStandings, calculateStandings } from "./standings";
@@ -89,10 +90,9 @@ export function eliminatedWithin(ranges: TeamRange[], team: TeamRange, slots: nu
 }
 
 export function divisionGroups(schedule: GeneratedSchedule) {
-  const divisionIds = schedule.setup.divisions.map((division) => division.id);
-  if (divisionIds.length === 2) return [[divisionIds[0]], [divisionIds[1]]];
-  if (divisionIds.length === 4) return [[divisionIds[0], divisionIds[1]], [divisionIds[2], divisionIds[3]]];
-  return [divisionIds];
+  // Conference-aware: even divisions with an assignment split into two conferences; two
+  // divisions each become a side; odd/unassigned collapse to a single unified group.
+  return conferenceDivisionGroups(schedule.setup);
 }
 
 export function resolvedPlayoffFieldSize(schedule: GeneratedSchedule) {
@@ -144,6 +144,7 @@ export function resolveClinchPool(
   const fieldSize = resolvedPlayoffFieldSize(schedule);
   const placementMode = resolvePlayoffPlacementMode({
     divisions: schedule.setup.divisions,
+    conferences: schedule.setup.conferences,
     playoffs: { ...schedule.setup.playoffs, fieldSize },
   });
   if (placementMode === "overall") {
