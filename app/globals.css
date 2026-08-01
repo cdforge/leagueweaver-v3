@@ -4399,11 +4399,10 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .bracket-slot-badge { position: absolute; right: 8px; bottom: 8px; z-index: 2; border-radius: var(--radius-chip); background: rgba(63,191,127,.16); color: #7fe3ac; padding: 2px 7px; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .01em; white-space: nowrap; pointer-events: none; }
 .bracket-slot-badge.is-bye { background: rgba(227,185,64,.16); color: var(--gold); }
 
-/* venue moved from the slot into a single card-footer line, led by the host team's logo */
-.main-playoff-game .playoff-venue { min-width: 0; display: inline-flex; align-items: center; gap: 6px; overflow: hidden; color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-medium); white-space: nowrap; text-overflow: ellipsis; }
-/* EntityLogo clamps to 32px (inline width/height + .entity-logo min-width); override with !important for the small footer adornment */
-.main-playoff-game .playoff-venue .entity-logo { flex: 0 0 auto; width: 22px !important; height: 22px !important; min-width: 22px; min-height: 22px; border-radius: 5px; }
-.main-playoff-game .playoff-venue .entity-logo > span { padding: 0; font-size: 9px; }
+/* venue moved from the slot into a single card-footer line, led by the host mark (bare logo where available, else a neutral pin — no team-color background) */
+.main-playoff-game .playoff-venue { min-width: 0; display: inline-flex; align-items: center; gap: 5px; overflow: hidden; color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-medium); white-space: nowrap; text-overflow: ellipsis; }
+.main-playoff-game .playoff-venue svg { width: 11px; flex: 0 0 auto; }
+.main-playoff-game .playoff-venue .entity-logo { flex: 0 0 auto; width: 18px !important; height: 18px !important; min-width: 18px; min-height: 18px; }
 .pp-board .playoff-venue { color: var(--pk-mut); }
 
 /* consolation entrants reuse the championship .bracket-slot + stacked identity: team-color spine + top separators, no side/bottom borders */
@@ -4414,6 +4413,16 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .pp-board .consolation-game > header strong { color: #fff; }
 .pp-board .consolation-game > header small { color: var(--pk-mut); }
 .pp-board .consolation-game > header > em { color: #fff; }
+
+/* played state reuses the same .bracket-slot + stacked identity as the projection, adding a right-aligned score (so entering a result no longer swaps the card to a different design) */
+.bracket-score { flex: 0 0 auto; align-self: center; padding-left: 4px; font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); font-variant-numeric: tabular-nums; letter-spacing: .01em; color: var(--pk-mut); }
+.result-slot.is-winner .bracket-score { color: #fff; }
+.pp-board .result-slot.is-winner { background: rgba(63,191,127,.07); }
+
+/* consolation bracket mirrors the championship round structure: same 56px column gap + generous vertical spacing between games */
+.pp-board .consolation-board { gap: 56px; grid-auto-columns: minmax(270px, 1fr); padding: 20px 22px 24px; }
+.pp-board .consolation-board > section { min-width: 270px; border-right: 0; padding: 0; }
+.pp-board .consolation-round-games { display: flex; flex-direction: column; justify-content: space-around; gap: 18px; min-height: 500px; }
 
 /* filled division badge on the playoff surfaces (bracket + picture): paint the division color behind the
    abbreviation (vars set by DivisionMark) and let the fixed-width wrappers grow to fit. Shared table/clinch marks stay plain colored text. */

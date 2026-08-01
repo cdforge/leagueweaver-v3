@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   BarChart3,
-  ArrowDownRight,
   Bell,
   CalendarDays,
   Check,
@@ -62,7 +61,6 @@ import { downloadCsv } from "@/lib/csv";
 import { accessibleAccentColor, readableTextColor } from "@/lib/colorContrast";
 import { DivisionMark } from "@/components/ui/DivisionIdentity";
 import { isDivisionHalvesConsolationUsable, projectConsolationBracket } from "@/lib/consolation";
-import { buildPlayoffPicture } from "@/lib/playoffPicture";
 import { downloadSchedulePdf } from "@/lib/pdf";
 import { getMatchupRatingRange, getMatchupSignal, matchupRating, sortGamesForDisplay } from "@/lib/matchups";
 import {
@@ -851,7 +849,6 @@ function PlayoffsView({
       outcome: entrant.outcome,
       label: entrant.label,
     })))) ?? [];
-  const transferRoutes = consolationConnections.filter((connection) => connection.sourceGameId.startsWith("main-"));
   const consolationInternalConnections = consolationConnections.filter((connection) => !connection.sourceGameId.startsWith("main-"));
   const hasConsolation = Boolean(consolationProjection);
   const PlayoffGameBrand = ({ roundIndex, gameIndex }: { roundIndex: number; gameIndex: number }) => {
@@ -877,13 +874,13 @@ function PlayoffsView({
   const bracketModeChip = bracketMode === "complete" ? "Final" : bracketMode === "live" ? "Live" : "Projected";
   const SimulatedPlayoffTeam = ({ teamId, score, winner }: { teamId: string; score?: number; winner: boolean }) => {
     const team = teamById.get(teamId);
-    if (!team) return <span className="sim-bracket-team placeholder"><strong>To be determined</strong></span>;
-    return <span className={`sim-bracket-team ${winner ? "winner" : ""}`}>
-      <b>#{seedByTeam.get(teamId) ?? team.overallRank}</b>
-      <EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={34} />
-      <span><small className="team-city">{team.city}</small><strong>{team.name}</strong></span>
-      <em>{score ?? "—"}</em>
-    </span>;
+    if (!team) return <div className="bracket-slot placeholder"><b>—</b><span><strong>To be determined</strong><small>Awaiting result</small></span></div>;
+    const standing = playoffStandingsByTeam.get(teamId);
+    const seedEntry = seeds.find((item) => item.teamId === teamId);
+    return <div className={`bracket-slot result-slot ${winner ? "is-winner" : "is-loser"}`} style={{ "--slot-spine": team.color } as React.CSSProperties}>
+      <TeamIdentityBlock variant="stacked" compact result={winner ? "winner" : "loser"} team={team} division={divisionById.get(team.divisionId)} leagueRank={seedByTeam.get(teamId) ?? team.overallRank} record={{ overall: seedEntry?.record ?? (standing ? formatRecord(standing) : "0-0"), division: standing ? `${standing.divisionWins}-${standing.divisionLosses}` : undefined }} showCity={showCity} href={`/season/${schedule.id}/team/${team.id}`} />
+      <span className="bracket-score">{score ?? "—"}</span>
+    </div>;
   };
   const playoffGameById = new Map(simulatedMainGames.map((game) => [game.id, game]));
   const orderedRoundMatchups = (round: typeof projectedMainRounds[number]) => round.matchups
@@ -907,7 +904,6 @@ function PlayoffsView({
     const played = recorded?.homeScore != null && recorded.awayScore != null;
     const homeWon = Boolean(played && recorded!.homeScore! > recorded!.awayScore!);
     const awayWon = Boolean(played && recorded!.awayScore! > recorded!.homeScore!);
-    const route = transferRoutes.find((connection) => connection.sourceGameId === gameId);
     const side = bracketSide || seed(homeSeed)?.bracketSide;
     const halfDivision = placement === "division-halves" && side && roundIndex < projectedMainRounds.length - 1 ? sideDivision(side) : undefined;
     const sideCopy = placement === "division-halves" && side && roundIndex < projectedMainRounds.length - 1
@@ -945,19 +941,8 @@ function PlayoffsView({
       <header><PlayoffGameBrand roundIndex={roundIndex} gameIndex={gameIndex} /><span><strong>{gameName}</strong><small>{sideCopy || (played ? "Final result" : settings.reseedMode === "fixed" ? "Fixed bracket path" : "Projected path")}</small></span>{played && <em>FINAL</em>}</header>
       <div className="main-playoff-game-teams">{recorded ? <><SimulatedPlayoffTeam teamId={recorded.awayTeamId} score={recorded.awayScore} winner={awayWon} /><SimulatedPlayoffTeam teamId={recorded.homeTeamId} score={recorded.homeScore} winner={homeWon} /></> : <><Slot number={homeSeed} host /><Slot number={awaySeed} /></>}</div>
       {!simulationMode && playoffsLive && homeTeam && awayTeam && <InlinePlayoffScoreEditor awayName={teamDisplayName(awayTeam, showCity)} homeName={teamDisplayName(homeTeam, showCity)} awayScore={recorded?.awayScore} homeScore={recorded?.homeScore} onSave={(awayScore, homeScore) => saveScore(awayScore, homeScore)} onClear={() => saveScore(undefined, undefined)} />}
-      {(homeTeam || route) && <footer>{homeTeam && <span className="playoff-venue"><EntityLogo color={homeTeam.color} logoUrl={homeTeam.logoUrl} monogram={teamInitials(homeTeam)} size={18} />{homeTeam.stadium}</span>}{route && <span className="placement-route"><b>L</b>Loser to placement</span>}</footer>}
+      {homeTeam && <footer><span className="playoff-venue">{homeTeam.logoUrl ? <EntityLogo imagePresentation="bare" color={homeTeam.color} logoUrl={homeTeam.logoUrl} monogram={teamInitials(homeTeam)} size={18} /> : <MapPin />}{homeTeam.stadium}</span></footer>}
     </article>;
-  };
-  const EliminationTransferRail = () => {
-    if (!transferRoutes.length) return null;
-    const consolationById = new Map(consolationGameBrandingSlots.map((game) => [game.id, game]));
-    return <section className="elimination-transfer-rail" aria-labelledby="placement-transfer-title">
-      <header><span><ArrowDownRight /><strong id="placement-transfer-title">Moves to placement</strong></span><small>Championship losses continue below without re-entering title contention.</small></header>
-      <div>{transferRoutes.map((route, index) => {
-        const destination = consolationById.get(route.targetGameId);
-        return <div key={route.id} data-bracket-game-id={`placement-transfer-${index + 1}`}><b>L</b><span><strong>{route.label}</strong><small>{destination ? `Continues in ${destination.label}` : "Destination updates after the result"}</small></span><ArrowDownRight /></div>;
-      })}</div>
-    </section>;
   };
   const championCapstone = (
     <div className={`champion-capstone${champion ? " is-crowned" : ""} playoff-theme-${settings.theme}`}>
@@ -1007,7 +992,6 @@ function PlayoffsView({
     </div>{championCapstone}</div>}
     {boardSection === "consolation" && hasConsolation && <div className="postseason-map-scroll" aria-label="Consolation and placement bracket">
       <BracketConnectorLayer connections={consolationInternalConnections} className="postseason-map-canvas">
-        <EliminationTransferRail />
         <ConsolationBracket schedule={normalizedSchedule} onUpdateGame={simulationMode ? undefined : onUpdatePlayoffGame} />
       </BracketConnectorLayer>
     </div>}
@@ -1635,9 +1619,12 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       if (game.bracket === "consolation" && item.bracket === "consolation" && item.roundIndex > game.roundIndex) return false;
       return true;
     });
-    const playoffGames = existing.some((item) => item.id === game.id)
-      ? existing.map((item) => item.id === game.id ? game : item)
-      : [...existing, game];
+    const cleared = game.homeScore == null && game.awayScore == null;
+    const playoffGames = cleared
+      ? existing.filter((item) => item.id !== game.id)
+      : existing.some((item) => item.id === game.id)
+        ? existing.map((item) => item.id === game.id ? game : item)
+        : [...existing, game];
     return { ...current, playoffGames };
   });
   const onUpdateTiebreakers = (tiebreakers: TiebreakerSettings) => setSchedule((current) => current ? normalizeSeason({ ...current, rankHistory: undefined, setup: { ...current.setup, tiebreakers } }) : current);
@@ -1845,10 +1832,6 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const scoreBarRankByTeam = new Map((getEnteringWeekRankSnapshot(activeSchedule, selectedWeek)?.rows ?? []).map((row) => [row.teamId, row.rank]));
   const scoreBarDivisionById = new Map(activeSchedule.setup.divisions.map((division) => [division.id, division]));
   const scoreBarWeek = activeSchedule.weeks.find((item) => item.weekNumber === selectedWeek) ?? activeSchedule.weeks[0];
-  const playoffPicture = canAccessPlayoffs ? buildPlayoffPicture(activeSchedule) : null;
-  const playoffPictureSummary = playoffPicture && playoffPicture.throughWeek > 0
-    ? `${playoffPicture.fieldSize} in · ${playoffPicture.huntCount} chasing`
-    : null;
   return <main className={`workspace-page ${simulation ? "simulation-mode" : ""} ${scoreBarWeek ? "has-scorebar" : ""}`} style={{ "--brand": schedule.setup.color, "--brand-on": readableTextColor(schedule.setup.color) } as CSSProperties}>
     {scoreModalOpen && canAccessScorekeeping && <Modal
       className="score-entry-modal"
@@ -1877,8 +1860,6 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       displayCityNames={activeSchedule.setup.display?.cityNames !== false}
       onSelectWeek={setSelectedWeek}
       onSelectGame={(gameId) => { openLeagueScheduleWeek(scoreBarWeek.weekNumber); setHighlightedGame({ id: gameId }); }}
-      playoffPictureSummary={playoffPictureSummary}
-      onOpenPlayoffPicture={playoffPictureSummary ? () => { setPlayoffTab("picture"); setView("playoffs"); } : undefined}
     />}
     <div className="workspace-shell">
       <aside className="workspace-rail"><nav aria-label="Season workspace">{VIEW_ITEMS.map((item) => { const Icon = item.icon; return <button type="button" key={item.key} aria-label={item.label} title={item.label} className={view === item.key ? "active" : ""} onClick={() => selectView(item)}><Icon /><span>{item.label}</span></button>; })}</nav><div className="rail-bottom"><WorkspaceSwitcher current={{ id: schedule.id, name: schedule.setup.name, seasonYear: schedule.setup.seasonYear, color: schedule.setup.color, logoUrl: schedule.setup.logoUrl, initials: schedule.setup.initials }} signedIn={Boolean(entitlements.signedIn)} /></div></aside>
