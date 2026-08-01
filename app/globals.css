@@ -4026,9 +4026,8 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .workspace-rail nav button.active span { display: block; max-width: 74px; overflow: hidden; font-size: var(--text-2xs); line-height: 1; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
   /* Bottom bar: collapse the schedule switcher to an icon-only trigger so it
      sits at the end of the bar instead of stacking on top of the tabs. */
-  .workspace-rail .rail-bottom { flex: 0 0 auto; margin: 0; border-top: 0; padding: 0; }
-  .workspace-rail .rail-bottom .workspace-switcher-copy { display: none; }
-  .workspace-rail .rail-bottom .workspace-switcher-face { min-width: 48px; min-height: 48px; justify-content: center; padding: 0; gap: 0; }
+  /* Drop the schedule-switcher on the mobile tab bar so the page tabs get the room. */
+  .workspace-rail .rail-bottom { display: none; }
   .workspace-main { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
   .workspace-toolbar { align-items: flex-start; flex-direction: column; padding: 13px 14px; }
   .draft-rank-reminder { grid-template-columns: 30px minmax(0, 1fr); padding: 11px 14px; }
