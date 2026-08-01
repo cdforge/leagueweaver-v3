@@ -4034,11 +4034,12 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .sb-games-wrap.can-left::before { opacity: 1; }
 .sb-games-wrap.can-right::after { opacity: 1; }
 
-.sb-games { width: 100%; display: flex; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: thin; cursor: grab; overscroll-behavior-x: contain; }
+/* Still scrolls (drag, wheel, auto-scroll) but the bar is hidden — the edge fades signal
+   overflow, and the auto-scroll no longer flashes a scrollbar as it pans. */
+.sb-games { width: 100%; display: flex; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; -ms-overflow-style: none; cursor: grab; overscroll-behavior-x: contain; }
 .sb-games.autoscrolling, .sb-games.dragging { scroll-snap-type: none; }
 .sb-games.dragging { cursor: grabbing; user-select: none; }
-.sb-games::-webkit-scrollbar { height: 7px; }
-.sb-games::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 99px; }
+.sb-games::-webkit-scrollbar { display: none; }
 .sb-empty { flex: 1; display: grid; place-items: center; padding: 18px; color: var(--muted); font-size: var(--text-xs); font-weight: var(--w-medium); }
 
 /* Grow to fill the available width; lock to the basis and scroll only once the
