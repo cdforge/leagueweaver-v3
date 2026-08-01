@@ -72,11 +72,10 @@ export function formatSplitRecord(record: SplitRecord) {
  *  commonly decimals, and summing/subtracting them accrues floating-point drift
  *  (e.g. 1217.3999999999999). Round to a single decimal and group thousands. */
 export function formatPoints(value: number) {
-  // Fantasy points read as ###.## — hand-typed and platform-synced scores keep
-  // their two decimals. A whole score drops the redundant ".00" so it reads
-  // cleanly (129, not 129.00) while real fractional scores (129.24) are untouched.
-  const formatted = value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return formatted.endsWith(".00") ? formatted.slice(0, -3) : formatted;
+  // Fantasy points always read as ###.## — hand-typed and platform-synced scores
+  // must look identical, and fantasy scoring is inherently two-decimal, so a whole
+  // score renders 129.00 (not 129) and real fractional scores (129.24) are untouched.
+  return value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 /** Format a point differential with an explicit sign and a tone for styling.

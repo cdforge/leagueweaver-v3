@@ -100,6 +100,7 @@ import { formatPoints, gameOfWeekStatusLabel, getScheduleGameSignals } from "@/l
 import { formatDraftPlace, getTeamsMissingDraftPlaces, getWeekOneRankMap, getWeekOneTeamOrder, hasCompleteDraftRanking } from "@/lib/rankings";
 import { loadSeasonById, normalizeSeason, removeLocalSeason, saveSeason } from "@/lib/storage";
 import { getNflWeekWindow, getWeekDateLabel, updateGameScore } from "@/lib/schedule";
+import { getWeekPhase } from "@/lib/weekPhase";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
 import type { GeneratedSchedule, ImportHistoryEvent, ImportPreview, LeagueSetupInput, PlatformConnection, PlatformSyncMode, PlayoffGame, ScheduledGame, Team, TiebreakerSettings } from "@/lib/types";
 
@@ -196,7 +197,7 @@ function playoffRoundShortLabel(name: string) {
   return name.replace("Round ", "Rd ");
 }
 
-function PlayoffWeekSchedule({ schedule, roundIndex }: { schedule: GeneratedSchedule; roundIndex: number }) {
+function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores }: { schedule: GeneratedSchedule; roundIndex: number; onEnterScores: () => void }) {
   const settings = normalizePlayoffSettings(schedule.setup.playoffs, schedule.setup.teams.length, schedule.setup.color, schedule.setup.weeks);
   const normalizedSchedule = { ...schedule, setup: { ...schedule.setup, playoffs: settings } };
   const projectedRounds = projectPlayoffRounds(normalizedSchedule);
@@ -235,11 +236,10 @@ function PlayoffWeekSchedule({ schedule, roundIndex }: { schedule: GeneratedSche
   const showCity = schedule.setup.display?.cityNames !== false;
   const roundDate = getWeekDateLabel(schedule.setup.seasonYear, round.weekNumber);
   const roundComplete = actualGames.length > 0 && actualGames.every((game) => game.homeScore != null && game.awayScore != null);
-  const projectionCopy = roundIndex === 0
-    ? "The field and byes follow the current standings and playoff settings."
-    : "Future teams assume the higher projected seed advances from each prior matchup.";
-  const statusLabel = roundComplete ? "PLAYOFF RESULTS" : actualGames.length ? "PLAYOFF WEEK" : "LIVE PROJECTION";
   const championshipNeutral = roundIndex === projectedRounds.length - 1 && settings.championshipVenueMode === "neutral-site";
+  const playoffPhaseLabel = roundComplete ? "Final" : actualGames.length ? "Scheduled" : "Projected";
+  const playoffPillClass = roundComplete ? "phase-final" : "phase-playoff";
+  const playoffScored = actualGames.filter((game) => game.homeScore != null && game.awayScore != null).length;
 
   const TeamSlot = ({ teamId, seedNumber, mirrored = false, result = "open" }: {
     teamId: string;
@@ -266,10 +266,25 @@ function PlayoffWeekSchedule({ schedule, roundIndex }: { schedule: GeneratedSche
   };
 
   return <div className="workspace-stack playoff-week-schedule" style={{ "--playoff-week-color": settings.color, "--playoff-week-ink": readableTextColor(settings.color) } as CSSProperties}>
-    <div className={`playoff-week-heading${settings.logoUrl ? " has-logo" : " no-logo"}`}>
-      {settings.logoUrl && <EntityLogo color={settings.color} logoUrl={settings.logoUrl} monogram="PO" size={48} />}
-      <span><small>{statusLabel}</small><strong>{round.name}</strong><em>NFL Week {round.weekNumber} · {roundDate}</em></span>
-      <span className="playoff-week-heading-copy"><strong>{settings.name}</strong><small>{projectionCopy}</small></span>
+    <div className="section-bar schedule-week-header is-playoff">
+      <div className="week-lead">
+        <span className="bar-number" aria-hidden="true">{settings.logoUrl ? <EntityLogo color={settings.color} logoUrl={settings.logoUrl} monogram="PO" size={40} /> : <Trophy />}</span>
+        <span className="week-lead-copy">
+          <span className="schedule-week-title"><strong>{round.name}</strong></span>
+          <small>NFL Week {round.weekNumber} · {roundDate}</small>
+        </span>
+      </div>
+      <div className="week-status">
+        <span className={`week-phase-pill ${playoffPillClass}`}>{playoffPhaseLabel}</span>
+        <span className="playoff-week-context">{matchups.length} game{matchups.length === 1 ? "" : "s"}{round.byeSeeds.length > 0 ? ` · ${round.byeSeeds.length} bye${round.byeSeeds.length === 1 ? "" : "s"}` : ""}</span>
+      </div>
+      <div className="section-bar-actions">
+        <button type="button" className="score-entry-trigger" onClick={onEnterScores}>
+          <LayoutList />
+          <span>{playoffScored > 0 ? "Edit scores" : "Add scores"}</span>
+          {matchups.length > 0 && <small className="score-progress" aria-label={`${playoffScored} of ${matchups.length} scored`}>{playoffScored}/{matchups.length}</small>}
+        </button>
+      </div>
     </div>
     <div className="playoff-week-games" role="list" aria-label={`${round.name} matchups`}>
       {matchups.map((matchup, index) => {
@@ -302,17 +317,17 @@ function PlayoffWeekSchedule({ schedule, roundIndex }: { schedule: GeneratedSche
   </div>;
 }
 
-function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayoffs, onOpenScores, highlightedGame, simulationResults = {}, simulationProbabilities = {} }: {
+function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayoffs, onOpenScores, onOpenPlayoffs, highlightedGame, simulationResults = {}, simulationProbabilities = {} }: {
   schedule: GeneratedSchedule;
   selectedWeek: number;
   setSelectedWeek: (week: number) => void;
   canAccessPlayoffs: boolean;
   onOpenScores: (week: number) => void;
+  onOpenPlayoffs: () => void;
   highlightedGame?: HighlightedGame;
   simulationResults?: Record<string, SimulatorResultView>;
   simulationProbabilities?: Record<string, { away: number; home: number }>;
 }) {
-  const [ratingTier, setRatingTier] = useState("all");
   const weekStripRef = useRef<HTMLDivElement>(null);
   const scheduleSignals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
   const playoffRounds = useMemo(() => projectPlayoffRounds(schedule), [schedule]);
@@ -374,16 +389,13 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
   const openScoreCount = week.games.filter((game) => game.homeScore == null || game.awayScore == null).length;
   const hasEnteredScores = week.games.some((game) => game.homeScore != null || game.awayScore != null);
   const scoreEntryDue = openScoreCount > 0 && Date.now() >= new Date(nflWeekWindow.endsAt).getTime();
+  const scoredCount = week.games.length - openScoreCount;
+  // Clock-derived week phase (Upcoming / Live / Final) — same source the score bar uses, no feed.
+  const weekPhase = getWeekPhase(new Date(), nflWeekWindow);
   const playingTeamIds = new Set(week.games.flatMap((game) => [game.homeTeamId, game.awayTeamId]));
   const byeTeams = schedule.setup.teams.filter((team) => !playingTeamIds.has(team.id));
   const orderedGames = sortGamesForDisplay(week.games.filter((game) => teamById.has(game.homeTeamId) && teamById.has(game.awayTeamId)), displayedRanks);
-  const visibleGames = ratingTier === "all" ? orderedGames : orderedGames.filter((game) => getMatchupSignal(game, displayedRanks, ratingRange).label.toLowerCase() === ratingTier);
-  const ratingOptions = [
-    { value: "all", label: "All matchups", description: "Show the complete week" },
-    { value: "competitive", label: "Competitive", description: "Strongest third of this schedule" },
-    { value: "neutral", label: "Neutral", description: "Middle third of this schedule" },
-    { value: "lopsided", label: "Lopsided", description: "Widest ranking gaps" },
-  ];
+  const visibleGames = orderedGames;
   const gotwPureAway = gotwEntry ? teamById.get(gotwEntry.pureGame.awayTeamId) : undefined;
   const gotwPureHome = gotwEntry ? teamById.get(gotwEntry.pureGame.homeTeamId) : undefined;
   const gotwOverrideDetails = gotwEntry?.playoffImplication && gotwEntry.pureGame.id !== gotwEntry.game.id && gotwPureAway && gotwPureHome
@@ -419,14 +431,40 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
   if (selectedPlayoffIndex >= 0) {
     return <div className="workspace-stack">
       {weekSelector}
-      <PlayoffWeekSchedule schedule={schedule} roundIndex={selectedPlayoffIndex} />
+      <PlayoffWeekSchedule schedule={schedule} roundIndex={selectedPlayoffIndex} onEnterScores={onOpenPlayoffs} />
     </div>;
   }
   return (
     <div className="workspace-stack">
       {weekSelector}
       <div className="schedule-week-panel">
-        <div className={`section-bar schedule-week-header${isThanksgivingWeek ? " is-thanksgiving" : ""}`}><div><span className="bar-number">{String(week.weekNumber).padStart(2, "0")}</span><span><span className="schedule-week-title"><strong>Week {week.weekNumber}</strong>{isThanksgivingWeek && <em className="thanksgiving-week-label">Thanksgiving Week</em>}</span><small>{week.dateLabel}</small></span></div><div className="section-bar-actions"><WeekMatchupRank rank={week.matchupRank} total={schedule.weeks.length} />{week.weekNumber === liveWeekNumber && <StakesButton schedule={schedule} weekNumber={week.weekNumber} onGoToGame={goToGame} />}<button type="button" className={`score-entry-trigger${scoreEntryDue ? " needs-attention" : ""}`} onClick={() => onOpenScores(week.weekNumber)}><LayoutList /><span>{hasEnteredScores ? "Edit scores" : "Add scores"}</span></button><span className="week-markers">{secondaryHolidays.map((holiday) => <em className="holiday-marker" key={holiday}>{holiday}</em>)}{byeTeams.length > 0 && <em className="bye-marker">{byeTeams.length} BYE</em>}</span><span className="rating-tier-filter"><CustomSelect label="Filter matchup rating" value={ratingTier} onChange={setRatingTier} options={ratingOptions} showSelectedDescription={false} /></span></div></div>
+        <div className={`section-bar schedule-week-header${isThanksgivingWeek ? " is-thanksgiving" : ""}${weekPhase.phase === "live" ? " is-live" : ""}`}>
+          <div className="week-lead">
+            <span className="bar-number" aria-hidden="true">{String(week.weekNumber).padStart(2, "0")}</span>
+            <span className="week-lead-copy">
+              <span className="schedule-week-title"><strong>Week {week.weekNumber}</strong>{isThanksgivingWeek && <em className="thanksgiving-week-label" aria-label="Thanksgiving week"><span aria-hidden="true">🦃</span><span className="thx-text">Thanksgiving</span></em>}</span>
+              <small>{week.dateLabel}</small>
+            </span>
+          </div>
+          <div className="week-status">
+            <WeekMatchupRank rank={week.matchupRank} total={schedule.weeks.length} withLabel />
+            <span className={`week-phase-pill phase-${weekPhase.phase}`}>
+              {weekPhase.phase === "live" && <i className="live-dot" aria-hidden="true" />}
+              <span>{weekPhase.phase === "live" ? "Live" : weekPhase.label}</span>
+              {weekPhase.phase === "live" && weekPhase.window && weekPhase.window !== "between" && <small>{weekPhase.label}</small>}
+            </span>
+            {(secondaryHolidays.length > 0 || byeTeams.length > 0) && <span className="week-markers">{secondaryHolidays.map((holiday) => <em className="holiday-marker" key={holiday}>{holiday}</em>)}{byeTeams.length > 0 && <em className="bye-marker">{byeTeams.length} BYE</em>}</span>}
+          </div>
+          <div className="section-bar-actions">
+            {week.weekNumber === liveWeekNumber && <StakesButton schedule={schedule} weekNumber={week.weekNumber} onGoToGame={goToGame} />}
+            <button type="button" className={`score-entry-trigger${scoreEntryDue ? " needs-attention" : ""}`} onClick={() => onOpenScores(week.weekNumber)}>
+              {scoreEntryDue && <i className="due-dot" aria-hidden="true" />}
+              <LayoutList />
+              <span>{scoreEntryDue ? "Enter scores" : hasEnteredScores ? "Edit scores" : "Add scores"}</span>
+              {week.games.length > 0 && <small className="score-progress" aria-label={`${scoredCount} of ${week.games.length} scored`}>{scoredCount}/{week.games.length}</small>}
+            </button>
+          </div>
+        </div>
         {gotwOverrideDetails && gotwEntry && visibleGames.some((game) => game.id === gameOfWeekId) && <section className="gotw-selection-reason" aria-label="Why this matchup is Game of the Week">
           <span><Star fill="currentColor" /></span>
           <div><small>LATE-SEASON PLAYOFF IMPACT</small><strong>Why this won the rating tie</strong><p>This {gotwOverrideDetails.featuredRanks} matchup shares the week&apos;s best {gotwEntry.rating.toFixed(1)} rating and crosses the {schedule.setup.playoffs.fieldSize}-team playoff cutline. Playoff impact moved it ahead of <span>{gotwOverrideDetails.pureMatchup}</span> after the rating tie. Lower ratings always remain first.</p></div>
@@ -438,9 +476,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
           const isHighlighted = highlightedGame?.id === game.id;
           const highlightedMedalLabel = isHighlighted && highlightedGame?.medalRank ? ["Gold", "Silver", "Bronze"][highlightedGame.medalRank - 1] : undefined;
           return <MatchupCard key={game.id} {...presentationFor(game, week.weekNumber)} featured={featured} featuredLabel={featured && gotwEntry ? gameOfWeekStatusLabel(gotwEntry.status) : undefined} gameLabel={featured ? undefined : `Game ${game.gameNumber}`} badges={analytics?.badges} medalRank={isHighlighted ? highlightedGame?.medalRank : analytics?.qualityRank} medalLabel={highlightedMedalLabel ? `${highlightedMedalLabel} · ${highlightedGame?.medalCategory || "League leader"}` : undefined} highlighted={isHighlighted} simulationSource={simulationResult?.source} simulationLocked={simulationResult?.locked} winProbability={simulationProbabilities[game.id]} teamHrefBase={`/season/${schedule.id}/team`} />;
-        })}{visibleGames.length === 0 && (ratingTier !== "all"
-          ? <div className="rating-filter-empty"><strong>No {ratingTier} matchups this week.</strong><button type="button" onClick={() => setRatingTier("all")}>Show all matchups</button></div>
-          : <div className="rating-filter-empty"><strong>No games scheduled this week.</strong>{byeTeams.length > 0 && <span>Every team is on a bye this week.</span>}</div>)}</div>
+        })}{visibleGames.length === 0 && <div className="rating-filter-empty"><strong>No games scheduled this week.</strong>{byeTeams.length > 0 && <span>Every team is on a bye this week.</span>}</div>}</div>
       </div>
       <MatchupRatingLegend />
       {byeTeams.length > 0 && <div className="week-bye-list"><strong>Bye</strong>{byeTeams.map((team) => <span key={team.id}><EntityLogo size={32} color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} />{teamDisplayName(team, display.cityNames)}</span>)}</div>}
@@ -1871,6 +1907,24 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       setActionBusy(null);
     }
   };
+  // Publish (saving to the cloud first if needed) and return the public link + slug
+  // so the recap's Share button can hand them to the native share sheet.
+  const shareForReveal = async (): Promise<{ url?: string; slug?: string; error?: string }> => {
+    let cloudSchedule = schedule;
+    try {
+      if (!CLOUD_SCHEDULE_ID.test(schedule.id)) {
+        const saved = await save();
+        if (!saved) return { error: "Sign in and save this schedule to share it." };
+        cloudSchedule = saved;
+      }
+      const response = await fetch("/api/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: cloudSchedule.id }) });
+      const payload = await response.json().catch(() => ({})) as { url?: string; slug?: string; error?: string };
+      if (!response.ok || !payload.url) return { error: apiErrorMessage(response.status, payload.error, "This schedule could not be published.") };
+      return { url: payload.url, slug: payload.slug };
+    } catch {
+      return { error: "Something went wrong publishing your schedule." };
+    }
+  };
   const selectView = (item: typeof VIEW_ITEMS[number]) => {
     setScoreModalOpen(false);
     setView(item.key);
@@ -1886,10 +1940,14 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     router.push(teamId ? `/season/${schedule.id}/team/${teamId}` : `/season/${schedule.id}?view=team-schedule`);
   };
   const currentTitle = VIEW_ITEMS.find((item) => item.key === view)?.label ?? "League Schedule";
-  const canAccessPlayoffs = true;
+  const canAccessPlayoffs = true; // Playoff rounds ship to all users on the schedule page.
   const openScoreEntry = (weekNumber: number) => {
     setSelectedWeek(Math.min(weekNumber, schedule.setup.weeks));
     setScoreModalOpen(true);
+  };
+  const openPlayoffScores = () => {
+    setView("playoffs");
+    router.push(`/season/${schedule.id}?view=playoffs`);
   };
   const openDraftRankingSettings = () => {
     setView("settings");
@@ -1927,7 +1985,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
         {scoreDiscardConfirmOpen && <div className="score-entry-discard-warning" role="alertdialog" aria-modal="true" aria-labelledby="score-discard-title" aria-describedby="score-discard-desc"><span><strong id="score-discard-title">Discard imported score suggestions?</strong><small id="score-discard-desc">Apply the reviewed scores first, or discard the suggestions and close this panel.</small></span><button type="button" autoFocus onClick={() => setScoreDiscardConfirmOpen(false)}>Keep reviewing</button><button type="button" onClick={discardScoreSuggestions}>Discard</button></div>}
         <footer><span><ShieldCheck /><small>Scores save automatically as you enter them.</small></span><button type="button" className="button-primary" onClick={() => closeScoreModal(true)}>Done</button></footer>
     </Modal>}
-    {showRecap && <GenerationReveal schedule={schedule} mode="replay" onComplete={() => setShowRecap(false)} />}
+    {showRecap && <GenerationReveal schedule={schedule} mode="replay" onComplete={() => setShowRecap(false)} onShare={shareForReveal} />}
     <header className="workspace-topbar"><BrandLockup /><div className="workspace-top-actions"><AccountIdentity identity={entitlements} plan={entitlements.plan} /></div></header>
     {scoreBarWeek && <WeekScoreBar
       week={scoreBarWeek}
@@ -1980,7 +2038,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
         </div>}
         <DraftRankingReminder schedule={schedule} onSave={onSaveDraftPlaces} openRequest={draftRankingRequest} onOpenSettings={openDraftRankingSettings} />
         <div className="workspace-content">
-          {view === "league-schedule" && <ScheduleView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} canAccessPlayoffs={canAccessPlayoffs} onOpenScores={openScoreEntry} highlightedGame={highlightedGame} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
+          {view === "league-schedule" && <ScheduleView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} canAccessPlayoffs={canAccessPlayoffs} onOpenScores={openScoreEntry} onOpenPlayoffs={openPlayoffScores} highlightedGame={highlightedGame} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
           {view === "team-schedule" && <TeamScheduleView schedule={activeSchedule} teamId={selectedTeamId} onSelectTeam={selectTeamSchedule} onSelectWeek={openLeagueScheduleWeek} simulationResults={simulationResultByGame} />}
           {view === "gotw" && <GotwWorkspace schedule={activeSchedule} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
           {view === "matchup-ratings" && <MatchupRatingsView schedule={activeSchedule} />}

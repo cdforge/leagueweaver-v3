@@ -63,14 +63,15 @@ export function MatchupRatingLegend() {
   </div>;
 }
 
-export function WeekMatchupRank({ rank, total, compact = false }: { rank?: number; total: number; compact?: boolean }) {
+export function WeekMatchupRank({ rank, total, compact = false, withLabel = false }: { rank?: number; total: number; compact?: boolean; withLabel?: boolean }) {
   if (rank == null || rank < 1 || total < 1) return null;
   const signal = getWeeklyMatchupSignal(rank, total);
   const tier = signal.label.toLowerCase();
   // One monotone strength scale: 1 = strongest slate, 0 = regular. Never "bad".
   const strength = 1 - signal.normalized;
-  const label = `Weekly matchup rank ${rank} of ${total}. ${signal.label} slate; lower rank is better.`;
+  const label = `Slate rank ${rank} of ${total}. ${signal.label} slate; lower rank is better.`;
   return <span className={`week-matchup-rank signal-${tier} ${compact ? "compact" : ""}`} style={{ "--sig-t": strength } as React.CSSProperties} aria-label={label} title={label}>
+    {withLabel && !compact && <b className="week-matchup-rank-label" aria-hidden="true">Slate rank</b>}
     {!compact && <span className="signal-bars" aria-hidden="true">{[1, 2, 3].map((bar) => <i className={bar <= signal.bars ? "active" : ""} key={bar} />)}</span>}
     {compact
       ? <strong>#{rank}</strong>
