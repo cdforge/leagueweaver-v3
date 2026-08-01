@@ -160,6 +160,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .builder-heading-row { display: flex; align-items: end; justify-content: space-between; gap: 28px; margin-bottom: 24px; }
 .builder-heading-row h2 { margin: 0; font-family: var(--font-barlow-condensed), sans-serif; font-size: clamp(34px, 0.8vw + 30px, 40px); line-height: 0.98; }
 .builder-heading-row > p { max-width: 390px; margin: 0 0 2px; color: var(--muted); font-size: var(--text-lg); text-align: right; }
+.builder-save-draft { flex: 0 0 auto; align-self: end; white-space: nowrap; }
+.builder-save-draft.is-saved { border-color: var(--field); color: var(--field-dark); background: var(--field-soft); }
 .wizard-progress { margin-bottom: 18px; border-block: 1px solid var(--line); background: color-mix(in srgb, white 72%, var(--canvas)); padding: 10px 0 8px; }
 .wizard-progress-summary { display: none; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 10px 16px; padding: 0 10px 11px; }
 .wizard-progress-summary > span { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -1396,7 +1398,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 
 /* Season workspace */
 .workspace-page { min-height: 100vh; background: #f2f5f3; }
-.workspace-topbar { position: sticky; z-index: 30; top: 0; min-height: 66px; display: grid; grid-template-columns: 240px 1fr auto; align-items: center; gap: 20px; padding: 0 22px; background: white; border-bottom: 1px solid var(--line); box-shadow: 0 1px 0 var(--line), 0 2px 8px rgba(21,35,28,0.05); }
+.workspace-topbar { position: sticky; z-index: 30; top: 0; min-height: 66px; display: grid; grid-template-columns: 240px 1fr; align-items: center; gap: 20px; padding: 0 22px; background: white; border-bottom: 1px solid var(--line); box-shadow: 0 1px 0 var(--line), 0 2px 8px rgba(21,35,28,0.05); }
 .workspace-season-switch { justify-self: center; min-width: 260px; min-height: 46px; border: 1px solid var(--line); border-radius: var(--radius); display: flex; align-items: center; gap: 9px; padding: 5px 10px; transition: border-color var(--transition); }
 .workspace-season-switch:hover { border-color: var(--line-strong); }
 .mini-league-mark { width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-items: center; border-radius: var(--radius-sm); color: white; font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-md); font-weight: var(--w-bold); }
@@ -1406,7 +1408,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .workspace-season-switch strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--text-2xs); }
 .workspace-season-switch small { color: var(--muted); font-size: var(--text-2xs); }
 .workspace-season-switch svg { width: 15px; }
-.workspace-top-actions { display: flex; align-items: center; gap: 8px; }
+.workspace-top-actions { justify-self: end; display: flex; align-items: center; gap: 8px; }
 .workspace-top-actions button, .workspace-top-actions a { min-height: 42px; border: 0; border-radius: var(--radius); background: transparent; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; font-size: var(--text-2xs); font-weight: var(--w-bold); transition: background var(--transition); }
 .workspace-top-actions button:hover, .workspace-top-actions a:hover { background: var(--canvas); }
 .workspace-top-actions .account-link { border: 0; }
@@ -1485,6 +1487,29 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .save-nudge-banner button { border-color: #a6b8de; }
 .save-nudge-banner .save-nudge-dismiss { min-width: 44px; padding: 0; color: var(--muted); }
 .save-nudge-banner .save-nudge-dismiss svg { width: 16px; }
+/* H2: persistent publish-status panel — replaces the transient toast so the
+   public URL and Unpublish control are always recoverable, not just visible
+   for the few seconds after a Share click. */
+.publish-panel { min-height: 60px; display: flex; align-items: center; gap: var(--space-3); border-bottom: 1px solid var(--line); padding: 10px var(--space-5); }
+.publish-panel.is-live { background: #f4fbf7; border-bottom-color: #cfe0d7; }
+.publish-panel.is-idle { background: var(--canvas); }
+.publish-status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--field); box-shadow: 0 0 0 3px rgba(17, 122, 69, 0.16); flex: none; }
+.publish-status-dot.is-off { background: var(--muted); box-shadow: none; }
+.publish-panel-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.publish-panel-copy strong { font-size: var(--text-2xs); color: var(--ink); }
+.publish-panel-copy small { color: var(--muted); font-size: var(--text-2xs); line-height: 1.4; }
+.publish-panel-copy input { width: 100%; max-width: 420px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: white; color: var(--field-dark); font-size: var(--text-2xs); padding: 5px var(--space-2); font-family: inherit; }
+.publish-panel-actions { display: flex; align-items: center; gap: var(--space-2); flex: none; }
+.publish-panel-actions .button-secondary, .publish-panel-actions .button-danger, .publish-panel .is-idle button { min-height: 36px; padding: 0 var(--space-3); font-size: var(--text-2xs); white-space: nowrap; text-decoration: none; }
+.publish-panel-actions .button-secondary svg, .publish-panel-actions .button-danger svg { width: 15px; }
+.publish-panel.is-idle .button-secondary { min-height: 36px; padding: 0 var(--space-3); font-size: var(--text-2xs); white-space: nowrap; }
+.publish-panel.is-idle .button-secondary svg { width: 15px; }
+.publish-panel-unpublish { min-height: 36px; }
+@media (max-width: 720px) {
+  .publish-panel { flex-wrap: wrap; padding: 10px var(--space-4); }
+  .publish-panel-copy input { max-width: none; }
+  .publish-panel-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+}
 .workspace-conflict-notice { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 12px; border-bottom: 1px solid #ead98e; background: linear-gradient(180deg, #fff8da 0%, #fffdf1 100%); padding: 12px 18px; color: var(--ink); }
 .workspace-conflict-notice > div { min-width: 0; }
 .workspace-conflict-notice small { display: block; margin-bottom: 3px; color: var(--field); font-size: var(--text-2xs); font-weight: var(--w-black); }
@@ -3936,6 +3961,7 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .builder-section { padding-top: 24px; }
   .builder-heading-row { display: block; }
   .builder-heading-row > p { margin-top: 8px; text-align: left; }
+  .builder-save-draft { margin-top: 14px; }
   .wizard-progress { overflow: hidden; margin-top: 22px; border: 1px solid var(--line); border-radius: var(--radius); background: white; padding-top: 12px; }
   /* Mobile tracker scrolls horizontally; column count follows --wizard-steps (set inline). */
   .wizard-progress-track { width: 100%; min-width: 0; grid-template-columns: repeat(var(--wizard-steps), minmax(56px, 1fr)); overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; scroll-snap-type: x proximity; }

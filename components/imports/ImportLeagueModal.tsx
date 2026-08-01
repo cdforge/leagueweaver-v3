@@ -5,6 +5,7 @@ import { AlertCircle, ArrowLeft, Check, ChevronDown, FileDown, FileSpreadsheet, 
 import { Modal, ConfirmDialog } from "@/components/ui/Modal";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
+import { extractLogoColors } from "@/lib/imageColors";
 import { apiErrorMessage } from "@/lib/apiErrors";
 import { tintColor } from "@/lib/colorContrast";
 import type { ImportPreview, ImportTeam, LeagueSetupInput } from "@/lib/types";
@@ -211,6 +212,9 @@ export function ImportLeagueModal({ source, setup, onClose, onConfirm }: {
   const reviewListRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const manualIdCounter = useRef(0);
+  // Bumped every time a new roster opens for review so a slow logo-color pass from a
+  // superseded import (back button, re-import) can't write onto the current one.
+  const enrichTokenRef = useRef(0);
   const meta = SOURCE_META[source];
   // Once someone is editing a parsed roster, an accidental backdrop click or Escape
   // shouldn't silently throw the work away — confirm first. A fresh (untouched)
@@ -351,12 +355,34 @@ export function ImportLeagueModal({ source, setup, onClose, onConfirm }: {
   }, [setup.seasonYear]);
   const csvShape = useMemo(() => detectRosterShape(pasteValue), [pasteValue]);
 
+  // Providers like ESPN and Sleeper give us a team logo but usually no colors. Pull the
+  // top colors straight from each logo so the swatches populate and the "best" (most
+  // dominant) color is pre-selected — without waiting on the network before showing the
+  // roster. Teams that already carry colors (e.g. a curated rule) are left untouched, and
+  // this never marks the review dirty, so no bogus "discard edits" prompt appears.
+  const enrichLogoColors = async (result: ImportPreview) => {
+    const token = ++enrichTokenRef.current;
+    const targets = result.teams.filter((team) => team.logoUrl && team.providerId && !team.colorSuggestions?.length);
+    if (!targets.length) return;
+    await Promise.all(targets.map(async (team) => {
+      const colors = await extractLogoColors(team.logoUrl!);
+      if (enrichTokenRef.current !== token || !colors.length) return;
+      setPreview((current) => current ? {
+        ...current,
+        teams: current.teams.map((candidate) => candidate.providerId === team.providerId
+          ? { ...candidate, colorSuggestions: colors, color: candidate.color || colors[0] }
+          : candidate),
+      } : current);
+    }));
+  };
+
   const openReview = (result: ImportPreview) => {
     const incomplete = new Set<number>();
     result.teams.forEach((team, index) => { if (!team.name.trim()) incomplete.add(index); });
     setExpandedTeams(incomplete);
     setPreview(result);
     setReviewDirty(false);
+    void enrichLogoColors(result);
   };
   const toggleTeam = (index: number) => setExpandedTeams((current) => {
     const next = new Set(current);

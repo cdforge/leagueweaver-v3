@@ -11,6 +11,7 @@ import {
   Cloud,
   Copy,
   Download,
+  ExternalLink,
   FileDown,
   FileSpreadsheet,
   Gamepad2,
@@ -1437,6 +1438,12 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const [platformSyncLoading, setPlatformSyncLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState<"share" | "notify" | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
+  // H2: publish status persists across reloads (fetched from /api/publish for
+  // cloud schedules) so the public URL and Unpublish control are always
+  // recoverable, not just visible for the few seconds the toast is on screen.
+  const [publishStatus, setPublishStatus] = useState<{ published: boolean; url: string | null; slug: string | null } | null>(null);
+  const [unpublishBusy, setUnpublishBusy] = useState(false);
+  const [copiedPublishLink, setCopiedPublishLink] = useState(false);
   const [scorebarCollapsed, setScorebarCollapsed] = useState(false);
   // H1: irreversible actions (publish, save-run-back, regenerate) open this
   // confirm gate before running, so a reflexive click can't publish private data,
@@ -1536,6 +1543,18 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     }
     fetch(`/api/entitlements${params.id ? `?scheduleId=${encodeURIComponent(params.id)}` : ""}`).then((response) => response.json()).then(setEntitlements).catch(() => undefined);
   }, [params.id]);
+  // H2: check whether this cloud schedule already has a live public page, so
+  // the "Public page is live" panel survives a reload instead of only ever
+  // showing right after a fresh Publish click.
+  useEffect(() => {
+    if (!schedule || !CLOUD_SCHEDULE_ID.test(schedule.id)) { setPublishStatus(null); return; }
+    let cancelled = false;
+    fetch(`/api/publish?scheduleId=${encodeURIComponent(schedule.id)}`)
+      .then((response) => response.json().catch(() => ({})) as Promise<{ published?: boolean; url?: string; slug?: string }>)
+      .then((payload) => { if (!cancelled) setPublishStatus({ published: Boolean(payload.published), url: payload.url ?? null, slug: payload.slug ?? null }); })
+      .catch(() => { if (!cancelled) setPublishStatus({ published: false, url: null, slug: null }); });
+    return () => { cancelled = true; };
+  }, [schedule?.id]);
   // Surface the "save to an account" nudge for device-only schedules unless this
   // one was already dismissed. Cloud schedules are safe, so they never nudge.
   useEffect(() => {
@@ -2045,13 +2064,30 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
         cloudSchedule = saved;
       }
       const response = await fetch("/api/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: cloudSchedule.id }) });
-      const payload = await response.json().catch(() => ({})) as { url?: string; error?: string };
+      const payload = await response.json().catch(() => ({})) as { url?: string; slug?: string; error?: string };
       if (!response.ok || !payload.url) return setNotice(apiErrorMessage(response.status, payload.error, "This schedule could not be published."));
+      setPublishStatus({ published: true, url: payload.url, slug: payload.slug ?? null });
       try { await navigator.clipboard.writeText(payload.url); setNotice("Public schedule link copied."); }
       catch { setNotice(`Public schedule ready: ${payload.url}`); }
       window.setTimeout(() => setNotice(null), 5200);
     } finally {
       setActionBusy(null);
+    }
+  };
+  // Unpublish a live public page (H2). Reversible: publishing again reuses the
+  // same slug (see the upsert in /api/publish), so this only toggles visibility.
+  const unpublish = async () => {
+    if (unpublishBusy || !publishStatus?.published || !CLOUD_SCHEDULE_ID.test(schedule.id)) return;
+    setUnpublishBusy(true);
+    try {
+      const response = await fetch(`/api/publish?scheduleId=${encodeURIComponent(schedule.id)}`, { method: "DELETE" });
+      const payload = await response.json().catch(() => ({})) as { unpublished?: boolean; error?: string };
+      if (!response.ok || !payload.unpublished) { setNotice(apiErrorMessage(response.status, payload.error, "Sharing could not be disabled.")); return; }
+      setPublishStatus({ published: false, url: null, slug: null });
+      setNotice("Public page unpublished.");
+      window.setTimeout(() => setNotice(null), 5200);
+    } finally {
+      setUnpublishBusy(false);
     }
   };
   // Publish (saving to the cloud first if needed) and return the public link + slug
@@ -2067,6 +2103,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       const response = await fetch("/api/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: cloudSchedule.id }) });
       const payload = await response.json().catch(() => ({})) as { url?: string; slug?: string; error?: string };
       if (!response.ok || !payload.url) return { error: apiErrorMessage(response.status, payload.error, "This schedule could not be published.") };
+      setPublishStatus({ published: true, url: payload.url, slug: payload.slug ?? null });
       return { url: payload.url, slug: payload.slug };
     } catch {
       return { error: "Something went wrong publishing your schedule." };
@@ -2150,6 +2187,26 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       <section className={`workspace-main ${selectedTeamColor ? "team-workspace-branded" : ""}`} style={workspaceMainStyle}>
         <div className="workspace-toolbar"><div><span className="workspace-breadcrumb">{schedule.setup.abbreviation} / {schedule.setup.seasonYear}</span><h1>{currentTitle}</h1></div><div className="toolbar-actions"><button type="button" title="Replay the season recap" onClick={() => setShowRecap(true)}><Sparkles />Recap</button><button type="button" title={simulation ? "Export simulated CSV" : "Export CSV"} onClick={() => downloadCsv(activeSchedule)}><Download />CSV</button><button type="button" title={simulation ? "Print simulated ESPN entry sheet" : "Print ESPN entry sheet"} disabled={pdfBusy} aria-busy={pdfBusy} onClick={async () => { if (pdfBusy) return; setPdfBusy(true); try { await downloadSchedulePdf(activeSchedule); } catch { setNotice("Couldn’t build the ESPN entry sheet. Please try again."); } finally { setPdfBusy(false); } }}>{pdfBusy ? <LoaderCircle className="spin" /> : <FileDown />}{pdfBusy ? "Building…" : "ESPN PDF"}</button><button type="button" title={simulation ? "Share the real schedule" : "Share schedule"} disabled={actionBusy !== null} onClick={() => setConfirmAction("share")}>{actionBusy === "share" ? <LoaderCircle className="spin" /> : <Share2 />}Share</button></div></div>
         <div className="workspace-notice" role="status" aria-live="polite">{notice && <><Cloud />{notice}</>}</div>
+        {publishStatus && CLOUD_SCHEDULE_ID.test(schedule.id) && (publishStatus.published ? (
+          <section className="publish-panel is-live" role="status" aria-label="Public schedule status">
+            <span className="publish-status-dot" aria-hidden="true" />
+            <span className="publish-panel-copy">
+              <strong>Public page is live</strong>
+              <input type="text" readOnly value={publishStatus.url ?? ""} onFocus={(event) => event.currentTarget.select()} aria-label="Public schedule link" />
+            </span>
+            <div className="publish-panel-actions">
+              <button type="button" className="button-secondary" onClick={async () => { if (!publishStatus.url) return; try { await navigator.clipboard.writeText(publishStatus.url); setCopiedPublishLink(true); window.setTimeout(() => setCopiedPublishLink(false), 2400); } catch { setNotice(`Public schedule ready: ${publishStatus.url}`); } }}>{copiedPublishLink ? <Check /> : <Copy />}{copiedPublishLink ? "Copied" : "Copy link"}</button>
+              <a className="button-secondary" href={publishStatus.url ?? "#"} target="_blank" rel="noreferrer"><ExternalLink />Open</a>
+              <button type="button" className="button-danger publish-panel-unpublish" disabled={unpublishBusy} onClick={() => void unpublish()}>{unpublishBusy ? <LoaderCircle className="spin" /> : <X />}Unpublish</button>
+            </div>
+          </section>
+        ) : (
+          <section className="publish-panel is-idle" role="status" aria-label="Public schedule status">
+            <span className="publish-status-dot is-off" aria-hidden="true" />
+            <span className="publish-panel-copy"><strong>Not published</strong><small>Publish to share a public schedule page with anyone.</small></span>
+            <button type="button" className="button-secondary" disabled={actionBusy !== null} onClick={() => setConfirmAction("share")}>{actionBusy === "share" ? <LoaderCircle className="spin" /> : <Share2 />}Publish</button>
+          </section>
+        ))}
         {!entitlements.signedIn && !CLOUD_SCHEDULE_ID.test(schedule.id) && !saveNudgeDismissed && <section className="cloud-retry-banner save-nudge-banner" role="status" aria-label="Save this schedule to an account">
           <ShieldCheck />
           <span><strong>This schedule is saved on this device only.</strong><small>Create a free account so you never lose it and can open it on any device.</small></span>

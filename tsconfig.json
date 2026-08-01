@@ -47,7 +47,9 @@
     ".next-wt/types/**/*.ts",
     ".next-wt/dev/types/**/*.ts",
     ".next-verify3/types/**/*.ts",
-    ".next-verify3/dev/types/**/*.ts"
+    ".next-verify3/dev/types/**/*.ts",
+    ".next-mergecheck/types/**/*.ts",
+    ".next-mergecheck/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
