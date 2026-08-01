@@ -201,7 +201,7 @@ export function IdentityColorPicker({
       <input id={inputId} className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => upload(event.target.files?.[0])} />
       <Tooltip label={visibleLogo ? `Change ${name} logo` : `Upload ${name} logo`}>
         <label className={`identity-logo-button ${visibleLogo && imagePresentation === "bare" ? "identity-logo-button-bare" : ""}`} htmlFor={inputId} style={compact ? { background: visibleLogo && imagePresentation === "bare" ? "transparent" : visibleLogo ? tintColor(color) : color, borderColor: color, color: readableTextColor(color) } : undefined}>
-          {busy ? <LoaderCircle className="spin" /> : visibleLogo ? <img src={visibleLogo} alt="" onError={() => setFailedLogo(visibleLogo)} /> : compact ? <ImagePlus /> : <><ImagePlus /><span><strong>Add {name.toLowerCase()} logo</strong><small>We’ll pull its top three colors</small></span></>}
+          {busy ? <LoaderCircle className="spin" /> : visibleLogo ? <img src={visibleLogo} alt="" onError={() => setFailedLogo(visibleLogo)} /> : compact ? <ImagePlus /> : <><ImagePlus /><span><strong>Add {name.toLowerCase()} logo</strong><small>We’ll pull its top colors</small></span></>}
         </label>
       </Tooltip>
       {compact && showAbbreviation && <span className="identity-name">{abbreviation}</span>}

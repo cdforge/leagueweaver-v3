@@ -511,7 +511,24 @@ function resizeDivisions(existing: Division[], count: number): Division[] {
   return Array.from({ length: count }, (_, index) => existing[index] ?? template[index]);
 }
 
+// Split a folded-in name back into city + name when "City names" is turned on again.
+// Prefers the exact city we stashed when it was folded off (so an untouched round-trip is
+// lossless); otherwise falls back to the same last-word heuristic the ESPN import uses.
+function splitCityFromName(fullName: string, stashedCity?: string): { city: string; name: string } {
+  const trimmed = fullName.trim();
+  const stashed = stashedCity?.trim();
+  if (stashed && trimmed.toLowerCase().startsWith(`${stashed.toLowerCase()} `)) {
+    return { city: trimmed.slice(0, stashed.length), name: trimmed.slice(stashed.length).trim() };
+  }
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return { city: "", name: trimmed };
+  return { city: parts.slice(0, -1).join(" "), name: parts[parts.length - 1] };
+}
+
 function TeamsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; setSetup: React.Dispatch<React.SetStateAction<LeagueSetupInput>>; showErrors: boolean }) {
+  // Remembers each team's city while "City names" is off, so flipping it back on restores
+  // the original split exactly (unless the merged name was hand-edited in the meantime).
+  const cityStashRef = useRef<Map<string, string>>(new Map());
   const updateTeam = (id: string, patch: Partial<Team>) => setSetup((current) => ({
     ...current,
     teams: current.teams.map((team) => {
@@ -538,13 +555,39 @@ function TeamsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; s
     });
   };
   const updateDisplay = (patch: Partial<LeagueSetupInput["display"]>) => setSetup((current) => ({ ...current, display: { ...current.display, ...patch } }));
+  // Turning "City names" off folds each city into the team name (Green Bay + Packers →
+  // "Green Bay Packers"); turning it back on re-splits it. Only teams whose city we folded
+  // in this session are re-split, so a team that never had a city can't get one invented.
+  // All stash mutation happens here in the handler body (runs once). The setSetup updater
+  // stays pure and only *reads* the snapshot, so React's dev double-invoke can't corrupt it.
+  const toggleCityNames = (next: boolean) => {
+    const stash = cityStashRef.current;
+    if (!next) setup.teams.forEach((team) => { if (team.city.trim()) stash.set(team.id, team.city); });
+    const snapshot = new Map(stash);
+    if (next) stash.clear();
+    setSetup((current) => ({
+      ...current,
+      display: { ...current.display, cityNames: next },
+      teams: current.teams.map((team) => {
+        if (!next) {
+          if (!team.city.trim()) return team;
+          const name = `${team.city.trim()} ${team.name.trim()}`.trim();
+          return { ...team, city: "", name, shortName: resolveInitials(team.initials, entityMonogram(name, "")) };
+        }
+        const stashed = snapshot.get(team.id);
+        if (stashed === undefined) return team;
+        const { city, name } = splitCityFromName(team.name, stashed);
+        return { ...team, city, name, shortName: resolveInitials(team.initials, entityMonogram(name, city)) };
+      }),
+    }));
+  };
   const teamColumns = ["60px", setup.display.cityNames && "112px", "minmax(145px,1.2fr)", "72px", setup.display.managers && "118px", setup.display.venues && "minmax(140px,1fr)"].filter(Boolean).join(" ");
 
   return (
     <div className="step-stack">
       <div className="section-heading"><h1>Add every team.</h1><p>Confirm team identities now. Organize divisions on the next tab.</p></div>
       <div className="team-details-stage">
-        <div className="team-meta-controls"><div><FieldLabel>Teams</FieldLabel><div className="stepper"><button type="button" aria-label="Remove two teams" onClick={() => setTeamCount(setup.teams.length - 2)}><Minus /></button><strong>{setup.teams.length}</strong><button type="button" aria-label="Add two teams" onClick={() => setTeamCount(setup.teams.length + 2)}><Plus /></button></div></div><div><FieldLabel>Optional team details</FieldLabel><div className="field-switches"><FieldSwitch checked={setup.display.cityNames} onChange={(cityNames) => updateDisplay({ cityNames })} label="City names" /><FieldSwitch checked={setup.display.managers} onChange={(managers) => updateDisplay({ managers })} label="Managers" /><FieldSwitch checked={setup.display.venues} onChange={(venues) => updateDisplay({ venues })} label="Venues" /></div></div></div>
+        <div className="team-meta-controls"><div><FieldLabel>Teams</FieldLabel><div className="stepper"><button type="button" aria-label="Remove two teams" onClick={() => setTeamCount(setup.teams.length - 2)}><Minus /></button><strong>{setup.teams.length}</strong><button type="button" aria-label="Add two teams" onClick={() => setTeamCount(setup.teams.length + 2)}><Plus /></button></div></div><div><FieldLabel>Optional team details</FieldLabel><div className="field-switches"><FieldSwitch checked={setup.display.cityNames} onChange={toggleCityNames} label="City names" /><FieldSwitch checked={setup.display.managers} onChange={(managers) => updateDisplay({ managers })} label="Managers" /><FieldSwitch checked={setup.display.venues} onChange={(venues) => updateDisplay({ venues })} label="Venues" /></div></div></div>
         <div className="team-editor-table" style={{ "--team-columns": teamColumns } as React.CSSProperties}>
           <div className="team-editor-head"><span>Identity</span>{setup.display.cityNames && <span>City</span>}<span>Team name</span><span>Initials</span>{setup.display.managers && <span>Manager</span>}{setup.display.venues && <span>Home venue</span>}</div>
           <div className="team-editor-list">{setup.teams.map((team) => <div className="team-editor-row" key={team.id}>
@@ -1354,6 +1397,10 @@ export function LeagueBuilder() {
   const logoBaseline = useRef<Map<string, string>>(new Map(setupLogoEntries(setup)));
   const [generating, setGenerating] = useState(false);
   const [blueprintOpen, setBlueprintOpen] = useState(false);
+  // The builder autosaves this draft on every edit; "Save draft" is the explicit,
+  // confirmable version of that so a commissioner knows their progress is kept.
+  const [draftSaved, setDraftSaved] = useState(false);
+  const draftSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [revealSeason, setRevealSeason] = useState<GeneratedSchedule | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showFieldErrors, setShowFieldErrors] = useState(false);
@@ -1386,6 +1433,14 @@ export function LeagueBuilder() {
   const [avatarNudge, setAvatarNudge] = useState<string | null>(null);
   const [avatarNudgeState, setAvatarNudgeState] = useState<"idle" | "saving" | "saved">("idle");
   const avatarNudgeDismissed = useRef(false);
+
+  const saveDraft = () => {
+    saveSetup(setup);
+    setDraftSaved(true);
+    if (draftSavedTimer.current) clearTimeout(draftSavedTimer.current);
+    draftSavedTimer.current = setTimeout(() => setDraftSaved(false), 2200);
+  };
+  useEffect(() => () => { if (draftSavedTimer.current) clearTimeout(draftSavedTimer.current); }, []);
 
   const startNewLeague = () => {
     const blankSetup = createBlankSetup();
@@ -1769,6 +1824,7 @@ export function LeagueBuilder() {
     <section className="builder-section" aria-label="League schedule builder">
       <div className="page-width builder-heading-row">
         <div><p className="eyebrow">Fantasy football schedule maker</p><h2>Build the season your league deserves.</h2></div>
+        {step > 0 && <button type="button" aria-live="polite" className={`button-secondary builder-save-draft${draftSaved ? " is-saved" : ""}`} onClick={saveDraft}>{draftSaved ? <><Check />Draft saved</> : <><BookmarkPlus />Save draft</>}</button>}
       </div>
       <div className="page-width wizard-progress" aria-label="Setup progress">
         <div className="wizard-progress-summary">
