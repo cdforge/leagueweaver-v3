@@ -16,3 +16,5 @@ tmp/
 qa-artifacts/
 .next-wt/
 .next-dist/
+.next-slate/
+.next-connect/
