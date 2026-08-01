@@ -319,4 +319,12 @@ check(() => {
   assert.ok(chart.every((slot) => slot.exact));
 });
 
+check(() => {
+  // Playoff length: 13-week seasons choose 3 (≤8 seeds) or 4 (≤16) weeks; 14-week is always 3.
+  assert.equal(getMaximumPlayoffFieldSize(32, 13, "single-elimination", 3), 8);
+  assert.equal(getMaximumPlayoffFieldSize(32, 13, "single-elimination", 4), 16);
+  assert.equal(getMaximumPlayoffFieldSize(32, 14, "single-elimination"), 8);
+  assert.equal(getMaximumPlayoffFieldSize(32, 14, "single-elimination", 4), 8); // clamped to the 14-week ceiling
+});
+
 console.log(`Playoff, holiday, and opening-week matrix: ${checks} checks passed.`);

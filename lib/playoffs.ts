@@ -28,16 +28,27 @@ export function getMaximumPlayoffWeeks(regularSeasonWeeks: 13 | 14) {
   return 17 - regularSeasonWeeks;
 }
 
+/**
+ * How many weeks the playoff actually runs. A 14-week season has only 3 open weeks; a 13-week
+ * season has 4 and the commissioner may cap it at 3. Clamped to the season's ceiling.
+ */
+export function resolvePlayoffWeeks(regularSeasonWeeks: 13 | 14, chosen?: 3 | 4): 3 | 4 {
+  const ceiling = getMaximumPlayoffWeeks(regularSeasonWeeks); // 3 for 14-week, 4 for 13-week
+  if (!chosen) return ceiling as 3 | 4;
+  return Math.min(chosen, ceiling) as 3 | 4;
+}
+
 export function getRequiredPlayoffWeeks(fieldSize: number, bracketType: PlayoffSettings["bracketType"] = "single-elimination") {
   const singleEliminationRounds = Math.max(1, Math.ceil(Math.log2(Math.max(2, fieldSize))));
   if (bracketType === "ladder") return Math.max(1, fieldSize - 1);
   return singleEliminationRounds;
 }
 
-export function getMaximumPlayoffFieldSize(teamCount: number, regularSeasonWeeks: 13 | 14, bracketType: PlayoffSettings["bracketType"] = "single-elimination") {
+export function getMaximumPlayoffFieldSize(teamCount: number, regularSeasonWeeks: 13 | 14, bracketType: PlayoffSettings["bracketType"] = "single-elimination", playoffWeeks?: 3 | 4) {
+  const availableWeeks = resolvePlayoffWeeks(regularSeasonWeeks, playoffWeeks);
   let maximum = 2;
   for (let fieldSize = 2; fieldSize <= teamCount; fieldSize += 1) {
-    if (getRequiredPlayoffWeeks(fieldSize, bracketType) <= getMaximumPlayoffWeeks(regularSeasonWeeks)) maximum = fieldSize;
+    if (getRequiredPlayoffWeeks(fieldSize, bracketType) <= availableWeeks) maximum = fieldSize;
   }
   return Math.min(teamCount, maximum);
 }
@@ -67,11 +78,12 @@ export function createDefaultPlayoffSettings(teamCount: number, _leagueColor = "
 export function normalizePlayoffSettings(value: LegacyPlayoffSettings | undefined, teamCount: number, leagueColor: string, regularSeasonWeeks: 13 | 14 = 14): PlayoffSettings {
   const defaults = createDefaultPlayoffSettings(teamCount, leagueColor, regularSeasonWeeks);
   if (!value) return defaults;
+  const playoffWeeks = resolvePlayoffWeeks(regularSeasonWeeks, value.playoffWeeks === 3 || value.playoffWeeks === 4 ? value.playoffWeeks : undefined);
   let bracketType: PlayoffSettings["bracketType"] = value.bracketType === "ladder" ? "ladder" : "single-elimination";
-  let maximumFieldSize = getMaximumPlayoffFieldSize(teamCount, regularSeasonWeeks, bracketType);
+  let maximumFieldSize = getMaximumPlayoffFieldSize(teamCount, regularSeasonWeeks, bracketType, playoffWeeks);
   if (maximumFieldSize < 2) {
     bracketType = "single-elimination";
-    maximumFieldSize = getMaximumPlayoffFieldSize(teamCount, regularSeasonWeeks, bracketType);
+    maximumFieldSize = getMaximumPlayoffFieldSize(teamCount, regularSeasonWeeks, bracketType, playoffWeeks);
   }
   const requestedFieldSize = Math.round(Number(value.fieldSize) || defaults.fieldSize);
   const fieldSize = Math.max(2, Math.min(maximumFieldSize, requestedFieldSize));
@@ -87,6 +99,7 @@ export function normalizePlayoffSettings(value: LegacyPlayoffSettings | undefine
     : defaults.consolationMode;
   return {
     fieldSize,
+    playoffWeeks,
     bracketType,
     placementMode: ["auto", "division-halves", "division-leaders", "overall"].includes(value.placementMode || "") ? value.placementMode! : defaults.placementMode,
     reseedMode,

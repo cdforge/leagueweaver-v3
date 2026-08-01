@@ -112,6 +112,8 @@ export interface LeagueSetupInput {
   tiebreakers?: TiebreakerSettings;
   playoffs: {
     fieldSize: PlayoffFieldSize;
+    /** How many weeks the playoff runs. 14-week seasons are always 3; 13-week seasons may pick 3 or 4. */
+    playoffWeeks?: 3 | 4;
     bracketType: PlayoffBracketType;
     placementMode: PlayoffPlacementMode;
     reseedMode: PlayoffReseedMode;

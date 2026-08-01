@@ -442,12 +442,15 @@ function SeasonStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: Re
   const divisionSizes = setup.divisions.map((division) => setup.teams.filter((team) => team.divisionId === division.id).length);
   const requiresFourteenWeeks = (setup.divisions.length === 3 && setup.teams.length === 10) || divisionSizes.some((size) => 2 * (size - 1) > 13 || (size % 2 === 1 && 13 < 2 * size));
   const setRegularSeasonWeeks = (regularSeasonWeeks: 13 | 14) => setSetup((current) => {
-    const maximumFieldSize = getMaximumPlayoffFieldSize(current.teams.length, regularSeasonWeeks, current.playoffs.bracketType);
+    // 14-week seasons only have 3 open weeks, so a chosen 4-week playoff no longer applies.
+    const nextPlayoffWeeks = regularSeasonWeeks === 14 ? undefined : current.playoffs.playoffWeeks;
+    const maximumFieldSize = getMaximumPlayoffFieldSize(current.teams.length, regularSeasonWeeks, current.playoffs.bracketType, nextPlayoffWeeks);
     return {
       ...current,
       weeks: regularSeasonWeeks,
       playoffs: {
         ...current.playoffs,
+        playoffWeeks: nextPlayoffWeeks,
         fieldSize: Math.min(current.playoffs.fieldSize, maximumFieldSize),
         fieldStatus: "live",
         lockedTeamIds: [],
@@ -576,7 +579,9 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   const [expandedRounds, setExpandedRounds] = useState<number[]>([]);
   const [previewView, setPreviewView] = useState<"championship" | "consolation" | "placement">("championship");
   const divisionCount = setup.divisions.length;
-  const maxFieldSize = getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, p.bracketType);
+  const maxFieldSize = getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, p.bracketType, p.playoffWeeks);
+  const canChoosePlayoffLength = setup.weeks === 13; // 14-week seasons only have 3 open weeks
+  const effectivePlayoffWeeks = setup.weeks === 14 ? 3 : (p.playoffWeeks ?? 4);
   const patch = (next: Partial<LeagueSetupInput["playoffs"]>) =>
     setSetup((current) => ({ ...current, playoffs: { ...current.playoffs, ...next } }));
 
@@ -866,6 +871,12 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
     <div className="playoff-wizard-layout">
       <div className="playoff-wizard-form">
         {subPage === "format" && <>
+          {canChoosePlayoffLength && <div className="ppw-group"><FieldLabel hint="a 13-week season leaves room for a longer playoff">Playoff length</FieldLabel>
+            <div className="choice-row">{[3, 4].map((wk) => <button key={wk} type="button" className={effectivePlayoffWeeks === wk ? "active" : ""} onClick={() => {
+              const nextMax = getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, p.bracketType, wk as 3 | 4);
+              patch({ playoffWeeks: wk as 3 | 4, fieldSize: Math.min(p.fieldSize, nextMax) });
+            }}><strong>{wk} weeks</strong><small>{wk === 3 ? "up to 8 seeds" : "up to 16 seeds"}</small></button>)}</div>
+          </div>}
           <div className="ppw-group"><FieldLabel hint={byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"} for the top seed${byeCount === 1 ? "" : "s"}` : "every qualifier opens play"}>Playoff teams</FieldLabel>
             <CustomSelect label="Playoff field size" value={String(p.fieldSize)} onChange={(value) => setFieldSize(Number(value))} options={fieldSizeOptions.map((n) => ({ value: String(n), label: `${n} teams`, description: getPlayoffByeCount(n) ? `${getPlayoffByeCount(n)} bye${getPlayoffByeCount(n) === 1 ? "" : "s"}` : "No byes" }))} />
           </div>
