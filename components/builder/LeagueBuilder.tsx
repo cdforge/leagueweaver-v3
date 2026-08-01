@@ -339,6 +339,28 @@ function minSchedulableDivisions(teamCount: number): number {
   return divisionCountOptions(teamCount).find((count) => divisionCountSchedulable(teamCount, count)) ?? 2;
 }
 
+// Resize the roster WITHOUT discarding what the user already entered: keep every
+// existing team, append fresh defaults only for added slots, trim from the end when
+// shrinking, and repair any divisionId that no longer points at a live division.
+function resizeTeams(existing: Team[], nextCount: number, divisions: Division[]): Team[] {
+  const template = createTeams(nextCount, divisions);
+  return Array.from({ length: nextCount }, (_, index) => {
+    const kept = existing[index];
+    if (!kept) return template[index];
+    const divisionId = divisions.some((division) => division.id === kept.divisionId)
+      ? kept.divisionId
+      : divisions[index % divisions.length].id;
+    return { ...kept, overallRank: index + 1, divisionId };
+  });
+}
+
+// Resize divisions WITHOUT discarding the user's named/colored/logo'd divisions:
+// keep existing ones and only append defaults for added slots or trim from the end.
+function resizeDivisions(existing: Division[], count: number): Division[] {
+  const template = createDivisions(count);
+  return Array.from({ length: count }, (_, index) => existing[index] ?? template[index]);
+}
+
 function TeamsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; setSetup: React.Dispatch<React.SetStateAction<LeagueSetupInput>>; showErrors: boolean }) {
   const updateTeam = (id: string, patch: Partial<Team>) => setSetup((current) => ({
     ...current,
@@ -356,11 +378,11 @@ function TeamsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; s
       // the smallest division count that fits so generation never hits a dead end.
       const divisions = divisionCountSchedulable(next, current.divisions.length)
         ? current.divisions
-        : createDivisions(minSchedulableDivisions(next));
+        : resizeDivisions(current.divisions, minSchedulableDivisions(next));
       return {
         ...current,
         divisions,
-        teams: createTeams(next, divisions),
+        teams: resizeTeams(current.teams, next, divisions),
         priorSeason: { ...current.priorSeason, enabled: false, hasData: false, entryMode: "none" },
       };
     });
@@ -391,13 +413,15 @@ function TeamsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; s
 
 function DivisionsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; setSetup: React.Dispatch<React.SetStateAction<LeagueSetupInput>>; showErrors: boolean }) {
   const setDivisionCount = (count: number) => {
-    const divisions = createDivisions(count);
-    setSetup((current) => ({
-      ...current,
-      divisions,
-      teams: current.teams.map((team, index) => ({ ...team, divisionId: divisions[index % count].id })),
-      playoffs: { ...current.playoffs, placementMode: "auto", fieldStatus: "live", lockedTeamIds: [] },
-    }));
+    setSetup((current) => {
+      const divisions = resizeDivisions(current.divisions, count);
+      return {
+        ...current,
+        divisions,
+        teams: current.teams.map((team, index) => ({ ...team, divisionId: divisions[index % count].id })),
+        playoffs: { ...current.playoffs, placementMode: "auto", fieldStatus: "live", lockedTeamIds: [] },
+      };
+    });
   };
   const updateDivision = (id: string, patch: Partial<Division>) => setSetup((current) => ({ ...current, divisions: current.divisions.map((division) => division.id === id ? { ...division, ...patch } : division) }));
   const updateTeam = (id: string, divisionId: string) => setSetup((current) => ({ ...current, teams: current.teams.map((team) => team.id === id ? { ...team, divisionId } : team) }));
@@ -476,7 +500,7 @@ function SeedingStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: R
           <GripVertical className="ranking-grip" aria-hidden="true" />
           <CustomSelect label={`${teamDisplayName(team)} rank`} value={String(index + 1)} onChange={(value) => moveTeam(team.id, Number(value) - 1)} options={rankedTeams.map((_, optionIndex) => ({ value: String(optionIndex + 1), label: `#${optionIndex + 1}`, description: optionIndex === 0 ? "Strongest finish" : optionIndex === rankedTeams.length - 1 ? "Last-place finish" : "Prior-season order" }))} />
           <EntityLogo className="ranking-mark" color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} />
-          <span className="ranking-team">{setup.display.cityNames && team.city && <small className="team-city">{team.city}</small>}<strong>{team.name}</strong><small>{setup.display.managers ? `${team.manager || "No manager"} · ` : ""}{setup.divisions.find((division) => division.id === team.divisionId)?.name || "No division"}</small></span>
+          <span className="ranking-team"><strong>{team.name}</strong></span>
           <span className="ranking-actions"><Tooltip label="Move up"><button type="button" aria-label={`Move ${teamDisplayName(team)} up`} disabled={index === 0} onClick={() => moveTeam(team.id, index - 1)}><ArrowUp /></button></Tooltip><Tooltip label="Move down"><button type="button" aria-label={`Move ${teamDisplayName(team)} down`} disabled={index === rankedTeams.length - 1} onClick={() => moveTeam(team.id, index + 1)}><ArrowDown /></button></Tooltip></span>
         </div>)}
       </div>

@@ -126,7 +126,7 @@ function GameDetails({ game }: { game: ScheduledGame }) {
   </div>;
 }
 
-export function MatchupCard({ game, away, home, awayDivision, homeDivision, awayRank, homeRank, awayRecord, homeRecord, signal, featured, featuredLabel = "GOTW", gameLabel, showCity, showVenue, variant = "standard", teamHrefBase, badges = [], medalRank, medalLabel, highlighted = false, simulationSource, simulationLocked = false, winProbability }: {
+export function MatchupCard({ game, away, home, awayDivision, homeDivision, awayRank, homeRank, awayRecord, homeRecord, signal, featured, featuredLabel = "GOTW", gameLabel, showCity, showVenue, variant = "standard", teamHrefBase, badges = [], medalRank, medalLabel, highlighted = false, simulationSource, simulationLocked = false, winProbability, projected = false }: {
   game: ScheduledGame;
   away: Team;
   home: Team;
@@ -151,12 +151,16 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, away
   simulationSource?: "simulated" | "override";
   simulationLocked?: boolean;
   winProbability?: { away: number; home: number };
+  projected?: boolean;
 }) {
   const played = game.awayScore != null && game.homeScore != null;
+  // A projected (not-yet-started) playoff matchup: the pairing is known but no
+  // score exists, so the score slot reads "Projected" instead of a "—" blank.
+  const showProjected = projected && !played;
   const hasAdditionalDetails = Boolean(game.dateTimeOverride || game.rescheduleStatus || game.specialEvent || game.notes?.length || game.tbdReason);
   const awayResult = !played ? "open" : game.awayScore! > game.homeScore! ? "winner" : game.awayScore! < game.homeScore! ? "loser" : "open";
   const homeResult = !played ? "open" : game.homeScore! > game.awayScore! ? "winner" : game.homeScore! < game.awayScore! ? "loser" : "open";
-  return <article id={game.id} className={`matchup-card ${featured ? "is-gotw" : ""} ${highlighted ? "is-stat-highlight" : ""} ${simulationSource ? `is-simulated simulation-${simulationSource}` : ""} matchup-card-${variant}`}>
+  return <article id={game.id} className={`matchup-card ${featured ? "is-gotw" : ""} ${highlighted ? "is-stat-highlight" : ""} ${showProjected ? "is-projected" : ""} ${simulationSource ? `is-simulated simulation-${simulationSource}` : ""} matchup-card-${variant}`}>
     <div className="matchup-card-badges">
       <div className="matchup-card-chips">
         {featured && <span className="gotw-chip"><Star fill="currentColor" /><strong>{featuredLabel}</strong></span>}
@@ -181,17 +185,21 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, away
           center score stays for desktop. Both read from the same game data. */}
       <div className="matchup-team-row">
         <TeamIdentityBlock team={away} division={awayDivision} leagueRank={awayRank} record={awayRecord} showCity={showCity} result={awayResult} href={teamHrefBase ? `${teamHrefBase}/${away.id}` : undefined} />
-        <span className="matchup-row-score"><strong className={awayResult === "loser" ? "loser" : ""}>{game.awayScore != null ? formatPoints(game.awayScore) : "—"}</strong></span>
+        {!showProjected && <span className="matchup-row-score"><strong className={awayResult === "loser" ? "loser" : ""}>{game.awayScore != null ? formatPoints(game.awayScore) : "—"}</strong></span>}
       </div>
-      <div className="matchup-score" aria-label={played ? `${away.name} ${game.awayScore}, ${home.name} ${game.homeScore}, final` : `${away.name} at ${home.name}, score not entered`}>
-        <strong className={awayResult === "loser" ? "loser" : ""}>{game.awayScore != null ? formatPoints(game.awayScore) : "—"}</strong>
-        <span aria-label="at">@</span>
-        <strong className={homeResult === "loser" ? "loser" : ""}>{game.homeScore != null ? formatPoints(game.homeScore) : "—"}</strong>
-        <small>{played ? "FINAL" : "SCHEDULED"}</small>
-      </div>
+      {showProjected ? (
+        <div className="matchup-score is-projected" aria-label={`${away.name} at ${home.name}, projected — not yet played`}><em>Projected</em></div>
+      ) : (
+        <div className="matchup-score" aria-label={played ? `${away.name} ${game.awayScore}, ${home.name} ${game.homeScore}, final` : `${away.name} at ${home.name}, score not entered`}>
+          <strong className={awayResult === "loser" ? "loser" : ""}>{game.awayScore != null ? formatPoints(game.awayScore) : "—"}</strong>
+          <span aria-label="at">@</span>
+          <strong className={homeResult === "loser" ? "loser" : ""}>{game.homeScore != null ? formatPoints(game.homeScore) : "—"}</strong>
+          <small>{played ? "FINAL" : "SCHEDULED"}</small>
+        </div>
+      )}
       <div className="matchup-team-row">
         <TeamIdentityBlock mirrored team={home} division={homeDivision} leagueRank={homeRank} record={homeRecord} showCity={showCity} result={homeResult} href={teamHrefBase ? `${teamHrefBase}/${home.id}` : undefined} />
-        <span className="matchup-row-score"><strong className={homeResult === "loser" ? "loser" : ""}>{game.homeScore != null ? formatPoints(game.homeScore) : "—"}</strong></span>
+        {!showProjected && <span className="matchup-row-score"><strong className={homeResult === "loser" ? "loser" : ""}>{game.homeScore != null ? formatPoints(game.homeScore) : "—"}</strong></span>}
       </div>
     </div>
     {hasAdditionalDetails && <div className="game-details-desktop"><GameDetails game={game} /></div>}

@@ -7,6 +7,7 @@ import { DivisionMark } from "@/components/ui/DivisionIdentity";
 import { buildPlayoffPicture, type PlayoffPictureEntry } from "@/lib/playoffPicture";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
 import { accessibleTeamColor, tintColor } from "@/lib/colorContrast";
+import { useIsMobile } from "@/lib/useIsMobile";
 import type { Division, GeneratedSchedule, Team } from "@/lib/types";
 
 function weekLabel(week?: number) {
@@ -27,7 +28,9 @@ export function PlayoffPicturePanel({ schedule, onClose }: { schedule: Generated
   const picture = useMemo(() => buildPlayoffPicture(schedule), [schedule]);
   const teamById = useMemo(() => new Map(schedule.setup.teams.map((team) => [team.id, team])), [schedule.setup.teams]);
   const divisionById = useMemo(() => new Map(schedule.setup.divisions.map((d) => [d.id, d])), [schedule.setup.divisions]);
-  const showCity = schedule.setup.display?.cityNames !== false;
+  // Team names only on phones — the city won't fit the compact rows.
+  const isMobile = useIsMobile();
+  const showCity = schedule.setup.display?.cityNames !== false && !isMobile;
   const leagueLogo = schedule.setup.logoUrl;
   const leagueColor = schedule.setup.color;
 
