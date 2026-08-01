@@ -144,6 +144,10 @@ export default function ScorebarPreview() {
       >
         LEAGUE WEAVER — score bar preview
         <span style={{ marginLeft: "auto", display: "inline-flex", gap: 6, alignItems: "center" }}>
+          {([6, 7, 8] as const).map((w) => (
+            <button key={w} type="button" onClick={() => setSelectedWeek(w)} style={btn(selectedWeek === w)}>W{w}</button>
+          ))}
+          <span style={{ width: 1, height: 22, background: "var(--line)" }} />
           {(["pre", "afternoon", "night", "final", "real"] as const).map((p) => (
             <button key={p} type="button" onClick={() => setPhase(p)} style={btn(phase === p)}>{p}</button>
           ))}
@@ -153,8 +157,7 @@ export default function ScorebarPreview() {
       </header>
 
       <WeekScoreBar
-        week={week}
-        weekCount={14}
+        weeks={[week]}
         seasonYear={SEASON}
         now={now}
         thanksgiving={thanksgiving}
@@ -163,7 +166,6 @@ export default function ScorebarPreview() {
         getRank={(id) => teamById.get(id)?.overallRank}
         gameOfWeekId="g3"
         displayCityNames
-        onSelectWeek={setSelectedWeek}
         onSelectGame={(id) => console.log("open game", id)}
       />
 

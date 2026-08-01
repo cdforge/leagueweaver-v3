@@ -2112,15 +2112,13 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     {showRecap && <GenerationReveal schedule={schedule} mode="replay" onComplete={() => setShowRecap(false)} onShare={shareForReveal} />}
     <header className="workspace-topbar"><BrandLockup /><div className="workspace-top-actions"><AccountIdentity identity={entitlements} plan={entitlements.plan} /></div></header>
     {scoreBarWeek && <WeekScoreBar
-      week={scoreBarWeek}
-      weekCount={activeSchedule.weeks.length}
+      weeks={activeSchedule.weeks}
       seasonYear={activeSchedule.setup.seasonYear}
       getTeam={(id) => scoreBarTeamById.get(id)}
       getDivision={(id) => scoreBarDivisionById.get(id)}
       getRank={(id) => scoreBarRankByTeam.get(id)}
       displayCityNames={activeSchedule.setup.display?.cityNames !== false}
-      onSelectWeek={setSelectedWeek}
-      onSelectGame={(gameId) => { openLeagueScheduleWeek(scoreBarWeek.weekNumber); setHighlightedGame({ id: gameId }); }}
+      onSelectGame={(gameId) => { const gameWeek = activeSchedule.weeks.find((item) => item.games.some((game) => game.id === gameId)); if (gameWeek) openLeagueScheduleWeek(gameWeek.weekNumber); setHighlightedGame({ id: gameId }); }}
       onCollapsedChange={setScorebarCollapsed}
     />}
     <div className="workspace-shell">

@@ -4,9 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Division, ScheduledGame, ScheduleWeek, Team } from "@/lib/types";
 import { readableTextColor, tintColor } from "@/lib/colorContrast";
 import { formatGameDateTimeOverride } from "@/lib/matchups";
-import { getNflWeekWindow } from "@/lib/schedule";
+import { getCurrentSlateWeek, getNflWeekWindow } from "@/lib/schedule";
 import { getWeekPhase, type WeekPhaseState } from "@/lib/weekPhase";
 import { formatPoints } from "@/lib/statistics";
+import { useIsMobile } from "@/lib/useIsMobile";
 import { DivisionMark } from "@/components/ui/DivisionIdentity";
 
 /**
@@ -25,10 +26,11 @@ import { DivisionMark } from "@/components/ui/DivisionIdentity";
  * Class names are namespaced `sb-*` because `.game`/`.team` are used globally.
  */
 export interface WeekScoreBarProps {
-  /** The week whose slate is shown. */
-  week: ScheduleWeek;
-  /** Total regular-season weeks, so prev/next can clamp and the rank can read "of N". */
-  weekCount: number;
+  /**
+   * All regular-season weeks, in order. The bar always shows the *current*
+   * week (clock-derived, never user-selectable) — it is not navigable.
+   */
+  weeks: ScheduleWeek[];
   /** Season year — enables the clock-derived live phase and holiday detection. */
   seasonYear?: number;
   /** Resolve a team by id (typically `teamById.get`). */
@@ -47,8 +49,6 @@ export interface WeekScoreBarProps {
   now?: Date;
   /** Force Thanksgiving styling (preview / testing); real weeks auto-detect. */
   thanksgiving?: boolean;
-  /** Switch the selected week (kept in sync with the in-view week selector). */
-  onSelectWeek: (week: number) => void;
   /** Open a matchup when its card is clicked. */
   onSelectGame?: (gameId: string) => void;
   /** Summary line for the Playoff Picture chip (e.g. "8 in · 3 chasing"). Chip hides when null. */
@@ -206,8 +206,7 @@ function GameCard({
 }
 
 export function WeekScoreBar({
-  week,
-  weekCount,
+  weeks,
   seasonYear,
   getTeam,
   getDivision,
@@ -217,13 +216,16 @@ export function WeekScoreBar({
   railKicker = "NFL Week",
   now: nowProp,
   thanksgiving,
-  onSelectWeek,
   onSelectGame,
   playoffPictureSummary,
   onOpenPlayoffPicture,
   onCollapsedChange,
   className = "",
 }: WeekScoreBarProps) {
+  // On phones the strip is tight, so team labels drop the city and show just
+  // the nickname (never truncated to "Down S…").
+  const isMobile = useIsMobile();
+  const showCity = displayCityNames && !isMobile;
   const pictureChip = onOpenPlayoffPicture && playoffPictureSummary ? (
     <button type="button" className="sb-picture" onClick={onOpenPlayoffPicture} title="Playoff picture">
       <TrophyGlyph />
@@ -242,11 +244,23 @@ export function WeekScoreBar({
   }, [nowProp]);
   const effectiveNow = nowProp ?? now;
 
-  const games = week.games;
+  // The bar is locked to the current week. With a clock we derive it (Wed 4 AM ET
+  // rollover); for the first paint (now still null) we fall back to the earliest
+  // week that still has an unplayed game, else the last week — deterministic so
+  // server and client agree, then the clock refines it.
+  const weekCount = weeks.length;
+  const currentWeekNumber = useMemo(() => {
+    if (effectiveNow && seasonYear) return getCurrentSlateWeek(effectiveNow, seasonYear, weekCount);
+    const firstOpen = weeks.find((w) => w.games.some((g) => g.homeScore == null || g.awayScore == null));
+    return firstOpen?.weekNumber ?? weeks[weekCount - 1]?.weekNumber ?? 1;
+  }, [effectiveNow, seasonYear, weekCount, weeks]);
+  const week = weeks.find((w) => w.weekNumber === currentWeekNumber) ?? weeks[0];
+
+  const games = useMemo(() => week?.games ?? [], [week]);
   const allPlayed = games.length > 0 && games.every((g) => g.homeScore != null && g.awayScore != null);
   const window_ = useMemo(
-    () => (seasonYear ? getNflWeekWindow(seasonYear, week.weekNumber) : null),
-    [seasonYear, week.weekNumber],
+    () => (seasonYear && week ? getNflWeekWindow(seasonYear, week.weekNumber) : null),
+    [seasonYear, week],
   );
   const firstOverride = useMemo(
     () => games.map((g) => g.dateTimeOverride).filter((value): value is string => Boolean(value)).sort()[0],
@@ -259,10 +273,8 @@ export function WeekScoreBar({
 
   const isThanksgiving = Boolean(thanksgiving) || Boolean(window_?.holidays?.includes("Thanksgiving"));
   const gotwId = gameOfWeekId ?? games.find((g) => g.gameNumber === 1)?.id;
-  const n = week.weekNumber;
-  const hasPrev = n > 1;
-  const hasNext = n < weekCount;
-  const dateShort = week.dateLabel.split(",")[0];
+  const n = week?.weekNumber ?? 1;
+  const dateShort = week?.dateLabel.split(",")[0] ?? "";
   const phaseWord = phaseState.phase === "live" ? "Live" : phaseState.phase === "final" ? "Final" : "Upcoming";
   const showBadge = phaseState.phase !== "pre";
 
@@ -417,6 +429,8 @@ export function WeekScoreBar({
 
   const rootClass = `sb sb-phase-${phaseState.phase}${isThanksgiving ? " is-thanksgiving" : ""}`;
 
+  if (!week) return null;
+
   if (collapsed) {
     return (
       <div className={`${rootClass} sb-collapsed ${className}`.trim()} role="region" aria-label={`Week ${n} scoreboard, collapsed`}>
@@ -438,11 +452,6 @@ export function WeekScoreBar({
   return (
     <div className={`${rootClass} ${className}`.trim()} role="region" aria-label={`Week ${n} scoreboard`}>
       <div className="sb-rail">
-        <div className="sb-nav">
-          <button type="button" aria-label="Previous week" disabled={!hasPrev} onClick={() => hasPrev && onSelectWeek(n - 1)}>
-            <ChevronIcon dir="left" />
-          </button>
-        </div>
         <div className="sb-meta">
           <span className="sb-kick">{isThanksgiving ? "Thanksgiving Week" : railKicker}</span>
           <span className="sb-num">{isThanksgiving && <span className="sb-turkey" aria-hidden="true">🦃</span>}Week {n}</span>
@@ -456,11 +465,6 @@ export function WeekScoreBar({
             </span>
           )}
           {badge}
-        </div>
-        <div className="sb-nav">
-          <button type="button" aria-label="Next week" disabled={!hasNext} onClick={() => hasNext && onSelectWeek(n + 1)}>
-            <ChevronIcon dir="right" />
-          </button>
         </div>
       </div>
 
@@ -485,7 +489,7 @@ export function WeekScoreBar({
                 getRank={getRank}
                 featured={game.id === gotwId}
                 phase={phaseState.phase}
-                displayCityNames={displayCityNames}
+                displayCityNames={showCity}
                 onSelectGame={onSelectGame}
               />
             ))
@@ -497,20 +501,6 @@ export function WeekScoreBar({
         <Caret dir="up" />
       </button>
     </div>
-  );
-}
-
-function ChevronIcon({ dir }: { dir: "left" | "right" }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d={dir === "left" ? "M15 6l-6 6 6 6" : "M9 6l6 6-6 6"}
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }
 
