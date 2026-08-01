@@ -32,6 +32,9 @@ export function ConnectScoresModal({ schedule, onClose, onConnect, dismissLabel 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  // Default to automatic — getting hands-off scores is usually the whole point
+  // of connecting. Unchecking leaves it manual (refresh on click).
+  const [autoSync, setAutoSync] = useState(true);
   const [discardPrompt, setDiscardPrompt] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -127,7 +130,7 @@ export function ConnectScoresModal({ schedule, onClose, onConnect, dismissLabel 
       providerLeagueId: preview.providerLeagueId,
       providerLeagueName: preview.leagueName,
       seasonYear: preview.seasonYear ?? seasonYear,
-      syncMode: "manual",
+      syncMode: autoSync ? "auto" : "manual",
       authType: "public",
       status: "ready",
       warnings: [],
@@ -170,6 +173,10 @@ export function ConnectScoresModal({ schedule, onClose, onConnect, dismissLabel 
         <div className="import-modal-body">
           {countMismatch && <div className="import-warning"><span><strong>{candidates.length} fantasy teams vs {teams.length} in your league.</strong>Map the ones that line up; leave the rest on manual entry.</span></div>}
           <TeamMap teams={teams} candidates={candidates} assignments={mapState.assign} confidenceByTeam={mapState.conf} onAssign={assign} />
+          <label className="connect-auto-toggle">
+            <input type="checkbox" checked={autoSync} onChange={(event) => setAutoSync(event.target.checked)} />
+            <span><strong>Keep scores up to date automatically</strong><small>Refreshes on its own within about 15 minutes of each slate of games finishing. You can still refresh manually anytime.</small></span>
+          </label>
         </div>
       )}
 
