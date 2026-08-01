@@ -1207,7 +1207,7 @@ function PlatformSyncCard({
   const lastSync = connection.lastSyncAt ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(connection.lastSyncAt)) : "Not synced yet";
   return <div className="platform-sync-panel">
     <div className="platform-sync-card">
-      <div><Cloud /><span><strong>{providerLabel} Platform Sync</strong><small>Generate here, update your fantasy platform, then sync scores back.</small></span></div>
+      <div><img className="platform-sync-provider-mark" src={`/providers/${connection.provider}.png`} alt="" /><span><strong>{providerLabel} Platform Sync</strong><small>Generate here, update your fantasy platform, then sync scores back.</small></span></div>
       <button type="button" className="button-primary" disabled={platformSyncLoading} onClick={onRefreshScores}>{platformSyncLoading ? <LoaderCircle className="spin" /> : <RefreshCw />}Refresh scores</button>
     </div>
     <div className="platform-sync-details">
