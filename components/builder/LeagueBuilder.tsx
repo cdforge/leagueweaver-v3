@@ -623,6 +623,9 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
         for (const x of order) { next.push(x); next.push(s + 1 - x); }
         order = next;
       }
+      // When both slots of a game belong to the same division, the winner is guaranteed to
+      // come from that division — so the winner-feeder inherits its color + icon.
+      const guar = (x?: PSlot, y?: PSlot) => (x?.division && y?.division && x.division.id === y.division.id ? x.division : undefined);
       // Each bracket slot holds a seed (1..size) or null when that rank is a bye.
       const slotAt = order.map((rank) => (rank <= size ? seeds[rank - 1] : null));
       const out: PMatch[][] = [];
@@ -632,8 +635,9 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
         const a = slotAt[2 * j], b = slotAt[2 * j + 1];
         if (a != null && b != null) {
           const id = `${prefix}-r1-${j}`;
-          r1.push({ id, accent: slotFor(a).division?.color, slots: [slotFor(a), slotFor(b)] });
-          advancers.push({ feederId: id });
+          const sa = slotFor(a), sb = slotFor(b);
+          r1.push({ id, accent: sa.division?.color, slots: [sa, sb] });
+          advancers.push({ feederId: id, division: guar(sa, sb) });
         } else {
           const s = (a != null ? a : b) as number; // bye — present seed advances
           advancers.push(slotFor(s));
@@ -646,10 +650,11 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
         for (let k = 0; k < Math.floor(advancers.length / 2); k++) {
           const s1 = advancers[2 * k], s2 = advancers[2 * k + 1];
           const id = `${prefix}-r${ri + 1}-${k}`;
+          const gd = guar(s1, s2);
           if (s1?.feederId) link(s1.feederId, id, s1.division?.color);
           if (s2?.feederId) link(s2.feederId, id, s2.division?.color);
-          matches.push({ id, accent: s1?.division?.color ?? s2?.division?.color, slots: [s1, s2] });
-          next.push({ feederId: id });
+          matches.push({ id, accent: gd?.color ?? s1?.division?.color ?? s2?.division?.color, slots: [s1, s2] });
+          next.push({ feederId: id, division: gd });
         }
         out.push(matches); advancers = next; ri += 1;
       }
