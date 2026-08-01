@@ -985,7 +985,7 @@ function PlatformSyncCard({
   const [espnS2, setEspnS2] = useState("");
   useEffect(() => setSyncMode(connection?.syncMode ?? "manual"), [connection?.syncMode]);
   if (!connection) {
-    return <div className="platform-sync-card"><div><Cloud /><span><strong>Platform Sync</strong><small>Connect ESPN or Sleeper during import to refresh scores after your platform schedule is updated.</small></span></div><Link href="/" className="button-secondary"><RefreshCw />Import league</Link></div>;
+    return <div className="platform-sync-card"><div><Cloud /><span><strong>Platform Sync</strong><small>Connect ESPN or Sleeper during import to refresh scores after your platform schedule is updated.</small></span></div><Link href="/build" className="button-secondary"><RefreshCw />Import league</Link></div>;
   }
   const providerLabel = connection.provider === "espn" ? "ESPN" : "Sleeper";
   const lastSync = connection.lastSyncAt ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(connection.lastSyncAt)) : "Not synced yet";
@@ -1455,8 +1455,8 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   }, [schedule?.id, schedule?.setup.platformConnection, selectedWeek, canAccessPlatformSync, platformSyncLoading, simulation]);
   if (!schedule || !activeSchedule) {
     if (seasonLoadState === "loading") return <div className="empty-season" role="status"><BrandLockup /><LoaderCircle className="spin" /><h1>Loading season…</h1><p>Opening the latest saved schedule and checking your access.</p></div>;
-    if (seasonLoadState === "error") return <div className="empty-season" role="alert"><BrandLockup /><Cloud /><h1>Season could not open.</h1><p>{seasonLoadError || "The saved season was not available. Your local work is still safe on this device if it was created here."}</p><Link href="/account" className="button-primary">Open account</Link><Link href="/" className="button-secondary">Open schedule builder</Link></div>;
-    return <div className="empty-season"><BrandLockup /><CalendarDays /><h1>No generated season yet.</h1><p>Build your league first, then your complete schedule will appear here.</p><Link href="/" className="button-primary">Open schedule builder</Link></div>;
+    if (seasonLoadState === "error") return <div className="empty-season" role="alert"><BrandLockup /><Cloud /><h1>Season could not open.</h1><p>{seasonLoadError || "The saved season was not available. Your local work is still safe on this device if it was created here."}</p><Link href="/account" className="button-primary">Open account</Link><Link href="/build" className="button-secondary">Open schedule builder</Link></div>;
+    return <div className="empty-season"><BrandLockup /><CalendarDays /><h1>No generated season yet.</h1><p>Build your league first, then your complete schedule will appear here.</p><Link href="/build" className="button-primary">Open schedule builder</Link></div>;
   }
   const onScore = (id: string, home?: number, away?: number) => {
     if (simulation) {
@@ -1900,7 +1900,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
           title: "Build a new matchup slate?",
           body: <p>This builds a new matchup slate and <strong>clears any entered scores and standings.</strong></p>,
           confirmLabel: "Edit & regenerate", confirmIcon: <Pencil />,
-          run: () => router.push("/"),
+          run: () => router.push("/build"),
         },
       };
       const config = configs[confirmAction];
