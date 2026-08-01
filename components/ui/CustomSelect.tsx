@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 import { EntityLogo } from "./EntityLogo";
@@ -21,13 +21,21 @@ function OptionIdentity({ option }: { option: SelectOption }) {
   );
 }
 
-export function CustomSelect({ value, options, onChange, label, disabled = false, showSelectedDescription = true }: {
+export function CustomSelect({ value, options, onChange, label, disabled = false, showSelectedDescription = true, triggerLabel, triggerContent }: {
   value: string;
   options: SelectOption[];
   onChange: (value: string) => void;
   label: string;
   disabled?: boolean;
   showSelectedDescription?: boolean;
+  /** When set, the trigger shows this fixed label instead of the selected
+      option — use where the current value is already shown nearby (e.g. the
+      team hero) so the control reads "Switch team" rather than repeating it. */
+  triggerLabel?: string;
+  /** When set, the trigger renders this content (plus a chevron) instead of the
+      default identity+label — use to make an existing element (e.g. the team
+      name in the hero) the switcher itself. Renders unstyled, no control chrome. */
+  triggerContent?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -142,9 +150,17 @@ export function CustomSelect({ value, options, onChange, label, disabled = false
 
   return (
     <div className="custom-select" ref={root}>
-      <button ref={trigger} type="button" className="custom-select-trigger" aria-label={label} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? menuId : undefined} aria-activedescendant={open ? optionId(activeIndex) : undefined} disabled={disabled} onClick={() => open ? setOpen(false) : openAt(selectedIndex)} onKeyDown={onTriggerKeyDown}>
-        <OptionIdentity option={selected} />
-        <span><strong>{selected.label}</strong>{showSelectedDescription && selected.description && <small>{selected.description}</small>}</span>
+      <button ref={trigger} type="button" className={`custom-select-trigger${triggerLabel ? " custom-select-trigger-labeled" : ""}${triggerContent ? " custom-select-trigger-content" : ""}`} aria-label={label} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? menuId : undefined} aria-activedescendant={open ? optionId(activeIndex) : undefined} disabled={disabled} onClick={() => open ? setOpen(false) : openAt(selectedIndex)} onKeyDown={onTriggerKeyDown}>
+        {triggerContent ? (
+          triggerContent
+        ) : triggerLabel ? (
+          <span><strong>{triggerLabel}</strong></span>
+        ) : (
+          <>
+            <OptionIdentity option={selected} />
+            <span><strong>{selected.label}</strong>{showSelectedDescription && selected.description && <small>{selected.description}</small>}</span>
+          </>
+        )}
         <ChevronDown className={open ? "open" : ""} />
       </button>
       {open && !disabled && typeof document !== "undefined" && createPortal(

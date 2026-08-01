@@ -20,30 +20,36 @@ const TEAM_NAMES = [
   "First Down Foundry",
   "Play Action Club",
   "Victory Formation",
+  "Hail Mary Society",
+  "Trench Collective",
+  "Snap Count Club",
+  "Field General Union",
+  "Onside Assembly",
+  "Hurry-Up Guild",
+  "Coffin Corner Crew",
+  "Neutral Zone Works",
+  "Shotgun Syndicate",
+  "Zone Read Society",
+  "Special Teams Bureau",
+  "Backfield Department",
+  "Chain Gang Club",
+  "Sideline Standard",
+  "Overtime Union",
+  "Cover Two Company",
 ];
 
 const TEAM_CITIES = [
   "Brooklyn", "Austin", "Chicago", "Phoenix", "Seattle", "Nashville", "Baltimore", "Portland",
   "Denver", "Atlanta", "Boston", "Detroit", "Charlotte", "San Diego", "Cleveland", "Las Vegas",
+  "Kansas City", "Minneapolis", "Tampa", "Pittsburgh", "Buffalo", "Miami", "Houston", "Philadelphia",
+  "Indianapolis", "Milwaukee", "Sacramento", "Columbus", "Memphis", "Raleigh", "Salt Lake City", "New Orleans",
 ];
 
 const TEAM_COLORS = [
-  "#B91C1C",
-  "#1D4ED8",
-  "#7C3AED",
-  "#C2410C",
-  "#047857",
-  "#BE185D",
-  "#0369A1",
-  "#4D7C0F",
-  "#A16207",
-  "#4338CA",
-  "#0F766E",
-  "#9F1239",
-  "#6D28D9",
-  "#C2410C",
-  "#166534",
-  "#1E40AF",
+  "#B91C1C", "#1D4ED8", "#7C3AED", "#C2410C", "#047857", "#BE185D", "#0369A1", "#4D7C0F",
+  "#A16207", "#4338CA", "#0F766E", "#9F1239", "#6D28D9", "#9A3412", "#166534", "#1E40AF",
+  "#0E7490", "#B45309", "#15803D", "#7E22CE", "#BE123C", "#2563EB", "#DB2777", "#0891B2",
+  "#65A30D", "#CA8A04", "#4F46E5", "#E11D48", "#7C2D12", "#0D9488", "#1E3A8A", "#831843",
 ];
 
 const STADIUMS = [
@@ -57,13 +63,18 @@ const STADIUMS = [
   "Championship Field",
 ];
 
-export function createDivisions(count: 2 | 3 | 4 = 2): Division[] {
-  const names = count === 2 ? ["North", "South"] : count === 3 ? ["North", "Central", "South"] : ["North", "South", "East", "West"];
-  const colors = ["#117A45", "#B42318", "#2457A7", "#7A4A12"];
+const DIVISION_NAME_POOL = ["North", "South", "East", "West", "Central", "Atlantic", "Pacific", "Mountain"];
+const DIVISION_COLORS = ["#117A45", "#B42318", "#2457A7", "#7A4A12", "#6D28D9", "#0F766E", "#BE185D", "#4338CA"];
+
+export function createDivisions(count = 2): Division[] {
+  const names = count === 2 ? ["North", "South"]
+    : count === 3 ? ["North", "Central", "South"]
+    : count === 4 ? ["North", "South", "East", "West"]
+    : DIVISION_NAME_POOL.slice(0, count);
   return names.map((name, index) => ({
     id: `division-${index + 1}`,
     name,
-    color: colors[index],
+    color: DIVISION_COLORS[index % DIVISION_COLORS.length],
   }));
 }
 

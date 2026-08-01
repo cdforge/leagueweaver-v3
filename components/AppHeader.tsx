@@ -14,7 +14,7 @@ export function BrandLockup({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
   const [confirmOpen, setConfirmOpen] = useState(false);
   // The builder route holds in-progress setup that leaving could discard.
-  const guarded = pathname === "/";
+  const guarded = pathname === "/build";
 
   const handleClick = (event: React.MouseEvent) => {
     if (!guarded) return;
@@ -23,12 +23,12 @@ export function BrandLockup({ compact = false }: { compact?: boolean }) {
   };
   const leaveToWelcome = () => {
     setConfirmOpen(false);
-    router.push("/welcome");
+    router.push("/");
   };
 
   return (
     <>
-      <Link className="brand-lockup" href="/welcome" aria-label="League Weaver home" onClick={handleClick}>
+      <Link className="brand-lockup" href="/" aria-label="League Weaver home" onClick={handleClick}>
         <Image src="/branding/leagueweaver-mark.svg" alt="" width={40} height={40} priority />
         {!compact && (
           <span>

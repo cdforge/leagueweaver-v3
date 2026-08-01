@@ -19,7 +19,7 @@ export function WelcomeGate() {
       markWelcomed();
       return;
     }
-    router.replace("/welcome");
+    router.replace("/");
   }, [router]);
   return null;
 }

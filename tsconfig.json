@@ -38,6 +38,12 @@
     ".next-qa/dev/types/**/*.ts",
     ".next-build/types/**/*.ts",
     ".next-build/dev/types/**/*.ts",
+    ".next-cinematic/types/**/*.ts",
+    ".next-cinematic/dev/types/**/*.ts",
+    ".next-connect/types/**/*.ts",
+    ".next-connect/dev/types/**/*.ts",
+    ".next-workercheck/types/**/*.ts",
+    ".next-workercheck/dev/types/**/*.ts",
     ".next-wt/types/**/*.ts",
     ".next-wt/dev/types/**/*.ts"
   ],

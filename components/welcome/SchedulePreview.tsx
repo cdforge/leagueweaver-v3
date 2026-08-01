@@ -1,20 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { BarChart3, MapPin } from "lucide-react";
+import { useMemo, useState } from "react";
+import { MatchupCard } from "@/components/season/MatchupPresentation";
+import { WeekSelector } from "@/components/season/WeekSelector";
 import { EntityLogo } from "@/components/ui/EntityLogo";
+import { getMatchupRatingRange, getMatchupSignal } from "@/lib/matchups";
+import type { Division, ScheduledGame, Team } from "@/lib/types";
 
 type DivisionKey = "prodigy" | "esteemed";
-type Team = { rank: number; city: string; name: string; logo: string; color: string; venue: string; division: DivisionKey };
 
 const LEAGUE = { name: "Prodigies vs Esteemed FFL", color: "#117A45", logo: "/pve/league.png" };
 
-const DIVISIONS: Record<DivisionKey, { name: string; color: string; logo: string }> = {
-  prodigy: { name: "Prodigy", color: "#E9E9E9", logo: "/pve/division-prodigies.png" },
-  esteemed: { name: "Esteemed", color: "#FFD124", logo: "/pve/division-esteemed.png" },
+const DIVISIONS: Record<DivisionKey, Division> = {
+  prodigy: { id: "prodigy", name: "Prodigy", color: "#E9E9E9", logoUrl: "/pve/division-prodigies.png" },
+  esteemed: { id: "esteemed", name: "Esteemed", color: "#FFD124", logoUrl: "/pve/division-esteemed.png" },
 };
 
-const TEAMS: Record<string, Team> = {
+type SeedTeam = { rank: number; city: string; name: string; logo: string; color: string; venue: string; division: DivisionKey };
+
+const SEED: Record<string, SeedTeam> = {
   Decoupes: { rank: 1, city: "Bandera", name: "Decoupes", logo: "/pve/team-decoupes.png", color: "#BC2539", venue: "Decoupes Stadium", division: "prodigy" },
   Mutts: { rank: 2, city: "Uncross Your", name: "Mutts", logo: "/pve/team-mutts.png", color: "#BDBDBD", venue: "Mutts Stadium", division: "esteemed" },
   Popeyes: { rank: 3, city: "West End", name: "Popeyes", logo: "/pve/team-popeyes.png", color: "#FF8B29", venue: "Popeyes Stadium", division: "prodigy" },
@@ -26,6 +30,21 @@ const TEAMS: Record<string, Team> = {
   Eagles: { rank: 9, city: "Rex", name: "Eagles", logo: "/pve/team-eagles.png", color: "#93FF41", venue: "Eagles Stadium", division: "esteemed" },
   Kings: { rank: 10, city: "McDonough", name: "Kings", logo: "/pve/team-kings.png", color: "#6400DB", venue: "Kings Stadium", division: "prodigy" },
 };
+
+const TEAMS: Record<string, Team> = Object.fromEntries(
+  Object.entries(SEED).map(([key, team]) => [key, {
+    id: key.toLowerCase(),
+    city: team.city,
+    name: team.name,
+    shortName: team.name,
+    manager: "",
+    color: team.color,
+    logoUrl: team.logo,
+    divisionId: team.division,
+    overallRank: team.rank,
+    stadium: team.venue,
+  } satisfies Team]),
+);
 
 const WEEK_DATES = [
   "Sep 9–15", "Sep 16–22", "Sep 23–29", "Sep 30–Oct 6", "Oct 7–13", "Oct 14–20", "Oct 21–27",
@@ -53,42 +72,46 @@ const RAW: RawGame[][] = [
   [["Yardies", "Mutts", "d", 2, 2, 1, 6.4], ["Popeyes", "Decoupes", "d", 2, 2, 2, 7.4], ["Green", "Savages", "d", 2, 2, 3, 8.7], ["Eagles", "Kings", "x", 2, 2, 4, 11.7], ["Champs", "MetaMookDawgs", "d", 2, 2, 5, 13.1]],
 ];
 
-type Game = { home: Team; away: Team; divisional: boolean; seriesIndex: number; seriesTotal: number; rating: number; gotw: boolean };
-
-const SCHEDULE: Game[][] = RAW.map((week) =>
+const SCHEDULE: ScheduledGame[][] = RAW.map((week, weekIndex) =>
   week.map(([home, away, type, seriesGame, seriesLength, gameNumber, rating]) => ({
-    home: TEAMS[home],
-    away: TEAMS[away],
-    divisional: type === "d",
-    seriesIndex: seriesGame,
-    seriesTotal: seriesLength,
-    rating,
-    gotw: gameNumber === 1,
-  })),
+    id: `pve-w${weekIndex + 1}-g${gameNumber}`,
+    week: weekIndex + 1,
+    gameNumber,
+    homeTeamId: TEAMS[home].id,
+    awayTeamId: TEAMS[away].id,
+    matchupType: type === "d" ? "division" : "cross-division",
+    seriesGame,
+    seriesLength,
+    dateLabel: `${WEEK_DATES[weekIndex]}, 2026`,
+    stadium: TEAMS[home].stadium,
+    matchupRating: rating,
+  } satisfies ScheduledGame)),
 );
 
-function monogram(team: Team) {
-  return `${team.city[0] ?? ""}${team.name[0] ?? ""}`.toUpperCase();
-}
+const RATING_RANGE = getMatchupRatingRange(SCHEDULE.flat());
 
-function TeamCell({ team, align }: { team: Team; align: "left" | "right" }) {
-  const mark = <EntityLogo className="wp-mark" color={team.color} logoUrl={team.logo} monogram={monogram(team)} size={32} />;
-  const name = (
-    <span className="wp-name">
-      <small>{team.city}</small>
-      <strong>{team.name}</strong>
-      <span className="wp-record">0-0</span>
-    </span>
-  );
-  const rank = <b className="wp-seed">{team.rank}</b>;
-  return align === "left"
-    ? <span className="wp-team">{rank}{mark}{name}</span>
-    : <span className="wp-team wp-right">{name}{mark}{rank}</span>;
-}
+// Preview slate rank: rank weeks by average matchup rating (lower = stronger = #1),
+// matching the workspace week strip's slate-rank chip.
+const WEEK_RANK = (() => {
+  const averages = SCHEDULE.map((games, index) => ({ index, avg: games.reduce((sum, game) => sum + (game.matchupRating ?? 0), 0) / games.length }));
+  const ranked = [...averages].sort((left, right) => left.avg - right.avg);
+  const ranks = new Map<number, number>();
+  ranked.forEach((entry, position) => ranks.set(entry.index, position + 1));
+  return ranks;
+})();
+
+const PRESEASON_RECORD = { overall: "0-0", division: "0-0" };
 
 export function SchedulePreview() {
   const [week, setWeek] = useState(1);
   const games = SCHEDULE[week - 1];
+  const teamById = useMemo(() => new Map(Object.values(TEAMS).map((team) => [team.id, team])), []);
+  const weeks = useMemo(() => SCHEDULE.map((_, index) => ({
+    weekNumber: index + 1,
+    dateLabel: `${WEEK_DATES[index]}, 2026`,
+    matchupRank: WEEK_RANK.get(index),
+    isThanksgiving: index + 1 === THANKSGIVING_WEEK,
+  })), []);
   return (
     <div className="welcome-showcase-frame" role="group" aria-label="Prodigies vs Esteemed FFL 2026 schedule — select a week to preview its matchups">
       <span className="welcome-showcase-bar" aria-hidden="true"><i></i><i></i><i></i></span>
@@ -98,65 +121,42 @@ export function SchedulePreview() {
           <strong>{LEAGUE.name}</strong>
           <span>2026 &middot; 14 weeks</span>
         </div>
-        <div className="wp-weeks" role="tablist" aria-label="Schedule week">
-          {SCHEDULE.map((_, index) => {
-            const number = index + 1;
-            const isThanks = number === THANKSGIVING_WEEK;
-            return (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={week === number}
-                title={isThanks ? "Thanksgiving week" : `Week ${number}`}
-                className={`${week === number ? "on" : ""}${isThanks ? " thanks" : ""}`}
-                key={index}
-                onClick={() => setWeek(number)}
-              >
-                W{number}
-              </button>
-            );
-          })}
-        </div>
+        <WeekSelector
+          weeks={weeks}
+          totalWeeks={SCHEDULE.length}
+          selectedWeek={week}
+          onSelect={setWeek}
+          ariaLabel="Schedule week"
+        />
         <div className="wp-weekhead">
           <b>{String(week).padStart(2, "0")}</b>
           <span><strong>Week {week}{week === THANKSGIVING_WEEK ? " · Thanksgiving" : ""}</strong><small>{WEEK_DATES[week - 1]} &middot; 2026</small></span>
           <em>{games.length} games</em>
         </div>
-        <div className="wp-rows">
-          {games.map((game, index) => {
-            const thanks = week === THANKSGIVING_WEEK && game.gotw;
-            const division = game.divisional ? DIVISIONS[game.home.division] : null;
+        <div className="matchup-list matchup-card-list">
+          {games.map((game) => {
+            const away = teamById.get(game.awayTeamId)!;
+            const home = teamById.get(game.homeTeamId)!;
+            const featured = game.gameNumber === 1;
             return (
-              <div className={`wp-row${game.gotw ? " is-gotw" : ""}${thanks ? " is-thanks" : ""}`} key={game.home.name + game.away.name}>
-                <div className="wp-rowhead">
-                  <b className="wp-gameno">Game {index + 1}</b>
-                  {game.gotw ? (
-                    <span className="wp-tag gotw">{thanks ? "Thanksgiving Game" : "Game of the Week"}</span>
-                  ) : (
-                    <span className={`wp-tag${game.divisional ? " div" : ""}`}>
-                      {division && <img className="wp-divmark" src={division.logo} alt="" style={{ background: division.color }} />}
-                      {game.divisional ? `${division?.name} · ${game.seriesIndex} of ${game.seriesTotal}` : `Cross-division · ${game.seriesIndex} of ${game.seriesTotal}`}
-                    </span>
-                  )}
-                  <span className="wp-rating" title={`Matchup rating ${game.rating.toFixed(1)}`}>
-                    <BarChart3 aria-hidden="true" />
-                    <b>{game.rating.toFixed(1)}</b>
-                    <small>#{game.home.rank} vs #{game.away.rank}</small>
-                  </span>
-                </div>
-                <div className="wp-match">
-                  <TeamCell team={game.home} align="left" />
-                  <span className="wp-center">
-                    <small>SCHEDULED</small>
-                    <span className="wp-venue">
-                      <MapPin aria-hidden="true" />
-                      <span>{game.home.venue}</span>
-                      <img className="wp-venue-mark" src={game.home.logo} alt="" />
-                    </span>
-                  </span>
-                  <TeamCell team={game.away} align="right" />
-                </div>
-              </div>
+              <MatchupCard
+                key={game.id}
+                game={game}
+                away={away}
+                home={home}
+                awayDivision={DIVISIONS[away.divisionId as DivisionKey]}
+                homeDivision={DIVISIONS[home.divisionId as DivisionKey]}
+                awayRank={away.overallRank}
+                homeRank={home.overallRank}
+                awayRecord={PRESEASON_RECORD}
+                homeRecord={PRESEASON_RECORD}
+                signal={getMatchupSignal(game, undefined, RATING_RANGE)}
+                featured={featured}
+                featuredLabel={week === THANKSGIVING_WEEK && featured ? "Thanksgiving" : "GOTW"}
+                gameLabel={featured ? undefined : `Game ${game.gameNumber}`}
+                showCity
+                showVenue
+              />
             );
           })}
         </div>

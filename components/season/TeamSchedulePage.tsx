@@ -270,7 +270,12 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
   const currentStandingsByTeam = new Map(currentSnapshot.rows.map((row) => [row.teamId, row]));
   const recordFor = (recordTeamId: string) => {
     const row = currentStandingsByTeam.get(recordTeamId);
-    return { overall: row ? formatRecord(row) : "0-0", division: row ? `${row.divisionWins}-${row.divisionLosses}` : "0-0" };
+    if (!row) return { overall: "0-0", division: "0-0" };
+    // A slate still sitting at 0-0 counts every game as a tie, so formatRecord
+    // renders a confusing "0-0-14" headline. With no decisive games yet, show a
+    // clean "0-0" instead of surfacing the tie count as the hero's big number.
+    const overall = row.wins === 0 && row.losses === 0 ? "0-0" : formatRecord(row);
+    return { overall, division: `${row.divisionWins}-${row.divisionLosses}` };
   };
   const division = divisionById.get(team.divisionId);
   const divisionTeamCount = division ? schedule.setup.teams.filter((item) => item.divisionId === division.id).length : 0;
@@ -331,27 +336,8 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
     <div className="team-schedule-view team-branded-schedule" style={teamBrandStyle(team.color)}>
       <section className="team-schedule-hero">
         <div className="team-schedule-overview">
-          <TeamIdentityBlock
-            team={team}
-            division={division}
-            leagueRank={summary.liveRank}
-            record={recordFor(team.id)}
-            showCity={showCity}
-          />
-          <span className="team-schedule-facts">
-            {division
-              ? <DivisionIdentity division={division} detail={`${divisionTeamCount} teams · preseason seed #${summary.divisionSeed}`} />
-              : <strong>Independent</strong>}
-            <ClinchBadges timeline={currentClinches.get(team.id)} division={division} />
-            <small>{[
-              schedule.setup.display?.managers !== false ? team.manager || "No manager" : "",
-              schedule.setup.display?.venues !== false ? team.stadium : "",
-            ].filter(Boolean).join(" · ")}</small>
-          </span>
-        </div>
-        <div className="team-schedule-controls">
           <CustomSelect
-            label="Choose team schedule"
+            label="Switch team"
             value={team.id}
             onChange={(value) => onSelectTeam(value === "all" ? "" : value)}
             options={[
@@ -365,7 +351,29 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
                 monogram: teamInitials(item),
               })),
             ]}
+            triggerContent={
+              <TeamIdentityBlock
+                team={team}
+                division={division}
+                leagueRank={summary.liveRank}
+                record={recordFor(team.id)}
+                showCity={showCity}
+              />
+            }
           />
+          <span className="team-schedule-facts">
+            {division
+              ? <DivisionIdentity division={division} detail={`${divisionTeamCount}-team division`} />
+              : <strong>Independent</strong>}
+            <small className="team-schedule-rankline">Live rank <b>#{summary.liveRank}</b> · Preseason seed #{summary.divisionSeed}</small>
+            <ClinchBadges timeline={currentClinches.get(team.id)} division={division} />
+            <small>{[
+              schedule.setup.display?.managers !== false ? team.manager || "No manager" : "",
+              schedule.setup.display?.venues !== false ? team.stadium : "",
+            ].filter(Boolean).join(" · ")}</small>
+          </span>
+        </div>
+        <div className="team-schedule-controls">
           <FloatingPopover className="team-display-menu" label="Choose schedule fields" trigger={<><SlidersHorizontal />Display</>} closeOnSelect={false} menuClassName="team-display-menu-panel">
               {DISPLAY_OPTIONS.map((option) => (
                 <label key={option.key}>
@@ -503,6 +511,73 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
           </tbody>
         </table>
       </div>
+
+      {/* Mobile-only card view of the same per-week data. The wide table can't
+          show opponent + result together on a phone, so ≤560px swaps to cards
+          (CSS toggles which of the two is visible; desktop table is untouched). */}
+      <ul className="team-schedule-cards" aria-label={`${teamDisplayName(team, showCity)} schedule, card view`}>
+        {schedule.weeks.map((week) => {
+          const game = week.games.find((item) => item.homeTeamId === team.id || item.awayTeamId === team.id);
+          const holidays = getNflWeekWindow(schedule.setup.seasonYear, week.weekNumber).holidays;
+          if (!game) {
+            return (
+              <li className="team-week-card is-bye" key={week.weekNumber}>
+                <div className="twc-top">{renderWeekLink(week.weekNumber, week.dateLabel, holidays)}<span className="result-chip bye">BYE</span></div>
+                <div className="twc-body"><strong className="twc-bye-label">Bye week</strong></div>
+              </li>
+            );
+          }
+          const isHome = game.homeTeamId === team.id;
+          const opponent = teamById.get(isHome ? game.awayTeamId : game.homeTeamId);
+          if (!opponent) return null;
+          const opponentDivision = divisionById.get(opponent.divisionId);
+          const enteringSnapshot = getEnteringWeekRankSnapshot(schedule, week.weekNumber);
+          const opponentRank = enteringSnapshot.rows.find((row) => row.teamId === opponent.id)?.rank ?? opponent.overallRank;
+          const played = game.homeScore != null && game.awayScore != null;
+          const ownScore = isHome ? game.homeScore : game.awayScore;
+          const opponentScore = isHome ? game.awayScore : game.homeScore;
+          const result = !played ? "—" : ownScore === opponentScore ? "T" : ownScore! > opponentScore! ? "W" : "L";
+          const ownScoreClass = !played ? "" : result === "W" ? "score-winner" : result === "L" ? "score-loser" : "score-tied";
+          const opponentScoreClass = !played ? "" : result === "L" ? "score-winner" : result === "W" ? "score-loser" : "score-tied";
+          const gotwEntry = scheduleSignals.gotwByWeek.get(week.weekNumber);
+          const isGameOfWeek = gotwEntry?.game.id === game.id;
+          const gotwLabel = gotwEntry ? gameOfWeekStatusLabel(gotwEntry.status) : "GOTW";
+          const signal = getMatchupSignal(game, undefined, planningRatingRange);
+          return (
+            <li className={`team-week-card${isGameOfWeek ? " is-gotw" : ""}`} key={week.weekNumber}>
+              <div className="twc-top">
+                {renderWeekLink(week.weekNumber, week.dateLabel, holidays)}
+                <span className="twc-tags">{isGameOfWeek && <GameBadgeChip badge="GOTW" title={gotwLabel} />}<MatchupSeriesChip game={game} division={opponentDivision} /></span>
+              </div>
+              <div className="twc-body">
+                <span className="location-chip"><span aria-hidden="true">{isHome ? "vs" : "@"}</span><span className="sr-only">{isHome ? "Home versus" : "Away at"}</span></span>
+                <TeamIdentityBlock
+                  compact
+                  showRecord={false}
+                  team={opponent}
+                  division={opponentDivision}
+                  leagueRank={opponentRank}
+                  record={{ overall: "0-0" }}
+                  showCity={showCity}
+                  href={`/season/${schedule.id}/team/${opponent.id}`}
+                />
+                <span className="twc-result">
+                  {played
+                    ? <>
+                        <span className={`result-chip result-${result.toLowerCase()}`}>{result}</span>
+                        <span className="twc-score" aria-label={`${team.name} ${ownScore}, ${opponent.name} ${opponentScore}`}><strong className={ownScoreClass}>{ownScore}</strong><i aria-hidden="true">–</i><strong className={opponentScoreClass}>{opponentScore}</strong></span>
+                      </>
+                    : <span className="twc-scheduled"><small>Scheduled</small></span>}
+                </span>
+              </div>
+              <div className="twc-meta">
+                {schedule.setup.display?.venues !== false && <span><MapPin aria-hidden="true" />{game.stadium}</span>}
+                <span className="twc-rating">Rating {signal.rating.toFixed(1)}</span>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
 
       <section className="team-performance-panel" aria-label={`${teamDisplayName(team, showCity)} team statistics`}>
         <header><BarChart3 /><span><strong>Team performance</strong><small>{currentSnapshot.weekNumber ? `Results through Week ${currentSnapshot.weekNumber}` : "No results entered yet"}</small></span></header>

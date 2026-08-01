@@ -147,17 +147,38 @@ check(() => {
 
   const restarted = restartSimulationFromBeginning(sandbox);
   const materialized = materializeSimulationSchedule(restarted);
-  assert.equal(Object.keys(restarted.results).length, 0);
+  // H11: restart re-seeds the anchored recorded (real) results — it resets the
+  // SIMULATION, not the season. A fully-recorded season survives restart with
+  // every real score intact; materialize must never blank it back to empty.
+  assert.ok(Object.keys(restarted.results).length > 0);
+  assert.ok(Object.values(restarted.results).every((result) => result.source === "recorded"));
   assert.equal(materialized.playoffGames, undefined);
   assert.equal(materialized.rankHistory, undefined);
-  assert.equal(getNextSimulationGame(restarted)?.weekNumber, 1);
+  assert.equal(getNextSimulationGame(restarted), undefined);
   assert.ok(materialized.weeks.every((week) => week.games.every((scheduledGame) =>
-    scheduledGame.homeScore == null && scheduledGame.awayScore == null,
+    scheduledGame.homeScore != null && scheduledGame.awayScore != null,
   )));
   assert.ok(completed.weeks.every((week) => week.games.every((scheduledGame) =>
     scheduledGame.homeScore != null && scheduledGame.awayScore != null,
   )));
   assert.ok((frozenCompleted.rankHistory?.length ?? 0) > 1);
+});
+
+check(() => {
+  // H11 (partial season): simulating forward then restarting must clear the
+  // hypothetical games but keep the two anchored recorded results, and materialize
+  // must preserve exactly those two real scores — never a blank schedule.
+  const simmed = simulateThroughWeek(createSimulationSandbox(schedule, "h11-partial"), 3);
+  assert.equal(Object.keys(simmed.results).length, 6);
+  const restarted = restartSimulationFromBeginning(simmed);
+  assert.equal(Object.keys(restarted.results).length, 2);
+  assert.ok(Object.values(restarted.results).every((result) => result.source === "recorded"));
+  assert.ok(restarted.results["recorded-1"] && restarted.results["recorded-2"]);
+  const materialized = materializeSimulationSchedule(restarted);
+  const scored = materialized.weeks.flatMap((week) => week.games).filter((scheduledGame) => scheduledGame.homeScore != null);
+  assert.equal(scored.length, 2);
+  assert.ok(materialized.weeks[0].games.every((scheduledGame) => scheduledGame.homeScore != null));
+  assert.ok(materialized.weeks[1].games.every((scheduledGame) => scheduledGame.homeScore == null));
 });
 
 check(() => {
