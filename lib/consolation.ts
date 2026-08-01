@@ -313,3 +313,58 @@ export function projectFinalPlacements(schedule: GeneratedSchedule): ProjectedFi
 
   return placements;
 }
+
+export interface ProjectedPlacementSlot {
+  placeStart: number;
+  placeEnd: number;
+  label: string;
+  teamIds: string[];
+  /** True when this slot is a single exact place; false for a range. */
+  exact: boolean;
+}
+
+/**
+ * The league-wide placement chart: how every seed can finish. Places resolve exactly from the
+ * top and collapse into ranges once the calendar runs out.
+ *
+ * A W-round bracket exactly ranks at most 2^W teams (3 playoff weeks → 8, 4 → 16). With F =
+ * championship field and M = non-playoff teams:
+ * - places 1..F are individual (the championship + its loser-placement games),
+ * - if M ≤ 2^W every non-playoff team also gets an exact place (small leagues),
+ * - if M > 2^W the top 2^W non-playoff seeds resolve by elimination round (champion/runner-up
+ *   exact, then widening ranges) and the remainder fall into one tail range.
+ */
+export function projectPlacementChart(schedule: GeneratedSchedule): ProjectedPlacementSlot[] {
+  const settings = normalizePlayoffSettings(schedule.setup.playoffs, schedule.setup.teams.length, schedule.setup.color, schedule.setup.weeks);
+  const placements = projectFinalPlacements({ ...schedule, setup: { ...schedule.setup, playoffs: settings } });
+  const total = schedule.setup.teams.length;
+  const field = Math.max(2, Math.min(total, Math.round(settings.fieldSize)));
+  const rounds = getPlayoffRoundNames(settings, schedule.setup.divisions.length).length;
+  const cap = 2 ** rounds;
+  const nonPlayoff = total - field;
+
+  const bands: Array<[number, number]> = [];
+  for (let place = 1; place <= field; place += 1) bands.push([place, place]); // championship — individual
+  if (nonPlayoff >= 1 && nonPlayoff <= cap) {
+    for (let place = field + 1; place <= total; place += 1) bands.push([place, place]); // full placement
+  } else if (nonPlayoff > cap) {
+    bands.push([field + 1, field + 1]); // consolation champion
+    bands.push([field + 2, field + 2]); // consolation runner-up
+    let start = field + 3;
+    for (let round = rounds - 2; round >= 0 && start <= field + cap; round -= 1) {
+      const losers = 2 ** (rounds - 1 - round); // losers eliminated in this consolation round
+      const end = Math.min(field + cap, start + losers - 1);
+      bands.push([start, end]);
+      start = end + 1;
+    }
+    if (field + cap < total) bands.push([field + cap + 1, total]); // tail — did not make the bracket
+  }
+
+  return bands.map(([placeStart, placeEnd]) => ({
+    placeStart,
+    placeEnd,
+    label: placeStart === placeEnd ? `${ordinal(placeStart)} Place` : `${ordinal(placeStart)}–${ordinal(placeEnd)}`,
+    teamIds: placements.slice(placeStart - 1, placeEnd).map((entry) => entry.teamId),
+    exact: placeStart === placeEnd,
+  }));
+}

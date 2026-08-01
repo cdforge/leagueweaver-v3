@@ -13,7 +13,7 @@ import {
   normalizePlayoffSettings,
   resolvePlayoffPlacementMode,
 } from "../lib/playoffs";
-import { projectConsolationBracket, projectFinalPlacements } from "../lib/consolation";
+import { projectConsolationBracket, projectFinalPlacements, projectPlacementChart } from "../lib/consolation";
 import { formatDraftPlace, getTeamsMissingDraftPlaces, getWeekOneTeamOrder, hasCompleteDraftRanking } from "../lib/rankings";
 import { getNflWeekWindow } from "../lib/schedule";
 import { calculateStandings } from "../lib/standings";
@@ -296,6 +296,27 @@ check(() => {
   const groups = conferenceDivisionGroups({ divisions, conferences: createConferences(2) });
   assert.equal(groups.length, 2);
   assert.deepEqual(groups.map((group) => group.length), [3, 3]);
+});
+
+check(() => {
+  // Placement chart — 32 teams / 3 playoff weeks / 8-team field: 1–8 exact, then 9,10, 11–12,
+  // 13–16, tail 17–32 (matches the locked design).
+  const divisions = defaultConferenceAssignment(createDivisions(8), createConferences(2));
+  const conferences = createConferences(2);
+  const base = createDefaultSetup();
+  const setup = { ...base, divisions, conferences, teams: createTeams(32, divisions), playoffs: { ...base.playoffs, fieldSize: 8, placementMode: "auto" as const, consolationMode: "standard" as const } };
+  const bands = projectPlacementChart(blankSchedule(setup)).map((slot) => [slot.placeStart, slot.placeEnd]);
+  assert.deepEqual(bands, [[1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [6, 6], [7, 7], [8, 8], [9, 9], [10, 10], [11, 12], [13, 16], [17, 32]]);
+});
+
+check(() => {
+  // Small league (M = 4 ≤ 2^3) → everyone gets an exact place, no ranges.
+  const divisions = createDivisions(2);
+  const base = createDefaultSetup();
+  const setup = { ...base, divisions, teams: createTeams(10, divisions), playoffs: { ...base.playoffs, fieldSize: 6, placementMode: "overall" as const, consolationMode: "standard" as const } };
+  const chart = projectPlacementChart(blankSchedule(setup));
+  assert.equal(chart.length, 10);
+  assert.ok(chart.every((slot) => slot.exact));
 });
 
 console.log(`Playoff, holiday, and opening-week matrix: ${checks} checks passed.`);
