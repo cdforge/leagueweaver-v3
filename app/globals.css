@@ -1804,7 +1804,9 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .matchup-venue > svg { width: 13px; flex: 0 0 auto; color: var(--field); }
 .matchup-venue > img { width: 22px; height: 22px; flex: 0 0 auto; object-fit: contain; background: transparent; }
 .matchup-venue > strong { overflow: hidden; font-size: var(--text-2xs); text-overflow: ellipsis; white-space: nowrap; }
-.matchup-signal { display: inline-flex; align-items: flex-start; flex-direction: column; gap: 2px; }
+/* Rating pill reads inline at every width (bars · rating · #a vs #b), matching
+   the mobile card — never stacked. */
+.matchup-signal { display: inline-flex; align-items: center; flex-direction: row; gap: 8px; }
 .matchup-signal-main { display: inline-flex; align-items: center; gap: 6px; }
 .matchup-signal-main > b, .table-signal > strong { color: var(--ink); font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-md); font-variant-numeric: tabular-nums; line-height: 1; }
 .matchup-probability { position: relative; isolation: isolate; width: 146px; min-height: 24px; overflow: hidden; border-radius: var(--radius-chip); background: var(--gold-soft); display: grid; grid-template-columns: 1fr 1fr; align-items: center; }
@@ -2795,6 +2797,18 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .team-directory-card .team-identity-name { justify-content: center; gap: 0; }
 .team-directory-card .team-identity-name small { line-height: 1.2; }
 .team-directory-card .team-identity-name strong { line-height: 1.2; }
+/* TS6 — real cause of the "text sits high" look: the shared responsive rules
+   shrink .team-identity-mark to 40px at narrow widths but the EntityLogo keeps its
+   48px size prop, so the avatar overflows its box by 8px and the grid centers the
+   text on the 40px box, not the 48px avatar. Pin mark + logo to the same size so
+   the box == the visible avatar and the name centers on it. */
+.team-directory-card .team-identity-mark { width: 48px; height: 48px; }
+.team-directory-card .team-identity-mark .entity-logo { width: 48px !important; height: 48px !important; min-width: 0 !important; min-height: 0 !important; }
+/* Grid centers the text BOX, which carries line-leading below the last line, so the
+   visible glyphs sit ~4px high in the 48px avatar row. Nudge both text columns down
+   to optically center the glyphs on the avatar (name + record stay matched). */
+.team-directory-card .team-identity-name,
+.team-directory-card .team-identity-record { position: relative; top: 4px; }
 .team-directory-stats { display: grid; grid-template-columns: repeat(3, 1fr); margin: 0; border-top: 1px solid var(--line); }
 .team-directory-stats > div { min-width: 0; min-height: 34px; display: flex; flex-direction: row; align-items: baseline; gap: 6px; border-right: 1px solid var(--line); padding: 7px 10px; }
 .team-directory-stats > div:first-child { padding-left: 0; }
