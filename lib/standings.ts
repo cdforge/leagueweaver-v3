@@ -55,7 +55,9 @@ function buildRawStandings(schedule: GeneratedSchedule, throughWeek: number) {
   for (const week of schedule.weeks) {
     if (week.weekNumber > throughWeek) continue;
     for (const game of week.games) {
-      if (game.homeScore == null || game.awayScore == null) continue;
+      // A 0-0 "result" is never a real fantasy score — it means the game hasn't
+      // been played, so it must not count as a played tie (or any result).
+      if (game.homeScore == null || game.awayScore == null || (game.homeScore === 0 && game.awayScore === 0)) continue;
       const home = rows.get(game.homeTeamId);
       const away = rows.get(game.awayTeamId);
       if (!home || !away) continue;

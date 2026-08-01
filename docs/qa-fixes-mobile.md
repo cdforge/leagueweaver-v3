@@ -90,12 +90,13 @@ Builder wizard (`app/globals.css`, `app/build/page.tsx`, `components/builder/Lea
   strip). Ties into the preview's `.wp-weekhead`.
 
 ### Playoff bracket — projected vs played-out
-- **Projected bracket shouldn't "play out" the games** — when the bracket is a
-  projection (regular season not final), don't render every round as if it were
-  decided. Just show each team's first potential playoff matchup / entry point
-  (the seed zones in the corners), not a fully resolved bracket.
-  (`components/season/BracketConnectorLayer.tsx` + the playoff bracket in
-  `SeasonWorkspace` / the "LIVE PREVIEW" projected bracket.)
+- **DONE:** the championship bracket now reveals only up to the first not-yet-decided
+  round (`visibleRounds` in `SeasonWorkspace.tsx` PlayoffsView), so a projected
+  bracket shows just the entry round / seed zones; each completed round unlocks the
+  next. Verified live: 6-team division-halves bracket shows only the Wild Card round.
+- **DONE (foundation):** `MatchupCard` now accepts `projected` — an unplayed
+  projected matchup shows a neutral "Projected" pill instead of the "—" score
+  (desktop + mobile). Consumers below will pass it.
 
 ### Playoff — consolation games
 - **"Consolation games" divider in the league schedule view** — the divider labeled
