@@ -297,7 +297,7 @@ function TeamsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; s
     setSetup((current) => ({ ...current, teams: createTeams(next, current.divisions), priorSeason: { ...current.priorSeason, enabled: false, hasData: false, entryMode: "none" } }));
   };
   const updateDisplay = (patch: Partial<LeagueSetupInput["display"]>) => setSetup((current) => ({ ...current, display: { ...current.display, ...patch } }));
-  const teamColumns = ["74px", setup.display.cityNames && "112px", "minmax(145px,1.2fr)", "72px", setup.display.managers && "118px", setup.display.venues && "minmax(140px,1fr)"].filter(Boolean).join(" ");
+  const teamColumns = ["60px", setup.display.cityNames && "112px", "minmax(145px,1.2fr)", "72px", setup.display.managers && "118px", setup.display.venues && "minmax(140px,1fr)"].filter(Boolean).join(" ");
 
   return (
     <div className="step-stack">
@@ -307,7 +307,7 @@ function TeamsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; s
         <div className="team-editor-table" style={{ "--team-columns": teamColumns } as React.CSSProperties}>
           <div className="team-editor-head"><span>Identity</span>{setup.display.cityNames && <span>City</span>}<span>Team name</span><span>Initials</span>{setup.display.managers && <span>Manager</span>}{setup.display.venues && <span>Home venue</span>}</div>
           <div className="team-editor-list">{setup.teams.map((team) => <div className="team-editor-row" key={team.id}>
-            <IdentityColorPicker compact name={teamDisplayName(team, setup.display.cityNames)} abbreviation={teamInitials(team)} color={team.color} logoUrl={team.logoUrl} onChange={(next) => updateTeam(team.id, next)} />
+            <IdentityColorPicker compact showAbbreviation={false} name={teamDisplayName(team, setup.display.cityNames)} abbreviation={teamInitials(team)} color={team.color} logoUrl={team.logoUrl} onChange={(next) => updateTeam(team.id, next)} />
             {setup.display.cityNames && <label className="team-editor-field"><span>City</span><input aria-label={`Team ${team.overallRank} city`} placeholder="City" value={team.city} onChange={(event) => updateTeam(team.id, { city: event.target.value })} /></label>}
             <label className="team-editor-field"><span>Team name</span><input aria-label={`Team ${team.overallRank} name`} aria-invalid={showErrors && !team.name.trim()} placeholder="Team name" value={team.name} onChange={(event) => updateTeam(team.id, { name: event.target.value })} /></label>
             <label className="team-editor-field"><span>Initials</span><input aria-label={`${teamDisplayName(team)} initials override`} maxLength={4} placeholder={`Auto: ${entityMonogram(team.name, team.city)}`} value={team.initials ?? ""} onChange={(event) => updateTeam(team.id, { initials: event.target.value || undefined })} /></label>
