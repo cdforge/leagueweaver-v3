@@ -757,13 +757,12 @@ function PlayoffsView({
   const byeCount = getPlayoffByeCount(fieldSize);
   const roundDate = (index: number) => getWeekDateLabel(schedule.setup.seasonYear, schedule.setup.weeks + index + 1).replace(`, ${schedule.setup.seasonYear}`, "");
   const displayedSeed = (item: NonNullable<ReturnType<typeof seed>>) => settings.seedDisplayMode === "standings-finish" ? item.standingsPosition : item.seed;
-  const hostCopy = (team: Team) => `Hosts · ${team.stadium}`;
   const championshipVenueCopy = settings.championshipVenueMode === "neutral-site" ? "Neutral-site championship" : "Higher seed hosts the championship";
   const Slot = ({ number, host = false }: { number: number; host?: boolean }) => {
     const item = seed(number);
     const team = item ? teamById.get(item.teamId) : undefined;
     const standing = item ? playoffStandingsByTeam.get(item.teamId) : undefined;
-    return <div className={`bracket-slot ${host ? "host" : ""}`}>{team && item ? <><TeamIdentityBlock compact team={team} division={divisionById.get(team.divisionId)} leagueRank={displayedSeed(item)} record={{ overall: item.record, division: standing ? `${standing.divisionWins}-${standing.divisionLosses}` : undefined }} showCity={showCity} href={`/season/${schedule.id}/team/${team.id}`} /><span className="playoff-slot-meta">{item.divisionLeader && <small>DIV WINNER</small>}{item.bye && <small>BYE</small>}{host && <em><MapPin />{hostCopy(team)}</em>}</span></> : <><b>{number}</b><span><strong>To be determined</strong><small>Projected seed</small></span></>}</div>;
+    return <div className={`bracket-slot ${host ? "host" : ""}${team ? "" : " placeholder"}`} style={team ? { "--slot-spine": team.color } as React.CSSProperties : undefined}>{team && item ? <TeamIdentityBlock variant="stacked" compact team={team} division={divisionById.get(team.divisionId)} leagueRank={displayedSeed(item)} record={{ overall: item.record, division: standing ? `${standing.divisionWins}-${standing.divisionLosses}` : undefined }} showCity={showCity} href={`/season/${schedule.id}/team/${team.id}`} /> : <><b>{number}</b><span><strong>To be determined</strong><small>Projected seed</small></span></>}</div>;
   };
   const RoundHeading = ({ index }: { index: number }) => <h3 className="playoff-round-heading">{settings.roundLogoUrls?.[index] && <img src={settings.roundLogoUrls[index]} alt="" />}<span className="playoff-round-heading-copy"><span>{rounds[index] || `Round ${index + 1}`}</span><small>NFL Week {schedule.setup.weeks + index + 1} · {roundDate(index)}</small></span></h3>;
   const sideName = (side: "A" | "B") => {
@@ -943,10 +942,10 @@ function PlayoffsView({
       });
     };
     return <article className={`main-playoff-game ${played ? "is-final" : "is-projected"}`} data-bracket-game-id={gameId} style={{ "--game-half-color": halfDivision?.color, "--game-half-accent": halfDivision ? accessibleAccentColor(halfDivision.color, "#171d1a") : undefined } as React.CSSProperties}>
-      <header><PlayoffGameBrand roundIndex={roundIndex} gameIndex={gameIndex} /><span><strong>{gameName}</strong><small>{sideCopy || (played ? "Final result" : settings.reseedMode === "fixed" ? "Fixed bracket path" : "Projected path")}</small></span><em>{played ? "FINAL" : "PROJECTED"}</em></header>
+      <header><PlayoffGameBrand roundIndex={roundIndex} gameIndex={gameIndex} /><span><strong>{gameName}</strong><small>{sideCopy || (played ? "Final result" : settings.reseedMode === "fixed" ? "Fixed bracket path" : "Projected path")}</small></span>{played && <em>FINAL</em>}</header>
       <div className="main-playoff-game-teams">{recorded ? <><SimulatedPlayoffTeam teamId={recorded.awayTeamId} score={recorded.awayScore} winner={awayWon} /><SimulatedPlayoffTeam teamId={recorded.homeTeamId} score={recorded.homeScore} winner={homeWon} /></> : <><Slot number={homeSeed} host /><Slot number={awaySeed} /></>}</div>
       {!simulationMode && playoffsLive && homeTeam && awayTeam && <InlinePlayoffScoreEditor awayName={teamDisplayName(awayTeam, showCity)} homeName={teamDisplayName(homeTeam, showCity)} awayScore={recorded?.awayScore} homeScore={recorded?.homeScore} onSave={(awayScore, homeScore) => saveScore(awayScore, homeScore)} onClear={() => saveScore(undefined, undefined)} />}
-      <footer><span className="advance-route"><b>W</b>Advances toward championship</span>{route && <span className="placement-route"><b>L</b>Moves to placement</span>}</footer>
+      {(homeTeam || route) && <footer>{homeTeam && <span className="playoff-venue"><EntityLogo color={homeTeam.color} logoUrl={homeTeam.logoUrl} monogram={teamInitials(homeTeam)} size={18} />{homeTeam.stadium}</span>}{route && <span className="placement-route"><b>L</b>Loser to placement</span>}</footer>}
     </article>;
   };
   const EliminationTransferRail = () => {

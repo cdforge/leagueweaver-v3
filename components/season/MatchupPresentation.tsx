@@ -13,7 +13,7 @@ export interface TeamRecordDisplay {
   division?: string;
 }
 
-export function TeamIdentityBlock({ team, division, leagueRank, record, showCity = true, showRecord = true, result = "open", compact = false, mirrored = false, href }: {
+export function TeamIdentityBlock({ team, division, leagueRank, record, showCity = true, showRecord = true, result = "open", compact = false, mirrored = false, variant = "row", href }: {
   team: Team;
   division?: Division;
   leagueRank: number;
@@ -23,12 +23,15 @@ export function TeamIdentityBlock({ team, division, leagueRank, record, showCity
   result?: "winner" | "loser" | "open";
   compact?: boolean;
   mirrored?: boolean;
+  variant?: "row" | "stacked";
   href?: string;
 }) {
   const teamText = accessibleTeamColor(team.color);
   const divisionColor = division?.color || team.color;
+  const stacked = variant === "stacked";
+  const rankColor = stacked ? team.color : divisionColor;
   const content = <>
-    <b className="team-identity-rank" style={{ background: divisionColor, color: readableTextColor(divisionColor) }}>#{leagueRank}</b>
+    <b className="team-identity-rank" style={{ background: rankColor, color: readableTextColor(rankColor) }}>#{leagueRank}</b>
     <span className="team-identity-mark">
       <EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={compact ? 40 : 48} />
     </span>
@@ -44,8 +47,8 @@ export function TeamIdentityBlock({ team, division, leagueRank, record, showCity
       </span>}
     </span>}
   </>;
-  const className = `team-identity-block ${compact ? "compact" : ""} ${mirrored ? "mirrored" : ""} ${showRecord ? "" : "without-record"} result-${result}`;
-  const style = { "--team-text": teamText } as React.CSSProperties;
+  const className = `team-identity-block ${compact ? "compact" : ""} ${mirrored ? "mirrored" : ""} ${showRecord ? "" : "without-record"} ${stacked ? "variant-stacked" : ""} result-${result}`;
+  const style = { "--team-text": teamText, ...(stacked ? { "--team-raw": team.color } : {}) } as React.CSSProperties;
   return href ? <Link className={`${className} is-link`} style={style} href={href} aria-label={`Open ${team.city ? `${team.city} ` : ""}${team.name} schedule`}>{content}</Link> : <div className={className} style={style}>{content}</div>;
 }
 

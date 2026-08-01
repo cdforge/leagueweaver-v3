@@ -3,23 +3,23 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { Check, Medal, Pencil, RefreshCw, Trophy } from "lucide-react";
 import { EntityLogo } from "@/components/ui/EntityLogo";
+import { TeamIdentityBlock } from "@/components/season/MatchupPresentation";
 import { projectConsolationBracket, projectFinalPlacements, type ProjectedConsolationEntrant } from "@/lib/consolation";
 import { getWeekDateLabel } from "@/lib/schedule";
+import { calculateStandings, formatRecord } from "@/lib/standings";
 import { teamInitials } from "@/lib/teamIdentity";
-import type { GeneratedSchedule, PlayoffGame } from "@/lib/types";
+import type { GeneratedSchedule, PlayoffGame, StandingsRow } from "@/lib/types";
 
-function ConsolationEntrant({ entrant, schedule }: { entrant: ProjectedConsolationEntrant; schedule: GeneratedSchedule }) {
+function ConsolationEntrant({ entrant, schedule, standingsByTeam }: { entrant: ProjectedConsolationEntrant; schedule: GeneratedSchedule; standingsByTeam: Map<string, StandingsRow> }) {
   if (entrant.kind === "result") {
-    return <div className="consolation-entrant is-result"><span className="consolation-result-mark">{entrant.outcome === "winner" ? "W" : "L"}</span><span><strong>{entrant.label}</strong><small>Updates after the prior result</small></span></div>;
+    return <div className="bracket-slot placeholder"><b>{entrant.outcome === "winner" ? "W" : "L"}</b><span><strong>{entrant.label}</strong><small>Updates after the prior result</small></span></div>;
   }
   const team = schedule.setup.teams.find((item) => item.id === entrant.teamId);
   if (!team) return null;
   const division = schedule.setup.divisions.find((item) => item.id === team.divisionId);
-  return <div className="consolation-entrant is-team" style={{ "--entrant-color": team.color } as CSSProperties}>
-    <b>#{entrant.seed}</b>
-    <EntityLogo size={38} color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} />
-    <span>{schedule.setup.display.cityNames !== false && team.city && <small className="team-city">{team.city}</small>}<strong>{team.name}</strong></span>
-    {division?.logoUrl && <img className="consolation-division-logo" src={division.logoUrl} alt={`${division.name} division`} />}
+  const standing = standingsByTeam.get(team.id);
+  return <div className="bracket-slot" style={{ "--slot-spine": team.color } as CSSProperties}>
+    <TeamIdentityBlock variant="stacked" compact team={team} division={division} leagueRank={entrant.seed} record={{ overall: standing ? formatRecord(standing) : "0-0", division: standing ? `${standing.divisionWins}-${standing.divisionLosses}` : undefined }} showCity={schedule.setup.display.cityNames !== false} href={`/season/${schedule.id}/team/${team.id}`} />
   </div>;
 }
 
@@ -100,6 +100,7 @@ export function ConsolationBracket({ schedule, onUpdateGame }: { schedule: Gener
   if (!bracket || !bracket.rounds.length) return null;
 
   const divisionById = new Map(schedule.setup.divisions.map((division) => [division.id, division]));
+  const standingsByTeam = new Map(calculateStandings(schedule).map((row) => [row.teamId, row] as const));
   return <section className="consolation-surface" aria-labelledby="consolation-title">
     <header>
       <span className="consolation-heading-mark"><Medal /></span>
@@ -111,7 +112,7 @@ export function ConsolationBracket({ schedule, onUpdateGame }: { schedule: Gener
       {bracket.rounds.map((round) => {
         const roundLogo = schedule.setup.playoffs.roundLogoUrls?.[round.roundIndex];
         return <section key={round.roundIndex} data-bracket-round={round.roundIndex}>
-          <h3>{roundLogo && <img src={roundLogo} alt="" />}<span><strong>{round.name}</strong><small>NFL Week {round.weekNumber} · {getWeekDateLabel(schedule.setup.seasonYear, round.weekNumber).replace(`, ${schedule.setup.seasonYear}`, "")}</small></span></h3>
+          <h3>{roundLogo && <img src={roundLogo} alt="" />}<span><small>NFL Week {round.weekNumber} · {getWeekDateLabel(schedule.setup.seasonYear, round.weekNumber).replace(`, ${schedule.setup.seasonYear}`, "")}</small></span></h3>
           <div className="consolation-round-games">{round.games.map((game, gameIndex) => {
             const division = game.divisionId ? divisionById.get(game.divisionId) : undefined;
             const recorded = schedule.playoffGames?.find((item) => item.id === game.id);
@@ -125,8 +126,8 @@ export function ConsolationBracket({ schedule, onUpdateGame }: { schedule: Gener
               || schedule.setup.playoffs.logoUrl;
             return <article className="consolation-game" key={game.id} data-bracket-game-id={game.id} style={division ? { "--consolation-accent": division.color } as CSSProperties : undefined}>
               <header>{gameLogo && <img src={gameLogo} alt="" />}<span><strong>{gameName}</strong>{division && <small>{division.name} division</small>}</span>{recorded?.awayScore != null && recorded.homeScore != null && <em>{recorded.awayScore} @ {recorded.homeScore}</em>}</header>
-              <ConsolationEntrant entrant={game.entrants[0]} schedule={schedule} />
-              <ConsolationEntrant entrant={game.entrants[1]} schedule={schedule} />
+              <ConsolationEntrant entrant={game.entrants[0]} schedule={schedule} standingsByTeam={standingsByTeam} />
+              <ConsolationEntrant entrant={game.entrants[1]} schedule={schedule} standingsByTeam={standingsByTeam} />
               {onUpdateGame && awayTeam && homeTeam && <ConsolationScoreEditor game={recorded} awayName={`${awayTeam.city} ${awayTeam.name}`.trim()} homeName={`${homeTeam.city} ${homeTeam.name}`.trim()} onSave={(awayScore, homeScore) => onUpdateGame({
                 ...(recorded ?? {}),
                 id: game.id,
