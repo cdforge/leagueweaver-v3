@@ -1,6 +1,18 @@
 import { projectPlayoffSeeds, resolvePlayoffPlacementMode } from "./playoffs";
 import { calculateDivisionStandings, calculateStandings } from "./standings";
-import type { GeneratedSchedule, StandingsRow } from "./types";
+import {
+  buildTeamRanges,
+  clinchedWithin,
+  divisionGroups,
+  eliminatedWithin,
+  getLatestScoredWeek,
+  isEliminatedFor,
+  isLockedFor,
+  isRegularSeasonComplete,
+} from "./clinchCore";
+import type { GeneratedSchedule } from "./types";
+
+export { getLatestScoredWeek };
 
 export interface TeamClinchState {
   teamId: string;
@@ -16,80 +28,6 @@ export interface TeamClinchTimeline extends TeamClinchState {
   playoffBerthWeek?: number;
   topSeedWeek?: number;
   eliminatedWeek?: number;
-}
-
-interface TeamRange {
-  teamId: string;
-  divisionId: string;
-  minimumPoints: number;
-  maximumPoints: number;
-}
-
-function standingsPoints(row: StandingsRow) {
-  return row.wins * 2 + row.ties;
-}
-
-export function getLatestScoredWeek(schedule: GeneratedSchedule) {
-  return schedule.weeks.reduce((latest, week) => (
-    week.games.some((game) => game.homeScore != null && game.awayScore != null)
-      ? Math.max(latest, week.weekNumber)
-      : latest
-  ), 0);
-}
-
-function isRegularSeasonComplete(schedule: GeneratedSchedule, throughWeek: number) {
-  return schedule.weeks.every((week) => (
-    week.weekNumber > throughWeek
-      ? week.games.length === 0
-      : week.games.every((game) => game.homeScore != null && game.awayScore != null)
-  ));
-}
-
-function buildTeamRanges(schedule: GeneratedSchedule, throughWeek: number) {
-  const standings = calculateStandings(schedule, throughWeek);
-  const standingsByTeam = new Map(standings.map((row) => [row.teamId, row]));
-  const totalGames = new Map(schedule.setup.teams.map((team) => [team.id, 0]));
-  const playedGames = new Map(schedule.setup.teams.map((team) => [team.id, 0]));
-
-  for (const week of schedule.weeks) {
-    for (const game of week.games) {
-      totalGames.set(game.homeTeamId, (totalGames.get(game.homeTeamId) ?? 0) + 1);
-      totalGames.set(game.awayTeamId, (totalGames.get(game.awayTeamId) ?? 0) + 1);
-      if (week.weekNumber <= throughWeek && game.homeScore != null && game.awayScore != null) {
-        playedGames.set(game.homeTeamId, (playedGames.get(game.homeTeamId) ?? 0) + 1);
-        playedGames.set(game.awayTeamId, (playedGames.get(game.awayTeamId) ?? 0) + 1);
-      }
-    }
-  }
-
-  return schedule.setup.teams.map((team): TeamRange => {
-    const row = standingsByTeam.get(team.id)!;
-    const remainingGames = Math.max(0, (totalGames.get(team.id) ?? 0) - (playedGames.get(team.id) ?? 0));
-    const minimumPoints = standingsPoints(row);
-    return {
-      teamId: team.id,
-      divisionId: team.divisionId,
-      minimumPoints,
-      maximumPoints: minimumPoints + remainingGames * 2,
-    };
-  });
-}
-
-function clinchedWithin(ranges: TeamRange[], team: TeamRange, slots: number) {
-  if (slots >= ranges.length) return true;
-  return ranges.filter((rival) => rival.teamId !== team.teamId && rival.maximumPoints >= team.minimumPoints).length < slots;
-}
-
-function eliminatedWithin(ranges: TeamRange[], team: TeamRange, slots: number) {
-  if (slots >= ranges.length) return false;
-  return ranges.filter((rival) => rival.teamId !== team.teamId && rival.minimumPoints > team.maximumPoints).length >= slots;
-}
-
-function divisionGroups(schedule: GeneratedSchedule) {
-  const divisionIds = schedule.setup.divisions.map((division) => division.id);
-  if (divisionIds.length === 2) return [[divisionIds[0]], [divisionIds[1]]];
-  if (divisionIds.length === 4) return [[divisionIds[0], divisionIds[1]], [divisionIds[2], divisionIds[3]]];
-  return [divisionIds];
 }
 
 export function calculateTeamClinchStates(schedule: GeneratedSchedule, throughWeek: number): TeamClinchState[] {
@@ -108,7 +46,11 @@ export function calculateTeamClinchStates(schedule: GeneratedSchedule, throughWe
   for (const division of schedule.setup.divisions) {
     const divisionRanges = ranges.filter((range) => range.divisionId === division.id);
     for (const team of divisionRanges) {
-      if (hasDivisions && clinchedWithin(divisionRanges, team, 1)) divisionTitleIds.add(team.teamId);
+      // Division title uses the exact core (clinchedWithin is its fast path); this set also
+      // feeds the division-placement berth auto-qualify below, so both stay consistent.
+      if (hasDivisions && isLockedFor(schedule, team.teamId, "division-title", normalizedWeek, { ranges }).locked) divisionTitleIds.add(team.teamId);
+      // Elimination-from-division stays the conservative certificate (only used by division
+      // placement modes; conservative elimination never falsely eliminates).
       if (hasDivisions && eliminatedWithin(divisionRanges, team, 1)) divisionTitleEliminatedIds.add(team.teamId);
     }
   }
@@ -152,8 +94,8 @@ export function calculateTeamClinchStates(schedule: GeneratedSchedule, throughWe
     let playoffBerth = false;
     let eliminated = false;
     if (placementMode === "overall") {
-      playoffBerth = clinchedWithin(ranges, team, fieldSize);
-      eliminated = eliminatedWithin(ranges, team, fieldSize);
+      playoffBerth = isLockedFor(schedule, team.teamId, "playoff-berth", normalizedWeek, { ranges }).locked;
+      eliminated = isEliminatedFor(schedule, team.teamId, normalizedWeek, { ranges }).locked;
     } else if (placementMode === "division-leaders") {
       const atLargeGuaranteeSlots = Math.max(1, fieldSize - (schedule.setup.divisions.length - 1));
       playoffBerth = divisionTitleIds.has(team.teamId) || clinchedWithin(ranges, team, atLargeGuaranteeSlots);
@@ -172,7 +114,7 @@ export function calculateTeamClinchStates(schedule: GeneratedSchedule, throughWe
       throughWeek: normalizedWeek,
       divisionTitle: divisionTitleIds.has(team.teamId),
       playoffBerth,
-      topSeed: clinchedWithin(ranges, team, 1),
+      topSeed: isLockedFor(schedule, team.teamId, "top-seed", normalizedWeek, { ranges }).locked,
       eliminated,
     };
   });
