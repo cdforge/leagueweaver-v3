@@ -1291,6 +1291,54 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .start-divider { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; margin: 6px 0; color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: 0.06em; }
 .start-divider::before, .start-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 
+/* Entry: Manual + Continue-saved-league as peer primary options (B1). */
+.start-primary-row { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.start-primary-row.has-saved { grid-template-columns: 1fr 1fr; }
+.start-primary-row .start-option--main { grid-column: auto; }
+.start-option--saved { border-color: var(--field); background: var(--field-soft); padding: 26px; }
+.start-option--saved .start-option-icon { width: 54px; height: 54px; }
+.start-option--saved .start-option-copy strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-2xl); line-height: 1; }
+
+/* Saved-league picker modal (B1). */
+.saved-league-modal { width: min(520px, 92vw); max-height: min(80vh, 640px); display: flex; flex-direction: column; padding: 0; }
+.saved-league-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+.saved-league-modal-head strong { display: block; font-size: var(--text-lg); }
+.saved-league-modal-head small { color: var(--muted); font-size: var(--text-xs); }
+.saved-league-modal-head .modal-close { flex: 0 0 auto; display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: white; color: var(--muted); cursor: pointer; transition: border-color var(--transition), color var(--transition); }
+.saved-league-modal-head .modal-close:hover { border-color: var(--field); color: var(--ink); }
+.saved-league-modal-head .modal-close svg { width: 18px; }
+.saved-league-modal-list { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; }
+
+/* Quick-create ⁄ Customize fork card on the League step (B2). Customize is the
+   emphasized primary; Quick create is the secondary shortcut with a settings
+   preview + a "you'll regenerate to change these" note. */
+.build-fork { border: 1px solid var(--line-strong); border-radius: var(--radius); background: white; box-shadow: var(--shadow-sm); overflow: hidden; }
+.build-fork-head { border-bottom: 1px solid var(--line); padding: 14px 16px; display: flex; flex-direction: column; gap: 3px; }
+.build-fork-head strong { font-size: var(--text-lg); }
+.build-fork-head small { color: var(--muted); font-size: var(--text-xs); }
+.build-fork-options { display: grid; grid-template-columns: 1.15fr 1fr; }
+.build-fork-primary { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; border: 0; border-right: 1px solid var(--line); background: var(--field-soft); padding: 18px 16px; cursor: pointer; transition: background var(--transition); }
+.build-fork-primary:hover { background: color-mix(in srgb, var(--field) 12%, white); }
+.build-fork-primary strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); line-height: 1.05; color: var(--ink); }
+.build-fork-primary small { color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
+.build-fork-primary:focus-visible { outline: 3px solid color-mix(in srgb, var(--field), white 58%); outline-offset: -3px; }
+.build-fork-tag { align-self: flex-start; font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: 0.05em; color: var(--field-dark); background: white; border: 1px solid var(--field); border-radius: var(--radius-pill); padding: 2px 8px; }
+.build-fork-go { margin-top: 4px; display: inline-flex; align-items: center; gap: 6px; color: var(--field-dark); font-weight: var(--w-bold); font-size: var(--text-sm); }
+.build-fork-go svg { width: 16px; }
+.build-fork-secondary { display: flex; flex-direction: column; gap: 8px; padding: 18px 16px; background: var(--canvas); }
+.build-fork-secondary-head { display: inline-flex; align-items: center; gap: 6px; }
+.build-fork-secondary-head svg { width: 16px; color: var(--field); }
+.build-fork-secondary-head strong { font-size: var(--text-md); }
+.build-fork-secondary > small { color: var(--muted); font-size: var(--text-xs); }
+.build-fork-summary { list-style: none; margin: 2px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.build-fork-summary li { position: relative; padding-left: 16px; font-size: var(--text-xs); color: var(--ink); line-height: 1.35; }
+.build-fork-summary li::before { content: ""; position: absolute; left: 2px; top: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--field); }
+.build-fork-summary b { font-weight: var(--w-bold); }
+.build-fork-note { display: flex; align-items: flex-start; gap: 6px; font-size: var(--text-2xs); color: var(--muted); line-height: 1.35; }
+.build-fork-note svg { flex: 0 0 auto; width: 13px; margin-top: 1px; color: #b06a00; }
+.build-fork-quick { align-self: flex-start; margin-top: 2px; display: inline-flex; align-items: center; gap: 7px; }
+.build-fork-quick svg { width: 15px; }
+
 @media (max-width: 720px) {
   /* Mobile keeps the hero art, dropped to a faded band below the copy. */
   .welcome-hero { min-height: auto; background-image: linear-gradient(to bottom, var(--field-soft) 0%, var(--field-soft) 56%, rgba(234, 245, 239, 0.6) 74%, rgba(234, 245, 239, 0) 100%), url("/branding/hero-welcome-marquee.jpg"); background-size: cover, 150% auto; background-position: center, center bottom; }
@@ -1302,6 +1350,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .start-import-row { grid-template-columns: 1fr; }
   .start-import-row .start-option { flex-direction: row; align-items: center; }
   .start-option--main { padding: 22px; }
+  .start-primary-row.has-saved { grid-template-columns: 1fr; }
+  .start-option--saved { padding: 22px; }
+  .build-fork-options { grid-template-columns: 1fr; }
+  .build-fork-primary { border-right: 0; border-bottom: 1px solid var(--line); }
 }
 
 @media (max-width: 560px) {
@@ -2050,7 +2102,8 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .gotw-rating small { color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-black); white-space: nowrap; }
 .gotw-rating strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); }
 .playoff-impact-marker { background: #e9eef8; color: #304d78; box-shadow: inset 0 0 0 1px #bdc9dc; }
-.gotw-timeline-item > .matchup-card { border: 1px solid var(--line); border-left: 4px solid var(--gold); border-radius: 0 0 var(--radius) var(--radius); padding: 18px; }
+.gotw-why { margin: 0; border-left: 4px solid var(--gold); border-right: 1px solid var(--line); background: var(--surface-2, var(--canvas)); padding: 7px 14px; color: var(--muted); font-size: var(--text-2xs); line-height: 1.35; }
+.gotw-timeline-item > .matchup-card { border: 1px solid var(--line); border-top: 1px solid var(--line); border-left: 4px solid var(--gold); border-radius: 0 0 var(--radius) var(--radius); padding: 18px; }
 .gotw-view .matchup-card-main { min-height: 104px; grid-template-columns: minmax(0, 1fr) 210px minmax(0, 1fr); gap: 24px; }
 .gotw-view .team-identity-block { grid-template-columns: 24px 50px minmax(0, 1fr); grid-template-rows: auto auto; }
 .gotw-view .team-identity-block .team-identity-rank { grid-column: 1; grid-row: 1 / span 2; }
@@ -2408,6 +2461,14 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .season-odds-meter em { color: var(--ink); font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-lg); font-style: normal; font-weight: var(--w-bold); font-variant-numeric: tabular-nums; }
 .season-odds-meter i { position: relative; width: 64px; height: 4px; overflow: hidden; border-radius: var(--radius-chip); background: #dce4e0; }
 .season-odds-meter i b { position: absolute; inset: 0 auto 0 0; border-radius: inherit; }
+.stats-abbr-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 10px; border-left: 3px solid var(--line-strong, var(--line)); background: var(--surface-2, var(--canvas)); padding: 9px 13px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.stats-abbr-legend > div { display: flex; align-items: baseline; gap: 5px; }
+.stats-abbr-legend dt { font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: 0.04em; }
+.stats-abbr-legend dd { margin: 0; color: var(--muted); font-size: var(--text-2xs); }
+.stats-empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 220px; border: 1px dashed var(--line); border-radius: var(--radius); background: var(--surface-2, var(--canvas)); padding: 32px 20px; text-align: center; }
+.stats-empty-state > svg { width: 34px; height: 34px; color: var(--muted); }
+.stats-empty-state strong { font-size: var(--text-md); }
+.stats-empty-state span { max-width: 42ch; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
 .stats-rule-strip { min-height: 64px; display: flex; align-items: center; gap: 10px; border-left: 3px solid var(--gold); background: var(--gold-soft); padding: 10px 13px; }
 .stats-rule-strip > svg { width: 28px; height: 28px; flex: 0 0 auto; border-radius: var(--radius-sm); background: white; color: #806000; padding: 6px; }
 .stats-rule-strip > span:not(.badge-legend) { min-width: 0; display: flex; flex-direction: column; gap: 3px; }

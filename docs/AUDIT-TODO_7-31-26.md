@@ -30,7 +30,7 @@ Every story is self-contained — an engineer or designer should be able to pick
 | Matchup Ratings | ✅ | ✅ played (2026-08-01 — see MR cluster) |
 | Standings — table | ✅ | ✅ preseason + played |
 | — Rank race | ✅ | ✅ preseason |
-| — Team leaders / League leaders / Team stats | ✅ | ⚠️ code-read addendum 7-31 (#39–#41) |
+| — Team leaders / League leaders / Team stats | ✅ | ⚠️ code-read (#39–#41) + 📱 live @375px (#42) |
 | — Playoff stats | ✅ | 🔒 gated |
 | — Season odds | ✅ | ✅ played |
 | Settings | ✅ | ❌ |
@@ -173,7 +173,7 @@ Every story is self-contained — an engineer or designer should be able to pick
 **Acceptance:** No duplicate PRE RK; no movement arrows at preseason; DIV record shows ties; the two sort headers differ.
 
 ## #20 · Clarity: ratings, home/away, empty states
-**Type:** usability · **Status:** open
+**Type:** usability · **Status:** 🟡 PARTIAL (2026-08-01, branch `feat/audit-followups-7-31`) — Parts 3/4/5 done + verified live on PVE season. (3) Rank-race now guards on `rankHistory.some(s => s.playedGames > 0)` — a genuinely preseason league shows a `.stats-empty-state` "Enter Week 1 scores to start the race." card instead of a degenerate single-column chart (`StatsWorkspace.tsx:680`). (4) GOTW page: each timeline item carries a `.gotw-why` rationale line — "Featured because it earned the week's highest matchup rating (X.X)[ and swings the playoff race][ — a <holiday> spotlight]." (`GotwWorkspace.tsx:62`), verified all 14 items render with gold accent. (5) Team-stats tab now leads with a `.stats-abbr-legend` key (PF/PA, DIFF, GOTW WINS, SOV, SOS, PLAYOFF %) above the table (`StatsWorkspace.tsx:688`). `tsc` green. **Deferred:** part 1 (rating inline-scale explainer + legend placement) and part 2 (home/away visual differentiation + own-first score order) fold into the V-series visual work (V2 hierarchy / V10 color) since they restyle the shared MatchupCard — tracked there rather than duplicated here.
 **Problem/Target:**
 1. **"Matchup rating" unexplained** — users meet a bare "3.7 · #2 vs #1" with the legend buried below the whole list. Add a one-line inline scale ("lower = closer, two stronger teams") next to the first occurrence and move the legend above the list / into the section bar. Explain the preseason-vs-live lens in one sentence.
 2. **Home vs away (verified live)** — carried only by a tiny `@`/`vs` glyph on identical-background chips, and the per-team score is always printed `away@home` while the W/L chip is team-perspective. Differentiate H/A visually (fill vs outline, or an explicit "HOME"/"@ Opp" label) and order the per-team score own-first.
@@ -246,6 +246,25 @@ Every story is self-contained — an engineer or designer should be able to pick
 **Target:** Trim the table to fit a normal laptop without horizontal scroll — tighten per-column mins and/or make the lowest-value columns (SOV/SOS/GOTW WINS/BEST STREAK) opt-in via a "Display" toggle, or widen the shell when this tab is active; under ~720px stack to cards (mirror V5). Print DIV as `W-L(-T)` exactly as the Standings table does, from one shared record-formatter.
 **Acceptance:** the Team-stats table fits a 1280px viewport with no horizontal scroll; DIV records render identically (ties included) in both the Standings and Team-stats tables.
 **Deps:** V5 (responsive pattern), V9 (table craft), #36 (division-record ties in ranking).
+
+## #42 · Standings tabs: mobile (≤375px) — off-screen tabs, crushed podium, peephole tables ✓LIVE
+**Type:** visual/responsive + a11y · **Status:** open · **Added:** 2026-07-31 (standings-tab mobile addendum) · **Verified live @375px** on a generated 10-team/2-division league scored through Week 12.
+**Problem (all measured live at viewport 375px):**
+1. **Sub-tab strip hides 3 of 6 tabs with no affordance and no active-into-view.** `.stats-tabs` is `overflow-x:auto` with 6 × 128px min buttons: clientWidth **349px**, scrollWidth **768px** → **419px (55%) off-screen**. "Team stats" lives at left **653–781px** — entirely past the 375px edge. Selecting it leaves `strip.scrollLeft = 0`, so **the active tab is fully off-screen while its panel shows below** — the visible strip shows *no* active indicator at all (screenshotted). There's no edge fade / arrow to signal more tabs exist. Same defect the schedule week-tabs have under #22; `.stats-tabs` + `.leader-category-tabs` were not included there.
+2. **Team-leaders podium stays 3-up inside a full-width card → every name clips.** At ≤720px `.team-leader-grid` correctly collapses 2-up→1-up, but `.podium-columns` stays `repeat(3, …)`: three **116px** columns inside a 351px card. Team `strong` names (14px) overflow — measured `scrollWidth > clientWidth` on "Huddle House" and "End Zone Office"; on screen they render "Hudd…", "Blitz…", "End Z…", "Goal…", "Fourt…". Affects all 7 podium cards.
+3. **Three data tables become frozen-column peepholes.** Sticky identity columns eat the majority of the viewport, leaving a sliver to scroll the real data:
+   - **Standings** — table content 1271px; rank col **55px** *plus* team col **234px** both sticky = **289px = 77% of 375px**, leaving a **~60px** window for 11 data columns.
+   - **Season odds** (same tab) — `min-width:820px`, 216px sticky first col — same peephole.
+   - **Team stats** — 1360px, 15 columns, sticky first col **224px = 60%**, leaving a **125px** data window.
+   *Good news (credited):* document-level horizontal overflow measured **0px** on every tab — the scroll is properly contained in the table wraps (matches the existing "Non-issues" note). The problem is the intra-table peephole + no card fallback, not page overflow.
+**Where:** `globals.css:2285` (`.stats-tabs`), `:2440` (`.leader-category-tabs`), `:2421` (`.podium-columns`, mobile only touches min-height at `:3954`), `:2163-2165` (standings dual sticky cols), `:2398-2399` (odds sticky), `:2472,:2497` (team-stats 1360px + 224px sticky). No `scrollIntoView` on tab select in `StatsWorkspace.tsx:634`.
+**Current (measured):** 3 tabs unreachable-looking with the active one off-screen; podium names truncated; standings usable through a 60px slot, team-stats through 125px.
+**Target:**
+- **Tab strips:** on select *and* on mount, `activeTab.scrollIntoView({inline:"center", block:"nearest"})` for `.stats-tabs` and `.leader-category-tabs`; add a right-edge fade/gradient (or a subtle chevron) whenever `scrollWidth > clientWidth` so off-screen tabs are discoverable. (Roll this into #22's scroll-into-view fix rather than duplicating it.)
+- **Podium:** below ~560px collapse `.podium-columns` to a **single column** — stack Gold→Silver→Bronze as full-width rows (medal pill + logo + full, unclipped name + value). Never clip the team name.
+- **Tables:** below ~720px, **stack Standings / Season odds / Team stats into per-team cards** (a header row of team identity, then label:value pairs) instead of a horizontal peephole — mirror the card-stack V5 prescribes for the team-schedule table. Minimum bar if cards are deferred: drop the *second* sticky column on Standings and shrink the sticky team column so the data window is ≥ ~55% of the viewport.
+**Acceptance (re-measure @375px):** all 6 stats tabs reachable with the **active tab visible** after selection; an edge affordance appears when tabs overflow; **no podium name clips** (`scrollWidth ≤ clientWidth`); no standings/odds/team-stats table presents its data through a window narrower than ~55% of the viewport (either card-stacked or with materially reduced sticky width); document horizontal overflow stays 0.
+**Deps:** #22 (shared tab scroll-into-view), #40 (team-stats width), V5 (table→card responsive pattern), V9 (table craft).
 
 ---
 
@@ -410,7 +429,7 @@ Migrate hardcoded px to these; collapse the multi-layer font-size overrides into
 ---
 
 ## V11 · Mobile site-footer: tap targets + centering polish
-**Type:** a11y + visual · **Status:** open
+**Type:** a11y + visual · **Status:** ✅ DONE (verified 2026-08-01, branch `feat/audit-followups-7-31`) — the spec is already in place (`.footer-row nav a` = inline-flex, `min-height:44px`, underline at rest, color-on-hover; mobile `padding:0 10px` + `nav margin-left:-10px`). **Verified live @375px:** Privacy 59×44, Terms 53×44 (both ≥44×44 ≫ the 24×24 floor), underlined at rest, first link's text flush with the copyright line. No change required.
 **Scope note:** on the landing (`/`) and build-intro (`/build`) pages — outside the original post-generation audit scope, captured here by request.
 **Problem (measured live @375px):** The two legal links are the most touch-hostile control on the page. Measured on the running app, each renders **~36×18px with `padding:0`** — far below the WCAG **2.5.8 (24×24 min)** and **2.5.5 (44×44)** target-size thresholds. They also carry **no underline at rest** (underline is hover-only, and touch has no hover), so on mobile "Privacy"/"Terms" read as color-only links — a WCAG **1.4.1 (use of color)** smell. Contrast is fine (copyright 5.23:1, links 5.39:1) and type steps up to 12px on mobile, so those are *not* the issue. Vertical centering is also already correct — measured 11px above / 11px below — so a literal "center it" edit is a no-op; the win is to spend that dead vertical space on bigger hit areas.
 **Where:** markup `app/page.tsx:109-117` + `app/build/page.tsx:29-37`; base rules `app/globals.css:1196-1199`; mobile override `app/globals.css:3859` (`@media (max-width:720px)`).

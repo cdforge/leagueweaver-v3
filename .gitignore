@@ -18,3 +18,7 @@ qa-artifacts/
 .next-slate/
 .next-connect/
 .next-dist/
+
+# extra build/verify dirs
+.next-verify/
+.next-qa/

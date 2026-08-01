@@ -60,6 +60,7 @@ export function GotwWorkspace({ schedule, simulationResults = {}, simulationProb
             <span className="gotw-rating"><small>{entry.lens === "live" ? "LIVE RATING" : "PRESEASON RATING"}</small><strong>{entry.rating.toFixed(1)}</strong></span>
             {(entry.playoffImplication || holidays.length > 0) && <span className="week-markers">{entry.playoffImplication && <em className="playoff-impact-marker">PLAYOFF IMPACT</em>}{holidays.map((holiday) => <em className="holiday-marker" key={holiday}>{holiday}</em>)}</span>}
           </header>
+          <p className="gotw-why">Featured because it earned the week's highest matchup rating ({entry.rating.toFixed(1)}){entry.playoffImplication ? " and swings the playoff race" : ""}{holidays.length > 0 ? ` — a ${holidays[0]} spotlight` : ""}.</p>
           <MatchupCard
             game={entry.game}
             away={away}
