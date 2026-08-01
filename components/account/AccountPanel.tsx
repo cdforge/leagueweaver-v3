@@ -344,7 +344,7 @@ export function AccountPanel() {
       <button type="button" role="tab" aria-selected={dashboardTab === "settings"} className={dashboardTab === "settings" ? "active" : ""} onClick={() => setDashboardTab("settings")}>Settings</button>
     </div>
     {dashboardTab === "leagues" && <section className="account-saved-leagues">
-      <div className="account-section-head"><span><strong>Saved leagues</strong><small>Reuse league, division, team, color, and logo details.</small></span><Link href="/" className="button-secondary">Start new</Link></div>
+      <div className="account-section-head"><span><strong>Saved leagues</strong><small>Reuse league, division, team, color, and logo details.</small></span><Link href="/build" className="button-secondary">Start new</Link></div>
       {savedLeagues.length ? <><div className="account-saved-league-rows">{savedLeagues.slice(leaguePage * ACCOUNT_PAGE_SIZE, (leaguePage + 1) * ACCOUNT_PAGE_SIZE).map((preset) => {
         const league = preset.data.league;
         const monogram = resolveInitials(league.initials, leagueAcronym(league.name));
@@ -363,7 +363,7 @@ export function AccountPanel() {
       })}</div>{renderPagination(leaguePage, savedLeagues.length, setLeaguePage)}</> : <div className="account-empty"><FolderHeart /><span><strong>No saved leagues yet.</strong><small>Save one from the builder after confirming its teams and divisions.</small></span></div>}
     </section>}
     {dashboardTab === "schedules" && <section className="account-season-list">
-      <div className="account-section-head"><span><strong>Schedules</strong><small>Open a schedule or restore an earlier revision.</small></span><Link href="/" className="button-primary">New schedule</Link></div>
+      <div className="account-section-head"><span><strong>Schedules</strong><small>Open a schedule or restore an earlier revision.</small></span><Link href="/build" className="button-primary">New schedule</Link></div>
       {seasons.length ? <>{seasons.slice(seasonPage * ACCOUNT_PAGE_SIZE, (seasonPage + 1) * ACCOUNT_PAGE_SIZE).map((season) => {
         const isExpanded = expandedSeasonId === season.id;
         const revisions = revisionsBySeason[season.id];
@@ -426,7 +426,7 @@ export function AccountPanel() {
           {memberSince && <div><dt>Member since</dt><dd>{formatTimestamp(memberSince)}</dd></div>}
         </dl>
         <div className="account-settings-actions">
-          {plan === "pro" ? <button type="button" className="button-secondary" onClick={openBilling} disabled={loading}><CreditCard />Manage billing</button> : <Link href="/" className="button-secondary"><CalendarDays />Open builder</Link>}
+          {plan === "pro" ? <button type="button" className="button-secondary" onClick={openBilling} disabled={loading}><CreditCard />Manage billing</button> : <Link href="/build" className="button-secondary"><CalendarDays />Open builder</Link>}
           <button type="button" className="button-secondary account-signout" onClick={signOut}><LogOut />Sign out</button>
         </div>
       </section>
@@ -469,12 +469,12 @@ export function AccountPanel() {
     </div>}
     {message && <div className="account-message" role="status">{message}</div>}
     {editingPreset && <SavedLeagueEditor preset={editingPreset} onClose={() => setEditingPreset(null)} onSaved={(updated) => { setSavedLeagues((current) => current.map((existing) => existing.id === updated.id ? updated : existing)); setEditingPreset(null); }} />}
-    <footer>{plan === "pro" ? <button type="button" className="button-secondary" onClick={openBilling} disabled={loading}><CreditCard />Manage billing</button> : <Link href="/" className="button-primary"><CalendarDays />Open builder</Link>}<button type="button" className="account-signout" onClick={signOut}><LogOut />Sign out</button></footer>
+    <footer>{plan === "pro" ? <button type="button" className="button-secondary" onClick={openBilling} disabled={loading}><CreditCard />Manage billing</button> : <Link href="/build" className="button-primary"><CalendarDays />Open builder</Link>}<button type="button" className="account-signout" onClick={signOut}><LogOut />Sign out</button></footer>
   </div>;
 
   return (
     <div className="account-card">
-      <Link className="account-back" href="/"><ArrowLeft />Builder</Link>
+      <Link className="account-back" href="/build"><ArrowLeft />Builder</Link>
       <p className="eyebrow">Commissioner account</p>
       <h1>{mode === "signin" ? "Welcome back." : "Save your league once."}</h1>
       <p>{mode === "signin" ? "Pick up saved leagues and seasons on any device." : "Next season, skip league, team, and division setup."}</p>
