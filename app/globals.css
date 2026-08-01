@@ -2352,6 +2352,10 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .stats-filter-bar > .custom-select { width: min(300px, 48%); }
 .stats-filter-controls { width: min(620px, 62%); display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .stats-filter-controls > .custom-select { width: min(290px, 50%); }
+/* Filter bar reduced to just the two selects (no redundant heading) — let them fill the row. */
+.stats-filter-bar.controls-only { min-height: 0; padding: 10px; }
+.stats-filter-bar.controls-only .stats-filter-controls { width: 100%; justify-content: stretch; }
+.stats-filter-bar.controls-only .stats-filter-controls > .custom-select { flex: 1; width: auto; }
 .season-race-panel { min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: white; }
 .season-race-panel > header { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); background: var(--canvas); padding: 10px 13px; }
 .season-race-panel > header > span { min-width: 0; display: flex; align-items: center; gap: 9px; }
@@ -2677,29 +2681,20 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .team-page-topbar > a:hover { background: var(--field-soft); color: var(--field-dark); }
 .team-page-topbar > a svg { width: 15px; }
 .team-schedule-page { width: min(1180px, calc(100% - 32px)); display: grid; gap: 16px; margin: 22px auto 48px; }
-.team-schedule-hero { position: relative; min-height: 126px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); align-items: center; gap: 28px; overflow: visible; border: 0; border-radius: var(--radius); background: var(--team-brand, var(--field)); color: var(--team-brand-on, white); padding: 20px 22px; }
+/* Header is a light card (like a match-card team row), with a team-color left accent
+   for brand. The TeamIdentityBlock inside renders in its normal card style — colored
+   name, light avatar, dark record with a legible division mark — no white-on-color. */
+.team-schedule-hero { position: relative; min-height: 112px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); align-items: center; gap: 28px; overflow: visible; border: 1px solid var(--line); border-left: 5px solid var(--team-brand, var(--field)); border-radius: var(--radius); background: white; color: var(--ink); padding: 18px 22px; }
 .team-schedule-overview { min-width: 0; display: grid; grid-template-columns: minmax(280px, .95fr) minmax(220px, .8fr); align-items: center; gap: 26px; }
-.team-schedule-overview > .team-identity-block { max-width: 420px; --team-text: var(--team-brand-on, white) !important; }
-.workspace-page .team-schedule-hero .team-identity-name small,
-.workspace-page .team-schedule-hero .team-identity-name strong,
-.workspace-page .team-schedule-hero .team-identity-record,
-.workspace-page .team-schedule-hero .team-identity-division-record { color: var(--team-brand-on, white); }
-/* The record's division mark is the division color on text — it washes out on the
-   team-color hero. Paint it as a small filled division tile so the avatar stays visible. */
-.workspace-page .team-schedule-hero .team-identity-division-record .division-mark-filled {
-  border-radius: var(--radius-chip);
-  background: var(--dm-bg);
-  color: var(--dm-ink) !important;
-}
+.team-schedule-overview > .team-identity-block { max-width: 420px; }
 .workspace-page .team-schedule-hero .team-identity-name strong { font-size: var(--text-lg); }
 .workspace-page .team-schedule-hero .team-identity-name small { font-size: var(--text-xs); }
 .workspace-page .team-schedule-hero .team-identity-record > strong { font-size: var(--text-2xl); }
-.team-schedule-facts { min-width: 0; display: flex; flex-direction: column; gap: 6px; border-left: 1px solid color-mix(in srgb, var(--team-brand-on, white) 24%, transparent); padding-left: 24px; }
+.team-schedule-facts { min-width: 0; display: flex; flex-direction: column; gap: 6px; border-left: 1px solid var(--line); padding-left: 24px; }
 .team-schedule-facts > .division-identity { width: fit-content; }
-.team-schedule-facts .division-identity strong,
+.team-schedule-facts .division-identity strong, .team-schedule-facts > strong { color: var(--ink); }
 .team-schedule-facts .division-identity small,
-.team-schedule-facts > strong,
-.team-schedule-facts > small { color: var(--team-brand-on, white); }
+.team-schedule-facts > small { color: var(--muted); }
 .team-schedule-facts .division-identity small { font-size: var(--text-2xs); }
 .team-schedule-facts > small { overflow: hidden; font-size: var(--text-2xs); line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 .team-schedule-controls { position: relative; z-index: 4; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 44px; align-items: center; gap: 7px; }
@@ -2709,12 +2704,8 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
    the team color instead of looking like a sticker on a chip. */
 .team-schedule-overview .entity-logo-has-image { background: transparent !important; box-shadow: none; border-radius: 0; padding: 0; overflow: visible; }
 .team-schedule-overview .entity-logo-has-image > img { border-radius: 0; }
-/* Clinch badges sit on a colored hero, where the fixed light tints clash (pink
-   ELIMINATED on a lime team). Seat them on a solid white chip so the semantic
-   text/icon and ring read cleanly on any team color. */
-.team-schedule-hero .clinch-badge { background: #fff; box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 26%, transparent); }
 /* One labeled rank line instead of an unlabeled #chip competing with a seed. */
-.team-schedule-rankline { color: var(--team-brand-on, white); font-size: var(--text-2xs); opacity: 0.92; }
+.team-schedule-rankline { color: var(--muted); font-size: var(--text-2xs); }
 .team-schedule-rankline b { font-family: var(--font-barlow-condensed), sans-serif; font-weight: var(--w-black); }
 /* The team identity IS the team switcher — tap the header to switch teams.
    Strip the control chrome so it reads as the hero title, add a chevron
@@ -2722,11 +2713,11 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .team-schedule-overview > .custom-select { min-width: 0; }
 .team-schedule-overview .custom-select-trigger-content { min-height: 0; gap: 12px; border: 0; border-radius: var(--radius); background: transparent; color: inherit; padding: 6px 8px 6px 6px; }
 .team-schedule-overview .custom-select-trigger-content:hover:not(:disabled),
-.team-schedule-overview .custom-select-trigger-content:focus-visible { border: 0; box-shadow: none; outline: none; background: color-mix(in srgb, var(--team-brand-on, white) 12%, transparent); }
+.team-schedule-overview .custom-select-trigger-content:focus-visible { border: 0; box-shadow: none; outline: none; background: var(--canvas); }
 .team-schedule-overview .custom-select-trigger-content > .team-identity-block { flex: 1; min-width: 0; }
 .team-schedule-overview .custom-select-trigger-content strong,
 .team-schedule-overview .custom-select-trigger-content small { overflow: visible; text-overflow: clip; }
-.team-schedule-overview .custom-select-trigger-content > svg { flex: 0 0 auto; align-self: center; width: 18px; color: var(--team-brand-on, white); opacity: 0.75; }
+.team-schedule-overview .custom-select-trigger-content > svg { flex: 0 0 auto; align-self: center; width: 18px; color: var(--muted); }
 /* Only the Display control remains — pin it to the hero's top-right corner so it
    doesn't take its own row and add vertical height. */
 .team-schedule-hero { grid-template-columns: minmax(0, 1fr); }
@@ -4200,7 +4191,7 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .team-schedule-hero { grid-template-columns: 1fr; gap: 16px; padding: 16px; }
   .team-schedule-overview { grid-template-columns: 1fr; gap: 14px; }
   .team-schedule-overview > .team-identity-block { max-width: none; }
-  .team-schedule-facts { border-top: 1px solid color-mix(in srgb, var(--team-brand-on, white) 24%, transparent); border-left: 0; padding-top: 14px; padding-left: 0; }
+  .team-schedule-facts { border-top: 1px solid var(--line); border-left: 0; padding-top: 14px; padding-left: 0; }
   .team-schedule-facts small { white-space: normal; }
   .team-schedule-controls { width: auto; grid-template-columns: none; }
   /* Swap the 1375px table for the stacked week cards — opponent + result now

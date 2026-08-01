@@ -47,7 +47,7 @@ import { ConsolationBracket, FinalPlacementTable } from "@/components/season/Con
 import { GameBadgeChip, MatchupCard, MatchupRatingLegend, MatchupSeriesChip, TeamIdentityBlock, WeekMatchupRank } from "@/components/season/MatchupPresentation";
 import { WeekSelector } from "@/components/season/WeekSelector";
 import { SimulatorWorkspace, type SimulatorResultView } from "@/components/season/SimulatorWorkspace";
-import { StatsWorkspace } from "@/components/season/StatsWorkspace";
+import { StatsWorkspace, TiebreakerEditor } from "@/components/season/StatsWorkspace";
 import { TeamScheduleView } from "@/components/season/TeamSchedulePage";
 import { WeekScoreBar } from "@/components/season/WeekScoreBar";
 import { PlayoffPicturePanel } from "@/components/season/PlayoffPictureModal";
@@ -98,6 +98,7 @@ import {
 } from "@/lib/simulator";
 import { calculateStandings, formatRecord, freezeCompletedRankHistory, getEnteringWeekRankSnapshot } from "@/lib/standings";
 import { formatPoints, gameOfWeekStatusLabel, getScheduleGameSignals } from "@/lib/statistics";
+import { normalizeTiebreakerSettings, TIEBREAKER_RULE_LABELS } from "@/lib/tiebreakers";
 import { formatDraftPlace, getTeamsMissingDraftPlaces, getWeekOneRankMap, getWeekOneTeamOrder, hasCompleteDraftRanking } from "@/lib/rankings";
 import { loadSeasonById, normalizeSeason, removeLocalSeason, saveSeason, saveSetup } from "@/lib/storage";
 import { getNflWeekWindow, getWeekDateLabel, updateGameScore } from "@/lib/schedule";
@@ -1253,11 +1254,13 @@ function ImportHistoryPanel({ events, loading, error, onRefresh, scheduleId }: {
   </section>;
 }
 
-function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, onUpdatePlayoffs, canAccessPlatformSync, platformSyncLoading, onRefreshPlatformScores, onSavePlatformConnection, onDisconnectPlatform, onConnectPlatform, importHistory, importHistoryLoading, importHistoryError, onRefreshImportHistory }: {
+function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, onUpdatePlayoffs, onUpdateTiebreakers, readOnly = false, canAccessPlatformSync, platformSyncLoading, onRefreshPlatformScores, onSavePlatformConnection, onDisconnectPlatform, onConnectPlatform, importHistory, importHistoryLoading, importHistoryError, onRefreshImportHistory }: {
   schedule: GeneratedSchedule;
   onOpenDraftRanking: () => void;
   onRegenerate: () => void;
   onUpdatePlayoffs: (patch: Partial<LeagueSetupInput["playoffs"]>) => void;
+  onUpdateTiebreakers?: (settings: TiebreakerSettings) => void;
+  readOnly?: boolean;
   canAccessPlatformSync: boolean;
   platformSyncLoading: boolean;
   onRefreshPlatformScores: () => void;
@@ -1283,6 +1286,10 @@ function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, onUpdatePlay
       <div><span>Revision</span><strong>Version {schedule.revision}</strong></div>
       <div><span>Generation seed</span><code>{schedule.seed}</code></div>
     </div>
+    {onUpdateTiebreakers && (() => { const tb = normalizeTiebreakerSettings(schedule.setup.tiebreakers); return <>
+      <div className="settings-band"><div><SlidersHorizontal /><span><strong>Standings tiebreakers</strong><small>{tb.league.map((rule) => TIEBREAKER_RULE_LABELS[rule]).join(" → ") || "No field rules; deterministic fallback only"}</small></span></div></div>
+      <TiebreakerEditor settings={tb} onChange={onUpdateTiebreakers} disabled={readOnly} />
+    </>; })()}
     <div className="settings-band"><div><Trophy /><span><strong>Playoffs</strong><small>Field size, bracket format, and postseason presentation for this league.</small></span></div></div>
     <PlayoffsView schedule={schedule} onUpdatePlayoffs={onUpdatePlayoffs} onUpdatePlayoffGame={() => undefined} mode="settings" />
   </div>;
@@ -2196,7 +2203,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
             onDiscard={discardSimulation}
             onOpenSchedule={openLeagueScheduleWeek}
           />}
-          {view === "settings" && <SettingsView schedule={activeSchedule} onOpenDraftRanking={() => setDraftRankingRequest((current) => current + 1)} onRegenerate={() => setConfirmAction("regenerate")} onUpdatePlayoffs={onUpdatePlayoffs} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshPlatformScores={refreshPlatformScores} onSavePlatformConnection={savePlatformConnection} onDisconnectPlatform={disconnectPlatform} onConnectPlatform={() => setConnectOpen(true)} importHistory={importHistory} importHistoryLoading={importHistoryLoading} importHistoryError={importHistoryError} onRefreshImportHistory={loadImportHistory} />}
+          {view === "settings" && <SettingsView schedule={activeSchedule} onOpenDraftRanking={() => setDraftRankingRequest((current) => current + 1)} onRegenerate={() => setConfirmAction("regenerate")} onUpdatePlayoffs={onUpdatePlayoffs} onUpdateTiebreakers={simulation ? undefined : onUpdateTiebreakers} readOnly={Boolean(simulation)} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshPlatformScores={refreshPlatformScores} onSavePlatformConnection={savePlatformConnection} onDisconnectPlatform={disconnectPlatform} onConnectPlatform={() => setConnectOpen(true)} importHistory={importHistory} importHistoryLoading={importHistoryLoading} importHistoryError={importHistoryError} onRefreshImportHistory={loadImportHistory} />}
           {connectOpen && <ConnectScoresModal schedule={schedule} onClose={closeConnect} onConnect={applyPlatformConnection} dismissLabel={connectAutoOpened ? "Skip for now" : "Cancel"} />}
           {saveConnectionSetup && <SaveConnectionPrompt setup={saveConnectionSetup} onClose={() => setSaveConnectionSetup(null)} />}
         </div>
