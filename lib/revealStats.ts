@@ -8,8 +8,8 @@ import type { GeneratedSchedule } from "@/lib/types";
  */
 
 export type SeriesGap = { aId: string; bId: string; first: number; last: number; gap: number };
-export type StrengthPick = { teamId: string; avgOpponentRank: number };
-export type Gauntlet = { teamId: string; startWeek: number; endWeek: number; avgOpponentRank: number; opponentRanks: number[] };
+export type StrengthPick = { teamId: string; avgOpponentRank: number; opponents: { id: string; rank: number }[] };
+export type Gauntlet = { teamId: string; startWeek: number; endWeek: number; avgOpponentRank: number; opponentRanks: number[]; opponentIds: string[] };
 
 function pairKey(a: string, b: string): string {
   return [a, b].sort((left, right) => left.localeCompare(right)).join("~");
@@ -40,9 +40,14 @@ export function strengthOfSchedule(schedule: GeneratedSchedule): { hardest?: Str
   let easiest: StrengthPick | undefined;
   for (const [teamId, games] of opponentsByWeek(schedule)) {
     if (!games.length) continue;
-    const avg = games.reduce((sum, game) => sum + (rankById.get(game.opponentId) ?? 0), 0) / games.length;
-    if (!hardest || avg < hardest.avgOpponentRank) hardest = { teamId, avgOpponentRank: avg };
-    if (!easiest || avg > easiest.avgOpponentRank) easiest = { teamId, avgOpponentRank: avg };
+    // Every opponent, strongest first (lowest rank number), so the caller can lay
+    // them out as a wall whose heights read the schedule's difficulty at a glance.
+    const opponents = games
+      .map((game) => ({ id: game.opponentId, rank: rankById.get(game.opponentId) ?? 0 }))
+      .sort((left, right) => left.rank - right.rank);
+    const avg = opponents.reduce((sum, opponent) => sum + opponent.rank, 0) / opponents.length;
+    if (!hardest || avg < hardest.avgOpponentRank) hardest = { teamId, avgOpponentRank: avg, opponents };
+    if (!easiest || avg > easiest.avgOpponentRank) easiest = { teamId, avgOpponentRank: avg, opponents };
   }
   return { hardest, easiest };
 }
@@ -61,7 +66,7 @@ export function toughestGauntlet(schedule: GeneratedSchedule, windowSize = 4): G
       const ranks = slice.map((game) => rankById.get(game.opponentId) ?? 0);
       const avg = ranks.reduce((sum, rank) => sum + rank, 0) / size;
       if (!best || avg < best.avgOpponentRank) {
-        best = { teamId, startWeek: slice[0].week, endWeek: slice[size - 1].week, avgOpponentRank: avg, opponentRanks: ranks };
+        best = { teamId, startWeek: slice[0].week, endWeek: slice[size - 1].week, avgOpponentRank: avg, opponentRanks: ranks, opponentIds: slice.map((game) => game.opponentId) };
       }
     }
   }
