@@ -1905,6 +1905,10 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .matchup-card-main .team-identity-block.mirrored .team-identity-rank { grid-column: 3; grid-row: 1 / span 2; }
 .matchup-card-main .team-identity-block.mirrored .team-identity-mark { grid-column: 2; grid-row: 1 / span 2; }
 .matchup-card-main .team-identity-block.mirrored .team-identity-name { grid-column: 1; grid-row: 1; text-align: right; }
+/* Placeholder rows carry no record, so span the name across both rows and center
+   it against the "?" avatar instead of sitting in the top half. */
+.matchup-card-main .playoff-tbd-block .team-identity-name,
+.matchup-card-main .team-identity-block.mirrored.playoff-tbd-block .team-identity-name { grid-row: 1 / span 2; align-self: center; }
 .matchup-card-main .team-identity-block.mirrored .team-identity-record { grid-column: 1; grid-row: 2; justify-content: flex-end; }
 .matchup-card.is-simulated { box-shadow: inset 3px 0 #1b7180; }
 .matchup-card.is-simulated.is-gotw { box-shadow: inset 4px 0 var(--gold), inset 7px 0 #1b7180; }
@@ -1984,25 +1988,13 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .team-schedule-filter > .custom-select, .gotw-filter > .custom-select { width: min(300px, 55%); }
 .team-schedule-table-wrap { overflow: auto; border: 1px solid var(--line); background: white; }
 /* Mobile card view (shown ≤560px in place of the wide table — see the 560px block). */
-.team-schedule-cards { display: none; list-style: none; gap: 8px; margin: 0; padding: 0; }
-.team-week-card { display: grid; gap: 9px; border: 1px solid var(--line); border-radius: var(--radius); background: white; padding: 11px 12px; }
-.team-week-card.is-gotw { background: #fffaf0; box-shadow: inset 4px 0 var(--gold); }
-.team-week-card .twc-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.team-week-card .twc-top .team-week-link { width: auto; min-height: 0; padding: 0; }
-.team-week-card .twc-tags { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
-.team-week-card .twc-body { display: flex; align-items: center; gap: 10px; }
-.team-week-card .twc-body > .team-identity-block { flex: 1; min-width: 0; }
-.team-week-card .twc-result { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
-.team-week-card .twc-score { font-family: var(--font-barlow-condensed), sans-serif; white-space: nowrap; }
-.team-week-card .twc-score > strong.score-winner { color: var(--ink); font-size: var(--text-xl); font-weight: var(--w-black); }
-.team-week-card .twc-score > strong.score-loser { color: #7d8882; font-size: var(--text-md); font-weight: var(--w-bold); }
-.team-week-card .twc-score > strong.score-tied { color: var(--ink); font-size: var(--text-md); font-weight: var(--w-bold); }
-.team-week-card .twc-score > i { margin-inline: 3px; color: var(--muted); font-style: normal; }
-.team-week-card .twc-scheduled small { color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; }
-.team-week-card .twc-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; color: var(--muted); font-size: var(--text-2xs); }
-.team-week-card .twc-meta > span { display: inline-flex; align-items: center; min-width: 0; }
-.team-week-card .twc-meta svg { width: 12px; height: 12px; margin-right: 4px; flex: 0 0 auto; }
-.team-week-card .twc-bye-label { color: var(--muted); font-size: var(--text-sm); }
+/* Card view is a plain transparent grid of shared <MatchupCard>s — no container
+   frame/background (each card carries its own border). Hidden on desktop (table
+   shows there), shown as a grid ≤560px (below). */
+.team-schedule-cards { display: none; gap: 10px; }
+.team-week-bye-card .team-week-bye-main { display: flex; align-items: baseline; gap: 10px; padding: 12px 14px; }
+.team-week-bye-card .team-week-bye-main strong { font-size: var(--text-md); font-weight: var(--w-black); }
+.team-week-bye-card .team-week-bye-main small { color: var(--muted); font-size: var(--text-xs); }
 .team-schedule-table { min-width: 1280px; width: 100%; border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
 .team-schedule-table th { position: sticky; z-index: 3; top: 0; height: 40px; border-bottom: 1px solid color-mix(in srgb, var(--team-brand, var(--ink)), black 18%); background: var(--team-brand, var(--ink)); color: var(--team-brand-on, white); padding: 0 9px; text-align: left; font-weight: var(--w-black); letter-spacing: 0.04em; text-transform: uppercase; }
 .team-schedule-table th > svg { width: 14px; height: 14px; vertical-align: middle; }
@@ -4348,6 +4340,8 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .matchup-card-main .team-identity-mark, .matchup-card-main .team-identity-block.mirrored .team-identity-mark { grid-area: 1 / 2 / 3 / 3; align-self: center; width: 54px; height: 54px; }
   .matchup-card-main .team-identity-mark .entity-logo { width: 54px !important; height: 54px !important; min-width: 0; min-height: 0; }
   .matchup-card-main .team-identity-name, .matchup-card-main .team-identity-block.mirrored .team-identity-name { grid-area: 1 / 3 / 2 / 4; text-align: left; }
+  /* Placeholder rows have no record row — center the "Winner of / game" name against the "?" avatar. */
+  .matchup-card-main .playoff-tbd-block .team-identity-name { grid-area: 1 / 3 / 3 / 4; align-self: center; }
   .matchup-card-main .team-identity-name small { display: block; font-size: var(--text-2xs); line-height: 1.05; }
   .matchup-card-main .team-identity-name strong { -webkit-line-clamp: 1; font-size: var(--text-lg); line-height: 1.1; }
   .matchup-card-main .team-identity-record, .matchup-card-main .team-identity-block.mirrored .team-identity-record { grid-area: 2 / 3 / 3 / 4; flex-direction: row; align-items: center; justify-content: flex-start; gap: 8px; margin-top: 2px; }
