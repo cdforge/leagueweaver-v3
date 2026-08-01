@@ -67,7 +67,7 @@ import { accessibleAccentColor, readableTextColor } from "@/lib/colorContrast";
 import { DivisionMark } from "@/components/ui/DivisionIdentity";
 import { isDivisionHalvesConsolationUsable, projectConsolationBracket } from "@/lib/consolation";
 import { downloadSchedulePdf } from "@/lib/pdf";
-import { getMatchupRatingRange, getMatchupSignal, matchupRating, sortGamesForDisplay } from "@/lib/matchups";
+import { getMatchupRatingRange, getMatchupSignal, matchupRating, sortGamesForDisplay, toMatchupScore10 } from "@/lib/matchups";
 import {
   getPlayoffByeCount,
   getPlayoffGameBrandingSlots,
@@ -463,7 +463,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
       homeRank: standingsByTeam.get(home.id)?.rank ?? home.overallRank,
       awayRecord: recordFor(away.id),
       homeRecord: recordFor(home.id),
-      signal: getMatchupSignal(game, displayedRanks, ratingRange),
+      signal: getMatchupSignal(game, displayedRanks, ratingRange, schedule.setup.teams.length),
       showCity: display.cityNames,
       showVenue: display.venues,
     };
@@ -557,7 +557,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
         </div>
         {gotwOverrideDetails && gotwEntry && visibleGames.some((game) => game.id === gameOfWeekId) && <section className="gotw-selection-reason" aria-label="Why this matchup is Game of the Week">
           <span><Star fill="currentColor" /></span>
-          <div><small>LATE-SEASON PLAYOFF IMPACT</small><strong>Why this won the rating tie</strong><p>This {gotwOverrideDetails.featuredRanks} matchup shares the week&apos;s best {gotwEntry.rating.toFixed(1)} rating and crosses the {schedule.setup.playoffs.fieldSize}-team playoff cutline. Playoff impact moved it ahead of <span>{gotwOverrideDetails.pureMatchup}</span> after the rating tie. Lower ratings always remain first.</p></div>
+          <div><small>LATE-SEASON PLAYOFF IMPACT</small><strong>Why this won the rating tie</strong><p>This {gotwOverrideDetails.featuredRanks} matchup shares the week&apos;s best {toMatchupScore10(gotwEntry.rating, schedule.setup.teams.length).toFixed(1)}/10 rating and crosses the {schedule.setup.playoffs.fieldSize}-team playoff cutline. Playoff impact moved it ahead of <span>{gotwOverrideDetails.pureMatchup}</span> after the rating tie. Higher ratings always remain first.</p></div>
         </section>}
         {droppedGameCount > 0 && <div className="week-data-warning" role="alert"><CircleAlert /><span><strong>{droppedGameCount} matchup{droppedGameCount === 1 ? "" : "s"} can’t be shown</strong><small>A team in {droppedGameCount === 1 ? "it was" : "them was"} removed after the schedule was generated.</small></span></div>}
         <div className="matchup-list matchup-card-list">{visibleGames.map((game) => {
@@ -576,11 +576,11 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
 }
 
 function MatchupRatingsView({ schedule }: { schedule: GeneratedSchedule }) {
-  const [lens, setLens] = useState("live");
-  const [tier, setTier] = useState("all");
-  const [sort, setSort] = useState("best");
+  // Fixed presentation: all matchups, strongest first, weekly-standings lens.
+  const lens: "live" | "preseason" = "live";
   const scheduleSignals = getScheduleGameSignals(schedule);
   const allGames = schedule.weeks.flatMap((week) => week.games);
+  const teamCount = schedule.setup.teams.length;
   const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
   const divisionById = new Map(schedule.setup.divisions.map((division) => [division.id, division]));
   const preseasonRanks = new Map(schedule.setup.teams.map((team) => [team.id, team.overallRank]));
@@ -589,39 +589,29 @@ function MatchupRatingsView({ schedule }: { schedule: GeneratedSchedule }) {
     const snapshot = getEnteringWeekRankSnapshot(schedule, week.weekNumber);
     return [week.weekNumber, new Map(snapshot.rows.map((row) => [row.teamId, row.rank]))];
   }));
+  const weeklyRecords = new Map(schedule.weeks.map((week) => {
+    const snapshot = getEnteringWeekRankSnapshot(schedule, week.weekNumber);
+    return [week.weekNumber, new Map(snapshot.rows.map((row) => [row.teamId, formatRecord(row)]))];
+  }));
   const ranksForGame = (game: ScheduledGame) => lens === "live"
     ? weeklyRanks.get(game.week) ?? openingWeekRanks
     : game.week === 1 ? openingWeekRanks : preseasonRanks;
   const ratingForGame = (game: ScheduledGame) => matchupRating(game, lens === "live" ? ranksForGame(game) : undefined);
   const ratings = allGames.map(ratingForGame).filter(Number.isFinite);
   const ratingRange = ratings.length ? { min: Math.min(...ratings), max: Math.max(...ratings) } : { min: 0, max: 0 };
-  const visibleGames = allGames
-    .filter((game) => tier === "all" || getMatchupSignal(game, lens === "live" ? ranksForGame(game) : undefined, ratingRange).label.toLowerCase() === tier)
-    .sort((left, right) => {
-      if (sort === "week") return left.week - right.week || (left.gameNumber ?? 0) - (right.gameNumber ?? 0) || left.id.localeCompare(right.id);
-      const difference = ratingForGame(left) - ratingForGame(right);
-      return (sort === "worst" ? -difference : difference) || left.week - right.week || left.id.localeCompare(right.id);
-    });
-  const tierOptions = [
-    { value: "all", label: "All tiers", description: "Complete regular season" },
-    { value: "competitive", label: "Competitive", description: "Strongest third" },
-    { value: "neutral", label: "Neutral", description: "Middle third" },
-    { value: "lopsided", label: "Lopsided", description: "Widest ranking gaps" },
-  ];
+  const visibleGames = [...allGames].sort((left, right) => {
+    const difference = ratingForGame(left) - ratingForGame(right);
+    return difference || left.week - right.week || left.id.localeCompare(right.id);
+  });
   const strongestWeek = [...schedule.weeks].sort((left, right) => (left.matchupRank ?? 999) - (right.matchupRank ?? 999))[0];
   return <div className="matchup-ratings-view">
     <div className="matchup-ratings-summary">
-      <span><small>Rating range</small><strong>{ratingRange.min.toFixed(1)}–{ratingRange.max.toFixed(1)}</strong></span>
+      <span><small>Rating range</small><strong>{toMatchupScore10(ratingRange.max, teamCount).toFixed(1)}–{toMatchupScore10(ratingRange.min, teamCount).toFixed(1)}</strong></span>
       <span><small>Strongest week</small>{strongestWeek ? <span className="strongest-week-value"><strong>Week {strongestWeek.weekNumber}</strong><WeekMatchupRank rank={strongestWeek.matchupRank} total={schedule.weeks.length} compact /></span> : <strong>—</strong>}</span>
       <span><small>Games shown</small><strong>{visibleGames.length}</strong></span>
     </div>
     <div className="matchup-ratings-controls">
-      <span><strong>Matchup rating</strong><small>Lower is better. Tiers are relative to this schedule.</small></span>
-      <div>
-        <CustomSelect label="Rating lens" value={lens} onChange={setLens} options={[{ value: "live", label: "Weekly standings", description: "Frozen ranks entering each week" }, { value: "preseason", label: "Preseason plan", description: "Original season-building ranks" }]} />
-        <CustomSelect label="Filter rating tier" value={tier} onChange={setTier} options={tierOptions} />
-        <CustomSelect label="Sort matchup ratings" value={sort} onChange={setSort} options={[{ value: "best", label: "Best first", description: "Lowest rating first" }, { value: "worst", label: "Worst first", description: "Highest rating first" }, { value: "week", label: "Schedule order", description: "Week and game number" }]} />
-      </div>
+      <span><strong>Matchup rating</strong><small>Rated out of 10, higher is better. Every matchup, strongest first.</small></span>
     </div>
     <MatchupRatingLegend />
     <div className="matchup-ratings-table-wrap">
@@ -631,7 +621,7 @@ function MatchupRatingsView({ schedule }: { schedule: GeneratedSchedule }) {
           const away = teamById.get(game.awayTeamId)!;
           const home = teamById.get(game.homeTeamId)!;
           const rowRanks = ranksForGame(game);
-          const signal = getMatchupSignal(game, lens === "live" ? rowRanks : undefined, ratingRange);
+          const signal = getMatchupSignal(game, lens === "live" ? rowRanks : undefined, ratingRange, teamCount);
           const played = game.awayScore != null && game.homeScore != null;
           const awayWon = played && game.awayScore! > game.homeScore!;
           const homeWon = played && game.homeScore! > game.awayScore!;
@@ -643,11 +633,24 @@ function MatchupRatingsView({ schedule }: { schedule: GeneratedSchedule }) {
             <td>{played ? <span className="matchup-table-result" aria-label={`Final score: ${away.name} ${game.awayScore}, ${home.name} ${game.homeScore}`}><span><strong className={awayWon ? "winner" : homeWon ? "loser" : ""}>{formatPoints(game.awayScore!)}</strong><b aria-label="at">@</b><strong className={homeWon ? "winner" : awayWon ? "loser" : ""}>{formatPoints(game.homeScore!)}</strong></span><small>FINAL</small></span> : <span className="matchup-table-result pending">—<small>NOT PLAYED</small></span>}</td>
             <td><TeamIdentityBlock mirrored compact showRecord={false} team={home} division={divisionById.get(home.divisionId)} leagueRank={rowRanks.get(home.id) ?? home.overallRank} record={{ overall: "0-0" }} showCity={schedule.setup.display.cityNames} href={`/season/${schedule.id}/team/${home.id}`} /></td>
             <td><MatchupSeriesChip game={game} division={divisionById.get(home.divisionId)} /></td>
-            <td><span className="table-rating-cell"><span className={`table-signal signal-${signal.label.toLowerCase()}`} aria-label={`${signal.label} matchup, rating ${signal.rating.toFixed(1)}`}>{[1, 2, 3].map((bar) => <i className={bar <= signal.bars ? "active" : ""} key={bar} />)}<strong>{signal.rating.toFixed(1)}</strong></span><small className="table-rating-ranks">W{game.week} ranks · #{rowRanks.get(away.id) ?? away.overallRank} vs #{rowRanks.get(home.id) ?? home.overallRank}</small></span></td>
+            <td><span className="table-rating-cell"><span className={`table-signal signal-${signal.label.toLowerCase()}`} aria-label={`${signal.label} matchup, rated ${signal.score10.toFixed(1)} out of 10`}>{[1, 2, 3].map((bar) => <i className={bar <= signal.bars ? "active" : ""} key={bar} />)}<strong>{signal.score10.toFixed(1)}</strong></span><small className="table-rating-ranks">W{game.week} ranks · #{rowRanks.get(away.id) ?? away.overallRank} vs #{rowRanks.get(home.id) ?? home.overallRank}</small></span></td>
           </tr>;
         })}</tbody>
       </table>
     </div>
+    <div className="matchup-ratings-cards" role="list">{visibleGames.map((game) => {
+      const away = teamById.get(game.awayTeamId)!;
+      const home = teamById.get(game.homeTeamId)!;
+      const rowRanks = ranksForGame(game);
+      return <MatchupCard key={game.id} game={game} away={away} home={home}
+        awayDivision={divisionById.get(away.divisionId)} homeDivision={divisionById.get(home.divisionId)}
+        awayRank={rowRanks.get(away.id) ?? away.overallRank} homeRank={rowRanks.get(home.id) ?? home.overallRank}
+        awayRecord={{ overall: weeklyRecords.get(game.week)?.get(away.id) ?? "0-0" }} homeRecord={{ overall: weeklyRecords.get(game.week)?.get(home.id) ?? "0-0" }}
+        signal={getMatchupSignal(game, lens === "live" ? rowRanks : undefined, ratingRange, teamCount)}
+        featured={scheduleSignals.gotwIds.has(game.id)} featuredLabel="GOTW"
+        dateLabel={`Week ${game.week}`} showCity={schedule.setup.display.cityNames} showVenue={false}
+        teamHrefBase={`/season/${schedule.id}/team`} />;
+    })}</div>
   </div>;
 }
 

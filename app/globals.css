@@ -2129,6 +2129,12 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .matchup-ratings-controls > span small { color: var(--muted); font-size: var(--text-2xs); }
 .matchup-ratings-controls > div { width: min(720px, 72%); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .matchup-ratings-table-wrap { overflow-x: auto; border: 1px solid var(--line); background: white; }
+/* Tablet/phone: swap the ratings table for the shared match cards. */
+.matchup-ratings-cards { display: none; }
+@media (max-width: 900px) {
+  .matchup-ratings-table-wrap { display: none; }
+  .matchup-ratings-cards { display: grid; gap: 10px; }
+}
 .matchup-ratings-table { width: 100%; min-width: 1110px; border-collapse: collapse; }
 .matchup-ratings-table th { height: 42px; border-bottom: 1px solid var(--line-strong); background: var(--canvas); color: var(--muted); padding: 7px 10px; font-size: var(--text-2xs); font-weight: var(--w-black); text-align: left; text-transform: uppercase; letter-spacing: 0.04em; }
 .matchup-ratings-table td { height: 64px; border-bottom: 1px solid var(--line); padding: 7px 10px; font-size: var(--text-xs); font-variant-numeric: tabular-nums; transition: background var(--transition); }
