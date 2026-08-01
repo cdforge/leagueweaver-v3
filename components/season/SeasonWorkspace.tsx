@@ -1193,6 +1193,9 @@ function PlatformSyncCard({
   const [swid, setSwid] = useState("");
   const [espnS2, setEspnS2] = useState("");
   useEffect(() => setSyncMode(connection?.syncMode ?? "manual"), [connection?.syncMode]);
+  if (!canAccessPlatformSync) {
+    return <div className="platform-sync-card is-locked"><div><LockKeyhole /><span><strong>Platform Sync</strong><small>Auto-filling weekly scores from a public ESPN or Sleeper league is a Pro feature. Manual score entry is always available.</small></span></div></div>;
+  }
   if (!connection) {
     return <div className="platform-sync-card"><div><Cloud /><span><strong>Platform Sync</strong><small>Connect a public ESPN or Sleeper league to auto-fill weekly scores. Manual entry always stays available.</small></span></div><div className="platform-sync-actions"><button type="button" className="button-primary" onClick={onConnect}><Cloud />Connect for scores</button><Link href="/build" className="button-secondary">Import a league</Link></div></div>;
   }
@@ -1414,6 +1417,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const [scoreDiscardConfirmOpen, setScoreDiscardConfirmOpen] = useState(false);
   const [platformSyncLoading, setPlatformSyncLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState<"share" | "notify" | null>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
   const [scorebarCollapsed, setScorebarCollapsed] = useState(false);
   // H1: irreversible actions (publish, save-run-back, regenerate) open this
   // confirm gate before running, so a reflexive click can't publish private data,
@@ -2124,7 +2128,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     <div className="workspace-shell">
       <aside className="workspace-rail"><nav aria-label="Season workspace">{VIEW_ITEMS.map((item) => { const Icon = item.icon; return <button type="button" key={item.key} aria-label={item.label} title={item.label} className={view === item.key ? "active" : ""} onClick={() => selectView(item)}><Icon /><span>{item.label}</span></button>; })}</nav><div className="rail-bottom"><WorkspaceSwitcher current={{ id: schedule.id, name: schedule.setup.name, seasonYear: schedule.setup.seasonYear, color: schedule.setup.color, logoUrl: schedule.setup.logoUrl, initials: schedule.setup.initials }} signedIn={Boolean(entitlements.signedIn)} /></div></aside>
       <section className={`workspace-main ${selectedTeamColor ? "team-workspace-branded" : ""}`} style={workspaceMainStyle}>
-        <div className="workspace-toolbar"><div><span className="workspace-breadcrumb">{schedule.setup.abbreviation} / {schedule.setup.seasonYear}</span><h1>{currentTitle}</h1></div><div className="toolbar-actions"><button type="button" title="Replay the season recap" onClick={() => setShowRecap(true)}><Sparkles />Recap</button><button type="button" title={simulation ? "Export simulated CSV" : "Export CSV"} onClick={() => downloadCsv(activeSchedule)}><Download />CSV</button><button type="button" title={simulation ? "Print simulated ESPN entry sheet" : "Print ESPN entry sheet"} onClick={() => downloadSchedulePdf(activeSchedule)}><FileDown />ESPN PDF</button><button type="button" title={simulation ? "Share the real schedule" : "Share schedule"} disabled={actionBusy !== null} onClick={() => setConfirmAction("share")}>{actionBusy === "share" ? <LoaderCircle className="spin" /> : <Share2 />}Share</button></div></div>
+        <div className="workspace-toolbar"><div><span className="workspace-breadcrumb">{schedule.setup.abbreviation} / {schedule.setup.seasonYear}</span><h1>{currentTitle}</h1></div><div className="toolbar-actions"><button type="button" title="Replay the season recap" onClick={() => setShowRecap(true)}><Sparkles />Recap</button><button type="button" title={simulation ? "Export simulated CSV" : "Export CSV"} onClick={() => downloadCsv(activeSchedule)}><Download />CSV</button><button type="button" title={simulation ? "Print simulated ESPN entry sheet" : "Print ESPN entry sheet"} disabled={pdfBusy} aria-busy={pdfBusy} onClick={async () => { if (pdfBusy) return; setPdfBusy(true); try { await downloadSchedulePdf(activeSchedule); } catch { setNotice("Couldn’t build the ESPN entry sheet. Please try again."); } finally { setPdfBusy(false); } }}>{pdfBusy ? <LoaderCircle className="spin" /> : <FileDown />}{pdfBusy ? "Building…" : "ESPN PDF"}</button><button type="button" title={simulation ? "Share the real schedule" : "Share schedule"} disabled={actionBusy !== null} onClick={() => setConfirmAction("share")}>{actionBusy === "share" ? <LoaderCircle className="spin" /> : <Share2 />}Share</button></div></div>
         <div className="workspace-notice" role="status" aria-live="polite">{notice && <><Cloud />{notice}</>}</div>
         {!entitlements.signedIn && !CLOUD_SCHEDULE_ID.test(schedule.id) && !saveNudgeDismissed && <section className="cloud-retry-banner save-nudge-banner" role="status" aria-label="Save this schedule to an account">
           <ShieldCheck />

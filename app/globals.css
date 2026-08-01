@@ -2804,6 +2804,9 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
    the box == the visible avatar and the name centers on it. */
 .team-directory-card .team-identity-mark { width: 48px; height: 48px; }
 .team-directory-card .team-identity-mark .entity-logo { width: 48px !important; height: 48px !important; min-width: 0 !important; min-height: 0 !important; }
+/* Give the 48px avatar its own 48px column + a real column-gap so it doesn't
+   overflow the (responsively-narrowed) mark column and touch the name. */
+.team-directory-card .team-identity-block { grid-template-columns: 24px 48px minmax(0, 1fr) auto; column-gap: 11px; }
 /* Grid centers the text BOX, which carries line-leading below the last line, so the
    visible glyphs sit ~4px high in the 48px avatar row. Nudge both text columns down
    to optically center the glyphs on the avatar (name + record stay matched). */
@@ -3000,6 +3003,8 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .platform-sync-card span, .platform-cookie-fields span { display: flex; flex-direction: column; gap: 3px; }
 .platform-sync-card strong, .platform-cookie-fields strong { font-size: var(--text-2xs); }
 .platform-sync-card small, .platform-cookie-fields small, .platform-sync-note { color: var(--muted); font-size: var(--text-2xs); line-height: 1.4; }
+.platform-sync-card.is-locked { border-bottom: 0; }
+.platform-sync-card.is-locked svg { color: var(--muted); background: var(--surface-2, var(--canvas)); box-shadow: inset 0 0 0 1px var(--line); }
 .platform-sync-details { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
 .platform-sync-details span { min-height: 58px; padding: 11px 14px; display: flex; flex-direction: column; justify-content: center; gap: 4px; border-right: 1px solid var(--line); }
 .platform-sync-details span:last-child { border-right: 0; }
@@ -3607,6 +3612,8 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .public-subscribe label { display: grid; gap: 6px; font-size: var(--text-2xs); font-weight: var(--w-black); }
 .public-subscribe input { min-height: 44px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 0 10px; }
 .public-subscribe button { width: 100%; }
+.public-subscribe-consent { margin: 0; color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-medium); line-height: 1.4; }
+.public-subscribe-consent a { color: var(--field-dark); text-decoration: underline; text-underline-offset: 2px; }
 .public-subscribe-message { color: var(--field); display: flex; align-items: center; gap: 5px; font-size: var(--text-2xs); }
 .public-subscribe-message svg { width: 14px; }
 .public-footer { border-top: 1px solid var(--line); padding: 22px; color: var(--muted); font-size: var(--text-2xs); text-align: center; }
