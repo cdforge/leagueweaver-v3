@@ -318,6 +318,8 @@ export interface ProjectedPlacementSlot {
   placeStart: number;
   placeEnd: number;
   label: string;
+  /** Structural descriptor of who fills the slot (e.g. "Champion", "Consolation", "Outside the bracket"). */
+  source: string;
   teamIds: string[];
   /** True when this slot is a single exact place; false for a range. */
   exact: boolean;
@@ -360,11 +362,20 @@ export function projectPlacementChart(schedule: GeneratedSchedule): ProjectedPla
     if (field + cap < total) bands.push([field + cap + 1, total]); // tail — did not make the bracket
   }
 
-  return bands.map(([placeStart, placeEnd]) => ({
-    placeStart,
-    placeEnd,
-    label: placeStart === placeEnd ? `${ordinal(placeStart)} Place` : `${ordinal(placeStart)}–${ordinal(placeEnd)}`,
-    teamIds: placements.slice(placeStart - 1, placeEnd).map((entry) => entry.teamId),
-    exact: placeStart === placeEnd,
-  }));
+  return bands.map(([placeStart, placeEnd]) => {
+    const source = placeEnd <= field
+      ? (placeStart === 1 ? "Champion" : placeStart === 2 ? "Runner-up" : "Championship bracket")
+      : placeStart > field + cap ? "Outside the bracket"
+        : placeStart === field + 1 && placeStart === placeEnd ? "Consolation winner"
+          : placeStart === field + 2 && placeStart === placeEnd ? "Consolation runner-up"
+            : "Consolation bracket";
+    return {
+      placeStart,
+      placeEnd,
+      label: placeStart === placeEnd ? `${ordinal(placeStart)} Place` : `${ordinal(placeStart)}–${ordinal(placeEnd)}`,
+      source,
+      teamIds: placements.slice(placeStart - 1, placeEnd).map((entry) => entry.teamId),
+      exact: placeStart === placeEnd,
+    };
+  });
 }

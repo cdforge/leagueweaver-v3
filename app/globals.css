@@ -5237,3 +5237,14 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .week-status .week-markers { flex: 1 1 100%; }
   .thanksgiving-week-label .thx-text { display: none; }
 }
+
+/* placement chart — projected finishing order in the playoff preview */
+.ppw-chart { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 460px; overflow-y: auto; }
+.ppw-chart-row { display: grid; grid-template-columns: 92px 1fr; align-items: baseline; gap: 10px; padding: 6px 10px; border-radius: var(--radius-sm, 8px); }
+.ppw-chart-row.exact { background: rgba(255,255,255,.03); }
+.ppw-chart-row.range { background: rgba(255,255,255,.015); }
+.ppw-chart-row + .ppw-chart-row.range { border-top: 1px dashed rgba(255,255,255,.06); }
+.ppw-chart-place { font-family: var(--font-barlow-condensed), sans-serif; font-weight: var(--w-black); font-size: var(--text-sm); letter-spacing: .01em; color: var(--pk-ink, #eef4f0); text-transform: uppercase; white-space: nowrap; }
+.ppw-chart-row.range .ppw-chart-place { color: var(--pk-mut, #94a49c); }
+.ppw-chart-teams { min-width: 0; color: var(--pk-mut, #94a49c); font-size: var(--text-xs); line-height: 1.4; overflow: hidden; text-overflow: ellipsis; }
+.ppw-chart-row.exact .ppw-chart-teams { color: #dfe7e3; }

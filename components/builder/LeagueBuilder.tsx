@@ -57,7 +57,7 @@ import {
   normalizePlayoffSettings,
   PLAYOFF_THEME_COLORS,
 } from "@/lib/playoffs";
-import { projectConsolationBracket } from "@/lib/consolation";
+import { projectConsolationBracket, projectPlacementChart } from "@/lib/consolation";
 import { BracketConnectorLayer, type BracketConnection } from "@/components/season/BracketConnectorLayer";
 import { teamDisplayName, teamInitials, teamMonogram } from "@/lib/teamIdentity";
 import type { Division, GeneratedSchedule, ImportPreview, LeagueSetupInput, SavedLeagueIdentity, SavedLeaguePreset, Team } from "@/lib/types";
@@ -574,7 +574,7 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   const p = setup.playoffs;
   const [subPage, setSubPage] = useState<"format" | "rules" | "brand" | "logos">("format");
   const [expandedRounds, setExpandedRounds] = useState<number[]>([]);
-  const [previewView, setPreviewView] = useState<"championship" | "consolation">("championship");
+  const [previewView, setPreviewView] = useState<"championship" | "consolation" | "placement">("championship");
   const divisionCount = setup.divisions.length;
   const maxFieldSize = getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, p.bracketType);
   const patch = (next: Partial<LeagueSetupInput["playoffs"]>) =>
@@ -640,6 +640,13 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
       const stub = { id: "wizard-preview", seed: "0", createdAt: "", setup: { ...setup, playoffs: normalized }, weeks: [], playoffGames: [], revision: 0, fairness: {} } as unknown as GeneratedSchedule;
       const bracket = projectConsolationBracket(stub);
       return bracket?.rounds.flatMap((round) => round.games.map((game) => ({ id: game.id, label: game.label, roundName: round.name, roundIndex: round.roundIndex }))) ?? [];
+    } catch { return []; }
+  })();
+  // Projected finishing chart (exact places up top, ranges + tail once the calendar runs out).
+  const placementChart = (() => {
+    try {
+      const stub = { id: "wizard-preview", seed: "0", createdAt: "", setup: { ...setup, playoffs: normalized }, weeks: [], playoffGames: [], revision: 0, fairness: {} } as unknown as GeneratedSchedule;
+      return projectPlacementChart(stub);
     } catch { return []; }
   })();
   const updateRoundName = (roundIndex: number, name: string) => {
@@ -808,6 +815,7 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
 
   const consolationAvailable = consolationSlots.length > 0 && (seeded.length - p.fieldSize) >= 2;
   const showConsolationView = previewView === "consolation" && consolationAvailable;
+  const showPlacementView = previewView === "placement" && placementChart.length > 0;
   const bracketSignature = [
     showConsolationView, p.fieldSize, p.bracketType, p.placementMode, byeCount, previewHalves,
     roundNames.join("~"),
@@ -947,13 +955,19 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
 
       <aside className="playoff-wizard-preview" aria-label="Live bracket preview">
         <div className="ppw-preview-head"><span className="ppw-preview-eyebrow">Live preview</span></div>
-        {consolationAvailable && <div className="ppw-preview-toggle" role="tablist" aria-label="Preview bracket">
-          <button type="button" role="tab" aria-selected={!showConsolationView} className={!showConsolationView ? "active" : ""} onClick={() => setPreviewView("championship")}>Championship</button>
-          <button type="button" role="tab" aria-selected={showConsolationView} className={showConsolationView ? "active" : ""} onClick={() => setPreviewView("consolation")}>Consolation</button>
+        {(consolationAvailable || placementChart.length > 0) && <div className="ppw-preview-toggle" role="tablist" aria-label="Preview view">
+          <button type="button" role="tab" aria-selected={previewView === "championship"} className={previewView === "championship" ? "active" : ""} onClick={() => setPreviewView("championship")}>Championship</button>
+          {consolationAvailable && <button type="button" role="tab" aria-selected={previewView === "consolation"} className={previewView === "consolation" ? "active" : ""} onClick={() => setPreviewView("consolation")}>Consolation</button>}
+          {placementChart.length > 0 && <button type="button" role="tab" aria-selected={previewView === "placement"} className={previewView === "placement" ? "active" : ""} onClick={() => setPreviewView("placement")}>Placement chart</button>}
         </div>}
-        <strong className="ppw-preview-title">{showConsolationView ? "Placement bracket" : p.bracketType === "ladder" ? "The playoff ladder" : "Road to the title"}</strong>
-        <small className="ppw-preview-sub">{showConsolationView ? `${Math.max(0, setup.teams.length - p.fieldSize)} teams outside the title hunt` : `${p.fieldSize} teams · ${previewHalves ? "division halves" : p.placementMode === "overall" ? "overall seeds" : "auto seeding"} · ${byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"}` : "no byes"}`}</small>
-        {renderBracket(previewBracket)}
+        <strong className="ppw-preview-title">{showPlacementView ? "Where everyone finishes" : showConsolationView ? "Placement bracket" : p.bracketType === "ladder" ? "The playoff ladder" : "Road to the title"}</strong>
+        <small className="ppw-preview-sub">{showPlacementView ? `Projected final order · ${setup.teams.length} teams` : showConsolationView ? `${Math.max(0, setup.teams.length - p.fieldSize)} teams outside the title hunt` : `${p.fieldSize} teams · ${previewHalves ? "division halves" : p.placementMode === "overall" ? "overall seeds" : "auto seeding"} · ${byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"}` : "no byes"}`}</small>
+        {showPlacementView
+          ? <ol className="ppw-chart">{placementChart.map((slot) => <li key={slot.placeStart} className={`ppw-chart-row ${slot.exact ? "exact" : "range"}`}>
+              <span className="ppw-chart-place">{slot.label}</span>
+              <span className="ppw-chart-teams">{slot.source}</span>
+            </li>)}</ol>
+          : renderBracket(previewBracket)}
         <div className="ppw-facts">
           <span className="ppw-fact">🏟 <b>{p.championshipVenueMode === "neutral-site" ? "Neutral site" : "Higher seed hosts"}</b></span>
           <span className="ppw-fact">🔀 <b>{p.reseedMode === "each-round" ? "Reseed each round" : p.reseedMode === "protected" ? "Protected" : "Fixed bracket"}</b></span>
