@@ -2548,31 +2548,36 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .team-stats-table-wrap { max-width: 100%; overflow: auto; border: 1px solid var(--line); background: white; }
 .team-stats-table { min-width: 1000px; width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--text-2xs); font-variant-numeric: tabular-nums; }
 .team-stats-table th { position: sticky; z-index: 3; top: 0; height: 40px; border-bottom: 1px solid var(--line-strong); background: var(--ink); color: white; text-align: right; }
-.team-stats-table th:first-child { left: 0; z-index: 5; width: 168px; min-width: 168px; max-width: 168px; text-align: left; }
+.team-stats-table th.team-stats-logo-head { left: 0; z-index: 5; width: 44px; min-width: 44px; max-width: 44px; }
+.team-stats-table th:nth-child(2) { left: 44px; z-index: 5; width: 132px; min-width: 132px; max-width: 132px; text-align: left; }
 .team-stats-table th button { width: 100%; min-height: 40px; border: 0; background: transparent; color: inherit; display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; padding: 0 7px; font-size: var(--text-2xs); font-weight: var(--w-black); cursor: pointer; white-space: nowrap; }
-.team-stats-table th:first-child button { justify-content: flex-start; }
+.team-stats-table th:nth-child(2) button { justify-content: flex-start; }
 .team-stats-table th button svg { width: 11px; opacity: 0.45; transition: opacity var(--transition), color var(--transition); }
 .team-stats-table th button:hover svg { opacity: 0.8; }
 .team-stats-table th button.is-sorted { color: var(--gold); }
 .team-stats-table th button.is-sorted svg { opacity: 1; color: var(--gold); }
 .team-stats-table td { height: 58px; border-bottom: 1px solid var(--line); padding: 7px 9px; text-align: right; }
 .team-stats-table tbody tr:last-child td { border-bottom: 0; }
-.team-stats-table td:first-child { position: sticky; z-index: 2; left: 0; width: 168px; min-width: 168px; max-width: 168px; background: white; box-shadow: 1px 0 var(--line); text-align: left; }
-.team-stats-table td:first-child > a { min-width: 0; display: flex; align-items: center; gap: 8px; color: inherit; text-decoration: none; }
-.team-stats-table td:first-child > a > span:not(.division-identity):not(.entity-logo) { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
-.team-stats-table td:first-child strong, .team-stats-table td:first-child small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.team-stats-table td:first-child strong { font-size: var(--text-2xs); }
-.team-stats-table td:first-child small { color: var(--muted); font-size: var(--text-2xs); }
-.team-stats-table td:first-child .entity-logo { flex: 0 0 auto; width: 28px !important; height: 28px !important; min-width: 28px; min-height: 28px; }
-/* Division mark now reads inline with the division name in the subline (not a
-   standalone right-edge icon), so the team name gets the width it needs. */
-.team-stats-table td:first-child small .division-identity-icon { display: inline-flex; vertical-align: middle; width: 14px; min-width: 14px; margin: 0 3px 1px 0; }
-/* Division is its own column (identity: mark + name), left-aligned and pinned
-   next to the sticky TEAM column so both identity columns stay put while the
-   numeric columns scroll. */
-.team-stats-table th.team-stats-division-head { position: sticky; left: 168px; z-index: 5; width: 116px; min-width: 116px; max-width: 116px; text-align: left; padding: 0 9px; font-size: var(--text-2xs); font-weight: var(--w-black); }
-.team-stats-table td.team-stats-division-cell { position: sticky; left: 168px; z-index: 2; width: 116px; min-width: 116px; max-width: 116px; text-align: left; background: white; box-shadow: 1px 0 var(--line); }
+/* Logo column — frozen at every width (icon only). */
+.team-stats-table td.team-stats-logo-cell { position: sticky; z-index: 2; left: 0; width: 44px; min-width: 44px; max-width: 44px; background: white; text-align: left; padding: 7px 0 7px 12px; }
+.team-stats-table td.team-stats-logo-cell > a { display: inline-flex; }
+.team-stats-table td.team-stats-logo-cell .entity-logo { flex: 0 0 auto; width: 28px !important; height: 28px !important; min-width: 28px; min-height: 28px; }
+/* Team-name column — frozen on desktop/tablet, scrolls on phones. */
+.team-stats-table td.team-stats-name-cell { position: sticky; z-index: 2; left: 44px; width: 132px; min-width: 132px; max-width: 132px; background: white; box-shadow: 1px 0 var(--line); text-align: left; }
+.team-stats-table td.team-stats-name-cell > a { min-width: 0; display: flex; color: inherit; text-decoration: none; }
+.team-stats-table td.team-stats-name-cell > a > span { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.team-stats-table td.team-stats-name-cell strong, .team-stats-table td.team-stats-name-cell small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-stats-table td.team-stats-name-cell strong { font-size: var(--text-2xs); }
+.team-stats-table td.team-stats-name-cell small { color: var(--muted); font-size: var(--text-2xs); }
+/* Division is its own column (identity: mark + name), left-aligned, never frozen. */
+.team-stats-table th.team-stats-division-head { z-index: 3; width: 116px; min-width: 116px; max-width: 116px; text-align: left; padding: 0 9px; font-size: var(--text-2xs); font-weight: var(--w-black); }
+.team-stats-table td.team-stats-division-cell { width: 116px; min-width: 116px; max-width: 116px; text-align: left; }
 .team-stats-table td.team-stats-division-cell .division-identity { min-width: 0; max-width: 100%; }
+/* Phones: only the logo stays frozen; the team name scrolls with the stats. */
+@media (max-width: 560px) {
+  .team-stats-table th:nth-child(2), .team-stats-table td.team-stats-name-cell { position: static; box-shadow: none; }
+  .team-stats-table td.team-stats-logo-cell { box-shadow: 1px 0 var(--line); }
+}
 .schedule-medal { flex: 0 0 auto; }
 
 .playoff-field-actions { display: flex; align-items: center; gap: 8px; }
