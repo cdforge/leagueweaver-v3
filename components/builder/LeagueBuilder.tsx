@@ -946,7 +946,7 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
       </div>
 
       <aside className="playoff-wizard-preview" aria-label="Live bracket preview">
-        <div className="ppw-preview-head"><span className="ppw-preview-eyebrow">Live preview</span><span className="ppw-preview-live">Updates as you set</span></div>
+        <div className="ppw-preview-head"><span className="ppw-preview-eyebrow">Live preview</span></div>
         {consolationAvailable && <div className="ppw-preview-toggle" role="tablist" aria-label="Preview bracket">
           <button type="button" role="tab" aria-selected={!showConsolationView} className={!showConsolationView ? "active" : ""} onClick={() => setPreviewView("championship")}>Championship</button>
           <button type="button" role="tab" aria-selected={showConsolationView} className={showConsolationView ? "active" : ""} onClick={() => setPreviewView("consolation")}>Consolation</button>
