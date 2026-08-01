@@ -1221,40 +1221,81 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .section-bar-actions svg { width: 17px; }
 .schedule-week-panel { min-width: 0; overflow: visible; border: 1px solid var(--line); background: white; }
 .schedule-week-panel > .section-bar { border: 0; }
-.schedule-week-header { background: var(--ink); color: white; }
-.schedule-week-header .bar-number { background: rgba(255,255,255,.12); color: white; }
+
+/* ── Week header: broadcast-style lower-third ────────────────────────────
+   Three groups: identity (numeral + title/date) · status (slate rank +
+   phase + markers) · controls (primary Edit + secondary filter). */
+.schedule-week-header { gap: 16px; justify-content: flex-start; border-left-width: 4px; background: linear-gradient(180deg, #1c2c23 0%, var(--ink) 60%); color: white; box-shadow: inset 0 1px 0 rgba(255,255,255,.06), var(--shadow-sm); }
 .schedule-week-header strong { color: white; }
-.schedule-week-header small { color: rgba(255,255,255,.72); }
-.schedule-week-header.is-thanksgiving { background: #712f24; box-shadow: inset 0 -4px var(--holiday-line); }
-.schedule-week-header.is-thanksgiving .bar-number { background: var(--holiday-line); color: #3d2318; }
-.schedule-week-title { min-width: 0; display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
-.thanksgiving-week-label { width: fit-content; border-radius: var(--radius-chip); background: var(--holiday-line); color: #552216; padding: 4px 7px; font-size: var(--text-2xs); font-style: normal; font-weight: var(--w-black); line-height: 1; text-transform: uppercase; white-space: nowrap; }
+.schedule-week-header small { color: rgba(255,255,255,.74); }
+
+/* Identity */
+.schedule-week-header > .week-lead { display: flex; align-items: center; gap: 13px; }
+.schedule-week-header .bar-number { position: relative; width: 52px; height: 52px; overflow: hidden; background: rgba(255,255,255,.05); color: white; box-shadow: inset 0 0 0 1px rgba(255,255,255,.13); font-size: 30px; letter-spacing: -.03em; line-height: 1; }
+.schedule-week-header .bar-number::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--field); }
+.week-lead-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.schedule-week-header .week-lead-copy small { font-size: var(--text-2xs); letter-spacing: .01em; }
+.schedule-week-title { min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.schedule-week-header .schedule-week-title strong { font-size: var(--text-lg); font-weight: var(--w-black); letter-spacing: -.01em; line-height: 1.05; }
+
+/* Status — divided from identity */
+.week-status { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding-left: 16px; border-left: 1px solid rgba(255,255,255,.14); }
+.week-matchup-rank-label { font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: .05em; color: rgba(255,255,255,.6); }
+.schedule-week-header .week-matchup-rank { min-height: 34px; gap: 7px; border-radius: 0; background: transparent; color: white; box-shadow: none; padding-inline: 0; }
+.schedule-week-header .week-matchup-rank.signal-competitive,
+.schedule-week-header .week-matchup-rank.signal-neutral,
+.schedule-week-header .week-matchup-rank.signal-lopsided { background: transparent; }
+.schedule-week-header .week-matchup-rank strong, .schedule-week-header .week-matchup-rank small { color: white; }
+.schedule-week-header .week-matchup-rank small { opacity: .78; }
+.schedule-week-header .week-matchup-rank .signal-bars i:not(.active) { background: rgba(255,255,255,.24); }
+
+/* Phase pill (clock-derived: Upcoming / Live / Final) */
+.week-phase-pill { display: inline-flex; align-items: center; gap: 5px; border-radius: var(--radius-chip); padding: 3px 8px; font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+.week-phase-pill small { font-size: var(--text-2xs); font-weight: var(--w-bold); opacity: .82; text-transform: none; letter-spacing: 0; }
+.week-phase-pill.phase-pre { background: rgba(255,255,255,.09); color: rgba(255,255,255,.74); }
+.week-phase-pill.phase-final { background: rgba(255,255,255,.06); color: rgba(255,255,255,.56); }
+.week-phase-pill.phase-live { background: rgba(255,90,90,.17); color: #ff8b8b; }
+.week-phase-pill .live-dot { width: 6px; height: 6px; border-radius: 50%; background: #ff5a5a; animation: liveDotPulse 1.6s ease-out infinite; }
+@keyframes liveDotPulse { 0% { box-shadow: 0 0 0 0 rgba(255,90,90,.5); } 70% { box-shadow: 0 0 0 5px rgba(255,90,90,0); } 100% { box-shadow: 0 0 0 0 rgba(255,90,90,0); } }
+@media (prefers-reduced-motion: reduce) { .week-phase-pill .live-dot, .section-bar-actions > .score-entry-trigger .due-dot { animation: none; } }
+
+/* Controls — quiet utilities by default; score entry escalates only when due */
+.schedule-week-header .section-bar-actions { margin-left: auto; gap: 6px; }
+.section-bar-actions > .score-entry-trigger { width: auto; min-width: 0; min-height: 40px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: rgba(255,255,255,.88); display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; font-family: inherit; font-size: var(--text-2xs); font-weight: var(--w-bold); white-space: nowrap; transition: background var(--transition), border-color var(--transition), box-shadow var(--transition); }
+.section-bar-actions > .score-entry-trigger:hover { background: rgba(255,255,255,.1); }
+.score-entry-trigger svg { width: 15px; height: 15px; }
+.score-entry-trigger .score-progress { font-size: var(--text-2xs); font-weight: var(--w-black); font-variant-numeric: tabular-nums; opacity: .55; padding-left: 1px; }
+/* Scores-due — the one loud state: solid amber (deliberately NOT the GOTW gold) */
+.section-bar-actions > .score-entry-trigger.needs-attention { border-color: #f2994a; background: #f2994a; color: #3a2410; box-shadow: 0 0 0 3px rgba(242,153,74,.22); }
+.section-bar-actions > .score-entry-trigger.needs-attention:hover { background: #f0a765; border-color: #f0a765; }
+.section-bar-actions > .score-entry-trigger.needs-attention .score-progress { opacity: .7; }
+.section-bar-actions > .score-entry-trigger .due-dot { width: 7px; height: 7px; border-radius: 50%; background: #7a3d05; flex: 0 0 auto; animation: liveDotPulse 1.6s ease-out infinite; }
+.section-bar-actions > .score-entry-trigger:focus-visible { outline: 3px solid rgba(255,255,255,.72); outline-offset: 2px; }
+
+/* Live accent */
+.schedule-week-header.is-live { border-left-color: #ff5a5a; }
+.schedule-week-header.is-live .bar-number::after { background: #ff5a5a; }
+
+/* Thanksgiving variant — maroon broadcast surface, tan accent */
+.schedule-week-header.is-thanksgiving { border-left-color: var(--holiday-line); background: linear-gradient(180deg, #7c3529 0%, #5c2620 65%); box-shadow: inset 0 1px 0 rgba(255,255,255,.08), inset 0 -3px var(--holiday-line), var(--shadow-sm); }
+.schedule-week-header.is-thanksgiving .bar-number { background: rgba(255,255,255,.08); box-shadow: inset 0 0 0 1px rgba(217,180,143,.4); }
+.schedule-week-header.is-thanksgiving .bar-number::after { background: var(--holiday-line); }
+.schedule-week-header.is-thanksgiving .week-status { border-left-color: rgba(217,180,143,.32); }
+.thanksgiving-week-label { display: inline-flex; align-items: center; gap: 4px; width: fit-content; border-radius: var(--radius-chip); background: var(--holiday-line); color: #552216; padding: 4px 7px; font-size: var(--text-2xs); font-style: normal; font-weight: var(--w-black); line-height: 1; text-transform: uppercase; white-space: nowrap; }
+
+/* Playoff variant — same broadcast shell, themed with the league's playoff color */
+.schedule-week-header.is-playoff { border: 1px solid rgba(255,255,255,.08); border-left: 4px solid var(--playoff-week-color, var(--field)); border-radius: var(--radius); background: linear-gradient(180deg, color-mix(in srgb, var(--playoff-week-color, #2e7d46) 22%, #16221b) 0%, var(--ink) 68%); }
+.schedule-week-header.is-playoff .bar-number { display: grid; place-items: center; background: rgba(255,255,255,.06); box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); }
+.schedule-week-header.is-playoff .bar-number::after { background: var(--playoff-week-color, var(--field)); }
+.schedule-week-header.is-playoff .bar-number > svg { width: 26px; height: 26px; color: #fff; }
+.week-phase-pill.phase-playoff { background: color-mix(in srgb, var(--playoff-week-color, var(--field)) 30%, rgba(255,255,255,.06)); color: #fff; }
+.playoff-week-context { font-size: var(--text-2xs); font-weight: var(--w-bold); color: rgba(255,255,255,.8); white-space: nowrap; }
+
 .schedule-week-header + .gotw-selection-reason, .schedule-week-header + .matchup-list, .schedule-week-panel > .matchup-list { border-top: 1px solid var(--line); }
 .schedule-week-panel > .matchup-list { border-right: 0; border-bottom: 0; border-left: 0; }
 .section-bar-actions > .tooltip-wrap > .section-bar-more { width: 44px; height: 44px; border: 0; background: transparent; color: white; }
 .section-bar-actions > .tooltip-wrap > .section-bar-more:hover { background: rgba(255,255,255,.1); }
 .section-bar-actions > .tooltip-wrap > .section-bar-more:focus-visible { outline: 3px solid rgba(255,255,255,.62); outline-offset: 1px; }
-.section-bar-actions > .score-entry-trigger { width: auto; min-width: 112px; min-height: 44px; border-color: rgba(255,255,255,.28); background: rgba(255,255,255,.1); color: white; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 11px; font-family: inherit; font-size: var(--text-2xs); font-weight: var(--w-bold); white-space: nowrap; }
-.section-bar-actions > .score-entry-trigger:hover { border-color: rgba(255,255,255,.5); background: rgba(255,255,255,.17); }
-.section-bar-actions > .score-entry-trigger.needs-attention { border-color: #f2d771; background: #e3b940; color: #3d2b00; box-shadow: 0 0 0 3px rgb(227 185 64 / .2); }
-.section-bar-actions > .score-entry-trigger.needs-attention:hover { background: #edca5f; }
-.section-bar-actions > .score-entry-trigger:focus-visible { outline: 3px solid rgba(255,255,255,.68); outline-offset: 2px; }
-.score-entry-trigger svg { width: 15px; height: 15px; }
-.rating-tier-filter { width: 188px; }
-.rating-tier-filter .custom-select-trigger { width: 100%; min-height: 44px; height: auto; display: flex; padding-block: 5px; }
-.rating-tier-filter .custom-select-trigger > svg { width: 15px; }
-.schedule-week-header .week-matchup-rank { min-height: 36px; border-radius: 0; background: transparent; color: white; box-shadow: none; padding-inline: 0; }
-.schedule-week-header .week-matchup-rank.signal-competitive,
-.schedule-week-header .week-matchup-rank.signal-neutral,
-.schedule-week-header .week-matchup-rank.signal-lopsided { background: transparent; }
-.schedule-week-header .week-matchup-rank strong, .schedule-week-header .week-matchup-rank small { color: white; }
-.schedule-week-header .week-matchup-rank small { opacity: .76; }
-.schedule-week-header .week-matchup-rank .signal-bars i:not(.active) { background: rgba(255,255,255,.22); }
-.schedule-week-header .rating-tier-filter .custom-select-trigger { border-color: transparent; background: rgba(255,255,255,.08); color: white; }
-.schedule-week-header .rating-tier-filter .custom-select-trigger:hover { border-color: rgba(255,255,255,.3); background: rgba(255,255,255,.13); }
-.schedule-week-header .rating-tier-filter .custom-select-trigger strong { color: white; }
-.schedule-week-header .rating-tier-filter .custom-select-trigger small,
-.schedule-week-header .rating-tier-filter .custom-select-trigger > svg { color: rgba(255,255,255,.72); }
 .matchup-list { border: 1px solid var(--line); background: white; box-shadow: var(--shadow-sm); }
 .matchup-row { position: relative; min-width: 790px; min-height: 100px; display: grid; grid-template-columns: 110px minmax(190px, 1fr) 90px minmax(190px, 1fr) minmax(185px, .8fr); align-items: center; gap: 14px; border-bottom: 1px solid var(--line); padding: 13px 16px; transition: background var(--transition); }
 .matchup-row:hover:not(.featured) { background: #fafcfb; }
@@ -1441,7 +1482,7 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .rating-filter-empty { min-height: 116px; display: flex; align-items: center; justify-content: center; gap: 12px; border-bottom: 1px solid var(--line); background: white; color: var(--muted); padding: 18px; }
 .rating-filter-empty strong { font-size: var(--text-xs); }
 .rating-filter-empty button { min-height: 44px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: white; color: var(--field-dark); padding: 8px 12px; font-weight: var(--w-black); cursor: pointer; }
-.matchup-card-main { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 86px minmax(0, 1fr); align-items: center; gap: 18px; }
+.matchup-card-main { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 168px minmax(0, 1fr); align-items: center; gap: 18px; }
 .matchup-card.is-simulated { box-shadow: inset 3px 0 #1b7180; }
 .matchup-card.is-simulated.is-gotw { box-shadow: inset 4px 0 var(--gold), inset 7px 0 #1b7180; }
 .matchup-card.simulation-override { box-shadow: inset 3px 0 #53679d; }
@@ -1601,7 +1642,7 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .gotw-rating strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); }
 .playoff-impact-marker { background: #e9eef8; color: #304d78; box-shadow: inset 0 0 0 1px #bdc9dc; }
 .gotw-timeline-item > .matchup-card { border: 1px solid var(--line); border-left: 4px solid var(--gold); border-radius: 0 0 var(--radius) var(--radius); padding: 18px; }
-.gotw-view .matchup-card-main { min-height: 104px; grid-template-columns: minmax(0, 1fr) 142px minmax(0, 1fr); gap: 24px; }
+.gotw-view .matchup-card-main { min-height: 104px; grid-template-columns: minmax(0, 1fr) 210px minmax(0, 1fr); gap: 24px; }
 .gotw-view .team-identity-block { grid-template-columns: 24px 50px minmax(0, 1fr); grid-template-rows: auto auto; }
 .gotw-view .team-identity-block .team-identity-rank { grid-column: 1; grid-row: 1 / span 2; }
 .gotw-view .team-identity-block .team-identity-mark { grid-column: 2; grid-row: 1 / span 2; }
@@ -1612,7 +1653,7 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .gotw-view .team-identity-block.mirrored .team-identity-record { grid-column: 1; grid-row: 2; align-items: center; justify-content: flex-end; }
 .gotw-view .team-identity-block.mirrored .team-identity-mark { grid-column: 2; grid-row: 1 / span 2; }
 .gotw-view .team-identity-block.mirrored .team-identity-rank { grid-column: 3; grid-row: 1 / span 2; }
-.gotw-view .matchup-score { width: 142px; border-radius: var(--radius-sm); background: rgba(255, 255, 255, .62); padding: 10px 9px 8px; }
+.gotw-view .matchup-score { width: 210px; border-radius: var(--radius-sm); background: rgba(255, 255, 255, .62); padding: 10px 9px 8px; }
 .gotw-view .team-identity-name strong { font-size: var(--text-lg); }
 .gotw-view .matchup-score strong { font-size: var(--text-3xl); }
 .gotw-holiday { width: fit-content; }
@@ -3417,11 +3458,7 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .toolbar-actions { width: 100%; overflow-x: auto; }
   .toolbar-actions button { flex: 1; min-width: 65px; }
   .workspace-content { width: calc(100% - 24px); margin-block: 12px; }
-  .section-bar { align-items: stretch; flex-direction: column; gap: 9px; }
-  .section-bar-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
-  .section-bar-actions > .score-entry-trigger { flex: 1 1 150px; }
-  .section-bar-actions .week-markers { flex: 1 1 100%; }
-  .rating-tier-filter { width: min(240px, calc(100% - 48px)); }
+  /* Week-header responsive layout is container-driven — see the @container blocks at the end of this file. */
   .matchup-ratings-summary > span { align-items: flex-start; flex-direction: column; justify-content: center; gap: 2px; padding: 9px; }
   .matchup-ratings-summary strong { font-size: var(--text-xl); }
   .matchup-ratings-controls { align-items: stretch; flex-direction: column; }
@@ -3455,7 +3492,7 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .matchup-card-badges { flex-wrap: wrap; gap: 5px; }
   .matchup-venue { max-width: 100%; margin-left: 0; }
   .matchup-signal { margin-left: 0; }
-  .matchup-card-main { grid-template-columns: minmax(0, 1fr) 52px minmax(0, 1fr); gap: 6px; }
+  .matchup-card-main { grid-template-columns: minmax(0, 1fr) 128px minmax(0, 1fr); gap: 6px; }
   .team-identity-block, .team-identity-block.without-record { grid-template-columns: 20px 50px minmax(0, 1fr); gap: 6px; align-items: center; }
   .team-identity-block.compact, .team-identity-block.compact.without-record { grid-template-columns: 20px 42px minmax(0, 1fr); }
   .team-identity-rank { grid-column: 1; grid-row: 1 / span 2; width: 20px; height: 22px; font-size: var(--text-2xs); }
@@ -3494,7 +3531,7 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .gotw-rating { grid-column: 2; align-items: flex-start; }
   .gotw-timeline-item > header .week-markers { grid-column: 1 / -1; }
   .gotw-timeline-item > .matchup-card { padding: 12px 10px; }
-  .gotw-view .matchup-card-main { grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr); gap: 6px; }
+  .gotw-view .matchup-card-main { grid-template-columns: minmax(0, 1fr) 128px minmax(0, 1fr); gap: 6px; }
   .gotw-view .team-identity-block { grid-template-columns: 20px 50px minmax(0, 1fr); }
   .gotw-view .team-identity-block.mirrored { grid-template-columns: minmax(0, 1fr) 50px 20px; }
   .gotw-view .matchup-score { width: auto; background: transparent; padding: 4px 0; }
@@ -3818,9 +3855,6 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .team-schedule-page-shell .custom-select-trigger strong, .team-schedule-page-shell .custom-select-menu strong { font-size: var(--workspace-text-body); }
 .workspace-page .custom-select-trigger small, .workspace-page .custom-select-menu small,
 .team-schedule-page-shell .custom-select-trigger small, .team-schedule-page-shell .custom-select-menu small { font-size: var(--workspace-text-meta); }
-.workspace-page .schedule-week-header .rating-tier-filter .custom-select-trigger strong { color: white; }
-.workspace-page .schedule-week-header .rating-tier-filter .custom-select-trigger small,
-.workspace-page .schedule-week-header .rating-tier-filter .custom-select-trigger > svg { color: rgba(255,255,255,.72); }
 
 .workspace-season-switch strong, .workspace-rail nav button, .workspace-notice { font-size: var(--workspace-text-body); }
 .workspace-season-switch small, .rail-bottom p, .rail-bottom a { font-size: var(--workspace-text-meta); }
@@ -4247,4 +4281,29 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .stakes-out { font-size: 16px; white-space: normal; }
   .stakes-bsub, .stakes-conds, .stakes-hardway { padding-left: 0; }
   .stakes-cond-game { display: block; }
+}
+
+/* ── Week header responsive — container-driven (responds to the header's own
+   width, not the viewport, so the workspace chrome doesn't throw it off). ── */
+.schedule-week-panel, .playoff-week-schedule { container-type: inline-size; }
+
+/* Tablet: identity + controls on row 1, the full status group on row 2. */
+@container (max-width: 910px) {
+  .schedule-week-header { flex-direction: row; flex-wrap: wrap; align-items: center; row-gap: 10px; column-gap: 14px; }
+  .schedule-week-header > .week-lead { order: 1; flex: 1 1 auto; min-width: 0; }
+  .schedule-week-header > .section-bar-actions { order: 2; flex: 0 0 auto; width: auto; margin-left: auto; gap: 4px; }
+  .schedule-week-header > .section-bar-actions > .score-entry-trigger { flex: 0 0 auto; }
+  .schedule-week-header > .week-status { order: 3; flex-basis: 100%; width: 100%; padding-left: 0; border-left: 0; }
+}
+
+/* Mobile: grid so the score button stays pinned top-right no matter how wide the
+   week identity is (long round names, the Thanksgiving chip); status spans row 2. */
+@container (max-width: 560px) {
+  .schedule-week-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "lead actions" "status status"; align-items: start; column-gap: 10px; row-gap: 11px; }
+  .schedule-week-header > .week-lead { grid-area: lead; }
+  .schedule-week-header > .section-bar-actions { grid-area: actions; justify-self: end; width: auto; margin-left: 0; }
+  .schedule-week-header > .week-status { grid-area: status; width: 100%; padding-left: 0; border-left: 0; }
+  .schedule-week-header > .section-bar-actions > .score-entry-trigger { min-height: 38px; }
+  .week-status .week-markers { flex: 1 1 100%; }
+  .thanksgiving-week-label .thx-text { display: none; }
 }
