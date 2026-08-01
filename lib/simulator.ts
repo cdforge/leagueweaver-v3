@@ -463,7 +463,11 @@ export function restartSimulationFromBeginning(sandbox: SimulationSandbox): Simu
       playoffGames: undefined,
       rankHistory: undefined,
     },
-    results: {},
+    // Restart resets the SIMULATION, not the season. Re-seed the anchored
+    // recorded (real) results so a restart-then-commit can never strip a
+    // commissioner's real scores back to a blank schedule (H11). Only the
+    // hypothetical simulated games are cleared.
+    results: recordedResults(sandbox.baseSchedule),
     playoff: undefined,
   });
 }

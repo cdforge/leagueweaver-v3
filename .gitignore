@@ -2,6 +2,8 @@ node_modules/
 .next/
 .next-qa/
 .next-build/
+.next-cinematic/
+.next-connect/
 *.tsbuildinfo
 .claude/worktrees/
 .vercel/

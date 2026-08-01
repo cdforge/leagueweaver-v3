@@ -508,7 +508,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .division-identity-edit > div:last-child input { min-width: 0; width: 100%; height: 27px; border: 0; border-bottom: 1px solid transparent; outline: 0; padding: 2px 4px; font-size: var(--text-2xs); font-weight: var(--w-bold); }
 .division-identity-edit > div:last-child input + input { color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-medium); }
 .division-identity-edit > div:last-child input:focus { border-color: var(--field); }
-.division-controls { grid-template-columns: 220px 1fr; }
+.division-controls { grid-template-columns: minmax(300px, 360px) 1fr; }
+.segmented-wrap button { padding: 0 4px; }
+.segmented button:disabled { opacity: 0.4; cursor: not-allowed; background: var(--canvas); color: var(--muted); }
+.segmented button:disabled:hover { background: var(--canvas); color: var(--muted); }
 .division-assignments { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .division-assign-head { min-height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 11px; border-bottom: 1px solid var(--line); background: var(--canvas); }
 .division-assign-head strong { font-size: var(--text-2xs); }
@@ -944,49 +947,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .wp-league-mark { flex: 0 0 auto; }
 .wp-topline strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); color: var(--ink); }
 .wp-topline > span { color: var(--muted); font-size: var(--text-2xs); }
-.wp-weeks { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 14px; }
-.wp-weeks button { min-width: 32px; text-align: center; padding: 5px 0; border: 1px solid var(--line); border-radius: var(--radius); background: white; color: var(--muted); font: inherit; font-size: var(--text-2xs); font-weight: var(--w-black); cursor: pointer; transition: border-color var(--transition), background var(--transition), color var(--transition); }
-.wp-weeks button:hover { border-color: var(--field); color: var(--field-dark); background: var(--field-soft); }
-.wp-weeks button.on { border-color: var(--field); background: var(--field); color: white; }
 .wp-weekhead { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; border-radius: var(--radius); background: var(--ink); color: white; padding: 9px 13px; }
 .wp-weekhead > b { flex: 0 0 auto; color: var(--gold); font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); line-height: 1; }
 .wp-weekhead > span { display: flex; flex-direction: column; gap: 1px; }
 .wp-weekhead strong { font-size: var(--text-xs); }
 .wp-weekhead small { color: #b8c7c0; font-size: var(--text-2xs); }
 .wp-weekhead em { margin-left: auto; font-style: normal; color: #b8c7c0; font-size: var(--text-2xs); font-weight: var(--w-bold); }
-.wp-rowhead { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
-.wp-gameno { color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: .03em; }
-.wp-tag { display: inline-flex; align-items: center; gap: 5px; border-radius: var(--radius-chip); background: var(--field-soft); color: var(--field-dark); font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: .03em; padding: 2px 7px; }
-.wp-tag.gotw { background: var(--gold-mid); color: white; }
-.wp-tag.div { background: var(--canvas); color: var(--ink); }
-.wp-divmark { flex: 0 0 auto; width: 13px; height: 13px; border-radius: var(--radius-chip); object-fit: cover; }
-.wp-rating { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; }
-.wp-rating svg { flex: 0 0 auto; width: 12px; color: var(--field); }
-.wp-rating b { color: var(--field); font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-md); line-height: 1; }
-.wp-rating small { color: var(--muted); font-size: var(--text-2xs); white-space: nowrap; }
-.wp-rows { display: grid; gap: 10px; }
-.wp-row { position: relative; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 12px 14px; }
-.wp-row.is-gotw { border-color: var(--gold-mid); border-left-width: 3px; background: var(--gold-soft); }
-.wp-match { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; }
-.wp-team { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.wp-team.wp-right { justify-content: flex-end; }
-.wp-mark { flex: 0 0 auto; }
-.wp-seed { flex: 0 0 auto; color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-black); }
-.wp-seed::before { content: "#"; }
-.wp-name { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
-.wp-name small { color: var(--muted); font-size: var(--text-2xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wp-name strong { color: var(--ink); font-size: var(--text-xs); font-weight: var(--w-black); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wp-record { color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .02em; }
-.wp-team.wp-right .wp-name { align-items: flex-end; text-align: right; }
-.wp-center { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
-.wp-center > small { color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .04em; }
-.wp-venue { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: var(--text-2xs); white-space: nowrap; }
-.wp-venue svg { flex: 0 0 auto; width: 9px; }
-.wp-venue > span { overflow: hidden; text-overflow: ellipsis; max-width: 118px; }
-.wp-venue-mark { flex: 0 0 auto; width: 16px; height: 16px; border-radius: var(--radius-chip); object-fit: cover; }
-.wp-weeks button.thanks { border-color: var(--gold-mid); color: var(--gold-mid); }
-.wp-weeks button.thanks.on { background: var(--gold-mid); border-color: var(--gold-mid); color: white; }
-.wp-row.is-thanks { border-color: var(--gold-mid); background: var(--gold-soft); }
 
 /* Source chooser (wizard Step 1) */
 .start-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
@@ -1014,7 +980,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .welcome-capability-grid { grid-template-columns: 1fr 1fr; }
   .welcome-platforms-inner { gap: 12px; }
   .welcome-showcase { padding: 40px 0; }
-  .wp-rating small { display: none; }
   .welcome-step-row { grid-template-columns: 1fr; }
   .start-import-row { grid-template-columns: 1fr; }
   .start-import-row .start-option { flex-direction: row; align-items: center; }
@@ -1023,8 +988,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 
 @media (max-width: 560px) {
   .welcome-capability-grid { grid-template-columns: 1fr; }
-  .wp-rating b { display: none; }
-  .wp-center > small { display: none; }
+  /* Drop the browser-window frame on phones so the schedule preview sits directly
+     on the section — no surrounding box, fill, or chrome bar. */
+  .welcome-showcase-frame { border: 0; border-radius: 0; background: transparent; box-shadow: none; overflow: visible; }
+  .welcome-showcase-bar { display: none; }
+  .welcome-preview { padding: 0; background: transparent; }
 }
 
 /* Season workspace */
@@ -1343,12 +1311,18 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .gotw-selection-reason strong { font-size: var(--text-sm); }
 .gotw-selection-reason p { margin: 0; color: #5b615e; font-size: var(--text-xs); line-height: 1.45; }
 .gotw-selection-reason p span { color: var(--ink); font-weight: var(--w-bold); }
-.matchup-card-list { display: grid; }
-.matchup-card { position: relative; min-width: 0; scroll-margin-block: 110px; border-bottom: 1px solid var(--line); background: white; padding: 12px 14px 10px; }
+/* Individual spaced cards at every width (same treatment as mobile): a canvas tray
+   holds bordered, rounded cards with breathing room between them. */
+.matchup-card-list { display: grid; gap: 10px; background: var(--canvas); padding: 12px; }
+.matchup-card { position: relative; min-width: 0; scroll-margin-block: 110px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; background: white; padding: 12px 14px; }
 .matchup-card.is-stat-highlight { background: #fffdf4; box-shadow: inset 4px 0 var(--gold), inset 0 0 0 1px color-mix(in srgb, var(--gold) 58%, white); }
-.matchup-card:last-child { border-bottom: 0; }
+.matchup-card:last-child { border-bottom: 1px solid var(--line); }
 .matchup-card.is-gotw { background: #fffaf0; box-shadow: inset 4px 0 var(--gold); }
-.matchup-card-badges { min-height: 28px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding-bottom: 7px; }
+.matchup-card-badges { order: 2; min-height: 28px; margin-top: 11px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+/* Desktop: the chip / meta wrappers are transparent so everything flows as one
+   wrapping row (unchanged); mobile splits them into two footer rows. */
+.matchup-card-chips, .matchup-card-meta { display: contents; }
+.matchup-venue-mono { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: 0 0 auto; border-radius: 4px; font-size: 8px; font-weight: var(--w-black); line-height: 1; }
 .gotw-chip, .series-chip { width: fit-content; min-height: 24px; display: inline-flex; align-items: center; gap: 5px; border-radius: var(--radius-chip); padding: 4px 7px; font-family: var(--font-archivo), sans-serif; font-size: var(--text-2xs); font-weight: var(--w-bold); letter-spacing: 0; line-height: 1.2; white-space: nowrap; }
 .gotw-chip { background: var(--gold-soft); color: #6b5300; box-shadow: none; text-transform: none; }
 .gotw-chip svg { width: 11px; height: 11px; }
@@ -1420,7 +1394,45 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .rating-filter-empty { min-height: 116px; display: flex; align-items: center; justify-content: center; gap: 12px; border-bottom: 1px solid var(--line); background: white; color: var(--muted); padding: 18px; }
 .rating-filter-empty strong { font-size: var(--text-xs); }
 .rating-filter-empty button { min-height: 44px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: white; color: var(--field-dark); padding: 8px 12px; font-weight: var(--w-black); cursor: pointer; }
-.matchup-card-main { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 86px minmax(0, 1fr); align-items: center; gap: 18px; }
+.matchup-card-main { order: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 86px minmax(0, 1fr); align-items: center; gap: 18px; }
+.matchup-card > .game-details-desktop, .matchup-card > .game-details-mobile { order: 3; }
+/* Desktop: the per-team row wrapper is transparent (team blocks stay direct grid
+   children, center score shown) — the inline score only appears on mobile. */
+.matchup-team-row { display: contents; }
+.matchup-row-score { display: none; }
+/* Desktop/tablet scoreboard blocks: team name over a muted record subrow, with the
+   home side mirrored — the same hierarchy as the mobile card and approved mockup.
+   Scoped to .matchup-card-main so other team-identity uses keep their own layout;
+   the ≤560 rules (later in the file) override this with the tighter mobile sizing. */
+.matchup-card-main .team-identity-block,
+.matchup-card-main .team-identity-block.mirrored {
+  grid-template-columns: 24px auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 11px;
+  row-gap: 2px;
+  align-items: center;
+}
+.matchup-card-main .team-identity-rank { grid-column: 1; grid-row: 1 / span 2; align-self: center; }
+/* Crest sized to span the full text stack (top of city name to bottom of the
+   division record). The stack is a consistent 3 lines, so a fixed square matches. */
+.matchup-card-main .team-identity-mark { grid-column: 2; grid-row: 1 / span 2; align-self: center; width: 54px; height: 54px; }
+.matchup-card-main .team-identity-mark .entity-logo { width: 54px !important; height: 54px !important; min-width: 0; min-height: 0; }
+.matchup-card-main .team-identity-name { grid-column: 3; grid-row: 1; }
+.matchup-card-main .team-identity-name small { display: block; font-size: var(--text-2xs); line-height: 1.1; }
+.matchup-card-main .team-identity-name strong { font-size: var(--text-md); line-height: 1.15; }
+.matchup-card-main .team-identity-record { grid-column: 3; grid-row: 2; min-width: 0; flex-direction: row; align-items: center; justify-content: flex-start; gap: 6px; }
+/* League record a step larger than the division record; division record shown in
+   parentheses with its icon, all vertically centered as one row. */
+.matchup-card-main .team-identity-record > strong { color: var(--muted); font-family: var(--font-archivo), sans-serif; font-size: var(--text-sm); font-weight: var(--w-bold); }
+.matchup-card-main .team-identity-division-record { align-items: center; gap: 3px; }
+.matchup-card-main .team-identity-division-record > b { font-size: var(--text-2xs); }
+.matchup-card-main .team-identity-division-record > b::before { content: "("; }
+.matchup-card-main .team-identity-division-record > b::after { content: ")"; }
+.matchup-card-main .team-identity-block.mirrored { grid-template-columns: minmax(0, 1fr) auto 24px; }
+.matchup-card-main .team-identity-block.mirrored .team-identity-rank { grid-column: 3; grid-row: 1 / span 2; }
+.matchup-card-main .team-identity-block.mirrored .team-identity-mark { grid-column: 2; grid-row: 1 / span 2; }
+.matchup-card-main .team-identity-block.mirrored .team-identity-name { grid-column: 1; grid-row: 1; text-align: right; }
+.matchup-card-main .team-identity-block.mirrored .team-identity-record { grid-column: 1; grid-row: 2; justify-content: flex-end; }
 .matchup-card.is-simulated { box-shadow: inset 3px 0 #1b7180; }
 .matchup-card.is-simulated.is-gotw { box-shadow: inset 4px 0 var(--gold), inset 7px 0 #1b7180; }
 .matchup-card.simulation-override { box-shadow: inset 3px 0 #53679d; }
@@ -3769,6 +3781,48 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .team-identity-record strong { font-size: var(--text-md); line-height: 1; }
   .matchup-score { width: 100%; min-height: 40px; grid-template-columns: 1fr auto 1fr auto; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius); background: white; padding: 5px 9px; }
   .matchup-score small { grid-column: auto; align-self: center; justify-self: end; font-size: var(--text-2xs); }
+  /* Mobile matchup card (ESPN-style): two team rows each with an inline score
+     pinned right; league + division record (with div logo) read as a muted
+     subrow under the name; the signals — rating bars + score + ranks, venue +
+     home crest, GOTW/upset — drop to a compact footer strip. */
+  /* Breathing room: each game is its own rounded card floating on the canvas, so
+     the gaps read as clean separation (not white filler) and the first card
+     clears the dark week header. */
+  .matchup-card-list { gap: 10px; background: var(--canvas); padding: 11px 0 14px; box-shadow: none; }
+  /* Drop the panel frame on mobile — the cards carry their own borders now, so
+     the wrapping outline just made the games look like one connected group. */
+  .schedule-week-panel { border: 0; box-shadow: none; }
+  .matchup-card { display: flex; flex-direction: column; padding: 11px 13px; border: 1px solid var(--line); border-radius: 12px; }
+  .matchup-card:last-child { border-bottom: 1px solid var(--line); }
+  .matchup-card-main { order: 1; display: flex; flex-direction: column; align-items: stretch; gap: 3px; }
+  .matchup-card .game-details-mobile { order: 3; }
+  .matchup-card-main > .matchup-score { display: none; }
+  /* Team row = identity + inline score */
+  .matchup-team-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+  .matchup-team-row > .team-identity-block { flex: 1; min-width: 0; min-height: 0; border: 0; background: transparent; padding: 0; }
+  .matchup-row-score { display: block; flex: 0 0 auto; font-family: var(--font-barlow-condensed), sans-serif; font-variant-numeric: tabular-nums; line-height: 1; white-space: nowrap; }
+  .matchup-row-score > strong { color: var(--ink); font-size: var(--text-2xl); }
+  .matchup-row-score > strong.loser { color: #9aa39e; font-size: var(--text-xl); }
+  /* Team identity: crest + name (line 1), both records as a muted subrow (line 2) */
+  .matchup-card-main .team-identity-block, .matchup-card-main .team-identity-block.mirrored { grid-template-columns: auto auto minmax(0, 1fr); grid-template-rows: auto auto; gap: 0 9px; align-items: center; text-align: left; }
+  .matchup-card-main .team-identity-rank, .matchup-card-main .team-identity-block.mirrored .team-identity-rank { grid-area: 1 / 1 / 3 / 2; align-self: center; }
+  .matchup-card-main .team-identity-mark, .matchup-card-main .team-identity-block.mirrored .team-identity-mark { grid-area: 1 / 2 / 3 / 3; align-self: center; width: 54px; height: 54px; }
+  .matchup-card-main .team-identity-mark .entity-logo { width: 54px !important; height: 54px !important; min-width: 0; min-height: 0; }
+  .matchup-card-main .team-identity-name, .matchup-card-main .team-identity-block.mirrored .team-identity-name { grid-area: 1 / 3 / 2 / 4; text-align: left; }
+  .matchup-card-main .team-identity-name small { display: block; font-size: var(--text-2xs); line-height: 1.05; }
+  .matchup-card-main .team-identity-name strong { -webkit-line-clamp: 1; font-size: var(--text-lg); line-height: 1.1; }
+  .matchup-card-main .team-identity-record, .matchup-card-main .team-identity-block.mirrored .team-identity-record { grid-area: 2 / 3 / 3 / 4; flex-direction: row; align-items: center; justify-content: flex-start; gap: 8px; margin-top: 2px; }
+  .matchup-card-main .team-identity-record > strong { font-size: var(--text-xs); color: var(--muted); font-weight: var(--w-bold); }
+  /* Footer, two rows: a scrollable chip strip, then venue (bottom-left) + rating
+     (bottom-right, with the ranks inline to the right of the score). */
+  .matchup-card-badges { order: 2; min-height: 0; margin-top: 9px; padding: 9px 0 0; border-top: 1px solid var(--line); flex-direction: column; align-items: stretch; gap: 8px; }
+  .matchup-card-chips { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .matchup-card-chips::-webkit-scrollbar { display: none; }
+  .matchup-card-chips > * { flex: 0 0 auto; }
+  .matchup-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .matchup-card-meta .matchup-venue { flex: 1; min-width: 0; max-width: none; margin-left: 0; align-items: center; }
+  .matchup-card-meta .matchup-signal { flex: 0 0 auto; flex-direction: row; align-items: center; gap: 8px; }
+  .matchup-card-meta .matchup-signal-ranks { line-height: 1; }
   .score-entry-modal .data-head { display: none; }
   .score-entry-row { min-width: 0; grid-template-columns: minmax(0, 1fr) 76px; gap: 8px 10px; padding: 10px; }
   .score-team { min-width: 0; }

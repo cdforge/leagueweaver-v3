@@ -46,6 +46,7 @@ import { GotwWorkspace } from "@/components/season/GotwWorkspace";
 import { BracketConnectorLayer, type BracketConnection } from "@/components/season/BracketConnectorLayer";
 import { ConsolationBracket, FinalPlacementTable } from "@/components/season/ConsolationBracket";
 import { GameBadgeChip, MatchupCard, MatchupRatingLegend, MatchupSeriesChip, TeamIdentityBlock, WeekMatchupRank } from "@/components/season/MatchupPresentation";
+import { WeekSelector } from "@/components/season/WeekSelector";
 import { SimulatorWorkspace, type SimulatorResultView } from "@/components/season/SimulatorWorkspace";
 import { StatsWorkspace } from "@/components/season/StatsWorkspace";
 import { TeamScheduleView } from "@/components/season/TeamSchedulePage";
@@ -386,26 +387,30 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
         pureMatchup: `${teamDisplayName(gotwPureAway, display.cityNames)} vs ${teamDisplayName(gotwPureHome, display.cityNames)}`,
       }
     : undefined;
-  const weekSelector = <div ref={weekStripRef} className="week-selector schedule-week-selector" aria-label="Select regular season or playoff week">
-    {schedule.weeks.map((item) => {
-      const isThanksgiving = getNflWeekWindow(schedule.setup.seasonYear, item.weekNumber).holidays.includes("Thanksgiving");
-      return <button type="button" aria-current={item.weekNumber === selectedWeek ? "true" : undefined} aria-label={`Week ${item.weekNumber}, ${item.dateLabel}${item.weekNumber === selectedWeek ? ", selected" : ""}${isThanksgiving ? ", Thanksgiving week" : ""}`} className={`${item.weekNumber === selectedWeek ? "active" : ""}${isThanksgiving ? " is-thanksgiving" : ""}`.trim()} key={item.weekNumber} onClick={() => setSelectedWeek(item.weekNumber)}>{isThanksgiving && <span className="week-thanksgiving-mark" title="Thanksgiving week" aria-hidden="true">🦃</span>}<span>W{item.weekNumber}</span><small>{item.dateLabel.split(",")[0]}</small><WeekMatchupRank rank={item.matchupRank} total={schedule.weeks.length} compact /></button>;
-    })}
-    {canAccessPlayoffs && <span className="week-selector-divider" aria-hidden="true" />}
-    {canAccessPlayoffs && playoffRounds.map((round) => <Tooltip key={round.weekNumber} label={`${round.name}, NFL Week ${round.weekNumber}`}>
-      <button
-        type="button"
-        className={`playoff-week-button ${round.weekNumber === selectedWeek ? "active" : ""}`}
-        style={{ "--playoff-week-color": schedule.setup.playoffs.color, "--playoff-week-ink": readableTextColor(schedule.setup.playoffs.color) } as CSSProperties}
-        aria-label={`${round.name}, NFL Week ${round.weekNumber}`}
-        onClick={() => setSelectedWeek(round.weekNumber)}
-      >
-        <span>W{round.weekNumber}</span>
-        <small>{playoffRoundShortLabel(round.name)}</small>
-        <span className="playoff-week-selector-icon"><Trophy /></span>
-      </button>
-    </Tooltip>)}
-  </div>;
+  const weekSelector = <WeekSelector
+    stripRef={weekStripRef}
+    ariaLabel="Select regular season or playoff week"
+    weeks={schedule.weeks.map((item) => ({ weekNumber: item.weekNumber, dateLabel: item.dateLabel, matchupRank: item.matchupRank, isThanksgiving: getNflWeekWindow(schedule.setup.seasonYear, item.weekNumber).holidays.includes("Thanksgiving") }))}
+    totalWeeks={schedule.weeks.length}
+    selectedWeek={selectedWeek}
+    onSelect={setSelectedWeek}
+    trailing={<>
+      {canAccessPlayoffs && <span className="week-selector-divider" aria-hidden="true" />}
+      {canAccessPlayoffs && playoffRounds.map((round) => <Tooltip key={round.weekNumber} label={`${round.name}, NFL Week ${round.weekNumber}`}>
+        <button
+          type="button"
+          className={`playoff-week-button ${round.weekNumber === selectedWeek ? "active" : ""}`}
+          style={{ "--playoff-week-color": schedule.setup.playoffs.color, "--playoff-week-ink": readableTextColor(schedule.setup.playoffs.color) } as CSSProperties}
+          aria-label={`${round.name}, NFL Week ${round.weekNumber}`}
+          onClick={() => setSelectedWeek(round.weekNumber)}
+        >
+          <span>W{round.weekNumber}</span>
+          <small>{playoffRoundShortLabel(round.name)}</small>
+          <span className="playoff-week-selector-icon"><Trophy /></span>
+        </button>
+      </Tooltip>)}
+    </>}
+  />;
   if (selectedPlayoffIndex >= 0) {
     return <div className="workspace-stack">
       {weekSelector}

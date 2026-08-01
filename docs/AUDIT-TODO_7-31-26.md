@@ -129,13 +129,20 @@ Every story is self-contained — an engineer or designer should be able to pick
 **Acceptance:** In division scope, a team's PRE RK is its division preseason seed and movement is division-relative; the eliminated bottom team no longer shows a positive arrow.
 
 ## H11 · Simulator Restart + Save can wipe the real season
-**Type:** data-loss · **Status:** open
+**Type:** data-loss · **Status:** ✓ fixed (engine + regression test; live UI blocked — see R-sim)
 **Problem:** "Restart Week 1" clears **all** sandbox results including the recorded (real) ones; `materialize` then strips scores from every game not in `results` and nulls `playoffGames`. So Restart-then-Save replaces the real schedule with a blank one — no confirm, no diff, and the banner reads "0 simulated" so it looks empty/safe right before the destructive save.
 **Where:** `restartSimulationFromBeginning` `lib/simulator.ts:457-468`; commit `SeasonWorkspace.tsx:1553-1562`; save buttons `SimulatorWorkspace.tsx:300`.
 **Current:** silent full wipe possible.
 **Target:** Gate `commitSimulation` behind the H1 confirm ("This replaces N real scores"). Additionally, **refuse to commit** a sandbox whose `results` no longer contain the recorded set, or re-seed recorded results on restart so materialize can't erase real data.
 **Acceptance:** No path overwrites recorded scores without an explicit, accurate confirm; a restarted-then-committed sandbox can't blank real data.
 **Deps:** H1.
+**Fix (2026-08-01):** `restartSimulationFromBeginning` now re-seeds `recordedResults` instead of `{}` (`lib/simulator.ts:457`), so materialize can never strip real scores; `commitSimulation` also refuses to commit a schedule carrying fewer real scores than the season already has (`SeasonWorkspace.tsx`). The H1 commit confirm already counts real scores accurately. Covered by `scripts/simulator-matrix.ts` (rewrote the completed-restart check that had codified the bug; added a partial-season regression). Engine-verified; **could not** be driven live — see R-sim.
+
+## R-sim · Simulator has no reachable entry (orphaned, like PlayoffsView)
+**Type:** navigation/dead-code · **Status:** open (discovered while doing H11)
+**Problem:** The only `setView("simulator")` lives inside the simulation banner (`SeasonWorkspace.tsx:1933`), which renders only when a `simulation` already exists — and nothing starts one. `SimulatorLaunch` (the "Play Simulator" screen) renders only when `view === "simulator"`, and the URL guard (`:1354`) rejects `?view=simulator` (not in `VIEW_ITEMS`). So the whole Simulator (`SimulatorWorkspace`, launch, banner) is unreachable through the UI. Verified live: `?view=simulator` lands on League Schedule with no simulator affordance anywhere.
+**Where:** entry gap around `SeasonWorkspace.tsx:1933/1945`, guard `:1347-1354`.
+**Target:** Wire a real entry (a rail/toolbar "Simulator" action or accept `?view=simulator`), then live-verify H11's restart→save path once reachable.
 
 ## H12 · Playoff bracket correctness + z-order — ⏸ HOLD (gated, unQA'd)
 **Type:** correctness · **Status:** parked (playoffs)

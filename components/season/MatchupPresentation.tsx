@@ -82,12 +82,15 @@ export function MatchupSeriesChip({ game, division }: { game: ScheduledGame; div
     "--division-chip-color": division.color,
     "--division-chip-ink": accessibleTeamColor(division.color),
   } as React.CSSProperties : undefined;
-  return <span className={`series-chip ${isDivision ? "division-series-chip" : "cross-series-chip"}`} style={style} aria-label={division && isDivision ? `${division.name} division, game ${game.seriesGame} of ${game.seriesLength}` : label}>
+  // A one-off (series of one) needs no "1 of 1" — only note the count when the
+  // pair actually plays a multi-game series (1 of 2, 2 of 2).
+  const seriesCount = game.seriesLength > 1 ? ` ${game.seriesGame} of ${game.seriesLength}` : "";
+  return <span className={`series-chip ${isDivision ? "division-series-chip" : "cross-series-chip"}`} style={style} aria-label={division && isDivision ? `${division.name} division${seriesCount ? `, game${seriesCount}` : ""}` : label}>
     {isDivision ? <>
       {division && <DivisionMark division={division} />}
-      <span>Div {game.seriesGame} of {game.seriesLength}</span>
+      <span>Div{seriesCount}</span>
     </> : <>
-      <span>Cross-div {game.seriesGame} of {game.seriesLength}</span>
+      <span>Cross-div{seriesCount}</span>
     </>}
   </span>;
 }
@@ -151,29 +154,41 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, away
   const homeResult = !played ? "open" : game.homeScore! > game.awayScore! ? "winner" : game.homeScore! < game.awayScore! ? "loser" : "open";
   return <article id={game.id} className={`matchup-card ${featured ? "is-gotw" : ""} ${highlighted ? "is-stat-highlight" : ""} ${simulationSource ? `is-simulated simulation-${simulationSource}` : ""} matchup-card-${variant}`}>
     <div className="matchup-card-badges">
-      {featured && <span className="gotw-chip"><Star fill="currentColor" /><strong>{featuredLabel}</strong></span>}
-      {gameLabel && <span className="game-order-chip">{gameLabel}</span>}
-      <MatchupSeriesChip game={game} division={homeDivision} />
-      {medalRank && medalRank <= 3 && <span className={`schedule-medal medal-${medalRank}`} title={medalLabel}><Medal />{medalLabel || medalRank}</span>}
-      {simulationSource && <span className={`simulation-chip source-${simulationSource}`}><Gamepad2 />{simulationSource === "override" ? "Commissioner result" : "Simulated"}{simulationLocked && <LockKeyhole />}</span>}
-      {badges.filter((badge) => badge !== "GOTW").map((badge) => <GameBadgeChip badge={badge} key={badge} />)}
-      {showVenue && <span className="matchup-venue"><MapPin />{home.logoUrl && <img src={home.logoUrl} alt="" />}<strong>{game.stadium}</strong></span>}
-      {winProbability && !played && <span className="matchup-probability" aria-label={`${away.name} ${Math.round(winProbability.away * 100)} percent, ${home.name} ${Math.round(winProbability.home * 100)} percent`}>
-        <span style={{ "--away-probability": `${winProbability.away * 100}%` } as React.CSSProperties} />
-        <small>AWAY {Math.round(winProbability.away * 100)}%</small>
-        <small>HOME {Math.round(winProbability.home * 100)}%</small>
-      </span>}
-      <SignalBars signal={signal} awayRank={awayRank} homeRank={homeRank} />
+      <div className="matchup-card-chips">
+        {featured && <span className="gotw-chip"><Star fill="currentColor" /><strong>{featuredLabel}</strong></span>}
+        {gameLabel && <span className="game-order-chip">{gameLabel}</span>}
+        <MatchupSeriesChip game={game} division={homeDivision} />
+        {medalRank && medalRank <= 3 && <span className={`schedule-medal medal-${medalRank}`} title={medalLabel}><Medal />{medalLabel || medalRank}</span>}
+        {simulationSource && <span className={`simulation-chip source-${simulationSource}`}><Gamepad2 />{simulationSource === "override" ? "Commissioner result" : "Simulated"}{simulationLocked && <LockKeyhole />}</span>}
+        {badges.filter((badge) => badge !== "GOTW").map((badge) => <GameBadgeChip badge={badge} key={badge} />)}
+      </div>
+      <div className="matchup-card-meta">
+        {showVenue && <span className="matchup-venue"><MapPin />{home.logoUrl ? <img src={home.logoUrl} alt="" /> : <span className="matchup-venue-mono" style={{ background: home.color, color: readableTextColor(home.color) }}>{teamInitials(home)}</span>}<strong>{game.stadium}</strong></span>}
+        {winProbability && !played && <span className="matchup-probability" aria-label={`${away.name} ${Math.round(winProbability.away * 100)} percent, ${home.name} ${Math.round(winProbability.home * 100)} percent`}>
+          <span style={{ "--away-probability": `${winProbability.away * 100}%` } as React.CSSProperties} />
+          <small>AWAY {Math.round(winProbability.away * 100)}%</small>
+          <small>HOME {Math.round(winProbability.home * 100)}%</small>
+        </span>}
+        <SignalBars signal={signal} awayRank={awayRank} homeRank={homeRank} />
+      </div>
     </div>
     <div className="matchup-card-main">
-      <TeamIdentityBlock team={away} division={awayDivision} leagueRank={awayRank} record={awayRecord} showCity={showCity} result={awayResult} href={teamHrefBase ? `${teamHrefBase}/${away.id}` : undefined} />
+      {/* Each team wraps with an inline score (ESPN-style, shown ≤560px); the
+          center score stays for desktop. Both read from the same game data. */}
+      <div className="matchup-team-row">
+        <TeamIdentityBlock team={away} division={awayDivision} leagueRank={awayRank} record={awayRecord} showCity={showCity} result={awayResult} href={teamHrefBase ? `${teamHrefBase}/${away.id}` : undefined} />
+        <span className="matchup-row-score"><strong className={awayResult === "loser" ? "loser" : ""}>{game.awayScore != null ? formatPoints(game.awayScore) : "—"}</strong></span>
+      </div>
       <div className="matchup-score" aria-label={played ? `${away.name} ${game.awayScore}, ${home.name} ${game.homeScore}, final` : `${away.name} at ${home.name}, score not entered`}>
         <strong className={awayResult === "loser" ? "loser" : ""}>{game.awayScore != null ? formatPoints(game.awayScore) : "—"}</strong>
         <span aria-label="at">@</span>
         <strong className={homeResult === "loser" ? "loser" : ""}>{game.homeScore != null ? formatPoints(game.homeScore) : "—"}</strong>
         <small>{played ? "FINAL" : "SCHEDULED"}</small>
       </div>
-      <TeamIdentityBlock mirrored team={home} division={homeDivision} leagueRank={homeRank} record={homeRecord} showCity={showCity} result={homeResult} href={teamHrefBase ? `${teamHrefBase}/${home.id}` : undefined} />
+      <div className="matchup-team-row">
+        <TeamIdentityBlock mirrored team={home} division={homeDivision} leagueRank={homeRank} record={homeRecord} showCity={showCity} result={homeResult} href={teamHrefBase ? `${teamHrefBase}/${home.id}` : undefined} />
+        <span className="matchup-row-score"><strong className={homeResult === "loser" ? "loser" : ""}>{game.homeScore != null ? formatPoints(game.homeScore) : "—"}</strong></span>
+      </div>
     </div>
     {hasAdditionalDetails && <div className="game-details-desktop"><GameDetails game={game} /></div>}
     {hasAdditionalDetails && <details className="game-details-mobile"><summary>More details <ChevronDown /></summary><GameDetails game={game} /></details>}
