@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowRight, TriangleAlert } from "lucide-react";
 import { AccountIdentity } from "@/components/account/AccountIdentity";
+import { ResumeLatestButton } from "@/components/ResumeLatestButton";
 import { ConfirmDialog } from "@/components/ui/Modal";
 
 export function BrandLockup({ compact = false }: { compact?: boolean }) {
@@ -64,6 +65,7 @@ export function AppHeader() {
       <div className="page-width topbar-row">
         <BrandLockup />
         <nav className="topnav" aria-label="Primary navigation">
+          <ResumeLatestButton />
           <AccountIdentity />
         </nav>
       </div>
