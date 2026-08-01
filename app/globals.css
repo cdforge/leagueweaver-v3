@@ -4407,3 +4407,15 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 
 /* consolation entrants reuse the championship .bracket-slot + stacked identity: team-color spine + top separators, no side/bottom borders */
 .pp-board .consolation-game .bracket-slot { border-width: 1px 0 0 3px; border-top-color: var(--pk-line); box-shadow: none; }
+
+/* dark-board: the consolation game header was still light (var(--canvas)) with near-invisible text — darken it to match the championship card header */
+.pp-board .consolation-game > header { background: rgba(0,0,0,.22); }
+.pp-board .consolation-game > header strong { color: #fff; }
+.pp-board .consolation-game > header small { color: var(--pk-mut); }
+.pp-board .consolation-game > header > em { color: #fff; }
+
+/* filled division badge on the playoff surfaces (bracket + picture): paint the division color behind the
+   abbreviation (vars set by DivisionMark) and let the fixed-width wrappers grow to fit. Shared table/clinch marks stay plain colored text. */
+.pp-board .division-mark-filled, .pp-panel .division-mark-filled { width: auto !important; padding: 0 5px; border-radius: var(--radius-chip); overflow: visible; background: var(--dm-bg); color: var(--dm-ink) !important; }
+.pp-board .division-identity-icon, .pp-panel .division-identity-icon { width: auto; }
+.pp-board .team-identity-division-record .division-identity-icon { flex: 0 0 auto; }
