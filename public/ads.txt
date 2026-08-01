@@ -1,8 +1,6 @@
 # League Weaver — Authorized Digital Sellers (IAB ads.txt)
 #
-# Google AdSense requires this file at https://<your-domain>/ads.txt.
-# When AdSense approves the site, uncomment the line below and replace
-# pub-XXXXXXXXXXXXXXXX with your publisher id — the digits after "ca-" in
-# NEXT_PUBLIC_ADSENSE_CLIENT_ID (e.g. ca-pub-1234... -> pub-1234...).
-#
-# google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0
+# Served at https://leagueweaver.com/ads.txt. Authorizes Google AdSense to
+# sell inventory on this site. The publisher id is the digits after "ca-" in
+# NEXT_PUBLIC_ADSENSE_CLIENT_ID (ca-pub-3436602586436667 -> pub-3436602586436667).
+google.com, pub-3436602586436667, DIRECT, f08c47fec0942fa0
