@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AppHeader } from "@/components/AppHeader";
 import { StartBuildingButton } from "@/components/welcome/StartBuildingButton";
 import { SchedulePreview } from "@/components/welcome/SchedulePreview";
+import { AdUnit } from "@/components/ads/AdUnit";
 import { CalendarDays, Trophy, Users } from "lucide-react";
 
 const OG_DESCRIPTION = "Ditch the boring round-robin. Build a real NFL-style schedule — seeded off last season, with rivalry weeks and marquee games.";
@@ -105,6 +106,8 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      <AdUnit placement="home" />
 
       <footer className="site-footer">
         <div className="page-width footer-row">
