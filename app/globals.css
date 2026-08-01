@@ -2819,6 +2819,11 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .team-directory-division-group { display: flex; flex-direction: column; gap: 10px; }
 .team-directory-division-head { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 2px solid color-mix(in srgb, var(--line-strong), transparent 30%); }
 .team-directory-division-head > strong { font-size: var(--text-md); font-weight: var(--w-black); }
+/* Conference wrapper (4/6/8-division leagues): the two conferences head their division sections,
+   each becoming one half of the playoff bracket. */
+.team-directory-conference-group { display: flex; flex-direction: column; gap: 16px; }
+.team-directory-conference-head { display: flex; align-items: center; gap: 8px; }
+.team-directory-conference-group > .team-directory-division-group { padding-left: 14px; border-left: 2px solid color-mix(in srgb, var(--line-strong), transparent 55%); }
 .team-directory-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .team-directory-card { position: relative; min-width: 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--team-brand) 28%, var(--line)); border-left: 5px solid var(--team-brand); border-radius: var(--radius); background: white; padding: 14px 15px 12px; color: var(--ink); text-align: left; cursor: pointer; }
 .team-directory-card::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; background: var(--team-brand); }
@@ -5212,17 +5217,26 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
    Branding) + a live bracket preview + per-round/per-game logos.
    ========================================================================== */
 .playoff-wizard { max-width: none; }
-.playoff-wizard-subnav { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
-.playoff-wizard-subnav button { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; cursor: pointer; padding: 10px 15px 13px; border-radius: var(--radius-sm) var(--radius-sm) 0 0; color: var(--muted); font-family: inherit; position: relative; }
-.playoff-wizard-subnav button:hover:not(.active) { color: var(--ink); }
-.playoff-wizard-subnav .ppw-n { flex: 0 0 auto; width: 23px; height: 23px; border-radius: 50%; display: grid; place-items: center; font-size: var(--text-2xs); font-weight: var(--w-black); background: var(--canvas); border: 1.5px solid var(--line-strong); color: var(--muted); }
-.playoff-wizard-subnav button.active { color: var(--ink); }
-.playoff-wizard-subnav button.active .ppw-n { background: var(--field); border-color: var(--field); color: #fff; }
-.playoff-wizard-subnav button.active::after { content: ""; position: absolute; left: 13px; right: 13px; bottom: -1px; height: 3px; border-radius: 3px; background: var(--field); }
-.playoff-wizard-subnav .ppw-lab { text-align: left; line-height: 1.18; }
-.playoff-wizard-subnav .ppw-lab strong { display: block; font-size: var(--text-sm); font-weight: var(--w-bold); }
-.playoff-wizard-subnav .ppw-lab small { color: var(--muted); font-size: var(--text-2xs); }
-.playoff-wizard-subnav button:focus-visible { outline: 2px solid var(--field); outline-offset: 2px; }
+.playoff-wizard-subnav, .wizard-subnav { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.playoff-wizard-subnav button, .wizard-subnav button { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; cursor: pointer; padding: 10px 15px 13px; border-radius: var(--radius-sm) var(--radius-sm) 0 0; color: var(--muted); font-family: inherit; position: relative; }
+.playoff-wizard-subnav button:hover:not(.active), .wizard-subnav button:hover:not(.active) { color: var(--ink); }
+.playoff-wizard-subnav .ppw-n, .wizard-subnav .ppw-n { flex: 0 0 auto; width: 23px; height: 23px; border-radius: 50%; display: grid; place-items: center; font-size: var(--text-2xs); font-weight: var(--w-black); background: var(--canvas); border: 1.5px solid var(--line-strong); color: var(--muted); }
+.playoff-wizard-subnav button.active, .wizard-subnav button.active { color: var(--ink); }
+.playoff-wizard-subnav button.active .ppw-n, .wizard-subnav button.active .ppw-n { background: var(--field); border-color: var(--field); color: #fff; }
+.playoff-wizard-subnav button.active::after, .wizard-subnav button.active::after { content: ""; position: absolute; left: 13px; right: 13px; bottom: -1px; height: 3px; border-radius: 3px; background: var(--field); }
+.playoff-wizard-subnav .ppw-lab, .wizard-subnav .ppw-lab { text-align: left; line-height: 1.18; }
+.playoff-wizard-subnav .ppw-lab strong, .wizard-subnav .ppw-lab strong { display: block; font-size: var(--text-sm); font-weight: var(--w-bold); }
+.playoff-wizard-subnav .ppw-lab small, .wizard-subnav .ppw-lab small { color: var(--muted); font-size: var(--text-2xs); }
+.playoff-wizard-subnav button:focus-visible, .wizard-subnav button:focus-visible { outline: 2px solid var(--field); outline-offset: 2px; }
+
+/* Grouped wizard step: sub-tab bar above the active sub-panel (Teams & Divisions, Season & Rules). */
+.wizard-group-step { display: flex; flex-direction: column; gap: 22px; }
+/* On narrow screens the 4-tab Season & Rules row scrolls sideways rather than wrapping into a tall stack. */
+@media (max-width: 560px) {
+  .wizard-subnav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .wizard-subnav::-webkit-scrollbar { display: none; }
+  .wizard-subnav button { flex: 0 0 auto; }
+}
 
 .playoff-wizard-layout { display: grid; gap: 18px; }
 .playoff-wizard-form { display: grid; gap: 20px; min-width: 0; }

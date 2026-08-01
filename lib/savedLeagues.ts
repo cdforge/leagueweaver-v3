@@ -63,6 +63,7 @@ export function identityFromSetup(setup: LeagueSetupInput): SavedLeagueIdentity 
       logoUrl: setup.logoUrl,
     },
     divisions: setup.divisions.map((division) => ({ ...division, initials: division.initials ?? "" })),
+    conferences: setup.conferences,
     teams: setup.teams.map((team) => ({ ...team, initials: team.initials ?? "" })),
     display: setup.display,
     priorSeason: setup.priorSeason,
@@ -132,6 +133,7 @@ function normalizeDivision(division: Partial<Division>, index: number): Division
     initials: (hasInitials ? division.initials || undefined : legacyAcronym || undefined)?.slice(0, 4),
     color: division.color || "#117A45",
     logoUrl: division.logoUrl || undefined,
+    conferenceId: division.conferenceId || undefined,
   };
 }
 
