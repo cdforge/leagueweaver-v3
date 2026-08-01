@@ -363,7 +363,6 @@ function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores }: { schedule
         </span>
       </div>
       <div className="week-status">
-        <span className={`week-phase-pill ${playoffPillClass}`}>{playoffPhaseLabel}</span>
         <span className="playoff-week-context">{mainViews.length} game{mainViews.length === 1 ? "" : "s"}{round.byeSeeds.length > 0 ? ` · ${round.byeSeeds.length} bye${round.byeSeeds.length === 1 ? "" : "s"}` : ""}</span>
       </div>
       <div className="section-bar-actions">
@@ -531,11 +530,11 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
           </div>
           <div className="week-status">
             <WeekMatchupRank rank={week.matchupRank} total={schedule.weeks.length} withLabel />
-            <span className={`week-phase-pill phase-${weekPhase.phase}`}>
+            {weekPhase.phase !== "pre" && <span className={`week-phase-pill phase-${weekPhase.phase}`}>
               {weekPhase.phase === "live" && <i className="live-dot" aria-hidden="true" />}
               <span>{weekPhase.phase === "live" ? "Live" : weekPhase.label}</span>
               {weekPhase.phase === "live" && weekPhase.window && weekPhase.window !== "between" && <small>{weekPhase.label}</small>}
-            </span>
+            </span>}
             {(secondaryHolidays.length > 0 || byeTeams.length > 0) && <span className="week-markers">{secondaryHolidays.map((holiday) => <em className="holiday-marker" key={holiday}>{holiday}</em>)}{byeTeams.length > 0 && <em className="bye-marker">{byeTeams.length} BYE</em>}</span>}
           </div>
           <div className="section-bar-actions">
