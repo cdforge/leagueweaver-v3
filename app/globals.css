@@ -4549,3 +4549,14 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .ppw-preview-toggle button { border: 0; background: transparent; color: var(--pk-mut); font-family: inherit; font-weight: var(--w-bold); font-size: var(--text-2xs); padding: 5px 13px; border-radius: var(--radius-chip); cursor: pointer; }
 .ppw-preview-toggle button.active { background: var(--field); color: #fff; }
 .ppw-preview-toggle button:focus-visible { outline: 2px solid var(--field-mid); outline-offset: 1px; }
+
+/* preview: per-match game number title */
+.ppw-gameno { display: block; padding: 3px 8px 1px; font-size: 8.5px; font-weight: var(--w-black); letter-spacing: .08em; text-transform: uppercase; color: var(--pk-mut); }
+
+/* "Recommended" chip on a preset */
+.ppw-rec { display: inline-block; margin-left: 6px; font-size: 9px; font-weight: var(--w-black); letter-spacing: .04em; text-transform: uppercase; font-style: normal; color: var(--field); background: var(--field-soft); padding: 1px 6px; border-radius: var(--radius-pill); vertical-align: 1px; }
+
+/* preview columns: round header pinned to the top (aligned across columns), games centered below */
+.ppw-col { justify-content: flex-start; }
+.ppw-col .ppw-rh { flex: 0 0 auto; margin-bottom: 8px; }
+.ppw-col-games { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: space-around; gap: 12px; min-height: 0; }

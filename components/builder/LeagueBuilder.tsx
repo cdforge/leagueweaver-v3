@@ -496,15 +496,11 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   const patch = (next: Partial<LeagueSetupInput["playoffs"]>) =>
     setSetup((current) => ({ ...current, playoffs: { ...current.playoffs, ...next } }));
 
-  const setBracketType = (bracketType: LeagueSetupInput["playoffs"]["bracketType"]) => {
-    const max = getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, bracketType);
-    patch({ bracketType, fieldSize: Math.min(p.fieldSize, max), fieldStatus: "live", lockedTeamIds: [] });
-  };
   const setFieldSize = (fieldSize: number) => {
     const halvesUsable = isPlayoffPlacementUsable("division-halves", divisionCount, fieldSize);
     patch({
       fieldSize,
-      placementMode: p.placementMode === "division-halves" && !halvesUsable ? "auto" : p.placementMode,
+      placementMode: p.placementMode === "division-halves" && !halvesUsable ? "overall" : p.placementMode,
       consolationMode: p.consolationMode === "division-halves" && !halvesUsable ? "standard" : p.consolationMode,
       thirdPlaceGame: p.consolationMode !== "off" && fieldSize >= 4,
       fieldStatus: "live",
@@ -519,8 +515,9 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   // Division halves is the recommended default for eligible builds: pre-select it
   // once on mount when the league is still on "auto" and halves are usable.
   useEffect(() => {
-    if (p.placementMode === "auto" && isPlayoffPlacementUsable("division-halves", divisionCount, p.fieldSize)) {
-      patch({ placementMode: "division-halves" });
+    // "auto" is no longer a user-facing option — resolve it to a concrete mode (halves preferred).
+    if (p.placementMode === "auto") {
+      patch({ placementMode: isPlayoffPlacementUsable("division-halves", divisionCount, p.fieldSize) ? "division-halves" : isPlayoffPlacementUsable("division-leaders", divisionCount, p.fieldSize) ? "division-leaders" : "overall" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -532,12 +529,11 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
 
   const halvesUsable = isPlayoffPlacementUsable("division-halves", divisionCount, p.fieldSize);
   const placementOptions = [
-    { value: "auto", label: "Automatic", description: `Best fit for ${divisionCount} division${divisionCount === 1 ? "" : "s"}` },
     ...(halvesUsable
-      ? [{ value: "division-halves", label: "Division halves (Recommended)", description: "Each half runs its own tournament to the final" }] : []),
+      ? [{ value: "division-halves", label: "Division halves (Recommended)", description: "NFL-style — each half runs its own tournament to the final" }] : []),
     ...(isPlayoffPlacementUsable("division-leaders", divisionCount, p.fieldSize)
-      ? [{ value: "division-leaders", label: "Division leaders protected", description: "Division winners seeded at the top" }] : []),
-    { value: "overall", label: "Overall standings", description: "Top teams qualify regardless of division" },
+      ? [{ value: "division-leaders", label: "Division leaders protected", description: "Classic fantasy — each division winner is guaranteed a top seed on its own side" }] : []),
+    { value: "overall", label: "Overall standings", description: "Simple — top finishers qualify by overall seed, regardless of division" },
   ];
   const consolationOptions = [
     { value: "off", label: "No consolation bracket", description: "Championship bracket only" },
@@ -548,8 +544,8 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   const themes: Array<LeagueSetupInput["playoffs"]["theme"]> = ["gold", "silver", "bronze", "custom"];
 
   // Presets set several fields at once; the form remains the "customize" fallback.
-  const presetDefs: Array<{ id: string; label: string; desc: string; icon: string; size: number; bracketType: LeagueSetupInput["playoffs"]["bracketType"]; qual: "halves" | "overall"; consolationMode: LeagueSetupInput["playoffs"]["consolationMode"] }> = [
-    { id: "nfl", label: "NFL-style", desc: "6 teams · division halves · 2 byes", icon: "🏆", size: 6, bracketType: "single-elimination", qual: "halves", consolationMode: "off" },
+  const presetDefs: Array<{ id: string; label: string; desc: string; icon: string; size: number; bracketType: LeagueSetupInput["playoffs"]["bracketType"]; qual: "halves" | "overall"; consolationMode: LeagueSetupInput["playoffs"]["consolationMode"]; recommended?: boolean }> = [
+    { id: "nfl", label: "NFL-style", desc: "6 teams · division halves · 2 byes", icon: "🏆", size: 6, bracketType: "single-elimination", qual: "halves", consolationMode: "off", recommended: true },
     { id: "madness", label: "Bracket madness", desc: "8 teams · overall seeds · no byes", icon: "🎯", size: 8, bracketType: "single-elimination", qual: "overall", consolationMode: "off" },
     { id: "everyone", label: "Everyone plays on", desc: "6 teams · full consolation bracket", icon: "🎖️", size: 6, bracketType: "single-elimination", qual: "halves", consolationMode: "standard" },
   ];
@@ -559,7 +555,7 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
     patch({
       fieldSize: size,
       bracketType: def.bracketType,
-      placementMode: def.qual === "halves" ? (canHalves ? "division-halves" : "auto") : "overall",
+      placementMode: def.qual === "halves" ? (canHalves ? "division-halves" : "overall") : "overall",
       consolationMode: def.consolationMode === "division-halves" && !canHalves ? "standard" : def.consolationMode,
       thirdPlaceGame: def.consolationMode !== "off" && size >= 4,
       fieldStatus: "live",
@@ -569,7 +565,7 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   const activePresetId = presetDefs.find((def) =>
     p.fieldSize === Math.min(def.size, getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, def.bracketType))
     && p.bracketType === def.bracketType
-    && (def.qual === "overall" ? p.placementMode === "overall" : p.placementMode === "division-halves" || (p.placementMode === "auto" && !halvesUsable))
+    && (def.qual === "overall" ? p.placementMode === "overall" : p.placementMode === "division-halves" || (p.placementMode === "overall" && !halvesUsable))
     && p.consolationMode === def.consolationMode,
   )?.id;
 
@@ -617,76 +613,136 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   const divInitials = (d?: Division) => (d?.initials?.trim() || d?.name || "D").slice(0, 3).toUpperCase();
   const previewHalves = p.placementMode === "division-halves" && halvesUsable && divisions.length >= 2;
 
-  type PSlot = { division?: Division; label: string };
-  type PMatch = { id: string; accent?: string; gold?: boolean; slots: PSlot[] };
+  type PSlot = { division?: Division; seed?: number; feederId?: string; text?: string };
+  type PMatch = { id: string; accent?: string; gold?: boolean; gameNo?: number; slots: PSlot[] };
   type PRound = { name: string; matches: PMatch[] };
-  type PBracket = { rounds: PRound[]; connections: BracketConnection[] };
+  type PBracket = { rounds: PRound[]; connections: BracketConnection[]; gameNo: Record<string, number> };
 
-  const buildChampionship = (): PBracket => {
+  // Number every game across the bracket (round order, top to bottom) so later rounds can
+  // reference "Winner · Game N".
+  const numberGames = (rounds: PRound[]): Record<string, number> => {
+    const map: Record<string, number> = {}; let g = 0;
+    rounds.forEach((round) => round.matches.forEach((m) => { g += 1; m.gameNo = g; map[m.id] = g; }));
+    return map;
+  };
+
+  const buildPool = (kind: "championship" | "consolation"): PBracket => {
     const rounds: PRound[] = []; const conns: BracketConnection[] = [];
     const link = (source: string, target: string, color?: string) => conns.push({ id: `k-${source}-${target}`, sourceGameId: source, targetGameId: target, outcome: "winner", color });
     const n = p.fieldSize;
-    if (p.bracketType === "ladder") {
-      rounds.push({ name: "The climb", matches: Array.from({ length: n }, (_, i) => n - i).map((s) => ({ id: `pv-l-${s}`, accent: divOfSeed(s)?.color, slots: [{ division: divOfSeed(s), label: `#${s} seed · enters wk ${Math.max(1, n - s)}` }] })) });
-      return { rounds, connections: conns };
-    }
-    if (previewHalves) {
-      const per = Math.ceil(n / 2); const hb = Math.floor(byeCount / 2);
-      const wildCard: PMatch[] = []; const divFinals: PMatch[] = [];
-      [0, 1].forEach((hi) => {
-        const d = divisions[hi] ?? divisions[0];
-        const playing: number[] = []; for (let s = hb + 1; s <= per; s++) playing.push(s);
-        const hf: PMatch = { id: `pv-h${hi}-hf`, accent: d?.color, slots: [{ division: d, label: hb ? "#1 seed" : "WC winner" }, { division: d, label: "WC winner" }] };
-        for (let j = 0; j < Math.floor(playing.length / 2); j++) {
-          const m: PMatch = { id: `pv-h${hi}-r1-${j}`, accent: d?.color, slots: [{ division: d, label: `#${playing[j]} seed` }, { division: d, label: `#${playing[playing.length - 1 - j]} seed` }] };
-          wildCard.push(m); link(m.id, hf.id, d?.color);
+    const isCons = kind === "consolation";
+    const total = seeded.length;
+
+    // General single-elimination sub-bracket for a seeded list (any size; top seeds get byes when
+    // the count isn't a power of two). Returns the games per round + the id of its final game.
+    const buildSeedBracket = (seeds: number[], prefix: string, slotFor: (s: number) => PSlot): { rounds: PMatch[][]; championId: string } => {
+      const size = seeds.length;
+      if (size <= 1) return { rounds: [], championId: `${prefix}-solo` };
+      let bracketSize = 1; while (bracketSize < size) bracketSize *= 2;
+      // Standard bracket-seeding permutation of positions 1..bracketSize so #1 and #2
+      // always sit in opposite halves and byes attach to the correct top seeds.
+      let order = [1, 2];
+      while (order.length < bracketSize) {
+        const s = order.length * 2; const next: number[] = [];
+        for (const x of order) { next.push(x); next.push(s + 1 - x); }
+        order = next;
+      }
+      // Each bracket slot holds a seed (1..size) or null when that rank is a bye.
+      const slotAt = order.map((rank) => (rank <= size ? seeds[rank - 1] : null));
+      const out: PMatch[][] = [];
+      const r1: PMatch[] = [];
+      let advancers: PSlot[] = [];
+      for (let j = 0; j < bracketSize / 2; j++) {
+        const a = slotAt[2 * j], b = slotAt[2 * j + 1];
+        if (a != null && b != null) {
+          const id = `${prefix}-r1-${j}`;
+          r1.push({ id, accent: slotFor(a).division?.color, slots: [slotFor(a), slotFor(b)] });
+          advancers.push({ feederId: id });
+        } else {
+          const s = (a != null ? a : b) as number; // bye — present seed advances
+          advancers.push(slotFor(s));
         }
-        divFinals.push(hf);
-      });
-      const final: PMatch = { id: "pv-final", gold: true, slots: [{ division: divisions[0], label: `${divisions[0]?.name ?? "Top"} champ` }, { division: divisions[1], label: `${divisions[1]?.name ?? "Bottom"} champ` }] };
-      divFinals.forEach((m, hi) => link(m.id, final.id, divisions[hi]?.color));
-      if (wildCard.length) rounds.push({ name: "Wild card", matches: wildCard });
-      rounds.push({ name: "Divisional Championship", matches: divFinals });
-      rounds.push({ name: "Championship", matches: [final] });
-      rounds.forEach((round, i) => { if (roundNames[i]) round.name = roundNames[i]; });
-      return { rounds, connections: conns };
-    }
-    const playing: number[] = []; for (let s = byeCount + 1; s <= n; s++) playing.push(s);
-    const r1: PMatch[] = [];
-    for (let j = 0; j < Math.floor(playing.length / 2); j++) { const a = playing[j], c = playing[playing.length - 1 - j]; r1.push({ id: `pv-r1-${j}`, accent: divOfSeed(a)?.color, slots: [{ division: divOfSeed(a), label: `#${a} seed` }, { division: divOfSeed(c), label: `#${c} seed` }] }); }
-    const afterR1 = byeCount + r1.length;
-    if (r1.length) rounds.push({ name: "Round 1", matches: r1 });
-    const final: PMatch = { id: "pv-final", gold: true, slots: [{ division: divOfSeed(1), label: "#1 seed" }, { division: divOfSeed(2), label: "#2 seed" }] };
-    if (afterR1 >= 4) {
-      const semis: PMatch[] = [
-        { id: "pv-sf-0", accent: divOfSeed(1)?.color, slots: [{ division: divOfSeed(1), label: byeCount ? "#1 seed" : "WC winner" }, { division: undefined, label: "WC winner" }] },
-        { id: "pv-sf-1", accent: divOfSeed(2)?.color, slots: [{ division: divOfSeed(2), label: byeCount ? "#2 seed" : "WC winner" }, { division: undefined, label: "WC winner" }] },
-      ];
-      r1.forEach((m, i) => link(m.id, semis[i % 2].id));
-      semis.forEach((m) => link(m.id, final.id));
-      rounds.push({ name: "Semifinals", matches: semis });
-    } else {
-      r1.forEach((m) => link(m.id, final.id));
-    }
-    rounds.push({ name: "Championship", matches: [final] });
-    rounds.forEach((round, i) => { if (roundNames[i]) round.name = roundNames[i]; });
-    return { rounds, connections: conns };
-  };
+      }
+      if (r1.length) out.push(r1);
+      let ri = out.length;
+      while (advancers.length > 1) {
+        const matches: PMatch[] = []; const next: PSlot[] = [];
+        for (let k = 0; k < Math.floor(advancers.length / 2); k++) {
+          const s1 = advancers[2 * k], s2 = advancers[2 * k + 1];
+          const id = `${prefix}-r${ri + 1}-${k}`;
+          if (s1?.feederId) link(s1.feederId, id, s1.division?.color);
+          if (s2?.feederId) link(s2.feederId, id, s2.division?.color);
+          matches.push({ id, accent: s1?.division?.color ?? s2?.division?.color, slots: [s1, s2] });
+          next.push({ feederId: id });
+        }
+        out.push(matches); advancers = next; ri += 1;
+      }
+      return { rounds: out, championId: out.length ? out[out.length - 1][0].id : `${prefix}-r1-0` };
+    };
 
-  const buildConsolation = (): PBracket => {
-    const rounds: PRound[] = []; const conns: BracketConnection[] = [];
-    const roundOrder = [...new Map(consolationSlots.map((s) => [s.roundIndex, s.roundName])).entries()].sort((a, b) => a[0] - b[0]);
-    roundOrder.forEach(([roundIndex, roundName]) => {
-      const slots = consolationSlots.filter((s) => s.roundIndex === roundIndex);
-      rounds.push({ name: roundName, matches: slots.map((slot) => ({ id: `pv-${slot.id}`, accent: "#8a6bd1", slots: [{ division: undefined, label: slot.label }] })) });
+    if (previewHalves) {
+      const per = Math.ceil(n / 2);
+      const divCount = (d?: Division) => seeded.filter((t) => divById.get(t.divisionId)?.id === d?.id).length;
+      const offset = isCons ? per : 0; // consolation continues each division's seed ranking below the qualifiers
+      const counts = [0, 1].map((hi) => (isCons ? Math.max(0, divCount(divisions[hi]) - per) : per));
+      if (counts[0] + counts[1] >= 2 && counts[0] >= 1 && counts[1] >= 1) {
+        const champLabel = (d?: Division) => { const nm = d?.name ?? "Division"; return nm.length <= 11 ? `${nm} champ` : "Div champ"; };
+        const halves = [0, 1].map((hi) => {
+          const d = divisions[hi] ?? divisions[0];
+          const localSeeds = Array.from({ length: counts[hi] }, (_, i) => i + 1);
+          return { d, count: counts[hi], ...buildSeedBracket(localSeeds, `pv-h${hi}`, (s) => ({ division: d, seed: offset + s })) };
+        });
+        const maxRounds = Math.max(halves[0].rounds.length, halves[1].rounds.length);
+        for (let r = 0; r < maxRounds; r++) {
+          const name = isCons
+            ? (r === maxRounds - 1 ? "Division consolation" : `Consolation round ${r + 1}`)
+            : (roundNames[r] ?? (r === 0 ? "Wild Card" : "Divisional Championship"));
+          rounds.push({ name, matches: halves.flatMap((h) => h.rounds[r] ?? []) });
+        }
+        const finalSlots: PSlot[] = isCons
+          ? halves.map((h) => (h.count >= 2 ? { feederId: h.championId } : { division: h.d, seed: offset + 1 }))
+          : [{ division: divisions[0], text: champLabel(divisions[0]) }, { division: divisions[1], text: champLabel(divisions[1]) }];
+        const final: PMatch = { id: isCons ? "pv-cons-final" : "pv-final", gold: !isCons, slots: finalSlots };
+        halves.forEach((h, hi) => { if (h.count >= 2) link(h.championId, final.id, divisions[hi]?.color); });
+        rounds.push({ name: isCons ? "Consolation final" : (roundNames[maxRounds] ?? "Championship"), matches: [final] });
+        return { rounds, connections: conns, gameNo: numberGames(rounds) };
+      }
+      // consolation leftovers too small/uneven to split by division — fall through to a plain seed list
+    }
+
+    // Overall / division-leaders championship, or a plain seed-ordered consolation of the teams
+    // that missed the field (seeds n+1 … total). Consolation always uses pure overall seeds.
+    const isOverall = p.placementMode === "overall";
+    const leaderLabel = divisions.length === 2 ? "#1 / #2 seed" : `#1–${divisions.length} seed`;
+    // In division-leaders, only the protected leaders take fixed top seeds; every wild-card
+    // seed below them shifts with the leaders' records, so pair them off (#3 / #4, #5 / #6…).
+    const wildStart = divisions.length + 1;
+    const seedPairLabel = (s: number): string => {
+      const lo = wildStart + Math.floor((s - wildStart) / 2) * 2;
+      return `#${lo} / #${lo + 1} seed`;
+    };
+    const poolSeeds = isCons
+      ? Array.from({ length: Math.max(0, total - n) }, (_, i) => n + 1 + i)
+      : Array.from({ length: n }, (_, i) => i + 1);
+    if (poolSeeds.length < 2) return { rounds: [], connections: [], gameNo: {} };
+    const slotFor = (s: number): PSlot => isCons
+      ? { seed: s }
+      : (isOverall ? { seed: s } : (s <= divisions.length ? { division: divOfSeed(s), text: leaderLabel } : { text: seedPairLabel(s) }));
+    const { rounds: bracketRounds } = buildSeedBracket(poolSeeds, isCons ? "pv-c" : "pv", slotFor);
+    bracketRounds.forEach((matches, i) => {
+      const last = i === bracketRounds.length - 1;
+      const name = isCons ? (last ? "Consolation final" : `Consolation round ${i + 1}`) : (roundNames[i] ?? (last ? "Championship" : `Round ${i + 1}`));
+      rounds.push({ name, matches });
     });
-    for (let r = 0; r < rounds.length - 1; r++) {
-      rounds[r].matches.forEach((m, i) => { const target = rounds[r + 1].matches[Math.min(i, rounds[r + 1].matches.length - 1)]; if (target) conns.push({ id: `k-${m.id}-${target.id}`, sourceGameId: m.id, targetGameId: target.id, outcome: "winner" }); });
-    }
-    return { rounds, connections: conns };
+    const lastRound = rounds[rounds.length - 1];
+    if (lastRound?.matches.length === 1 && !isCons) { lastRound.matches[0].gold = true; lastRound.name = roundNames[rounds.length - 1] ?? "Championship"; }
+    return { rounds, connections: conns, gameNo: numberGames(rounds) };
   };
+  const buildChampionship = (): PBracket => buildPool("championship");
+  const buildConsolation = (): PBracket => buildPool("consolation");
 
-  const showConsolationView = previewView === "consolation" && consolationSlots.length > 0;
+  const consolationAvailable = consolationSlots.length > 0 && (seeded.length - p.fieldSize) >= 2;
+  const showConsolationView = previewView === "consolation" && consolationAvailable;
   const bracketSignature = [
     showConsolationView, p.fieldSize, p.bracketType, p.placementMode, byeCount, previewHalves,
     roundNames.join("~"),
@@ -699,19 +755,23 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const previewBracket = useMemo(() => (showConsolationView ? buildConsolation() : buildChampionship()), [bracketSignature]);
 
-  const renderSlot = (slot: PSlot, key: number) => {
+  const renderSlot = (slot: PSlot, gameNo: Record<string, number>, key: number) => {
     const d = slot.division;
     const color = d?.color ?? "#586761";
+    const label = slot.text ?? (slot.seed != null ? `#${slot.seed} seed` : slot.feederId ? `Winner · Game ${gameNo[slot.feederId] ?? "?"}` : "TBD");
     return <span key={key} className="ppw-slot" style={{ "--slot-c": color, color: accessibleAccentColor(color, "#161d18") } as React.CSSProperties}>
       {d?.logoUrl ? <img className="ppw-slogo" src={d.logoUrl} alt="" /> : <b className="ppw-dchip" style={{ background: color, color: readableTextColor(color) } as React.CSSProperties}>{d ? divInitials(d) : "#"}</b>}
-      <span className="ppw-name">{slot.label}</span>
+      <span className="ppw-name">{label}</span>
     </span>;
   };
   const renderBracket = (data: PBracket) => (
     <BracketConnectorLayer className="ppw-bracket" connections={data.connections}>
       {data.rounds.map((round, ri) => <div key={ri} className={`ppw-col ${ri === data.rounds.length - 1 ? "ppw-final" : ""}`}>
         <span className="ppw-rh">{round.name}</span>
-        {round.matches.map((m) => <div key={m.id} data-bracket-game-id={m.id} className={`ppw-match ${m.gold ? "ppw-gold" : ""}`} style={{ "--ppw-accent": m.gold ? "var(--gold)" : (m.accent ?? "#3fbf7f") } as React.CSSProperties}>{m.slots.map(renderSlot)}</div>)}
+        <div className="ppw-col-games">{round.matches.map((m) => <div key={m.id} data-bracket-game-id={m.id} className={`ppw-match ${m.gold ? "ppw-gold" : ""}`} style={{ "--ppw-accent": m.gold ? "var(--gold)" : (m.accent ?? "#3fbf7f") } as React.CSSProperties}>
+          {m.slots.length === 2 && <span className="ppw-gameno">Game {m.gameNo}</span>}
+          {m.slots.map((s, i) => renderSlot(s, data.gameNo, i))}
+        </div>)}</div>
       </div>)}
     </BracketConnectorLayer>
   );
@@ -734,18 +794,12 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
       <div className="playoff-wizard-form">
         {subPage === "format" && <>
           <div className="ppw-group"><FieldLabel hint="optional — tweak anything after">Start from a preset</FieldLabel>
-            <div className="ppw-presets">{presetDefs.map((def) => <button key={def.id} type="button" className={activePresetId === def.id ? "active" : ""} onClick={() => applyPreset(def)}><span className="ppw-preset-ic">{def.icon}</span><span><strong>{def.label}</strong><small>{def.desc}</small></span></button>)}
+            <div className="ppw-presets">{presetDefs.map((def) => <button key={def.id} type="button" className={activePresetId === def.id ? "active" : ""} onClick={() => applyPreset(def)}><span className="ppw-preset-ic">{def.icon}</span><span><strong>{def.label}{def.recommended && <em className="ppw-rec">Recommended</em>}</strong><small>{def.desc}</small></span></button>)}
               <button type="button" className={activePresetId ? "" : "active"} onClick={() => undefined}><span className="ppw-preset-ic">⚙️</span><span><strong>Custom</strong><small>Set every option yourself</small></span></button>
             </div>
           </div>
           <div className="ppw-group"><FieldLabel hint={byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"} for the top seed${byeCount === 1 ? "" : "s"}` : "every qualifier opens play"}>Playoff teams</FieldLabel>
             <CustomSelect label="Playoff field size" value={String(p.fieldSize)} onChange={(value) => setFieldSize(Number(value))} options={fieldSizeOptions.map((n) => ({ value: String(n), label: `${n} teams`, description: getPlayoffByeCount(n) ? `${getPlayoffByeCount(n)} bye${getPlayoffByeCount(n) === 1 ? "" : "s"}` : "No byes" }))} />
-          </div>
-          <div className="ppw-group"><FieldLabel>Bracket format</FieldLabel>
-            <div className="choice-row">
-              <button type="button" className={p.bracketType === "single-elimination" ? "active" : ""} onClick={() => setBracketType("single-elimination")}><strong>Single elimination</strong><small>One-and-done — lose and you're out</small></button>
-              <button type="button" className={p.bracketType === "ladder" ? "active" : ""} onClick={() => setBracketType("ladder")}><strong>Ladder</strong><small>Lowest seeds climb, week by week</small></button>
-            </div>
           </div>
           <div className="ppw-group"><FieldLabel>Qualification</FieldLabel>
             <CustomSelect label="Playoff qualification" value={p.placementMode} onChange={(value) => patch({ placementMode: value as LeagueSetupInput["playoffs"]["placementMode"] })} options={placementOptions} />
@@ -755,9 +809,9 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
         {subPage === "rules" && <>
           <div className="ppw-group"><FieldLabel>Reseeding</FieldLabel>
             <CustomSelect label="Reseeding" value={p.reseedMode} onChange={(value) => patch({ reseedMode: value as LeagueSetupInput["playoffs"]["reseedMode"] })} options={[
+              { value: "protected", label: "Protected reseed (Recommended)", description: "Reseed while protecting bracket halves" },
               { value: "fixed", label: "Fixed bracket", description: "Winners follow set bracket paths" },
               { value: "each-round", label: "Reseed each round", description: "Top remaining seed always hosts the lowest" },
-              { value: "protected", label: "Protected reseed", description: "Reseed while protecting bracket halves" },
             ]} />
           </div>
           <div className="ppw-group"><FieldLabel>Championship venue</FieldLabel>
@@ -833,7 +887,7 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
 
       <aside className="playoff-wizard-preview" aria-label="Live bracket preview">
         <div className="ppw-preview-head"><span className="ppw-preview-eyebrow">Live preview</span><span className="ppw-preview-live">Updates as you set</span></div>
-        {consolationSlots.length > 0 && <div className="ppw-preview-toggle" role="tablist" aria-label="Preview bracket">
+        {consolationAvailable && <div className="ppw-preview-toggle" role="tablist" aria-label="Preview bracket">
           <button type="button" role="tab" aria-selected={!showConsolationView} className={!showConsolationView ? "active" : ""} onClick={() => setPreviewView("championship")}>Championship</button>
           <button type="button" role="tab" aria-selected={showConsolationView} className={showConsolationView ? "active" : ""} onClick={() => setPreviewView("consolation")}>Consolation</button>
         </div>}
