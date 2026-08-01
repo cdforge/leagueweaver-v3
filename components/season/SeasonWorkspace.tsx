@@ -50,6 +50,7 @@ import { SimulatorWorkspace, type SimulatorResultView } from "@/components/seaso
 import { StatsWorkspace } from "@/components/season/StatsWorkspace";
 import { TeamScheduleView } from "@/components/season/TeamSchedulePage";
 import { WeekScoreBar } from "@/components/season/WeekScoreBar";
+import { PlayoffPictureModal } from "@/components/season/PlayoffPictureModal";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { Modal, ConfirmDialog } from "@/components/ui/Modal";
 import { EntityLogo } from "@/components/ui/EntityLogo";
@@ -60,6 +61,7 @@ import { apiErrorMessage } from "@/lib/apiErrors";
 import { downloadCsv } from "@/lib/csv";
 import { readableTextColor } from "@/lib/colorContrast";
 import { isDivisionHalvesConsolationUsable, projectConsolationBracket } from "@/lib/consolation";
+import { buildPlayoffPicture } from "@/lib/playoffPicture";
 import { downloadSchedulePdf } from "@/lib/pdf";
 import { getMatchupRatingRange, getMatchupSignal, matchupRating, sortGamesForDisplay } from "@/lib/matchups";
 import {
@@ -164,6 +166,7 @@ const VIEW_ITEMS: Array<{ key: ViewKey; label: string; icon: typeof CalendarDays
   { key: "gotw", label: "Game of the Week", icon: Star },
   { key: "matchup-ratings", label: "Matchup Ratings", icon: SlidersHorizontal },
   { key: "standings", label: "Standings", icon: BarChart3 },
+  { key: "playoffs", label: "Playoffs", icon: Trophy },
   { key: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -1202,6 +1205,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   // overwrite real scores, or wipe the slate.
   const [confirmAction, setConfirmAction] = useState<null | "share" | "commit" | "regenerate">(null);
   const [showRecap, setShowRecap] = useState(false);
+  const [playoffPictureOpen, setPlayoffPictureOpen] = useState(false);
   // Deep link from the account page (?recap=1) opens the recap straight away.
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("recap") !== "1") return;
@@ -1760,7 +1764,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     router.push(teamId ? `/season/${schedule.id}/team/${teamId}` : `/season/${schedule.id}?view=team-schedule`);
   };
   const currentTitle = VIEW_ITEMS.find((item) => item.key === view)?.label ?? "League Schedule";
-  const canAccessPlayoffs = false;
+  const canAccessPlayoffs = true;
   const openScoreEntry = (weekNumber: number) => {
     setSelectedWeek(Math.min(weekNumber, schedule.setup.weeks));
     setScoreModalOpen(true);
@@ -1785,6 +1789,10 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const scoreBarRankByTeam = new Map((getEnteringWeekRankSnapshot(activeSchedule, selectedWeek)?.rows ?? []).map((row) => [row.teamId, row.rank]));
   const scoreBarDivisionById = new Map(activeSchedule.setup.divisions.map((division) => [division.id, division]));
   const scoreBarWeek = activeSchedule.weeks.find((item) => item.weekNumber === selectedWeek) ?? activeSchedule.weeks[0];
+  const playoffPicture = canAccessPlayoffs ? buildPlayoffPicture(activeSchedule) : null;
+  const playoffPictureSummary = playoffPicture && playoffPicture.throughWeek > 0
+    ? `${playoffPicture.fieldSize} in · ${playoffPicture.huntCount} chasing`
+    : null;
   return <main className={`workspace-page ${simulation ? "simulation-mode" : ""} ${scoreBarWeek ? "has-scorebar" : ""}`} style={{ "--brand": schedule.setup.color, "--brand-on": readableTextColor(schedule.setup.color) } as CSSProperties}>
     {scoreModalOpen && canAccessScorekeeping && <Modal
       className="score-entry-modal"
@@ -1813,7 +1821,10 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       displayCityNames={activeSchedule.setup.display?.cityNames !== false}
       onSelectWeek={setSelectedWeek}
       onSelectGame={(gameId) => { openLeagueScheduleWeek(scoreBarWeek.weekNumber); setHighlightedGame({ id: gameId }); }}
+      playoffPictureSummary={playoffPictureSummary}
+      onOpenPlayoffPicture={playoffPictureSummary ? () => setPlayoffPictureOpen(true) : undefined}
     />}
+    {playoffPictureOpen && playoffPicture && <PlayoffPictureModal schedule={activeSchedule} onClose={() => setPlayoffPictureOpen(false)} />}
     <div className="workspace-shell">
       <aside className="workspace-rail"><nav aria-label="Season workspace">{VIEW_ITEMS.map((item) => { const Icon = item.icon; return <button type="button" key={item.key} aria-label={item.label} title={item.label} className={view === item.key ? "active" : ""} onClick={() => selectView(item)}><Icon /><span>{item.label}</span></button>; })}</nav><div className="rail-bottom"><WorkspaceSwitcher current={{ id: schedule.id, name: schedule.setup.name, seasonYear: schedule.setup.seasonYear, color: schedule.setup.color, logoUrl: schedule.setup.logoUrl, initials: schedule.setup.initials }} signedIn={Boolean(entitlements.signedIn)} /></div></aside>
       <section className={`workspace-main ${selectedTeamColor ? "team-workspace-branded" : ""}`} style={workspaceMainStyle}>
