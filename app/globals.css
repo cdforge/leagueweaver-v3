@@ -775,8 +775,21 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 
 /* Generation reveal ------------------------------------------------------- */
 .reveal-overlay { position: fixed; inset: 0; z-index: var(--z-reveal); display: grid; place-items: center; padding: 32px; text-align: center; color: #fff; background: radial-gradient(120% 120% at 50% 0%, var(--field-dark) 0%, #0a3a22 55%, #06251597 100%), var(--field-dark); animation: revealFade 260ms ease; }
-.reveal-stage { position: relative; width: min(560px, 100%); display: flex; flex-direction: column; align-items: center; gap: 28px; }
+.reveal-stage { position: relative; z-index: 1; width: min(560px, 100%); display: flex; flex-direction: column; align-items: center; gap: 28px; }
 .reveal-stage::before { content: ""; position: absolute; inset: -40% -20% auto; height: 320px; border-radius: 50%; filter: blur(60px); opacity: .5; background: radial-gradient(circle at 30% 40%, var(--wash-a, transparent), transparent 60%), radial-gradient(circle at 70% 60%, var(--wash-b, transparent), transparent 60%); transition: background 400ms ease, opacity 400ms ease; pointer-events: none; }
+/* Full-field colour wash: the beat's team colours bleed across the whole overlay
+   (screen-blended over the brand green), deepening it into the story's palette.
+   Only present on beats that carry a `wash`; the league bookends stay pure green. */
+.reveal-wash { position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: 0; background: radial-gradient(72% 58% at 18% 10%, var(--wash-a, transparent) 0%, transparent 58%), radial-gradient(66% 62% at 86% 92%, var(--wash-b, transparent) 0%, transparent 60%); mix-blend-mode: screen; transition: opacity 400ms ease, background 400ms ease; }
+/* Persistent loom: the real weave, faint and full-bleed, underlying every beat so
+   the woven-season motif threads through the whole story. Kept low enough to read
+   as texture, never to compete with the content. */
+.reveal-loom { position: absolute; inset: 0; z-index: 0; pointer-events: none; display: flex; align-items: stretch; justify-content: center; gap: 8px; padding: 7vh 4vw; opacity: .028; filter: blur(3px) saturate(.8); }
+.reveal-loom-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.reveal-loom-thread { display: block; flex: 1 1 0; min-height: 4px; border-radius: 10px; }
+.reveal-overlay.washed .reveal-wash { opacity: .42; }
+/* Concise per-beat announcement for screen readers; visually hidden. */
+.reveal-sr-live { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); border: 0; white-space: nowrap; }
 .reveal-segments { display: flex; gap: 6px; width: min(360px, 82%); pointer-events: none; }
 .reveal-seg { position: relative; flex: 1; height: 3px; border-radius: var(--radius-pill); background: rgba(255, 255, 255, .2); overflow: hidden; }
 .reveal-seg > i { position: absolute; inset: 0; width: 0; border-radius: inherit; background: var(--gold); }
@@ -785,7 +798,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .reveal-brandline { display: inline-flex; align-items: center; gap: 8px; font-size: var(--text-xs); font-weight: var(--w-black); letter-spacing: .14em; text-transform: uppercase; color: var(--gold); pointer-events: none; }
 .reveal-brandline svg { width: 15px; height: 15px; }
 .reveal-paused { font-style: normal; letter-spacing: .1em; color: rgba(255, 255, 255, .55); }
-.reveal-scene { position: relative; display: flex; flex-direction: column; align-items: center; gap: 12px; min-height: 220px; justify-content: center; pointer-events: none; animation: revealIn 520ms cubic-bezier(.16, 1, .3, 1); }
+.reveal-scene { position: relative; display: flex; flex-direction: column; align-items: center; gap: 12px; min-height: clamp(320px, 52vh, 480px); justify-content: center; pointer-events: none; animation: revealIn 400ms cubic-bezier(.16, 1, .3, 1); }
 .reveal-hint { margin: 6px 0 0; font-size: var(--text-xs); letter-spacing: .04em; color: rgba(255, 255, 255, .45); }
 .reveal-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: rgba(255, 255, 255, .1); border: 1px solid rgba(255, 255, 255, .22); color: var(--gold); }
 /* 3D hero render: the image is generated on the reveal's own dark-green field, and this
@@ -798,12 +811,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .reveal-icon svg { width: 24px; height: 24px; }
 .reveal-kicker { margin: 0; font-size: var(--text-xs); font-weight: var(--w-bold); letter-spacing: .16em; text-transform: uppercase; color: rgba(255, 255, 255, .62); }
 .reveal-value { margin: 0; font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-weight: var(--w-bold); font-size: clamp(34px, 8vw, 60px); line-height: 1.02; text-wrap: balance; }
-.reveal-caption { margin: 0; font-size: var(--text-lg); color: rgba(255, 255, 255, .78); text-wrap: balance; max-width: 42ch; }
+.reveal-caption { margin: 0; font-size: var(--text-lg); color: rgba(255, 255, 255, .85); text-shadow: 0 1px 6px rgba(0, 0, 0, .45); text-wrap: balance; max-width: 42ch; }
 /* Big matchup: a centred vertical stack (away / @ / home) so the huge names and
    the "@" always align, whatever the container width. */
 .reveal-matchup { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
 .reveal-team { display: inline-flex; flex-direction: column; align-items: center; gap: 10px; max-width: min(92vw, 460px); }
-.reveal-team b { filter: brightness(1.55) saturate(1.1); line-height: 1.04; }
+.reveal-team b { line-height: 1.04; overflow-wrap: anywhere; }
 .reveal-crest { border-radius: var(--radius-lg); font-size: var(--text-3xl); box-shadow: 0 0 0 3px rgba(255, 255, 255, .16), 0 14px 30px rgba(0, 0, 0, .38); animation: revealCrest 560ms cubic-bezier(.34, 1.56, .64, 1) both; }
 /* Monogram font must scale with the crest box, or 3-letter marks clip in the smaller crests. */
 .reveal-matchup-sm .reveal-crest { font-size: var(--text-md); box-shadow: 0 0 0 2px rgba(255, 255, 255, .16), 0 8px 20px rgba(0, 0, 0, .34); }
@@ -835,8 +848,83 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .reveal-solo .reveal-seed { margin-top: 2px; }
 /* Matchup framing: Game-of-the-Week badge, per-team rank seed, host venue. */
 .reveal-matchup-wrap { display: inline-flex; flex-direction: column; align-items: center; gap: 12px; }
-.reveal-gotw { display: inline-flex; align-items: center; gap: 6px; padding: 4px 13px; border-radius: var(--radius-pill); background: var(--gold); color: var(--field-dark); font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .12em; text-transform: uppercase; }
+.reveal-gotw { display: inline-flex; align-items: center; gap: 6px; padding: 4px 13px; border-radius: var(--radius-pill); background: var(--gold); color: var(--field-dark); font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .14em; text-transform: uppercase; }
 .reveal-gotw svg { width: 13px; height: 13px; }
+/* Marquee power meter: two colour bars grow inward from each side (length = each
+   team's strength) toward the centre @. Two top seeds nearly collide — showing
+   why the game was circled, not just labelling it. */
+.reveal-power { position: relative; width: min(280px, 72vw); height: 10px; border-radius: var(--radius-pill); background: rgba(255, 255, 255, .12); }
+.reveal-power-fill { position: absolute; top: 0; height: 100%; border-radius: var(--radius-pill); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .28); animation: revealGrow 660ms cubic-bezier(.16, 1, .3, 1) both; }
+.reveal-power-a { left: 0; transform-origin: left center; }
+.reveal-power-b { right: 0; transform-origin: right center; }
+.reveal-power-at { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 1; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--field-dark); border: 1px solid rgba(255, 255, 255, .3); font-family: var(--font-archivo), system-ui, sans-serif; font-style: normal; font-size: var(--text-xs); font-weight: var(--w-bold); color: rgba(255, 255, 255, .8); }
+/* The "Game of the Week" bug — a fixed broadcast frame any matchup drops into:
+   crests facing across a VS, the background split down the seam into each team's
+   colour, and a mini tale-of-the-tape (seed · division · power) below. */
+/* One broadcast frame shared by all three cards (bug · share · stat-card). They
+   differ only in body content. Border links to --gold (with an rgba fallback). */
+.reveal-bug, .reveal-share, .reveal-card {
+  width: min(452px, 92vw); margin: 4px auto 0;
+  border-radius: 16px;
+  border: 1px solid rgba(227, 185, 64, .5);
+  border-color: color-mix(in srgb, var(--gold) 50%, transparent);
+  background: linear-gradient(180deg, rgba(9, 36, 26, .82), rgba(4, 17, 12, .86));
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .45);
+  overflow: hidden;
+}
+.reveal-bug { position: relative; display: flex; flex-direction: column; align-items: stretch; text-align: center; }
+.reveal-bug-tab { align-self: center; margin-top: 14px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 14px; border-radius: var(--radius-pill); background: var(--gold); color: var(--field-dark); font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .14em; text-transform: uppercase; }
+.reveal-bug-tab svg { width: 12px; height: 12px; }
+.reveal-bug-hero { position: relative; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; padding: 16px 14px 14px; }
+.reveal-bug-hero::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .2; background: linear-gradient(100deg, var(--away, transparent) 0 38%, transparent 55%), linear-gradient(280deg, var(--home, transparent) 0 38%, transparent 55%); }
+.reveal-bug-hero::after { content: ""; position: absolute; top: 14%; bottom: 14%; left: 50%; width: 1px; background: linear-gradient(180deg, transparent, rgba(230, 182, 76, .5), transparent); }
+.reveal-bug-side { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+.reveal-bug-side b { font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-weight: var(--w-bold); font-size: clamp(17px, 4.2vw, 23px); line-height: 1.02; text-wrap: balance; overflow-wrap: anywhere; }
+.reveal-bug-vs { position: relative; z-index: 1; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--field-dark); border: 1px solid rgba(255, 255, 255, .25); box-shadow: 0 0 0 4px rgba(6, 25, 20, .6); }
+.reveal-bug-vs em { font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-style: normal; font-weight: var(--w-bold); font-size: var(--text-lg); color: var(--gold); }
+.reveal-bug-tape { display: flex; flex-direction: column; border-top: 1px solid rgba(255, 255, 255, .09); }
+.reveal-tape-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; padding: 8px 20px; }
+.reveal-tape-row + .reveal-tape-row { border-top: 1px solid rgba(255, 255, 255, .06); }
+.reveal-tape-row b { font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-weight: var(--w-bold); font-size: var(--text-xl); color: #fff; line-height: 1; }
+.reveal-tape-row b:first-child { text-align: right; }
+.reveal-tape-row b:last-child { text-align: left; }
+.reveal-tape-row > span { font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-bold); letter-spacing: .14em; text-transform: uppercase; color: rgba(255, 255, 255, .5); white-space: nowrap; }
+/* Same-division marquee: one centred value instead of the name printed twice. */
+.reveal-tape-row.reveal-tape-single { display: flex; justify-content: center; align-items: baseline; gap: 8px; }
+.reveal-bug-power { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 20px 4px; border-top: 1px solid rgba(255, 255, 255, .06); }
+.reveal-bug-power .reveal-power { width: 100%; }
+.reveal-bug-power small { font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-bold); letter-spacing: .14em; text-transform: uppercase; color: rgba(255, 255, 255, .45); }
+.reveal-bug-venue { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 0 14px; font-size: var(--text-sm); color: rgba(255, 255, 255, .6); }
+/* The finale share card — a screenshot-ready season recap that carries the brand. */
+.reveal-share { position: relative; display: flex; flex-direction: column; align-items: stretch; text-align: center; }
+.reveal-share-head { padding: 20px 18px 14px; border-bottom: 1px solid rgba(255, 255, 255, .08); }
+.reveal-share-league { display: block; font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-weight: var(--w-bold); font-size: clamp(24px, 6vw, 38px); line-height: 1.02; color: #fff; text-wrap: balance; }
+.reveal-share-year { font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .18em; text-transform: uppercase; color: var(--gold); }
+.reveal-share-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 14px 10px; }
+.reveal-share-stats > span { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+.reveal-share-stats b { font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-weight: var(--w-bold); font-size: var(--text-2xl); color: var(--gold); line-height: 1; }
+.reveal-share-stats small { font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-bold); letter-spacing: .1em; text-transform: uppercase; color: rgba(255, 255, 255, .55); }
+.reveal-share-marquee { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 16px; border-top: 1px solid rgba(255, 255, 255, .08); }
+.reveal-share-tag { font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
+.reveal-share-vs { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.reveal-share-team { display: inline-flex; align-items: center; gap: 6px; }
+.reveal-share-team b { font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-weight: var(--w-bold); font-size: var(--text-lg); overflow-wrap: anywhere; }
+.reveal-share-vs em { font-family: var(--font-archivo), system-ui, sans-serif; font-style: normal; font-weight: var(--w-bold); font-size: var(--text-xs); color: rgba(255, 255, 255, .5); text-transform: uppercase; letter-spacing: .1em; }
+.reveal-share-window { display: inline-flex; align-items: center; justify-content: center; gap: 10px; padding: 6px 16px; font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-size: var(--text-xl); color: var(--gold); }
+.reveal-share-window i { font-style: normal; color: rgba(255, 255, 255, .35); }
+.reveal-share-brand { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 12px 0 16px; border-top: 1px solid rgba(255, 255, 255, .06); font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .14em; text-transform: uppercase; color: rgba(255, 255, 255, .6); }
+.reveal-share-brand svg { width: 13px; height: 13px; color: var(--gold); }
+/* Shared framed "broadcast card" — the unifying container across the stat beats. */
+.reveal-card { display: flex; flex-direction: column; align-items: stretch; padding: 22px 20px; }
+/* Cards cascade their sections in (tab → hero → tape → power → venue), so the
+   frame arrives holding content rather than popping whole. */
+.reveal-bug > *, .reveal-share > * { animation: revealSection 420ms cubic-bezier(.16, 1, .3, 1) both; }
+.reveal-bug > *:nth-child(1), .reveal-share > *:nth-child(1) { animation-delay: 110ms; }
+.reveal-bug > *:nth-child(2), .reveal-share > *:nth-child(2) { animation-delay: 190ms; }
+.reveal-bug > *:nth-child(3), .reveal-share > *:nth-child(3) { animation-delay: 270ms; }
+.reveal-bug > *:nth-child(4), .reveal-share > *:nth-child(4) { animation-delay: 350ms; }
+.reveal-bug > *:nth-child(5), .reveal-share > *:nth-child(5) { animation-delay: 430ms; }
+.reveal-card .reveal-wall, .reveal-card .reveal-rulers, .reveal-card .reveal-climb, .reveal-card .reveal-field { width: 100%; }
 .reveal-seed { font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-xs); font-weight: var(--w-black); letter-spacing: .03em; color: var(--gold); }
 /* Flexible team mark (any size): raw image, or a colour+initials chip. */
 .reveal-mark { border-radius: 5px; object-fit: cover; flex: none; }
@@ -858,6 +946,26 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .reveal-window-date small { font-size: var(--text-2xs); font-weight: var(--w-bold); color: rgba(255, 255, 255, .55); }
 .reveal-window-date-tg b { color: #ffd24a; }
 .reveal-window-arrow { width: 20px; height: 20px; color: rgba(255, 255, 255, .35); }
+/* Season timeline: a weeks track that draws itself, kickoff → Thanksgiving flame →
+   final week, so the season's length and shape are shown, not listed as dates. */
+.reveal-timeline { display: block; width: min(460px, 88vw); margin: 10px auto 0; }
+.reveal-timeline-track { display: block; position: relative; width: 100%; height: 2px; margin: 64px 0 66px; }
+.reveal-timeline-line { position: absolute; left: 6%; right: 6%; top: 0; height: 2px; border-radius: 2px; background: linear-gradient(90deg, var(--gold), #ffd24a); transform-origin: left center; animation: revealGrow 760ms cubic-bezier(.16, 1, .3, 1) both; }
+.reveal-timeline-node { position: absolute; top: 1px; transform: translate(-50%, -50%); }
+.reveal-timeline-dot { display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 4px var(--field-dark), 0 0 12px rgba(255, 210, 74, .5); animation: revealPop 440ms cubic-bezier(.34, 1.56, .64, 1) both; animation-delay: calc(var(--tl-at, 0) * 6ms); }
+.reveal-timeline-label { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 2px; white-space: nowrap; }
+.reveal-tl-start .reveal-timeline-label { left: 0; transform: none; align-items: flex-start; }
+.reveal-tl-end .reveal-timeline-label { left: auto; right: 0; transform: none; align-items: flex-end; }
+.reveal-timeline-label em { display: inline-flex; align-items: center; gap: 4px; font-style: normal; font-size: var(--text-2xs); font-weight: var(--w-bold); letter-spacing: .12em; text-transform: uppercase; color: rgba(255, 255, 255, .5); }
+.reveal-timeline-label em svg { width: 12px; height: 12px; color: var(--gold); }
+.reveal-timeline-label b { font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-weight: var(--w-bold); font-size: var(--text-2xl); color: var(--gold); line-height: 1.05; }
+.reveal-timeline-label small { font-size: var(--text-2xs); font-weight: var(--w-bold); color: rgba(255, 255, 255, .55); }
+.reveal-tl-flame .reveal-timeline-dot { background: #ffd24a; box-shadow: 0 0 0 4px var(--field-dark), 0 0 16px rgba(255, 180, 60, .7); }
+.reveal-tl-flame .reveal-timeline-label b { color: #ffd24a; }
+/* The Thanksgiving node sits above the track so its label never collides with a
+   late final-week node (they can be only a week or two apart). */
+.reveal-tl-flame .reveal-timeline-label { top: auto; bottom: 18px; }
+@keyframes revealPop { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: none; } }
 /* The field: team crests grouped by division. */
 .reveal-field { display: flex; flex-direction: column; align-items: center; gap: 18px; }
 .reveal-field-count { font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-weight: var(--w-bold); font-size: clamp(26px, 5.4vw, 44px); line-height: 1; }
@@ -866,6 +974,53 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .reveal-field-div-name { font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .14em; text-transform: uppercase; }
 .reveal-field-div-teams { display: inline-flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .reveal-field-div-teams .reveal-crest { box-shadow: none; animation: none; font-size: var(--text-xs); }
+/* The field assembles: crests pop into their divisions in staggered order. */
+.reveal-field-crest { display: inline-flex; animation: revealPop 460ms cubic-bezier(.34, 1.56, .64, 1) both; animation-delay: calc(var(--i, 0) * 45ms); }
+/* The woven-season grid: columns are weeks, threads are matchups (two team colors),
+   drawing in on a diagonal sweep so the season appears to weave itself. */
+.reveal-weave { display: flex; align-items: flex-start; justify-content: center; gap: 5px; width: min(452px, 88vw); margin: 4px auto 0; }
+.reveal-weave-col { display: flex; flex-direction: column; gap: 4px; flex: 1 1 0; min-width: 0; }
+.reveal-weave-thread { display: block; height: 8px; border-radius: var(--radius-pill); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .28), 0 1px 2px rgba(0, 0, 0, .3); transform-origin: left center; animation: revealWeave 560ms cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--i, 0) * 42ms); }
+/* Division rivalries: a gold hairline + glow so the grudge weeks pop in the fabric. */
+.reveal-weave-thread.rivalry { box-shadow: inset 0 0 0 1.5px rgba(255, 210, 74, .9), 0 0 7px rgba(255, 210, 74, .4); }
+@keyframes revealWeave { from { opacity: 0; transform: scaleX(0); } to { opacity: 1; transform: none; } }
+/* Base tag pill — the visual "show" beats reuse it (was scoped to .reveal-statline). */
+.reveal-tag { font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
+/* Gauntlet climb: the subject faces a row of opponent bars that rise with strength. */
+.reveal-climb { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center; gap: 14px 22px; }
+.reveal-climb-subject { display: inline-flex; flex-direction: column; align-items: center; gap: 6px; padding-bottom: 4px; }
+.reveal-climb-subject b { font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-size: var(--text-xl); line-height: 1.05; overflow-wrap: anywhere; }
+.reveal-climb-subject .reveal-crest { animation: none; }
+.reveal-climb-track { display: inline-flex; align-items: flex-end; gap: 12px; }
+.reveal-climb-step { display: inline-flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 5px; }
+.reveal-climb-bar { width: 15px; border-radius: var(--radius-pill); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .28); transform-origin: bottom center; animation: revealRise 620ms cubic-bezier(.16, 1, .3, 1) both; }
+.reveal-climb-step:nth-child(2) .reveal-climb-bar { animation-delay: 90ms; }
+.reveal-climb-step:nth-child(3) .reveal-climb-bar { animation-delay: 180ms; }
+.reveal-climb-step:nth-child(4) .reveal-climb-bar { animation-delay: 270ms; }
+.reveal-climb-wk { font-size: var(--text-2xs); font-weight: var(--w-bold); color: rgba(255, 255, 255, .5); }
+/* Strength of schedule as two walls of opponent bars, strongest first. */
+.reveal-wall { display: flex; flex-direction: column; gap: 22px; width: min(452px, 88vw); font-family: var(--font-archivo), system-ui, sans-serif; }
+.reveal-wall-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin-bottom: 8px; text-align: left; }
+.reveal-wall-team { display: inline-flex; align-items: center; gap: 7px; }
+.reveal-wall-team b { font-size: var(--text-lg); font-weight: var(--w-bold); color: #fff; }
+.reveal-wall-head .reveal-crest { box-shadow: none; animation: none; }
+.reveal-wall-head .reveal-metric { margin-left: auto; }
+.reveal-wall-bars { display: flex; align-items: flex-end; gap: 4px; height: 54px; }
+.reveal-wall-bar { flex: 1 1 0; min-width: 5px; border-radius: 3px 3px 1px 1px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .25); transform-origin: bottom center; animation: revealRise 560ms cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--i, 0) * 45ms); }
+/* Rematch rulers: a weeks track with two pins and the wait drawn between them. */
+.reveal-rulers { display: flex; flex-direction: column; gap: 30px; width: min(452px, 88vw); font-family: var(--font-archivo), system-ui, sans-serif; }
+.reveal-ruler-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin-bottom: 20px; text-align: left; }
+.reveal-ruler-teams { display: inline-flex; align-items: center; gap: 7px; }
+.reveal-ruler-teams b { font-size: var(--text-md); font-weight: var(--w-bold); color: #fff; }
+.reveal-ruler-row { display: block; }
+.reveal-ruler-track { display: block; position: relative; width: 100%; height: 3px; border-radius: var(--radius-pill); background: rgba(255, 255, 255, .16); }
+.reveal-ruler-fill { position: absolute; top: 0; height: 100%; border-radius: inherit; background: var(--gold); transform-origin: left center; animation: revealGrow 640ms cubic-bezier(.16, 1, .3, 1) both; }
+.reveal-ruler-pin { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 11px; height: 11px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 3px var(--field-dark); animation: revealPinPop 360ms cubic-bezier(.34, 1.56, .64, 1) both; animation-delay: 120ms; }
+.reveal-ruler-pin:last-child { animation-delay: 520ms; }
+@keyframes revealPinPop { from { opacity: 0; transform: translate(-50%, -50%) scale(0); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+.reveal-ruler-pin em { position: absolute; top: 13px; left: 50%; transform: translateX(-50%); font-style: normal; font-size: var(--text-2xs); font-weight: var(--w-black); color: var(--gold); white-space: nowrap; }
+@keyframes revealRise { from { opacity: 0; transform: scaleY(0); } to { opacity: 1; transform: none; } }
+@keyframes revealGrow { from { transform: scaleX(0); } to { transform: none; } }
 /* Persistent left / right story navigation. */
 .reveal-arrow { position: fixed; top: 50%; transform: translateY(-50%); z-index: 4; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .22); background: rgba(255, 255, 255, .08); color: #fff; cursor: pointer; transition: background var(--transition); }
 .reveal-arrow:hover:not(:disabled) { background: rgba(255, 255, 255, .2); }
@@ -898,22 +1053,43 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .reveal-cta { padding: 14px 30px; border-radius: var(--radius-pill); border: none; background: var(--gold); color: var(--field-dark); font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-lg); font-weight: var(--w-black); cursor: pointer; box-shadow: 0 14px 34px rgba(0, 0, 0, .38); transition: transform var(--transition), filter var(--transition); }
 .reveal-cta:hover { transform: translateY(-1px); filter: brightness(1.05); }
 .reveal-actions-secondary { display: inline-flex; gap: 10px; }
-.reveal-actions-secondary button, .reveal-nav button { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: var(--radius-pill); border: 1px solid rgba(255, 255, 255, .28); background: rgba(255, 255, 255, .08); color: #fff; font-size: var(--text-sm); font-weight: var(--w-bold); cursor: pointer; transition: background var(--transition); }
+.reveal-actions-secondary button, .reveal-nav button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 10px 18px; border-radius: var(--radius-pill); border: 1px solid rgba(255, 255, 255, .28); background: rgba(255, 255, 255, .08); color: #fff; font-size: var(--text-sm); font-weight: var(--w-bold); cursor: pointer; transition: background var(--transition); }
 .reveal-actions-secondary button:hover, .reveal-nav button:not(:disabled):hover { background: rgba(255, 255, 255, .18); }
 .reveal-actions-secondary svg, .reveal-nav svg { width: 15px; height: 15px; }
 .reveal-nav { display: inline-flex; align-items: center; gap: 14px; z-index: 3; pointer-events: auto; font-size: var(--text-sm); font-weight: var(--w-bold); color: rgba(255, 255, 255, .6); }
 .reveal-nav button:disabled { opacity: .4; cursor: default; }
 .reveal-tapzone { position: fixed; inset: 0; z-index: 2; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: none; }
-.reveal-skip { position: fixed; right: 20px; bottom: 20px; z-index: 4; padding: 9px 16px; border-radius: var(--radius-pill); border: 1px solid rgba(255, 255, 255, .28); background: rgba(255, 255, 255, .08); color: #fff; font-size: var(--text-sm); font-weight: var(--w-bold); cursor: pointer; transition: background var(--transition); }
+.reveal-skip { position: fixed; right: 20px; bottom: 20px; z-index: 4; display: inline-flex; align-items: center; min-height: 44px; padding: 10px 18px; border-radius: var(--radius-pill); border: 1px solid rgba(255, 255, 255, .28); background: rgba(255, 255, 255, .08); color: #fff; font-size: var(--text-sm); font-weight: var(--w-bold); cursor: pointer; transition: background var(--transition); }
+/* Visible pause/play — the accessible affordance for the auto-advancing story. */
+.reveal-playpause { position: fixed; right: 20px; top: 20px; z-index: 4; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .28); background: rgba(255, 255, 255, .08); color: #fff; cursor: pointer; transition: background var(--transition); }
+.reveal-playpause:hover { background: rgba(255, 255, 255, .18); }
+.reveal-playpause svg { width: 18px; height: 18px; }
 .reveal-skip:hover { background: rgba(255, 255, 255, .18); }
 @keyframes revealFade { from { opacity: 0; } to { opacity: 1; } }
-@keyframes revealIn { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
+/* Pure cross-dissolve: the outgoing beat isn't kept mounted, so a slide-up reads
+   as a jump. A fade + a hair of scale settles far more smoothly and is directionless
+   (back/forward feel the same). */
+@keyframes revealIn { from { opacity: 0; transform: scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes revealSection { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes revealCrest { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: none; } }
 @keyframes revealSegFill { from { width: 0; } to { width: 100%; } }
 @keyframes revealArtIn { from { opacity: 0; transform: translateY(10px) scale(.94); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
   .reveal-overlay, .reveal-scene, .reveal-actions, .reveal-crest, .reveal-art { animation: none; }
   .reveal-seg.current > i { animation: none; }
+  /* Skip the weave sweep but keep the finished fabric fully drawn. */
+  .reveal-weave-thread { animation: none; opacity: 1; transform: none; }
+  /* The stat-show bars/rulers hold their finished shape without the grow animation. */
+  .reveal-climb-bar, .reveal-wall-bar, .reveal-ruler-fill { animation: none; opacity: 1; transform: none; }
+  /* Season timeline draws fully with no sweep or pop. */
+  .reveal-timeline-line, .reveal-timeline-dot { animation: none; opacity: 1; }
+  /* Field crests and the marquee power meter hold their finished state. */
+  .reveal-field-crest, .reveal-power-fill { animation: none; opacity: 1; transform: none; }
+  /* Transitions are motion too: snap the wash/halo instead of cross-fading. */
+  .reveal-wash, .reveal-stage::before { transition: none; }
+  /* Cards and ruler pins arrive fully formed, no cascade or pop. */
+  .reveal-bug > *, .reveal-share > * { animation: none; opacity: 1; transform: none; }
+  .reveal-ruler-pin { animation: none; opacity: 1; }
   .modal-backdrop, .modal-backdrop > * { animation: none; }
 }
 .site-footer { border-top: 1px solid var(--line); background: white; }
