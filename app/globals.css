@@ -4214,3 +4214,96 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .playoff-view-tabs button.active { box-shadow: inset 0 -3px var(--field); color: var(--field-dark); background: var(--field-soft); }
 .playoff-view-tabs button svg { width: 17px; height: 17px; }
 .playoff-view-tabs button:focus-visible { position: relative; z-index: 1; outline: 3px solid color-mix(in srgb, var(--field), white 58%); outline-offset: -3px; }
+
+/* ============ Bracket board in the dark broadcast skin (matches the Playoff Picture) ============ */
+.pp-board { display: flex; flex-direction: column; gap: 14px; }
+.pp-board .postseason-map-scroll { border: 1px solid #0d100e; border-radius: var(--radius-lg);
+  background: radial-gradient(120% 60% at 50% -6%, #232c27 0%, transparent 55%),
+    repeating-linear-gradient(135deg, rgba(255,255,255,.014) 0 2px, transparent 2px 6px), var(--pk); }
+.pp-board .postseason-map-canvas { background: transparent; }
+
+/* section panels + headers */
+.pp-board .championship-picture,
+.pp-board .elimination-transfer-rail,
+.pp-board .final-placement-surface,
+.pp-board .postseason-map-canvas .consolation-surface { border-color: var(--pk-line); background: rgba(255,255,255,.02); box-shadow: none; }
+.pp-board .championship-picture > header,
+.pp-board .elimination-transfer-rail > header,
+.pp-board .postseason-map-canvas .consolation-surface > header,
+.pp-board .final-placement-surface > header { border-bottom-color: var(--pk-line); background: linear-gradient(180deg, #1c2420, #171d1a); }
+.pp-board .championship-picture > header strong,
+.pp-board .final-placement-surface > header strong,
+.pp-board .postseason-map-canvas .consolation-surface > header strong { color: #fff; font-style: italic; text-transform: uppercase; text-shadow: 0 1px 0 #000; }
+.pp-board .championship-picture > header small { color: var(--field-mid); }
+.pp-board .championship-picture > header > em,
+.pp-board .elimination-transfer-rail > header small,
+.pp-board .final-placement-surface > header small { color: var(--pk-mut); background: transparent; }
+.pp-board .elimination-transfer-rail > header strong { color: #fff; }
+
+/* round headings */
+.pp-board .playoff-round-heading-copy > span { color: var(--pk-ink); }
+.pp-board .playoff-round-heading-copy > small { color: var(--pk-mut); }
+
+/* game cards */
+.pp-board .main-playoff-game { background: var(--pk-2); border-color: var(--pk-line); box-shadow: 0 6px 16px rgba(0,0,0,.3); }
+.pp-board .main-playoff-game > header { background: rgba(0,0,0,.22); border-bottom-color: var(--pk-line); }
+.pp-board .main-playoff-game > header strong { color: #fff; }
+.pp-board .main-playoff-game > header small { color: var(--pk-mut); }
+.pp-board .main-playoff-game > header > em { background: rgba(255,255,255,.06); color: var(--pk-mut); }
+.pp-board .main-playoff-game.is-final > header > em { background: rgba(63,191,127,.16); color: #7fe3ac; }
+.pp-board .main-playoff-game > footer { background: rgba(0,0,0,.22); border-top-color: var(--pk-line); }
+.pp-board .main-playoff-game > footer span { color: var(--pk-mut); }
+.pp-board .main-playoff-game-teams > .bracket-slot,
+.pp-board .main-playoff-game-teams > .sim-bracket-team { border-top-color: var(--pk-line); }
+
+/* team slots + identity text (TeamIdentityBlock reads --team-text / --division-text) */
+.pp-board .bracket-slot { background: rgba(255,255,255,.02); border-color: var(--pk-line); }
+.pp-board .bracket-slot.placeholder { background: rgba(255,255,255,.03); color: var(--pk-mut); }
+.pp-board .bracket-slot > b { color: #fff; }
+.pp-board .bracket-slot small { color: var(--pk-mut); }
+.pp-board .bracket-slot strong { color: #fff; }
+.pp-board .bracket-slot em { color: var(--field-mid); }
+.pp-board .playoff-slot-meta > small { background: rgba(63,191,127,.16); color: #7fe3ac; }
+.pp-board .team-identity-block { --team-text: #eef3f2; --division-text: #94a49c; }
+.pp-board .team-identity-block.result-winner .team-identity-name strong,
+.pp-board .team-identity-block.result-winner .team-identity-record strong { color: #fff; }
+
+/* simulated (recorded) team rows */
+.pp-board .sim-bracket-team { border-bottom-color: var(--pk-line); color: var(--pk-ink); }
+.pp-board .sim-bracket-team:last-child { border-top-color: var(--pk-line); }
+.pp-board .sim-bracket-team > b { background: rgba(255,255,255,.06); color: var(--pk-ink); }
+.pp-board .sim-bracket-team small { color: var(--pk-mut); }
+.pp-board .sim-bracket-team strong, .pp-board .sim-bracket-team > em { color: #fff; }
+.pp-board .sim-bracket-team.winner { background: rgba(63,191,127,.16); }
+.pp-board .sim-bracket-team.winner > em, .pp-board .sim-bracket-team.winner strong { color: #7fe3ac; }
+
+/* bye strip + champion outcome + transfer rail cells */
+.pp-board .playoff-bye-strip { background: rgba(227,185,64,.10); border-color: rgba(227,185,64,.35); }
+.pp-board .playoff-bye-strip > strong { color: var(--gold); }
+.pp-board .championship-outcome { border-color: rgba(227,185,64,.4); background: rgba(227,185,64,.08); }
+.pp-board .championship-outcome > svg { color: var(--gold); }
+.pp-board .championship-outcome > strong { color: #fff; }
+.pp-board .championship-outcome > small { color: var(--pk-mut); }
+.pp-board .elimination-transfer-rail > div > div { border-right-color: var(--pk-line); }
+.pp-board .elimination-transfer-rail > div > div strong { color: var(--pk-ink); }
+.pp-board .elimination-transfer-rail > div > div small,
+.pp-board .elimination-transfer-rail > div > div > svg { color: var(--pk-mut); }
+
+/* consolation interior + connectors + final placement */
+.pp-board .postseason-map-canvas .consolation-board { background: transparent; }
+.pp-board .postseason-map-canvas .consolation-game { box-shadow: inset 0 0 0 1px var(--pk-line); background: var(--pk-2); }
+.pp-board .bracket-connector-layer { color: rgba(255,255,255,.5); }
+.pp-board .final-placement-surface { color: var(--pk-ink); }
+
+/* Dark board: --team-text is set inline on TeamIdentityBlock, so override with !important */
+.pp-board .team-identity-block { --team-text: #eef3f2 !important; --division-text: #94a49c !important; }
+/* Dark board: inline score editor */
+.pp-board .inline-playoff-score { border-top-color: var(--pk-line); background: rgba(0,0,0,.22); }
+.pp-board .inline-playoff-score-trigger { color: #7fe3ac; }
+.pp-board .inline-playoff-score-trigger:hover { background: rgba(63,191,127,.14); }
+.pp-board .inline-playoff-score-form { border-top-color: var(--pk-line); }
+.pp-board .inline-playoff-score-form label span { color: var(--pk-mut); }
+.pp-board .inline-playoff-score-form input { background: rgba(255,255,255,.06); border-color: var(--pk-line); color: #fff; }
+.pp-board .inline-playoff-score-form > b { color: var(--pk-mut); }
+.pp-board .inline-playoff-score-actions button { background: rgba(255,255,255,.06); border-color: var(--pk-line); color: var(--pk-ink); }
+.pp-board .inline-playoff-score-actions .button-primary { background: var(--field); border-color: var(--field); color: #fff; }

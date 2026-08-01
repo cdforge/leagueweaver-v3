@@ -964,7 +964,7 @@ function PlayoffsView({
       <button type="button" role="tab" aria-selected={playoffTab !== "picture"} className={playoffTab !== "picture" ? "active" : ""} onClick={() => onChangePlayoffTab?.("board")}><Trophy />Bracket</button>
       <button type="button" role="tab" aria-selected={playoffTab === "picture"} className={playoffTab === "picture" ? "active" : ""} onClick={() => onChangePlayoffTab?.("picture")}><LayoutList />Playoff Picture</button>
     </div>
-    {playoffTab === "picture" ? <PlayoffPicturePanel schedule={normalizedSchedule} /> : (<>
+    {playoffTab === "picture" ? <PlayoffPicturePanel schedule={normalizedSchedule} /> : (<div className="pp-board">
     <div className="postseason-map-scroll" aria-label="Connected postseason bracket">
       <BracketConnectorLayer connections={bracketConnections} className={`postseason-map-canvas rounds-${rounds.length}`}>
         <section className="championship-picture" aria-labelledby="championship-picture-title">
@@ -978,7 +978,7 @@ function PlayoffsView({
       </BracketConnectorLayer>
     </div>
     <FinalPlacementTable schedule={normalizedSchedule} />
-    </>)}
+    </div>)}
     </>)}
   </div>;
 }
