@@ -166,7 +166,7 @@ Every story is self-contained — an engineer or designer should be able to pick
 **Acceptance:** Each of the five behaves as described; CSV opens inert in Excel/Sheets.
 
 ## #19 · Preseason standings cleanup ✓LIVE
-**Type:** correctness/clarity · **Status:** open
+**Type:** correctness/clarity · **Status:** ✅ DONE (2026-08-01, branch `feat/audit-followups-7-31`) — At preseason (`isPreseason = selectedRankSnapshot.weekNumber === 0`): the leading column relabels **"PRE RK" → "SEED"**, and the redundant **PRE RK + FROM PRE** columns (header `<th>` and body `<td>`) are suppressed, killing the duplicate-seed / meaningless-movement-arrow columns. DIV REC already renders ties (`W-L-T`). RECORD now sorts by `wins + winPercentage` (wins first, win% breaks ties) so the RECORD and WIN% headers no longer sort identically. **Deferred:** division-grouping in the league table is the larger layout change tracked under **R3** (per-page restructure), not folded here.
 **Problem (verified live):** At preseason (week 0) the standings show **two "PRE RK" columns** and a "FROM PRE" column of meaningless `—`/movement arrows computed against a nonexistent prior week.
 **Where:** `StatsWorkspace.tsx:625` header + `:588-594` rank header logic.
 **Target:** Relabel the leading column **"SEED"** in preseason mode and **suppress** the FROM-PRE / movement columns when `weekNumber === 0`. Also fold in: DIV record must include ties; RECORD and WIN% must not sort identically (sort RECORD by wins then win%); offer division grouping in the league standings (headers within the table or a two-column layout).
