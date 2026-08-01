@@ -4307,3 +4307,11 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .pp-board .inline-playoff-score-form > b { color: var(--pk-mut); }
 .pp-board .inline-playoff-score-actions button { background: rgba(255,255,255,.06); border-color: var(--pk-line); color: var(--pk-ink); }
 .pp-board .inline-playoff-score-actions .button-primary { background: var(--field); border-color: var(--field); color: #fff; }
+
+/* Bracket board sub-sections (Championship / Consolation / Final placement) — dark segmented control */
+.pp-subtabs { display: inline-flex; align-self: flex-start; gap: 2px; padding: 3px; border-radius: var(--radius); border: 1px solid var(--pk-line); background: rgba(0,0,0,.25); flex-wrap: wrap; }
+.pp-subtabs button { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 15px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--pk-mut); font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-md); font-weight: 800; letter-spacing: .04em; text-transform: uppercase; cursor: pointer; transition: background var(--transition), color var(--transition); }
+.pp-subtabs button svg { width: 15px; height: 15px; }
+.pp-subtabs button:hover:not(.active) { color: var(--pk-ink); }
+.pp-subtabs button.active { background: var(--field); color: #fff; }
+.pp-subtabs button:focus-visible { outline: 2px solid var(--field-mid); outline-offset: 2px; }
