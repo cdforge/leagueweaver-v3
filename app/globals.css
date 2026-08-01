@@ -1948,10 +1948,12 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .matchup-score small { grid-column: 1 / -1; color: var(--muted); font-family: var(--font-archivo), sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); }
 /* Week + date caption, centered above the score (mirrors the FINAL/SCHEDULED label below). */
 .matchup-score-date { margin-bottom: 2px; color: var(--muted); font-weight: var(--w-semibold, 600); text-transform: none; letter-spacing: .01em; white-space: nowrap; }
-/* Projected (not-yet-played) matchup: one neutral "Projected" pill in place of the
-   score. Field-green tint, never gold — gold stays GOTW-only. */
-.matchup-score.is-projected { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
-.matchup-score.is-projected em { font-style: normal; font-family: var(--font-archivo), sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: .08em; color: var(--field-dark); background: var(--field-soft); border-radius: var(--radius-chip); padding: 5px 12px; white-space: nowrap; }
+/* Projected (not-yet-played) matchup: a neutral "— @ —" placeholder, same grid as
+   a scheduled score. The "Projected" word lives in the card header (top-right),
+   not here. Field-green tint on the flag, never gold — gold stays GOTW-only. */
+.matchup-score.is-projected strong { color: var(--muted); }
+.matchup-projected-flag { order: -1; }
+.matchup-projected-flag em { font-style: normal; font-family: var(--font-archivo), sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: .08em; color: var(--field-dark); background: var(--field-soft); border-radius: var(--radius-chip); padding: 4px 10px; white-space: nowrap; }
 /* Projected playoff matchup whose teams aren't known yet (later rounds / pending
    consolation results) — a lightweight card that mirrors the projected look. */
 .playoff-tbd-card { justify-content: center; }
@@ -2768,27 +2770,32 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
   .team-performance-grid > div:nth-last-child(2):nth-child(odd) { border-bottom: 0; }
 }
 
-.team-schedule-directory { display: grid; gap: 12px; }
+.team-schedule-directory { display: flex; flex-direction: column; gap: 20px; }
+/* Division section — header + its grid of team cards. Conference wrappers would
+   nest above these when a conference entity exists (none today). */
+.team-directory-division-group { display: flex; flex-direction: column; gap: 10px; }
+.team-directory-division-head { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 2px solid color-mix(in srgb, var(--line-strong), transparent 30%); }
+.team-directory-division-head > strong { font-size: var(--text-md); font-weight: var(--w-black); }
 .team-directory-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
-.team-directory-card { position: relative; min-width: 0; display: grid; grid-template-columns: minmax(230px, 1fr) minmax(150px, .72fr); gap: 12px 18px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--team-brand) 28%, var(--line)); border-left: 5px solid var(--team-brand); border-radius: var(--radius); background: white; padding: 14px 15px 12px; color: var(--ink); text-align: left; cursor: pointer; }
+.team-directory-card { position: relative; min-width: 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--team-brand) 28%, var(--line)); border-left: 5px solid var(--team-brand); border-radius: var(--radius); background: white; padding: 14px 15px 12px; color: var(--ink); text-align: left; cursor: pointer; }
 .team-directory-card::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; background: var(--team-brand); }
 .team-directory-card:has(.team-directory-open:hover) { border-color: color-mix(in srgb, var(--team-brand) 55%, var(--line)); background: color-mix(in srgb, var(--team-brand) 4%, white); }
 /* H6 — the stretched, labeled button carries the click + focus ring; the card is a
    plain container so its name/stats stay in the a11y tree. */
 .team-directory-open { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; border: 0; background: transparent; cursor: pointer; border-radius: inherit; }
 .team-directory-open:focus-visible { outline: 3px solid color-mix(in srgb, var(--team-brand), white 52%); outline-offset: -2px; }
-.team-directory-card > .team-identity-block { align-self: center; }
-/* TS3 — center the bold team name on the logo. The city was an in-flow line
-   above the name, pushing the name ~7px below the logo's centerline; float it
-   as an absolute eyebrow so the name is the only in-flow line and centers on
-   the mark. */
-.team-directory-card .team-identity-name { position: relative; justify-content: center; gap: 0; }
-.team-directory-card .team-identity-name small { position: absolute; left: 0; right: 0; bottom: calc(100% + 1px); line-height: 1; }
-.team-directory-card .team-identity-name strong { line-height: 1.15; }
-.team-directory-group { min-width: 0; align-self: center; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-.team-directory-group .division-identity { max-width: 100%; }
-.team-directory-group > small { color: var(--team-brand-ink); font-size: var(--text-xs); font-weight: var(--w-black); }
-.team-directory-stats { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); margin: 0; border-top: 1px solid var(--line); }
+.team-directory-card > .team-identity-block { align-self: stretch; }
+/* Dedicated clinch-badge row; collapses entirely when the team has no status. */
+.team-directory-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+.team-directory-badges:empty { display: none; }
+.team-directory-badges > .clinch-badges { margin-top: 0; }
+/* TS3/TS6 — vertically center the city + name as ONE block against the avatar
+   (matching the record column), so the two lines have equal space above the city
+   and below the name. Tight line-heights keep the pair compact and balanced. */
+.team-directory-card .team-identity-name { justify-content: center; gap: 0; }
+.team-directory-card .team-identity-name small { line-height: 1.2; }
+.team-directory-card .team-identity-name strong { line-height: 1.2; }
+.team-directory-stats { display: grid; grid-template-columns: repeat(3, 1fr); margin: 0; border-top: 1px solid var(--line); }
 .team-directory-stats > div { min-width: 0; min-height: 34px; display: flex; flex-direction: row; align-items: baseline; gap: 6px; border-right: 1px solid var(--line); padding: 7px 10px; }
 .team-directory-stats > div:first-child { padding-left: 0; }
 .team-directory-stats > div:last-child { border-right: 0; padding-right: 0; }
@@ -2797,7 +2804,6 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 
 @media (min-width: 1280px) {
   .team-directory-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .team-directory-card { grid-template-columns: minmax(200px, 1fr) minmax(130px, .7fr); }
 }
 
 .simulator-control { flex-wrap: wrap; }
@@ -4181,8 +4187,7 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
      sit together on one screen instead of behind a 3.9× horizontal scroll. */
   .team-schedule-table-wrap { display: none; }
   .team-schedule-cards { display: grid; }
-  .team-directory-card { grid-template-columns: 1fr; gap: 8px; padding: 12px 12px 10px; }
-  .team-directory-group { padding-left: 2px; }
+  .team-directory-card { gap: 8px; padding: 12px 12px 10px; }
   .ad-wrap-workspace { display: none; }
   .saved-league-row { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; }
   .saved-league-when { display: none; }
@@ -4301,8 +4306,8 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .matchup-card .game-details-mobile { order: 3; }
   .matchup-card-main > .matchup-score { display: none; }
   /* Projected cards have no per-team inline score, so keep the centered
-     "Projected" pill visible on phones too. */
-  .matchup-card-main > .matchup-score.is-projected { display: flex; }
+     "— @ —" placeholder visible on phones too (the "Projected" flag is in the header). */
+  .matchup-card-main > .matchup-score.is-projected { display: grid; }
   /* A week+date caption should survive even though the numeric center score
      collapses into the per-team inline scores — show just the caption, centered. */
   .matchup-card-main > .matchup-score:has(.matchup-score-date) { display: flex; flex-direction: column; align-items: stretch; order: -1; min-height: 0; padding: 0 0 2px; background: transparent; border: 0; border-radius: 0; }

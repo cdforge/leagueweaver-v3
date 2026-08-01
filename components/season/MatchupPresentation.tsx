@@ -174,6 +174,7 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, away
         {badges.filter((badge) => badge !== "GOTW").map((badge) => <GameBadgeChip badge={badge} key={badge} />)}
       </div>
       <div className="matchup-card-meta">
+        {showProjected && <span className="matchup-projected-flag"><em>Projected</em></span>}
         {showVenue && <span className="matchup-venue"><MapPin />{home.logoUrl ? <img src={home.logoUrl} alt="" /> : <span className="matchup-venue-mono" style={{ background: home.color, color: readableTextColor(home.color) }}>{teamInitials(home)}</span>}<strong>{game.stadium}</strong></span>}
         {winProbability && !played && <span className="matchup-probability" aria-label={`${away.name} ${Math.round(winProbability.away * 100)} percent, ${home.name} ${Math.round(winProbability.home * 100)} percent`}>
           <span style={{ "--away-probability": `${winProbability.away * 100}%` } as React.CSSProperties} />
@@ -188,22 +189,27 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, away
           center score stays for desktop. Both read from the same game data. */}
       <div className="matchup-team-row">
         <TeamIdentityBlock team={away} division={awayDivision} leagueRank={awayRank} record={awayRecord} showCity={showCity} result={awayResult} href={teamHrefBase ? `${teamHrefBase}/${away.id}` : undefined} />
-        {!showProjected && <span className="matchup-row-score"><strong className={awayResult === "loser" ? "loser" : ""}>{game.awayScore != null ? formatPoints(game.awayScore) : "—"}</strong></span>}
+        {!showProjected && <span className="matchup-row-score"><strong className={awayResult === "loser" ? "loser" : ""}>{played ? formatPoints(game.awayScore ?? 0) : "—"}</strong></span>}
       </div>
       {showProjected ? (
-        <div className="matchup-score is-projected" aria-label={`${away.name} at ${home.name}, projected — not yet played`}>{dateLabel && <small className="matchup-score-date">{dateLabel}</small>}<em>Projected</em></div>
+        <div className="matchup-score is-projected" aria-label={`${away.name} at ${home.name}, projected — not yet played`}>
+          {dateLabel && <small className="matchup-score-date">{dateLabel}</small>}
+          <strong>—</strong>
+          <span aria-label="at">@</span>
+          <strong>—</strong>
+        </div>
       ) : (
         <div className="matchup-score" aria-label={played ? `${away.name} ${game.awayScore}, ${home.name} ${game.homeScore}, final` : `${away.name} at ${home.name}, score not entered`}>
           {dateLabel && <small className="matchup-score-date">{dateLabel}</small>}
-          <strong className={awayResult === "loser" ? "loser" : ""}>{game.awayScore != null ? formatPoints(game.awayScore) : "—"}</strong>
+          <strong className={awayResult === "loser" ? "loser" : ""}>{played ? formatPoints(game.awayScore ?? 0) : "—"}</strong>
           <span aria-label="at">@</span>
-          <strong className={homeResult === "loser" ? "loser" : ""}>{game.homeScore != null ? formatPoints(game.homeScore) : "—"}</strong>
+          <strong className={homeResult === "loser" ? "loser" : ""}>{played ? formatPoints(game.homeScore ?? 0) : "—"}</strong>
           <small>{played ? "FINAL" : "SCHEDULED"}</small>
         </div>
       )}
       <div className="matchup-team-row">
         <TeamIdentityBlock mirrored team={home} division={homeDivision} leagueRank={homeRank} record={homeRecord} showCity={showCity} result={homeResult} href={teamHrefBase ? `${teamHrefBase}/${home.id}` : undefined} />
-        {!showProjected && <span className="matchup-row-score"><strong className={homeResult === "loser" ? "loser" : ""}>{game.homeScore != null ? formatPoints(game.homeScore) : "—"}</strong></span>}
+        {!showProjected && <span className="matchup-row-score"><strong className={homeResult === "loser" ? "loser" : ""}>{played ? formatPoints(game.homeScore ?? 0) : "—"}</strong></span>}
       </div>
     </div>
     {hasAdditionalDetails && <div className="game-details-desktop"><GameDetails game={game} /></div>}
