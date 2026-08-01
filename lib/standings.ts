@@ -363,3 +363,8 @@ export function freezeCompletedRankHistory(schedule: GeneratedSchedule): Generat
 export function formatRecord(row: StandingsRow) {
   return row.ties ? `${row.wins}-${row.losses}-${row.ties}` : `${row.wins}-${row.losses}`;
 }
+
+/** Division record W-L(-T) — one formatter so every table renders ties the same way. */
+export function formatDivisionRecord(row: Pick<StandingsRow, "divisionWins" | "divisionLosses" | "divisionTies">) {
+  return row.divisionTies ? `${row.divisionWins}-${row.divisionLosses}-${row.divisionTies}` : `${row.divisionWins}-${row.divisionLosses}`;
+}

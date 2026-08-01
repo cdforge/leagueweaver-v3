@@ -2542,10 +2542,10 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .game-highlight-open { min-height: 28px; display: inline-flex; align-items: center; border-radius: var(--radius-chip); color: var(--field-dark); padding: 0 6px; font-size: var(--text-2xs); font-weight: var(--w-black); }
 .playoff-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .team-stats-table-wrap { max-width: 100%; overflow: auto; border: 1px solid var(--line); background: white; }
-.team-stats-table { min-width: 1360px; width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--text-2xs); font-variant-numeric: tabular-nums; }
+.team-stats-table { min-width: 1000px; width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--text-2xs); font-variant-numeric: tabular-nums; }
 .team-stats-table th { position: sticky; z-index: 3; top: 0; height: 40px; border-bottom: 1px solid var(--line-strong); background: var(--ink); color: white; text-align: right; }
-.team-stats-table th:first-child { left: 0; z-index: 5; width: 224px; min-width: 224px; max-width: 224px; text-align: left; }
-.team-stats-table th button { width: 100%; min-height: 40px; border: 0; background: transparent; color: inherit; display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; padding: 0 9px; font-size: var(--text-2xs); font-weight: var(--w-black); cursor: pointer; }
+.team-stats-table th:first-child { left: 0; z-index: 5; width: 168px; min-width: 168px; max-width: 168px; text-align: left; }
+.team-stats-table th button { width: 100%; min-height: 40px; border: 0; background: transparent; color: inherit; display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; padding: 0 7px; font-size: var(--text-2xs); font-weight: var(--w-black); cursor: pointer; white-space: nowrap; }
 .team-stats-table th:first-child button { justify-content: flex-start; }
 .team-stats-table th button svg { width: 11px; opacity: 0.45; transition: opacity var(--transition), color var(--transition); }
 .team-stats-table th button:hover svg { opacity: 0.8; }
@@ -2553,7 +2553,7 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .team-stats-table th button.is-sorted svg { opacity: 1; color: var(--gold); }
 .team-stats-table td { height: 58px; border-bottom: 1px solid var(--line); padding: 7px 9px; text-align: right; }
 .team-stats-table tbody tr:last-child td { border-bottom: 0; }
-.team-stats-table td:first-child { position: sticky; z-index: 2; left: 0; width: 224px; min-width: 224px; max-width: 224px; background: white; box-shadow: 1px 0 var(--line); text-align: left; }
+.team-stats-table td:first-child { position: sticky; z-index: 2; left: 0; width: 168px; min-width: 168px; max-width: 168px; background: white; box-shadow: 1px 0 var(--line); text-align: left; }
 .team-stats-table td:first-child > a { min-width: 0; display: flex; align-items: center; gap: 8px; color: inherit; text-decoration: none; }
 .team-stats-table td:first-child > a > span:not(.division-identity) { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .team-stats-table td:first-child strong, .team-stats-table td:first-child small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2684,6 +2684,13 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .workspace-page .team-schedule-hero .team-identity-name strong,
 .workspace-page .team-schedule-hero .team-identity-record,
 .workspace-page .team-schedule-hero .team-identity-division-record { color: var(--team-brand-on, white); }
+/* The record's division mark is the division color on text — it washes out on the
+   team-color hero. Paint it as a small filled division tile so the avatar stays visible. */
+.workspace-page .team-schedule-hero .team-identity-division-record .division-mark-filled {
+  border-radius: var(--radius-chip);
+  background: var(--dm-bg);
+  color: var(--dm-ink) !important;
+}
 .workspace-page .team-schedule-hero .team-identity-name strong { font-size: var(--text-lg); }
 .workspace-page .team-schedule-hero .team-identity-name small { font-size: var(--text-xs); }
 .workspace-page .team-schedule-hero .team-identity-record > strong { font-size: var(--text-2xl); }
