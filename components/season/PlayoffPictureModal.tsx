@@ -2,12 +2,11 @@
 
 import { useMemo, type CSSProperties } from "react";
 import { CircleX, Medal, ShieldCheck, Trophy, X } from "lucide-react";
-import { Modal } from "@/components/ui/Modal";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { DivisionMark } from "@/components/ui/DivisionIdentity";
 import { buildPlayoffPicture, type PlayoffPictureEntry } from "@/lib/playoffPicture";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
-import { tintColor } from "@/lib/colorContrast";
+import { accessibleTeamColor, tintColor } from "@/lib/colorContrast";
 import type { Division, GeneratedSchedule, Team } from "@/lib/types";
 
 function weekLabel(week?: number) {
@@ -24,7 +23,7 @@ function gamesBackLabel(gb?: number) {
   return `${num} back`;
 }
 
-export function PlayoffPictureModal({ schedule, onClose }: { schedule: GeneratedSchedule; onClose: () => void }) {
+export function PlayoffPicturePanel({ schedule, onClose }: { schedule: GeneratedSchedule; onClose?: () => void }) {
   const picture = useMemo(() => buildPlayoffPicture(schedule), [schedule]);
   const teamById = useMemo(() => new Map(schedule.setup.teams.map((team) => [team.id, team])), [schedule.setup.teams]);
   const divisionById = useMemo(() => new Map(schedule.setup.divisions.map((d) => [d.id, d])), [schedule.setup.divisions]);
@@ -73,7 +72,7 @@ export function PlayoffPictureModal({ schedule, onClose }: { schedule: Generated
     const division = divisionById.get(entry.divisionId);
     return (
       <>
-        <div className={`pp-srow${entry.isTopSeed ? " is-top" : ""}`} style={{ "--tc": team.color, "--dc": division?.color ?? "#5b6b64" } as CSSProperties}>
+        <div className={`pp-srow${entry.isTopSeed ? " is-top" : ""}`} style={{ "--tc": team.color, "--bar": accessibleTeamColor(team.color), "--dc": division?.color ?? "#5b6b64" } as CSSProperties}>
           <span className="pp-seed">{entry.seed}{entry.isTopSeed && <LeagueBadge corner />}</span>
           <EntityLogo className="pp-crest" color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={38} />
           <div className="pp-bar">
@@ -116,7 +115,7 @@ export function PlayoffPictureModal({ schedule, onClose }: { schedule: Generated
   const empty = picture.field.length === 0;
 
   return (
-    <Modal onClose={onClose} className="pp-panel" labelledBy="pp-title">
+    <div className={`pp-panel${onClose ? "" : " pp-panel-inline"}`} role="region" aria-labelledby="pp-title">
       <header className="pp-head">
         <div>
           <p className="pp-eyebrow">Playoff Picture</p>
@@ -127,7 +126,7 @@ export function PlayoffPictureModal({ schedule, onClose }: { schedule: Generated
           <b>{picture.throughWeek === 0 ? "Preseason" : `Week ${picture.throughWeek}`}</b>
           {!picture.regularSeasonComplete && picture.weeksToPlay > 0 ? `${picture.weeksToPlay} to play` : "Regular season complete"}
         </span>
-        <button type="button" className="pp-close" onClick={onClose} aria-label="Close playoff picture"><X aria-hidden="true" /></button>
+        {onClose && <button type="button" className="pp-close" onClick={onClose} aria-label="Close playoff picture"><X aria-hidden="true" /></button>}
       </header>
 
       {empty ? (
@@ -157,6 +156,6 @@ export function PlayoffPictureModal({ schedule, onClose }: { schedule: Generated
           </div>
         </>
       )}
-    </Modal>
+    </div>
   );
 }

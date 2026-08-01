@@ -50,7 +50,7 @@ import { SimulatorWorkspace, type SimulatorResultView } from "@/components/seaso
 import { StatsWorkspace } from "@/components/season/StatsWorkspace";
 import { TeamScheduleView } from "@/components/season/TeamSchedulePage";
 import { WeekScoreBar } from "@/components/season/WeekScoreBar";
-import { PlayoffPictureModal } from "@/components/season/PlayoffPictureModal";
+import { PlayoffPicturePanel } from "@/components/season/PlayoffPictureModal";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { Modal, ConfirmDialog } from "@/components/ui/Modal";
 import { EntityLogo } from "@/components/ui/EntityLogo";
@@ -720,12 +720,19 @@ function PlayoffsView({
   onUpdatePlayoffGame,
   highlightedGame,
   simulationMode = false,
+  mode = "board",
+  playoffTab = "board",
+  onChangePlayoffTab,
 }: {
   schedule: GeneratedSchedule;
   onUpdatePlayoffs: (patch: Partial<LeagueSetupInput["playoffs"]>) => void;
   onUpdatePlayoffGame: (game: PlayoffGame) => void;
   highlightedGame?: HighlightedGame;
   simulationMode?: boolean;
+  /** "board" renders the Bracket/Picture tabs; "settings" renders only the config block (for the Settings page). */
+  mode?: "board" | "settings";
+  playoffTab?: "board" | "picture";
+  onChangePlayoffTab?: (tab: "board" | "picture") => void;
 }) {
   const [roundBrandingOpen, setRoundBrandingOpen] = useState(false);
   const settings = normalizePlayoffSettings(schedule.setup.playoffs, schedule.setup.teams.length, schedule.setup.color, schedule.setup.weeks);
@@ -941,6 +948,7 @@ function PlayoffsView({
     </section>;
   };
   return <div className="workspace-stack playoff-workspace" style={{ "--playoff-color": settings.color } as React.CSSProperties}>
+    {mode === "settings" ? (<>
     <div className={`playoff-topline playoff-theme-${settings.theme}`}><div>{settings.logoUrl && <EntityLogo color={settings.color} logoUrl={settings.logoUrl} monogram="PO" imagePresentation="bare" />}<span><strong>{settings.name}</strong><small>{fieldSize} teams · {formatLabel} · Higher seed hosts before title · {championshipVenueCopy}</small></span></div><div className="playoff-field-actions">{simulationMode ? <span className="projected-pill simulation"><Gamepad2 />SIMULATED BRACKET</span> : <><span className={`projected-pill ${settings.fieldStatus === "locked" ? "locked" : ""}`}>{settings.fieldStatus === "locked" ? "FIELD LOCKED" : "LIVE PROJECTION"}</span><button type="button" onClick={lockField}><LockKeyhole />{settings.fieldStatus === "locked" ? "Unlock field" : "Lock field"}</button></>}</div></div>
     <div className="playoff-policy"><span><strong>{playoffPlacementLabel(placement)}</strong><small>{placement === "division-halves" ? `${sideName("A")} and ${sideName("B")} run separate tournaments; their champions meet in the final` : placement === "division-leaders" ? "Division winners protected at the top" : "Top teams qualify regardless of division"}</small></span><span><strong>{byeCount || "No"} {byeCount === 1 ? "bye" : "byes"}</strong><small>{byeCount ? "Awarded to the top seeds" : "Every qualifier opens play"}</small></span><span><strong>{settings.reseedMode === "fixed" ? "Fixed bracket" : settings.reseedMode === "protected" ? "Protected reseed" : "Reseed each round"}</strong><small>{placement === "division-halves" && settings.reseedMode !== "fixed" ? "Reseeding stays inside each half until the final" : settings.seedDisplayMode === "reranked" ? "Showing bracket seeds" : "Showing standings finish"}</small></span></div>
     {!simulationMode && <><div className="playoff-customization-bar"><span><strong>Postseason presentation</strong><small>Choose placement format and personalize round names, game names, and logos.</small></span><CustomSelect label="Consolation format" value={settings.consolationMode} onChange={(value) => onUpdatePlayoffs({ consolationMode: value as LeagueSetupInput["playoffs"]["consolationMode"], thirdPlaceGame: value !== "off" })} options={consolationOptions} /><button type="button" aria-expanded={roundBrandingOpen} onClick={() => setRoundBrandingOpen((current) => !current)}><Pencil />Names & logos</button></div>{roundBrandingOpen && <div className="playoff-branding-panels">
@@ -951,6 +959,12 @@ function PlayoffsView({
         return <section key={`${roundIndex}-branding`}><header><strong>{round || `Round ${roundIndex + 1}`}</strong><small>NFL Week {schedule.setup.weeks + roundIndex + 1}</small></header><div>{mainSlots.map((slot) => { const fallback = mainGameBrandingLabel(slot); const label = gameDisplayName(slot.id, fallback); return <div key={slot.id}><label><span>Championship bracket</span><input aria-label={`${fallback} name`} defaultValue={label} maxLength={60} onBlur={(event) => updateGameName(slot.id, event.target.value)} /></label><IdentityColorPicker compact showColorControl={false} showAbbreviation={false} imagePresentation="bare" name={label} abbreviation={`G${slot.gameIndex + 1}`} color={settings.color} logoUrl={settings.gameLogoUrls?.[slot.id]} onChange={(next) => updateGameLogo(slot.id, next.logoUrl)} /></div>; })}{placementSlots.map((game) => { const label = gameDisplayName(game.id, game.label); return <div key={game.id}><label><span>Placement bracket</span><input aria-label={`${game.label} name`} defaultValue={label} maxLength={60} onBlur={(event) => updateGameName(game.id, event.target.value)} /></label><IdentityColorPicker compact showColorControl={false} showAbbreviation={false} imagePresentation="bare" name={label} abbreviation="CG" color={settings.color} logoUrl={settings.gameLogoUrls?.[game.id]} onChange={(next) => updateGameLogo(game.id, next.logoUrl)} /></div>; })}</div></section>;
       })}</div></section>
     </div>}</>}
+    </>) : (<>
+    <div className="playoff-view-tabs" role="tablist" aria-label="Playoffs view">
+      <button type="button" role="tab" aria-selected={playoffTab !== "picture"} className={playoffTab !== "picture" ? "active" : ""} onClick={() => onChangePlayoffTab?.("board")}><Trophy />Bracket</button>
+      <button type="button" role="tab" aria-selected={playoffTab === "picture"} className={playoffTab === "picture" ? "active" : ""} onClick={() => onChangePlayoffTab?.("picture")}><LayoutList />Playoff Picture</button>
+    </div>
+    {playoffTab === "picture" ? <PlayoffPicturePanel schedule={normalizedSchedule} /> : (<>
     <div className="postseason-map-scroll" aria-label="Connected postseason bracket">
       <BracketConnectorLayer connections={bracketConnections} className={`postseason-map-canvas rounds-${rounds.length}`}>
         <section className="championship-picture" aria-labelledby="championship-picture-title">
@@ -964,6 +978,8 @@ function PlayoffsView({
       </BracketConnectorLayer>
     </div>
     <FinalPlacementTable schedule={normalizedSchedule} />
+    </>)}
+    </>)}
   </div>;
 }
 
@@ -1040,10 +1056,11 @@ function ImportHistoryPanel({ events, loading, error, onRefresh, scheduleId }: {
   </section>;
 }
 
-function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, canAccessPlatformSync, platformSyncLoading, onRefreshPlatformScores, onSavePlatformConnection, onDisconnectPlatform, importHistory, importHistoryLoading, importHistoryError, onRefreshImportHistory }: {
+function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, onUpdatePlayoffs, canAccessPlatformSync, platformSyncLoading, onRefreshPlatformScores, onSavePlatformConnection, onDisconnectPlatform, importHistory, importHistoryLoading, importHistoryError, onRefreshImportHistory }: {
   schedule: GeneratedSchedule;
   onOpenDraftRanking: () => void;
   onRegenerate: () => void;
+  onUpdatePlayoffs: (patch: Partial<LeagueSetupInput["playoffs"]>) => void;
   canAccessPlatformSync: boolean;
   platformSyncLoading: boolean;
   onRefreshPlatformScores: () => void;
@@ -1068,6 +1085,8 @@ function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, canAccessPla
       <div><span>Revision</span><strong>Version {schedule.revision}</strong></div>
       <div><span>Generation seed</span><code>{schedule.seed}</code></div>
     </div>
+    <div className="settings-band"><div><Trophy /><span><strong>Playoffs</strong><small>Field size, bracket format, and postseason presentation for this league.</small></span></div></div>
+    <PlayoffsView schedule={schedule} onUpdatePlayoffs={onUpdatePlayoffs} onUpdatePlayoffGame={() => undefined} mode="settings" />
   </div>;
 }
 
@@ -1208,7 +1227,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   // overwrite real scores, or wipe the slate.
   const [confirmAction, setConfirmAction] = useState<null | "share" | "commit" | "regenerate">(null);
   const [showRecap, setShowRecap] = useState(false);
-  const [playoffPictureOpen, setPlayoffPictureOpen] = useState(false);
+  const [playoffTab, setPlayoffTab] = useState<"board" | "picture">("board");
   // Deep link from the account page (?recap=1) opens the recap straight away.
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("recap") !== "1") return;
@@ -1825,9 +1844,8 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       onSelectWeek={setSelectedWeek}
       onSelectGame={(gameId) => { openLeagueScheduleWeek(scoreBarWeek.weekNumber); setHighlightedGame({ id: gameId }); }}
       playoffPictureSummary={playoffPictureSummary}
-      onOpenPlayoffPicture={playoffPictureSummary ? () => setPlayoffPictureOpen(true) : undefined}
+      onOpenPlayoffPicture={playoffPictureSummary ? () => { setPlayoffTab("picture"); setView("playoffs"); } : undefined}
     />}
-    {playoffPictureOpen && playoffPicture && <PlayoffPictureModal schedule={activeSchedule} onClose={() => setPlayoffPictureOpen(false)} />}
     <div className="workspace-shell">
       <aside className="workspace-rail"><nav aria-label="Season workspace">{VIEW_ITEMS.map((item) => { const Icon = item.icon; return <button type="button" key={item.key} aria-label={item.label} title={item.label} className={view === item.key ? "active" : ""} onClick={() => selectView(item)}><Icon /><span>{item.label}</span></button>; })}</nav><div className="rail-bottom"><WorkspaceSwitcher current={{ id: schedule.id, name: schedule.setup.name, seasonYear: schedule.setup.seasonYear, color: schedule.setup.color, logoUrl: schedule.setup.logoUrl, initials: schedule.setup.initials }} signedIn={Boolean(entitlements.signedIn)} /></div></aside>
       <section className={`workspace-main ${selectedTeamColor ? "team-workspace-branded" : ""}`} style={workspaceMainStyle}>
@@ -1872,7 +1890,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
           {view === "gotw" && <GotwWorkspace schedule={activeSchedule} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
           {view === "matchup-ratings" && <MatchupRatingsView schedule={activeSchedule} />}
           {view === "standings" && <StandingsView schedule={activeSchedule} onUpdateTiebreakers={simulation ? undefined : onUpdateTiebreakers} readOnly={Boolean(simulation)} />}
-          {view === "playoffs" && <PlayoffsView schedule={activeSchedule} onUpdatePlayoffs={simulation ? () => undefined : onUpdatePlayoffs} onUpdatePlayoffGame={simulation ? () => undefined : onUpdatePlayoffGame} highlightedGame={highlightedGame} simulationMode={Boolean(simulation)} />}
+          {view === "playoffs" && <PlayoffsView schedule={activeSchedule} onUpdatePlayoffs={simulation ? () => undefined : onUpdatePlayoffs} onUpdatePlayoffGame={simulation ? () => undefined : onUpdatePlayoffGame} highlightedGame={highlightedGame} simulationMode={Boolean(simulation)} playoffTab={playoffTab} onChangePlayoffTab={setPlayoffTab} />}
           {view === "simulator" && !simulation && simulationLoaded && <SimulatorLaunch hasSavedRun={Boolean(savedSimulation)} onPlay={playSimulation} onStartFromReal={startSimulationFromReal} />}
           {view === "simulator" && simulation && <SimulatorWorkspace
             schedule={activeSchedule}
@@ -1896,7 +1914,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
             onDiscard={discardSimulation}
             onOpenSchedule={openLeagueScheduleWeek}
           />}
-          {view === "settings" && <SettingsView schedule={activeSchedule} onOpenDraftRanking={() => setDraftRankingRequest((current) => current + 1)} onRegenerate={() => setConfirmAction("regenerate")} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshPlatformScores={refreshPlatformScores} onSavePlatformConnection={savePlatformConnection} onDisconnectPlatform={disconnectPlatform} importHistory={importHistory} importHistoryLoading={importHistoryLoading} importHistoryError={importHistoryError} onRefreshImportHistory={loadImportHistory} />}
+          {view === "settings" && <SettingsView schedule={activeSchedule} onOpenDraftRanking={() => setDraftRankingRequest((current) => current + 1)} onRegenerate={() => setConfirmAction("regenerate")} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshPlatformScores={refreshPlatformScores} onSavePlatformConnection={savePlatformConnection} onDisconnectPlatform={disconnectPlatform} importHistory={importHistory} importHistoryLoading={importHistoryLoading} importHistoryError={importHistoryError} onRefreshImportHistory={loadImportHistory} onUpdatePlayoffs={onUpdatePlayoffs} />}
         </div>
         {entitlements.plan !== "pro" && <AdUnit placement="workspace" />}
       </section>

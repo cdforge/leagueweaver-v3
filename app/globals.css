@@ -4134,15 +4134,18 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .pp-srow.is-top .pp-seed { box-shadow: inset 0 0 0 2px var(--gold); color: var(--gold); }
 .pp-crest { flex: 0 0 auto; align-self: center; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
 .pp-bar { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-radius: 8px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tc, #555) 88%, #fff 12%), var(--tc, #555));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.22), inset 0 -2px 6px rgba(0,0,0,.18); }
+  /* --bar is accessibleTeamColor(team.color): guaranteed >=4.5:1 with white, so the
+     white bar text always clears AA. Gloss comes from the inset highlight, not a
+     white color-mix that would lift a light team above the contrast floor. */
+  background: linear-gradient(180deg, var(--bar, var(--tc, #555)), color-mix(in srgb, var(--bar, var(--tc, #555)) 86%, #000 14%));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.20), inset 0 -2px 6px rgba(0,0,0,.20); }
 .pp-tm { display: flex; flex-direction: column; line-height: 1.04; min-width: 0; }
 .pp-name { font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-style: italic; font-size: 19px; letter-spacing: .01em; text-transform: uppercase; color: #fff; text-shadow: 0 1px 1px rgba(0,0,0,.32); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pp-div { display: inline-flex; align-items: center; gap: 5px; margin-top: 2px; font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: rgba(255,255,255,.85); white-space: nowrap; }
+.pp-div { display: inline-flex; align-items: center; gap: 5px; margin-top: 2px; font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: rgba(255,255,255,.94); white-space: nowrap; }
 .pp-sp { flex: 1; }
 .pp-recs { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.05; flex: 0 0 auto; }
 .pp-rec { font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 18px; color: #fff; font-variant-numeric: tabular-nums; text-shadow: 0 1px 1px rgba(0,0,0,.3); }
-.pp-drec { font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 10.5px; letter-spacing: .03em; text-transform: uppercase; color: rgba(255,255,255,.8); font-variant-numeric: tabular-nums; }
+.pp-drec { font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 10.5px; letter-spacing: .03em; text-transform: uppercase; color: rgba(255,255,255,.94); font-variant-numeric: tabular-nums; }
 .pp-tag { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border-radius: var(--radius-pill); background: rgba(0,0,0,.32); font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: #fff; white-space: nowrap; }
 .pp-tag svg { width: 11px; height: 11px; }
 .pp-tag.is-top { color: var(--gold); }
@@ -4200,3 +4203,14 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .playoff-branding-row { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
 .playoff-name-field { flex: 1; min-width: 220px; }
 .playoff-name-field input { width: 100%; }
+
+/* Playoff Picture rendered inline as a tab on the Playoffs page (not a modal) */
+.pp-panel-inline { width: auto; max-height: none; overflow: visible; box-shadow: var(--shadow-sm); }
+.pp-panel-inline .pp-head { position: static; }
+.playoff-view-tabs { min-height: 48px; display: flex; align-items: stretch; overflow-x: auto; border: 1px solid var(--line); background: white; scrollbar-width: thin; box-shadow: var(--shadow-sm); margin-bottom: 14px; }
+.playoff-view-tabs button { min-width: 150px; min-height: 46px; border: 0; border-right: 1px solid var(--line); background: white; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 18px; font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-lg); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: .02em; cursor: pointer; transition: background var(--transition), color var(--transition); }
+.playoff-view-tabs button:hover:not(.active) { background: var(--canvas); color: var(--ink); }
+.playoff-view-tabs button:last-child { border-right: 0; }
+.playoff-view-tabs button.active { box-shadow: inset 0 -3px var(--field); color: var(--field-dark); background: var(--field-soft); }
+.playoff-view-tabs button svg { width: 17px; height: 17px; }
+.playoff-view-tabs button:focus-visible { position: relative; z-index: 1; outline: 3px solid color-mix(in srgb, var(--field), white 58%); outline-offset: -3px; }

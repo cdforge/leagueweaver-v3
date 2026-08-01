@@ -508,18 +508,28 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   const setConsolation = (consolationMode: LeagueSetupInput["playoffs"]["consolationMode"]) =>
     patch({ consolationMode, thirdPlaceGame: consolationMode !== "off" && p.fieldSize >= 4 });
 
+  // Division halves is the recommended default for eligible builds: pre-select it
+  // once on mount when the league is still on "auto" and halves are usable.
+  useEffect(() => {
+    if (p.placementMode === "auto" && isPlayoffPlacementUsable("division-halves", divisionCount, p.fieldSize)) {
+      patch({ placementMode: "division-halves" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const byeCount = getPlayoffByeCount(p.fieldSize);
   const fieldSizeOptions: number[] = [];
   for (let n = 2; n <= maxFieldSize; n += 2) fieldSizeOptions.push(n);
   if (!fieldSizeOptions.includes(maxFieldSize)) fieldSizeOptions.push(maxFieldSize);
 
+  const halvesUsable = isPlayoffPlacementUsable("division-halves", divisionCount, p.fieldSize);
   const placementOptions = [
     { value: "auto", label: "Automatic", description: `Best fit for ${divisionCount} division${divisionCount === 1 ? "" : "s"}` },
-    { value: "overall", label: "Overall standings", description: "Top teams qualify regardless of division" },
+    ...(halvesUsable
+      ? [{ value: "division-halves", label: "Division halves (Recommended)", description: "Each half runs its own tournament to the final" }] : []),
     ...(isPlayoffPlacementUsable("division-leaders", divisionCount, p.fieldSize)
       ? [{ value: "division-leaders", label: "Division leaders protected", description: "Division winners seeded at the top" }] : []),
-    ...(isPlayoffPlacementUsable("division-halves", divisionCount, p.fieldSize)
-      ? [{ value: "division-halves", label: "Division halves", description: "Each half runs its own tournament to the final" }] : []),
+    { value: "overall", label: "Overall standings", description: "Top teams qualify regardless of division" },
   ];
   const consolationOptions = [
     { value: "off", label: "No consolation bracket", description: "Championship bracket only" },
