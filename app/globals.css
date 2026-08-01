@@ -2463,7 +2463,7 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .season-odds-meter em { color: var(--ink); font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-lg); font-style: normal; font-weight: var(--w-bold); font-variant-numeric: tabular-nums; }
 .season-odds-meter i { position: relative; width: 64px; height: 4px; overflow: hidden; border-radius: var(--radius-chip); background: #dce4e0; }
 .season-odds-meter i b { position: absolute; inset: 0 auto 0 0; border-radius: inherit; }
-.stats-abbr-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 10px; border-left: 3px solid var(--line-strong, var(--line)); background: var(--surface-2, var(--canvas)); padding: 9px 13px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.stats-abbr-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0 0; border-left: 3px solid var(--line-strong, var(--line)); background: var(--surface-2, var(--canvas)); padding: 9px 13px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 .stats-abbr-legend > div { display: flex; align-items: baseline; gap: 5px; }
 .stats-abbr-legend dt { font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: 0.04em; }
 .stats-abbr-legend dd { margin: 0; color: var(--muted); font-size: var(--text-2xs); }
@@ -2559,11 +2559,14 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .team-stats-table tbody tr:last-child td { border-bottom: 0; }
 .team-stats-table td:first-child { position: sticky; z-index: 2; left: 0; width: 168px; min-width: 168px; max-width: 168px; background: white; box-shadow: 1px 0 var(--line); text-align: left; }
 .team-stats-table td:first-child > a { min-width: 0; display: flex; align-items: center; gap: 8px; color: inherit; text-decoration: none; }
-.team-stats-table td:first-child > a > span:not(.division-identity) { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.team-stats-table td:first-child > a > span:not(.division-identity):not(.entity-logo) { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .team-stats-table td:first-child strong, .team-stats-table td:first-child small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .team-stats-table td:first-child strong { font-size: var(--text-2xs); }
 .team-stats-table td:first-child small { color: var(--muted); font-size: var(--text-2xs); }
-.team-stats-table td:first-child .division-identity-icon { margin-left: auto; }
+.team-stats-table td:first-child .entity-logo { flex: 0 0 auto; width: 28px !important; height: 28px !important; min-width: 28px; min-height: 28px; }
+/* Division mark now reads inline with the division name in the subline (not a
+   standalone right-edge icon), so the team name gets the width it needs. */
+.team-stats-table td:first-child small .division-identity-icon { display: inline-flex; vertical-align: middle; width: 14px; min-width: 14px; margin: 0 3px 1px 0; }
 .schedule-medal { flex: 0 0 auto; }
 
 .playoff-field-actions { display: flex; align-items: center; gap: 8px; }
@@ -2692,9 +2695,23 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
    which washes out on the team-color hero. Use the readable-on-brand ink so the mark's
    text is accessible against the team color, like the rest of the record. */
 .workspace-page .team-schedule-hero .team-identity-division-record .division-mark { color: var(--team-brand-on, white) !important; }
-.workspace-page .team-schedule-hero .team-identity-name strong { font-size: var(--text-lg); }
-.workspace-page .team-schedule-hero .team-identity-name small { font-size: var(--text-xs); }
-.workspace-page .team-schedule-hero .team-identity-record > strong { font-size: var(--text-2xl); }
+/* Lay the switcher's team out exactly like a match-card team row — rank | 54px crest |
+   (city/name over a parenthesised division record) — same positioning, size and font.
+   Only the colors stay white for accessibility on the team-color hero; the dropdown
+   functionality is unchanged. Mirrors the .matchup-card-main .team-identity-block spec. */
+.team-schedule-hero .team-identity-block { grid-template-columns: 24px auto minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 11px; row-gap: 2px; align-items: center; }
+.team-schedule-hero .team-identity-rank { grid-column: 1; grid-row: 1 / span 2; align-self: center; }
+.team-schedule-hero .team-identity-mark { grid-column: 2; grid-row: 1 / span 2; align-self: center; width: 54px; height: 54px; }
+.team-schedule-hero .team-identity-mark .entity-logo { width: 54px !important; height: 54px !important; min-width: 0; min-height: 0; }
+.team-schedule-hero .team-identity-name { grid-column: 3; grid-row: 1; }
+.workspace-page .team-schedule-hero .team-identity-name small { display: block; font-size: var(--text-2xs); line-height: 1.1; }
+.workspace-page .team-schedule-hero .team-identity-name strong { font-size: var(--text-md); line-height: 1.15; }
+.team-schedule-hero .team-identity-record { grid-column: 3; grid-row: 2; min-width: 0; flex-direction: row; align-items: center; justify-content: flex-start; gap: 6px; }
+.workspace-page .team-schedule-hero .team-identity-record > strong { font-family: var(--font-archivo), sans-serif; font-size: var(--text-sm); font-weight: var(--w-bold); }
+.team-schedule-hero .team-identity-division-record { align-items: center; gap: 3px; }
+.team-schedule-hero .team-identity-division-record > b { font-size: var(--text-2xs); }
+.team-schedule-hero .team-identity-division-record > b::before { content: "("; }
+.team-schedule-hero .team-identity-division-record > b::after { content: ")"; }
 .team-schedule-facts { min-width: 0; display: flex; flex-direction: column; gap: 6px; border-left: 1px solid color-mix(in srgb, var(--team-brand-on, white) 24%, transparent); padding-left: 24px; }
 .team-schedule-facts > .division-identity { width: fit-content; }
 .team-schedule-facts .division-identity strong,
@@ -2734,9 +2751,9 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .team-schedule-controls { position: absolute; top: 50%; right: 16px; bottom: auto; transform: translateY(-50%); z-index: 5; display: flex; width: auto; grid-template-columns: none; }
 /* Tidy the name stack next to the logo: a tight city eyebrow over a stronger
    name, vertically centered against the crest. */
-.team-schedule-hero .team-identity-name { gap: 2px; justify-content: center; }
-.team-schedule-hero .team-identity-name small { font-size: var(--text-xs); line-height: 1; opacity: 0.82; }
-.workspace-page .team-schedule-hero .team-identity-name strong { font-size: var(--text-xl); line-height: 1.03; }
+.team-schedule-hero .team-identity-name { gap: 2px; }
+.team-schedule-hero .team-identity-name small { font-size: var(--text-2xs); line-height: 1.1; opacity: 0.82; }
+.workspace-page .team-schedule-hero .team-identity-name strong { font-size: var(--text-md); line-height: 1.15; }
 .team-display-menu .floating-popover-trigger { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--team-brand, var(--field)) 24%, var(--line)); border-radius: var(--radius-sm); background: white; color: var(--team-brand-ink, var(--field-dark)); cursor: pointer; font-size: 0; }
 .team-display-menu .floating-popover-trigger svg { width: 18px; }
 .team-display-menu .floating-popover-trigger:hover { background: color-mix(in srgb, var(--team-brand, var(--field)) 8%, white); }
