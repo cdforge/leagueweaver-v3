@@ -2567,6 +2567,12 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 /* Division mark now reads inline with the division name in the subline (not a
    standalone right-edge icon), so the team name gets the width it needs. */
 .team-stats-table td:first-child small .division-identity-icon { display: inline-flex; vertical-align: middle; width: 14px; min-width: 14px; margin: 0 3px 1px 0; }
+/* Division is its own column (identity: mark + name), left-aligned and pinned
+   next to the sticky TEAM column so both identity columns stay put while the
+   numeric columns scroll. */
+.team-stats-table th.team-stats-division-head { position: sticky; left: 168px; z-index: 5; width: 116px; min-width: 116px; max-width: 116px; text-align: left; padding: 0 9px; font-size: var(--text-2xs); font-weight: var(--w-black); }
+.team-stats-table td.team-stats-division-cell { position: sticky; left: 168px; z-index: 2; width: 116px; min-width: 116px; max-width: 116px; text-align: left; background: white; box-shadow: 1px 0 var(--line); }
+.team-stats-table td.team-stats-division-cell .division-identity { min-width: 0; max-width: 100%; }
 .schedule-medal { flex: 0 0 auto; }
 
 .playoff-field-actions { display: flex; align-items: center; gap: 8px; }
