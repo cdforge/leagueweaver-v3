@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { createDefaultSetup, createDivisions, createTeams } from "../lib/defaults";
+import { createConferences, createDefaultSetup, createDivisions, createTeams } from "../lib/defaults";
+import { conferenceDivisionGroups, defaultConferenceAssignment } from "../lib/conferences";
 import {
   createDefaultPlayoffSettings,
   getMaximumPlayoffFieldSize,
@@ -232,6 +233,69 @@ check(() => {
 
 check(() => {
   assert.deepEqual([1, 2, 3, 4, 11].map((place) => formatDraftPlace(place, 12)), ["1st of 12", "2nd of 12", "3rd of 12", "4th of 12", "11th of 12"]);
+});
+
+// ── Conferences & large-league playoffs ────────────────────────────────────
+check(() => {
+  // Even divisions (8) with a conference assignment → division-halves across two conferences.
+  const divisions = defaultConferenceAssignment(createDivisions(8), createConferences(2));
+  const conferences = createConferences(2);
+  const base = createDefaultSetup();
+  const setup = { ...base, divisions, conferences, teams: createTeams(32, divisions), playoffs: { ...base.playoffs, fieldSize: 8, placementMode: "auto" as const } };
+  assert.equal(resolvePlayoffPlacementMode(setup), "division-halves");
+  const seeds = projectPlayoffSeeds(blankSchedule(setup), 8);
+  // Two bracket sides, four seeds each; an 8-field / 8-division bracket is all division winners.
+  assert.equal(seeds.filter((seed) => seed.bracketSide === "A").length, 4);
+  assert.equal(seeds.filter((seed) => seed.bracketSide === "B").length, 4);
+  assert.ok(seeds.every((seed) => seed.divisionLeader));
+});
+
+check(() => {
+  // Six divisions with conferences → 3 per side; 12-field seats all six leaders + six wild cards.
+  const divisions = defaultConferenceAssignment(createDivisions(6), createConferences(2));
+  const conferences = createConferences(2);
+  const base = createDefaultSetup();
+  const setup = { ...base, weeks: 13 as const, divisions, conferences, teams: createTeams(24, divisions), playoffs: { ...base.playoffs, fieldSize: 12, placementMode: "auto" as const } };
+  assert.equal(resolvePlayoffPlacementMode(setup), "division-halves");
+  const seeds = projectPlayoffSeeds(blankSchedule(setup), 12);
+  assert.equal(seeds.filter((seed) => seed.bracketSide === "A").length, 6);
+  assert.equal(seeds.filter((seed) => seed.bracketSide === "B").length, 6);
+  assert.equal(seeds.filter((seed) => seed.divisionLeader).length, 6);
+});
+
+check(() => {
+  // Odd divisions (5) → one unified bracket (division-leaders), no conferences.
+  const divisions = createDivisions(5);
+  const base = createDefaultSetup();
+  const setup = { ...base, weeks: 13 as const, divisions, teams: createTeams(20, divisions), playoffs: { ...base.playoffs, fieldSize: 8, placementMode: "auto" as const } };
+  assert.equal(resolvePlayoffPlacementMode(setup), "division-leaders");
+  const seeds = projectPlayoffSeeds(blankSchedule(setup), 8);
+  assert.ok(seeds.slice(0, 5).every((seed) => seed.divisionLeader));
+});
+
+check(() => {
+  // Even divisions but NO conference assignment → falls back to division-leaders (needs two real sides).
+  const divisions = createDivisions(6);
+  const base = createDefaultSetup();
+  const setup = { ...base, weeks: 13 as const, divisions, teams: createTeams(24, divisions), playoffs: { ...base.playoffs, fieldSize: 8, placementMode: "auto" as const } };
+  assert.equal(resolvePlayoffPlacementMode(setup), "division-leaders");
+});
+
+check(() => {
+  // Round naming uses "Conference Championship" for a conference bracket.
+  const divisions = defaultConferenceAssignment(createDivisions(8), createConferences(2));
+  const settings = { ...createDefaultPlayoffSettings(32), fieldSize: 8, placementMode: "division-halves" as const };
+  const names = getPlayoffRoundNames(settings, divisions.length);
+  assert.ok(names.includes("Conference Championship"));
+  assert.equal(names[names.length - 1], "Championship");
+});
+
+check(() => {
+  // conferenceDivisionGroups splits divisions evenly into two conferences.
+  const divisions = defaultConferenceAssignment(createDivisions(6), createConferences(2));
+  const groups = conferenceDivisionGroups({ divisions, conferences: createConferences(2) });
+  assert.equal(groups.length, 2);
+  assert.deepEqual(groups.map((group) => group.length), [3, 3]);
 });
 
 console.log(`Playoff, holiday, and opening-week matrix: ${checks} checks passed.`);

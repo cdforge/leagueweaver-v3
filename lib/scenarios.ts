@@ -318,6 +318,7 @@ export function getWeekScenarios(schedule: GeneratedSchedule, week?: number): We
   const fieldSize = resolvedPlayoffFieldSize(schedule);
   const placementMode = resolvePlayoffPlacementMode({
     divisions: schedule.setup.divisions,
+    conferences: schedule.setup.conferences,
     playoffs: { ...schedule.setup.playoffs, fieldSize },
   });
   const supportsBerth = placementMode === "overall";

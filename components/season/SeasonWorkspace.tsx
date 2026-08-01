@@ -797,7 +797,7 @@ function PlayoffsView({
     return () => window.clearTimeout(timer);
   }, [highlightedGame?.id]);
   const mainGameBrandingSlots = getPlayoffGameBrandingSlots(settings, schedule.setup.divisions.length);
-  const placement = resolvePlayoffPlacementMode({ divisions: schedule.setup.divisions, playoffs: settings });
+  const placement = resolvePlayoffPlacementMode({ divisions: schedule.setup.divisions, conferences: schedule.setup.conferences, playoffs: settings });
   const byeCount = getPlayoffByeCount(fieldSize);
   const roundDate = (index: number) => getWeekDateLabel(schedule.setup.seasonYear, schedule.setup.weeks + index + 1).replace(`, ${schedule.setup.seasonYear}`, "");
   const displayedSeed = (item: NonNullable<ReturnType<typeof seed>>) => settings.seedDisplayMode === "standings-finish" ? item.standingsPosition : item.seed;

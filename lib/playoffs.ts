@@ -1,3 +1,4 @@
+import { conferenceDivisionGroups, conferencesApply, hasConferences } from "./conferences";
 import { calculateDivisionStandings, calculateStandings, formatRecord } from "./standings";
 import type {
   GeneratedSchedule,
@@ -127,24 +128,33 @@ export function getPlayoffByeCount(fieldSize: PlayoffFieldSize) {
 
 export function isPlayoffPlacementUsable(mode: Exclude<PlayoffPlacementMode, "auto">, divisionCount: number, fieldSize: PlayoffFieldSize) {
   if (mode === "overall") return true;
-  if (mode === "division-halves") return (divisionCount === 2 || divisionCount === 4) && fieldSize % 2 === 0 && fieldSize >= divisionCount;
+  // Grouped "halves" is structurally possible for any EVEN division count (2/4/6/8): two
+  // divisions split by division, 4/6/8 split into two conferences. The conference *assignment*
+  // itself is checked in resolvePlayoffPlacementMode (which sees the full setup).
+  if (mode === "division-halves") return divisionCount >= 2 && divisionCount % 2 === 0 && fieldSize % 2 === 0 && fieldSize >= divisionCount;
   return divisionCount > 1 && fieldSize >= divisionCount;
 }
 
-export function resolvePlayoffPlacementMode(setup: Pick<LeagueSetupInput, "divisions" | "playoffs">): ResolvedPlayoffPlacementMode {
+export function resolvePlayoffPlacementMode(setup: Pick<LeagueSetupInput, "divisions" | "conferences" | "playoffs">): ResolvedPlayoffPlacementMode {
   const divisionCount = setup.divisions.length;
   const requested = setup.playoffs.placementMode;
+  const fieldSize = setup.playoffs.fieldSize;
   if (setup.playoffs.bracketType === "ladder") return "overall";
+  // Halves needs two real sides: 2 divisions always have them; 4/6/8 need a conference assignment.
+  const halvesReady = isPlayoffPlacementUsable("division-halves", divisionCount, fieldSize)
+    && (divisionCount === 2 || hasConferences(setup));
+  const leadersReady = divisionCount >= 3 && isPlayoffPlacementUsable("division-leaders", divisionCount, fieldSize);
   if (requested !== "auto") {
-    return isPlayoffPlacementUsable(requested, divisionCount, setup.playoffs.fieldSize) ? requested : "overall";
+    if (requested === "division-halves") return halvesReady ? "division-halves" : leadersReady ? "division-leaders" : "overall";
+    return isPlayoffPlacementUsable(requested, divisionCount, fieldSize) ? requested : "overall";
   }
-  if (divisionCount === 2 && isPlayoffPlacementUsable("division-halves", divisionCount, setup.playoffs.fieldSize)) return "division-halves";
-  if (divisionCount >= 3 && divisionCount <= 4 && isPlayoffPlacementUsable("division-leaders", divisionCount, setup.playoffs.fieldSize)) return "division-leaders";
+  if (halvesReady) return "division-halves";
+  if (leadersReady) return "division-leaders";
   return "overall";
 }
 
-export function playoffPlacementLabel(mode: ResolvedPlayoffPlacementMode) {
-  if (mode === "division-halves") return "Division Halves";
+export function playoffPlacementLabel(mode: ResolvedPlayoffPlacementMode, conferences = false) {
+  if (mode === "division-halves") return conferences ? "Conference Halves" : "Division Halves";
   if (mode === "division-leaders") return "Division Leaders Priority";
   return "Overall Standings";
 }
@@ -152,15 +162,16 @@ export function playoffPlacementLabel(mode: ResolvedPlayoffPlacementMode) {
 function singleEliminationRoundNames(settings: Pick<PlayoffSettings, "bracketType" | "fieldSize" | "placementMode">, divisionCount: number) {
   const count = getRequiredPlayoffWeeks(settings.fieldSize, "single-elimination");
   const hasFirstRoundByes = getPlayoffByeCount(settings.fieldSize) > 0;
-  const usesTwoDivisionHalves = divisionCount === 2
+  const usesTwoHalves = (divisionCount === 2 || conferencesApply(divisionCount))
     && settings.bracketType === "single-elimination"
     && (settings.placementMode === "auto" || settings.placementMode === "division-halves")
     && isPlayoffPlacementUsable("division-halves", divisionCount, settings.fieldSize);
+  const penultimateGroupedName = conferencesApply(divisionCount) ? "Conference Championship" : "Divisional Championship";
 
   return Array.from({ length: count }, (_, index) => {
     if (index === count - 1) return "Championship";
     if (index === 0 && hasFirstRoundByes) return "Wild Card";
-    if (index === count - 2) return usesTwoDivisionHalves ? "Divisional Championship" : "Semifinals";
+    if (index === count - 2) return usesTwoHalves ? penultimateGroupedName : "Semifinals";
     return `Round ${index + 1}`;
   });
 }
@@ -246,7 +257,7 @@ export function projectPlayoffSeeds(schedule: GeneratedSchedule, fieldSize = sch
     .sort((left, right) => (standingsPosition.get(left.teamId) ?? Infinity) - (standingsPosition.get(right.teamId) ?? Infinity));
   const leaderIds = new Set(leaders.map((row) => row.teamId));
   const byeCount = getPlayoffByeCount(normalizedFieldSize);
-  const placementMode = resolvePlayoffPlacementMode({ divisions: schedule.setup.divisions, playoffs: { ...schedule.setup.playoffs, fieldSize: normalizedFieldSize } });
+  const placementMode = resolvePlayoffPlacementMode({ divisions: schedule.setup.divisions, conferences: schedule.setup.conferences, playoffs: { ...schedule.setup.playoffs, fieldSize: normalizedFieldSize } });
 
   const toSeed = (teamId: string, seed: number, bracketSide?: "A" | "B"): PlayoffSeed => {
     const row = standingsById.get(teamId)!;
@@ -283,10 +294,8 @@ export function projectPlayoffSeeds(schedule: GeneratedSchedule, fieldSize = sch
     return ordered.map((row, index) => toSeed(row.teamId, index + 1));
   }
 
-  const divisionIds = schedule.setup.divisions.map((division) => division.id);
-  const divisionGroups = divisionIds.length === 2
-    ? [[divisionIds[0]], [divisionIds[1]]]
-    : [[divisionIds[0], divisionIds[1]], [divisionIds[2], divisionIds[3]]];
+  // Two bracket sides: conferences (even ≥4 divisions) or the two divisions (2 divisions).
+  const divisionGroups = conferenceDivisionGroups(schedule.setup);
   const selectedSides = divisionGroups.map((group) => {
     const groupSet = new Set(group);
     const groupRows = standings.filter((row) => groupSet.has(teamById.get(row.teamId)?.divisionId || ""));
@@ -368,7 +377,7 @@ export function projectPlayoffRounds(schedule: GeneratedSchedule): ProjectedPlay
     });
   }
 
-  const placement = resolvePlayoffPlacementMode({ divisions: schedule.setup.divisions, playoffs: settings });
+  const placement = resolvePlayoffPlacementMode({ divisions: schedule.setup.divisions, conferences: schedule.setup.conferences, playoffs: settings });
   const openingPairs = getFirstRoundSeedPairs(settings.fieldSize);
   const openingMatchups: ProjectedPlayoffMatchup[] = openingPairs.map(([homeSeed, awaySeed]) => ({
     homeSeed,
