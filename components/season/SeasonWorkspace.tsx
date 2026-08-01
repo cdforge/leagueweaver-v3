@@ -330,13 +330,14 @@ function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores }: { schedule
     return <div className="playoff-game-banner">{logo ? <img src={logo} alt="" /> : <span className="playoff-game-banner-mark"><Trophy /></span>}<strong>{name}</strong></div>;
   };
   const PlayoffGameBlock = ({ id, name, index, count, home, away, homeScore, awayScore, stadium }: { id: string; name: string; index: number; count: number; home: SlotV; away: SlotV; homeScore?: number; awayScore?: number; stadium?: string }) => {
-    const played = homeScore != null && awayScore != null && !(homeScore === 0 && awayScore === 0);
     const homeReal = home.kind === "team" ? home : null;
     const awayReal = away.kind === "team" ? away : null;
+    // A resolved playoff matchup is just a normal match card — the round banner
+    // above carries the playoff context. No separate "Projected" score state.
     return <div className="playoff-game-block" role="listitem">
       <GameBanner id={id} name={name} />
       {homeReal && awayReal
-        ? <PlayoffMatchupCard id={id} gameNumber={index + 1} homeTeamId={homeReal.teamId} awayTeamId={awayReal.teamId} homeSeed={homeReal.seed} awaySeed={awayReal.seed} homeScore={homeScore} awayScore={awayScore} stadium={stadium} projected={!played} />
+        ? <PlayoffMatchupCard id={id} gameNumber={index + 1} homeTeamId={homeReal.teamId} awayTeamId={awayReal.teamId} homeSeed={homeReal.seed} awaySeed={awayReal.seed} homeScore={homeScore} awayScore={awayScore} stadium={stadium} projected={false} />
         : <article className="matchup-card is-projected matchup-card-standard" role="listitem"><div className="matchup-card-main">
             {awayReal ? <RealRow teamId={awayReal.teamId} seedNumber={awayReal.seed} /> : <TbdRow slot={away as Extract<SlotV, { kind: "tbd" }>} />}
             <div className="matchup-score is-projected"><em>Projected</em></div>
