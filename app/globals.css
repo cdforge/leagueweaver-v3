@@ -4429,3 +4429,90 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .pp-board .division-mark-filled, .pp-panel .division-mark-filled { width: auto !important; padding: 0 5px; border-radius: var(--radius-chip); overflow: visible; background: var(--dm-bg); color: var(--dm-ink) !important; }
 .pp-board .division-identity-icon, .pp-panel .division-identity-icon { width: auto; }
 .pp-board .team-identity-division-record .division-identity-icon { flex: 0 0 auto; }
+
+/* ============================================================================
+   Playoff wizard step redesign — one step, three sub-pages (Format / Rules /
+   Branding) + a live bracket preview + per-round/per-game logos.
+   ========================================================================== */
+.playoff-wizard { max-width: none; }
+.playoff-wizard-subnav { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.playoff-wizard-subnav button { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; cursor: pointer; padding: 10px 15px 13px; border-radius: var(--radius-sm) var(--radius-sm) 0 0; color: var(--muted); font-family: inherit; position: relative; }
+.playoff-wizard-subnav button:hover:not(.active) { color: var(--ink); }
+.playoff-wizard-subnav .ppw-n { flex: 0 0 auto; width: 23px; height: 23px; border-radius: 50%; display: grid; place-items: center; font-size: var(--text-2xs); font-weight: var(--w-black); background: var(--canvas); border: 1.5px solid var(--line-strong); color: var(--muted); }
+.playoff-wizard-subnav button.active { color: var(--ink); }
+.playoff-wizard-subnav button.active .ppw-n { background: var(--field); border-color: var(--field); color: #fff; }
+.playoff-wizard-subnav button.active::after { content: ""; position: absolute; left: 13px; right: 13px; bottom: -1px; height: 3px; border-radius: 3px; background: var(--field); }
+.playoff-wizard-subnav .ppw-lab { text-align: left; line-height: 1.18; }
+.playoff-wizard-subnav .ppw-lab strong { display: block; font-size: var(--text-sm); font-weight: var(--w-bold); }
+.playoff-wizard-subnav .ppw-lab small { color: var(--muted); font-size: var(--text-2xs); }
+.playoff-wizard-subnav button:focus-visible { outline: 2px solid var(--field); outline-offset: 2px; }
+
+.playoff-wizard-layout { display: grid; gap: 18px; }
+.playoff-wizard-form { display: grid; gap: 20px; min-width: 0; }
+.ppw-group { display: grid; gap: 9px; min-width: 0; }
+
+/* presets */
+.ppw-presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ppw-presets button { display: flex; gap: 11px; align-items: flex-start; text-align: left; border: 1px solid var(--line-strong); border-radius: var(--radius); background: white; padding: 12px 13px; cursor: pointer; font-family: inherit; color: var(--ink); transition: border-color var(--transition), background var(--transition); }
+.ppw-presets button:hover:not(.active) { border-color: color-mix(in srgb, var(--field) 40%, var(--line-strong)); background: #f9fdfb; }
+.ppw-presets button.active { border-color: var(--field); box-shadow: inset 0 0 0 1px var(--field); background: var(--field-soft); }
+.ppw-preset-ic { flex: 0 0 auto; width: 30px; height: 30px; border-radius: var(--radius-sm); display: grid; place-items: center; font-size: 16px; background: var(--canvas); }
+.ppw-presets button.active .ppw-preset-ic { background: color-mix(in srgb, var(--field) 12%, white); }
+.ppw-presets strong { display: block; font-size: var(--text-sm); }
+.ppw-presets small { display: block; color: var(--muted); font-size: var(--text-2xs); margin-top: 2px; line-height: 1.35; }
+
+/* rounds & games branding */
+.ppw-rgnote { margin: -2px 0 2px; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
+.ppw-rounds { display: grid; gap: 9px; }
+.ppw-round { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: white; }
+.ppw-round-head { display: flex; align-items: center; gap: 11px; padding: 9px 11px; background: var(--surface); }
+.ppw-round-head .identity-picker, .ppw-game .identity-picker { flex: 0 0 auto; }
+.ppw-round-name { flex: 1; min-width: 0; }
+.ppw-round-name input { width: 100%; border: 0; background: transparent; font-family: inherit; font-size: var(--text-sm); font-weight: var(--w-bold); color: var(--ink); padding: 2px 0; }
+.ppw-round-name input:focus-visible { outline: 0; border-bottom: 2px solid var(--field); }
+.ppw-round-name small { display: block; color: var(--muted); font-size: var(--text-2xs); }
+.ppw-games { display: grid; border-top: 1px solid var(--line); padding: 3px 11px 8px; }
+.ppw-game { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); }
+.ppw-game:first-child { border-top: 0; }
+.ppw-game input { flex: 1; min-width: 0; border: 0; background: transparent; font-family: inherit; font-size: var(--text-xs); color: var(--ink); padding: 2px 0; }
+.ppw-game input:focus-visible { outline: 0; border-bottom: 1.5px solid var(--field); }
+
+/* live preview (dark broadcast island — sits full-width below the form) */
+.playoff-wizard-preview { background: var(--pk); border-radius: var(--radius); padding: 16px 18px 18px; color: #eaf1ee; min-width: 0; }
+.ppw-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 3px; }
+.ppw-preview-eyebrow { font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .12em; text-transform: uppercase; color: #7fe3ac; }
+.ppw-preview-live { font-size: 10px; font-weight: var(--w-black); letter-spacing: .07em; text-transform: uppercase; color: #7fe3ac; background: rgba(63,191,127,.16); padding: 3px 9px; border-radius: var(--radius-pill); display: inline-flex; align-items: center; gap: 6px; }
+.ppw-preview-live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #3fbf7f; animation: bracket-live-pulse 1.8s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) { .ppw-preview-live::before { animation: none; } }
+.ppw-preview-title { display: block; font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); font-style: italic; text-transform: uppercase; color: #fff; line-height: 1.05; margin-top: 2px; }
+.ppw-preview-sub { display: block; color: var(--pk-mut); font-size: var(--text-2xs); margin-bottom: 13px; }
+.ppw-bracket { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; }
+.ppw-col { display: flex; flex-direction: column; justify-content: center; gap: 9px; min-width: 108px; }
+.ppw-rh { font-size: 9.5px; font-weight: var(--w-black); letter-spacing: .06em; text-transform: uppercase; color: var(--pk-mut); }
+.ppw-rh-sub { margin-top: 5px; }
+.ppw-half { font-size: 9.5px; font-weight: var(--w-black); letter-spacing: .05em; text-transform: uppercase; display: flex; align-items: center; gap: 5px; }
+.ppw-half-0 { color: #3fbf7f; } .ppw-half-1 { color: #6ea2ff; }
+.ppw-half::before { content: ""; width: 7px; height: 7px; border-radius: 2px; background: currentColor; }
+.ppw-match { border: 1px solid var(--pk-line); border-left: 3px solid var(--ppw-accent, #3fbf7f); border-radius: var(--radius-sm); background: rgba(255,255,255,.03); overflow: hidden; }
+.ppw-team { display: flex; align-items: center; gap: 6px; padding: 5px 7px; font-size: var(--text-2xs); min-width: 0; }
+.ppw-match .ppw-team + .ppw-team { border-top: 1px solid var(--pk-line); }
+.ppw-seed { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 4px; background: var(--pk-line); display: grid; place-items: center; font-size: 9px; font-weight: var(--w-black); color: #fff; font-variant-numeric: tabular-nums; }
+.ppw-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #dfe8e4; font-weight: var(--w-bold); }
+.ppw-bye { border-left-color: var(--gold); }
+.ppw-tag { display: block; padding: 5px 7px; font-size: 9px; font-weight: var(--w-black); letter-spacing: .04em; text-transform: uppercase; color: var(--gold); }
+.ppw-tag.ppw-plain { color: var(--pk-mut); font-weight: var(--w-bold); text-transform: none; letter-spacing: 0; }
+.ppw-final .ppw-match { border-left-color: var(--gold); }
+.ppw-final .ppw-rh { color: var(--gold); }
+.ppw-cons { margin-top: 13px; padding-top: 11px; border-top: 1px dashed var(--pk-line); }
+.ppw-cons-h { font-size: 9.5px; font-weight: var(--w-black); letter-spacing: .06em; text-transform: uppercase; color: var(--pk-mut); display: block; margin-bottom: 6px; }
+.ppw-cons-row { display: flex; flex-wrap: wrap; gap: 5px; }
+.ppw-pill { font-size: var(--text-2xs); font-weight: var(--w-bold); color: #cdd8d3; background: rgba(255,255,255,.05); border: 1px solid var(--pk-line); border-radius: var(--radius-pill); padding: 3px 9px; }
+.ppw-facts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 13px; }
+.ppw-fact { font-size: var(--text-2xs); font-weight: var(--w-bold); color: #cdd8d3; background: rgba(255,255,255,.05); border: 1px solid var(--pk-line); border-radius: var(--radius-sm); padding: 5px 8px; display: flex; align-items: center; gap: 5px; }
+.ppw-fact b { color: #fff; }
+
+@media (max-width: 880px) {
+  .playoff-wizard-layout { grid-template-columns: 1fr; }
+  .playoff-wizard-preview { position: static; }
+  .ppw-presets { grid-template-columns: 1fr; }
+}

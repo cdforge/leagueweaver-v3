@@ -50,7 +50,10 @@ import { formatDraftPlace, getTeamsMissingDraftPlaces, getWeekOneTeamOrder, hasC
 import {
   getMaximumPlayoffFieldSize,
   getPlayoffByeCount,
+  getPlayoffGameBrandingSlots,
+  getPlayoffRoundNames,
   isPlayoffPlacementUsable,
+  normalizePlayoffSettings,
   PLAYOFF_THEME_COLORS,
 } from "@/lib/playoffs";
 import { teamDisplayName, teamInitials, teamMonogram } from "@/lib/teamIdentity";
@@ -483,6 +486,7 @@ function FairnessStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
 
 function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: React.Dispatch<React.SetStateAction<LeagueSetupInput>> }) {
   const p = setup.playoffs;
+  const [subPage, setSubPage] = useState<"format" | "rules" | "brand">("format");
   const divisionCount = setup.divisions.length;
   const maxFieldSize = getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, p.bracketType);
   const patch = (next: Partial<LeagueSetupInput["playoffs"]>) =>
@@ -539,57 +543,207 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   ];
   const themes: Array<LeagueSetupInput["playoffs"]["theme"]> = ["gold", "silver", "bronze", "custom"];
 
-  return <div className="step-stack">
-    <div className="section-heading"><span className="step-kicker">Step 9 of 10</span><h1>Shape the playoffs.</h1><p>Set the postseason field and format now. Round names, game names, and logos can still be personalized on the Playoffs page once the bracket is live.</p></div>
+  // Presets set several fields at once; the form remains the "customize" fallback.
+  const presetDefs: Array<{ id: string; label: string; desc: string; icon: string; size: number; bracketType: LeagueSetupInput["playoffs"]["bracketType"]; qual: "halves" | "overall"; consolationMode: LeagueSetupInput["playoffs"]["consolationMode"] }> = [
+    { id: "nfl", label: "NFL-style", desc: "6 teams · division halves · 2 byes", icon: "🏆", size: 6, bracketType: "single-elimination", qual: "halves", consolationMode: "off" },
+    { id: "madness", label: "Bracket madness", desc: "8 teams · overall seeds · no byes", icon: "🎯", size: 8, bracketType: "single-elimination", qual: "overall", consolationMode: "off" },
+    { id: "everyone", label: "Everyone plays on", desc: "6 teams · full consolation bracket", icon: "🎖️", size: 6, bracketType: "single-elimination", qual: "halves", consolationMode: "standard" },
+  ];
+  const applyPreset = (def: typeof presetDefs[number]) => {
+    const size = Math.min(def.size, getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, def.bracketType));
+    const canHalves = isPlayoffPlacementUsable("division-halves", divisionCount, size);
+    patch({
+      fieldSize: size,
+      bracketType: def.bracketType,
+      placementMode: def.qual === "halves" ? (canHalves ? "division-halves" : "auto") : "overall",
+      consolationMode: def.consolationMode === "division-halves" && !canHalves ? "standard" : def.consolationMode,
+      thirdPlaceGame: def.consolationMode !== "off" && size >= 4,
+      fieldStatus: "live",
+      lockedTeamIds: [],
+    });
+  };
+  const activePresetId = presetDefs.find((def) =>
+    p.fieldSize === Math.min(def.size, getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, def.bracketType))
+    && p.bracketType === def.bracketType
+    && (def.qual === "overall" ? p.placementMode === "overall" : p.placementMode === "division-halves" || (p.placementMode === "auto" && !halvesUsable))
+    && p.consolationMode === def.consolationMode,
+  )?.id;
 
-    <div className="field-grid two-col playoff-setup-grid">
-      <div><FieldLabel hint={byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"} for the top seed${byeCount === 1 ? "" : "s"}` : "Every qualifier opens play"}>Playoff teams</FieldLabel>
-        <CustomSelect label="Playoff field size" value={String(p.fieldSize)} onChange={(value) => setFieldSize(Number(value))} options={fieldSizeOptions.map((n) => ({ value: String(n), label: `${n} teams`, description: getPlayoffByeCount(n) ? `${getPlayoffByeCount(n)} bye${getPlayoffByeCount(n) === 1 ? "" : "s"}` : "No byes" }))} />
+  // Round & game branding — the slots derive from the format choices, so they exist before generation.
+  const normalized = normalizePlayoffSettings(p, setup.teams.length, setup.color, setup.weeks);
+  const roundNames = getPlayoffRoundNames(normalized, divisionCount);
+  const gameSlots = getPlayoffGameBrandingSlots(normalized, divisionCount);
+  const updateRoundName = (roundIndex: number, name: string) => {
+    const next = [...(p.roundNames ?? roundNames)];
+    next[roundIndex] = name.slice(0, 40);
+    patch({ roundNames: next });
+  };
+  const updateRoundLogo = (roundIndex: number, logoUrl?: string) => {
+    const next = [...(p.roundLogoUrls ?? Array(roundNames.length).fill(""))];
+    next[roundIndex] = logoUrl || "";
+    patch({ roundLogoUrls: next });
+  };
+  const updateGameName = (gameId: string, name: string) => {
+    const next = { ...(p.gameNames ?? {}) };
+    if (name.trim()) next[gameId] = name.slice(0, 60); else delete next[gameId];
+    patch({ gameNames: next });
+  };
+  const updateGameLogo = (gameId: string, logoUrl?: string) => {
+    const next = { ...(p.gameLogoUrls ?? {}) };
+    if (logoUrl) next[gameId] = logoUrl; else delete next[gameId];
+    patch({ gameLogoUrls: next });
+  };
+
+  // Representative live preview — seeds carry real team names/colors ordered by prior-season rank.
+  const seeded = [...setup.teams].sort((a, b) => (a.overallRank ?? 99) - (b.overallRank ?? 99));
+  const teamAt = (seed: number) => seeded[seed - 1];
+  const teamLabel = (seed: number) => teamAt(seed)?.name ?? `Seed ${seed}`;
+  const seedChip = (seed: number) => <span className="ppw-team"><b className="ppw-seed">{seed}</b><span className="ppw-name">{teamLabel(seed)}</span></span>;
+  const matchCard = (a: number, c: number, extra = "") => <div className={`ppw-match ${extra}`} style={{ "--ppw-accent": teamAt(a)?.color ?? "#3fbf7f" } as React.CSSProperties}>{seedChip(a)}{seedChip(c)}</div>;
+  const byeCard = (seed: number) => <div className="ppw-match ppw-bye" style={{ "--ppw-accent": teamAt(seed)?.color ?? "#3fbf7f" } as React.CSSProperties}>{seedChip(seed)}<span className="ppw-tag">Bye → round 2</span></div>;
+  const previewHalves = p.placementMode === "division-halves" && halvesUsable;
+  const previewColumns = () => {
+    const n = p.fieldSize;
+    if (p.bracketType === "ladder") {
+      return <div className="ppw-col"><span className="ppw-rh">The climb</span>{Array.from({ length: n }, (_, i) => n - i).map((seed) =>
+        <div key={seed} className="ppw-match" style={{ "--ppw-accent": teamAt(seed)?.color ?? "#3fbf7f" } as React.CSSProperties}>{seedChip(seed)}<span className="ppw-tag ppw-plain">enters week {Math.max(1, n - seed)}</span></div>)}</div>;
+    }
+    const playing: number[] = [];
+    for (let s = byeCount + 1; s <= n; s++) playing.push(s);
+    if (previewHalves && n % 2 === 0 && n >= 4) {
+      const per = n / 2, hb = Math.floor(byeCount / 2);
+      return <>{[0, 1].map((hi) => {
+        const base = hi * per;
+        const halfPlaying: number[] = [];
+        for (let s = base + hb + 1; s <= base + per; s++) halfPlaying.push(s);
+        return <div key={hi} className="ppw-col">
+          <span className={`ppw-half ppw-half-${hi}`}>{["Top", "Bottom"][hi]} half</span>
+          <span className="ppw-rh">Round 1</span>
+          {Array.from({ length: hb }, (_, i) => base + i + 1).map((s) => <span key={s}>{byeCard(s)}</span>)}
+          {halfPlaying.slice(0, Math.floor(halfPlaying.length / 2)).map((s, j) => <span key={s}>{matchCard(s, halfPlaying[halfPlaying.length - 1 - j])}</span>)}
+          <span className="ppw-rh ppw-rh-sub">Half final</span>
+          {matchCard(base + 1, base + 2)}
+        </div>;
+      })}<div className="ppw-col ppw-final"><span className="ppw-rh">Championship</span>{matchCard(1, 2)}</div></>;
+    }
+    const afterR1 = byeCount + Math.floor(playing.length / 2);
+    return <>
+      <div className="ppw-col"><span className="ppw-rh">Round 1</span>
+        {Array.from({ length: byeCount }, (_, i) => i + 1).map((s) => <span key={s}>{byeCard(s)}</span>)}
+        {playing.slice(0, Math.floor(playing.length / 2)).map((s, j) => <span key={s}>{matchCard(s, playing[playing.length - 1 - j])}</span>)}
       </div>
-      <div><FieldLabel>Bracket format</FieldLabel>
-        <div className="choice-row">
-          <button type="button" className={p.bracketType === "single-elimination" ? "active" : ""} onClick={() => setBracketType("single-elimination")}><strong>Single elimination</strong><small>One-and-done bracket</small></button>
-          <button type="button" className={p.bracketType === "ladder" ? "active" : ""} onClick={() => setBracketType("ladder")}><strong>Ladder</strong><small>Lowest seeds climb each week</small></button>
-        </div>
-      </div>
-      <div><FieldLabel>Qualification</FieldLabel>
-        <CustomSelect label="Playoff qualification" value={p.placementMode} onChange={(value) => patch({ placementMode: value as LeagueSetupInput["playoffs"]["placementMode"] })} options={placementOptions} />
-      </div>
-      <div><FieldLabel>Reseeding</FieldLabel>
-        <CustomSelect label="Reseeding" value={p.reseedMode} onChange={(value) => patch({ reseedMode: value as LeagueSetupInput["playoffs"]["reseedMode"] })} options={[
-          { value: "fixed", label: "Fixed bracket", description: "Winners follow set bracket paths" },
-          { value: "each-round", label: "Reseed each round", description: "Top remaining seed always hosts the lowest" },
-          { value: "protected", label: "Protected reseed", description: "Reseed while protecting bracket halves" },
-        ]} />
-      </div>
-      <div><FieldLabel>Championship venue</FieldLabel>
-        <div className="choice-row">
-          <button type="button" className={p.championshipVenueMode === "higher-seed" ? "active" : ""} onClick={() => patch({ championshipVenueMode: "higher-seed" })}><strong>Higher seed hosts</strong><small>Top seed keeps home field</small></button>
-          <button type="button" className={p.championshipVenueMode === "neutral-site" ? "active" : ""} onClick={() => patch({ championshipVenueMode: "neutral-site" })}><strong>Neutral site</strong><small>Title game at a set venue</small></button>
-        </div>
-      </div>
-      <div><FieldLabel>Seed labels</FieldLabel>
-        <div className="choice-row">
-          <button type="button" className={p.seedDisplayMode === "reranked" ? "active" : ""} onClick={() => patch({ seedDisplayMode: "reranked" })}><strong>Bracket seeds</strong><small>1…N by playoff seeding</small></button>
-          <button type="button" className={p.seedDisplayMode === "standings-finish" ? "active" : ""} onClick={() => patch({ seedDisplayMode: "standings-finish" })}><strong>Standings finish</strong><small>Show regular-season place</small></button>
-        </div>
-      </div>
-      <div><FieldLabel>Consolation bracket</FieldLabel>
-        <CustomSelect label="Consolation bracket" value={p.consolationMode} onChange={(value) => setConsolation(value as LeagueSetupInput["playoffs"]["consolationMode"])} options={consolationOptions} />
-      </div>
-      <div><FieldLabel>Trophy theme</FieldLabel>
-        <div className="choice-row playoff-theme-row">
-          {themes.map((t) => <button key={t} type="button" className={p.theme === t ? "active" : ""} onClick={() => setTheme(t)}><span className="playoff-theme-swatch" style={{ background: t === "custom" ? p.color : PLAYOFF_THEME_COLORS[t] }} /><strong>{t.charAt(0).toUpperCase() + t.slice(1)}</strong></button>)}
-        </div>
-      </div>
+      {afterR1 >= 4 && <div className="ppw-col"><span className="ppw-rh">Semifinals</span>{matchCard(1, 4)}{matchCard(2, 3)}</div>}
+      <div className="ppw-col ppw-final"><span className="ppw-rh">Championship</span>{matchCard(1, 2)}</div>
+    </>;
+  };
+
+  const subPages: Array<{ key: typeof subPage; label: string; sub: string }> = [
+    { key: "format", label: "Format", sub: "Field & bracket" },
+    { key: "rules", label: "Rules", sub: "Seeding & venue" },
+    { key: "brand", label: "Branding", sub: "Names & logos" },
+  ];
+
+  return <div className="step-stack playoff-wizard">
+    <div className="section-heading"><span className="step-kicker">Step 9 of 10</span><h1>Shape the playoffs.</h1><p>Set the field and format, fine-tune the rules, then brand every round. You can change any of this later on the Playoffs page.</p></div>
+
+    <div className="playoff-wizard-subnav" role="tablist" aria-label="Playoff setup sections">
+      {subPages.map((sp, i) => <button key={sp.key} type="button" role="tab" aria-selected={subPage === sp.key} className={subPage === sp.key ? "active" : ""} onClick={() => setSubPage(sp.key)}><span className="ppw-n">{i + 1}</span><span className="ppw-lab"><strong>{sp.label}</strong><small>{sp.sub}</small></span></button>)}
     </div>
 
-    <div className="playoff-branding-row">
-      <IdentityColorPicker name={p.name || "Championship Playoffs"} abbreviation="PO" color={p.color} logoUrl={p.logoUrl} showColorControl={p.theme === "custom"} onChange={(next) => patch({ ...(p.theme === "custom" ? { color: next.color } : {}), logoUrl: next.logoUrl })} />
-      <div className="playoff-name-field"><FieldLabel>Playoff name</FieldLabel><input aria-label="Playoff name" value={p.name} maxLength={40} placeholder="Championship Playoffs" onChange={(event) => patch({ name: event.target.value })} /></div>
-    </div>
+    <div className="playoff-wizard-layout">
+      <div className="playoff-wizard-form">
+        {subPage === "format" && <>
+          <div className="ppw-group"><FieldLabel hint="optional — tweak anything after">Start from a preset</FieldLabel>
+            <div className="ppw-presets">{presetDefs.map((def) => <button key={def.id} type="button" className={activePresetId === def.id ? "active" : ""} onClick={() => applyPreset(def)}><span className="ppw-preset-ic">{def.icon}</span><span><strong>{def.label}</strong><small>{def.desc}</small></span></button>)}
+              <button type="button" className={activePresetId ? "" : "active"} onClick={() => undefined}><span className="ppw-preset-ic">⚙️</span><span><strong>Custom</strong><small>Set every option yourself</small></span></button>
+            </div>
+          </div>
+          <div className="ppw-group"><FieldLabel hint={byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"} for the top seed${byeCount === 1 ? "" : "s"}` : "every qualifier opens play"}>Playoff teams</FieldLabel>
+            <CustomSelect label="Playoff field size" value={String(p.fieldSize)} onChange={(value) => setFieldSize(Number(value))} options={fieldSizeOptions.map((n) => ({ value: String(n), label: `${n} teams`, description: getPlayoffByeCount(n) ? `${getPlayoffByeCount(n)} bye${getPlayoffByeCount(n) === 1 ? "" : "s"}` : "No byes" }))} />
+          </div>
+          <div className="ppw-group"><FieldLabel>Bracket format</FieldLabel>
+            <div className="choice-row">
+              <button type="button" className={p.bracketType === "single-elimination" ? "active" : ""} onClick={() => setBracketType("single-elimination")}><strong>Single elimination</strong><small>One-and-done — lose and you're out</small></button>
+              <button type="button" className={p.bracketType === "ladder" ? "active" : ""} onClick={() => setBracketType("ladder")}><strong>Ladder</strong><small>Lowest seeds climb, week by week</small></button>
+            </div>
+          </div>
+          <div className="ppw-group"><FieldLabel>Qualification</FieldLabel>
+            <CustomSelect label="Playoff qualification" value={p.placementMode} onChange={(value) => patch({ placementMode: value as LeagueSetupInput["playoffs"]["placementMode"] })} options={placementOptions} />
+          </div>
+        </>}
 
-    <div className="info-callout"><Info /><span><strong>Higher seed hosts every round before the championship.</strong> {p.fieldSize} teams make the field{byeCount ? `, with ${byeCount} first-round bye${byeCount === 1 ? "" : "s"}` : ""}.</span></div>
+        {subPage === "rules" && <>
+          <div className="ppw-group"><FieldLabel>Reseeding</FieldLabel>
+            <CustomSelect label="Reseeding" value={p.reseedMode} onChange={(value) => patch({ reseedMode: value as LeagueSetupInput["playoffs"]["reseedMode"] })} options={[
+              { value: "fixed", label: "Fixed bracket", description: "Winners follow set bracket paths" },
+              { value: "each-round", label: "Reseed each round", description: "Top remaining seed always hosts the lowest" },
+              { value: "protected", label: "Protected reseed", description: "Reseed while protecting bracket halves" },
+            ]} />
+          </div>
+          <div className="ppw-group"><FieldLabel>Championship venue</FieldLabel>
+            <div className="choice-row">
+              <button type="button" className={p.championshipVenueMode === "higher-seed" ? "active" : ""} onClick={() => patch({ championshipVenueMode: "higher-seed" })}><strong>Higher seed hosts</strong><small>Top seed keeps home field</small></button>
+              <button type="button" className={p.championshipVenueMode === "neutral-site" ? "active" : ""} onClick={() => patch({ championshipVenueMode: "neutral-site" })}><strong>Neutral site</strong><small>Title game at a set venue</small></button>
+            </div>
+          </div>
+          <div className="ppw-group"><FieldLabel>Seed labels</FieldLabel>
+            <div className="choice-row">
+              <button type="button" className={p.seedDisplayMode === "reranked" ? "active" : ""} onClick={() => patch({ seedDisplayMode: "reranked" })}><strong>Bracket seeds</strong><small>1…N by playoff seeding</small></button>
+              <button type="button" className={p.seedDisplayMode === "standings-finish" ? "active" : ""} onClick={() => patch({ seedDisplayMode: "standings-finish" })}><strong>Standings finish</strong><small>Show regular-season place</small></button>
+            </div>
+          </div>
+          <div className="ppw-group"><FieldLabel>Consolation bracket</FieldLabel>
+            <CustomSelect label="Consolation bracket" value={p.consolationMode} onChange={(value) => setConsolation(value as LeagueSetupInput["playoffs"]["consolationMode"])} options={consolationOptions} />
+          </div>
+        </>}
+
+        {subPage === "brand" && <>
+          <div className="ppw-group"><FieldLabel>Playoff identity</FieldLabel>
+            <div className="playoff-branding-row">
+              <IdentityColorPicker name={p.name || "Championship Playoffs"} abbreviation="PO" color={p.color} logoUrl={p.logoUrl} showColorControl={p.theme === "custom"} onChange={(next) => patch({ ...(p.theme === "custom" ? { color: next.color } : {}), logoUrl: next.logoUrl })} />
+              <div className="playoff-name-field"><FieldLabel>Playoff name</FieldLabel><input aria-label="Playoff name" value={p.name} maxLength={40} placeholder="Championship Playoffs" onChange={(event) => patch({ name: event.target.value })} /></div>
+            </div>
+          </div>
+          <div className="ppw-group"><FieldLabel>Trophy theme</FieldLabel>
+            <div className="choice-row playoff-theme-row">
+              {themes.map((t) => <button key={t} type="button" className={p.theme === t ? "active" : ""} onClick={() => setTheme(t)}><span className="playoff-theme-swatch" style={{ background: t === "custom" ? p.color : PLAYOFF_THEME_COLORS[t] }} /><strong>{t.charAt(0).toUpperCase() + t.slice(1)}</strong></button>)}
+            </div>
+          </div>
+          <div className="ppw-group"><FieldLabel hint="new">Rounds &amp; games</FieldLabel>
+            <p className="ppw-rgnote">Name and badge each round, or logo its individual games. These slots come from your Format choices, so they're ready before the bracket is generated.</p>
+            <div className="ppw-rounds">{roundNames.map((round, roundIndex) => {
+              const slots = gameSlots.filter((slot) => slot.roundIndex === roundIndex);
+              return <div className="ppw-round" key={roundIndex}>
+                <div className="ppw-round-head">
+                  <IdentityColorPicker compact showColorControl={false} showAbbreviation={false} imagePresentation="bare" name={`${round} round`} abbreviation={(round || "R").slice(0, 3).toUpperCase()} color={p.color} logoUrl={p.roundLogoUrls?.[roundIndex]} onChange={(next) => updateRoundLogo(roundIndex, next.logoUrl)} />
+                  <label className="ppw-round-name"><input aria-label={`Round ${roundIndex + 1} name`} defaultValue={round} maxLength={40} onBlur={(event) => updateRoundName(roundIndex, event.target.value)} /><small>{slots.length} game{slots.length === 1 ? "" : "s"}</small></label>
+                </div>
+                {slots.length > 1 && <div className="ppw-games">{slots.map((slot) => {
+                  const fallback = `${round} · Game ${slot.gameIndex + 1}`;
+                  return <div className="ppw-game" key={slot.id}>
+                    <IdentityColorPicker compact showColorControl={false} showAbbreviation={false} imagePresentation="bare" name={fallback} abbreviation={`G${slot.gameIndex + 1}`} color={p.color} logoUrl={p.gameLogoUrls?.[slot.id]} onChange={(next) => updateGameLogo(slot.id, next.logoUrl)} />
+                    <input aria-label={`${fallback} name`} defaultValue={p.gameNames?.[slot.id] ?? fallback} maxLength={60} onBlur={(event) => updateGameName(slot.id, event.target.value)} />
+                  </div>;
+                })}</div>}
+              </div>;
+            })}</div>
+          </div>
+        </>}
+      </div>
+
+      <aside className="playoff-wizard-preview" aria-label="Live bracket preview">
+        <div className="ppw-preview-head"><span className="ppw-preview-eyebrow">Live preview</span><span className="ppw-preview-live">Updates as you set</span></div>
+        <strong className="ppw-preview-title">{p.bracketType === "ladder" ? "The playoff ladder" : "Road to the title"}</strong>
+        <small className="ppw-preview-sub">{p.fieldSize} teams · {previewHalves ? "division halves" : p.placementMode === "overall" ? "overall seeds" : "auto seeding"} · {byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"}` : "no byes"}</small>
+        <div className="ppw-bracket">{previewColumns()}</div>
+        {p.consolationMode !== "off" && <div className="ppw-cons"><span className="ppw-cons-h">Consolation placement</span><div className="ppw-cons-row">{Array.from({ length: Math.min(4, Math.max(0, setup.teams.length - p.fieldSize)) }, (_, i) => p.fieldSize + 1 + i).map((s) => <span key={s} className="ppw-pill">#{s} {teamLabel(s).split(" ")[0]}</span>)}</div></div>}
+        <div className="ppw-facts">
+          <span className="ppw-fact">🏟 <b>{p.championshipVenueMode === "neutral-site" ? "Neutral site" : "Higher seed hosts"}</b></span>
+          <span className="ppw-fact">🔀 <b>{p.reseedMode === "each-round" ? "Reseed each round" : p.reseedMode === "protected" ? "Protected" : "Fixed bracket"}</b></span>
+          {byeCount > 0 && <span className="ppw-fact">🎫 <b>{byeCount} bye{byeCount === 1 ? "" : "s"}</b></span>}
+        </div>
+      </aside>
+    </div>
   </div>;
 }
 
