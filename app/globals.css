@@ -4534,3 +4534,18 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .ppw-cons-round { font-size: var(--text-sm); font-weight: var(--w-black); color: var(--ink); }
 .ppw-round-head-plain small { color: var(--muted); font-size: var(--text-2xs); }
 .ppw-games-flush { border-top: 1px solid var(--line); }
+
+/* preview bracket v2 — left-to-right rounds + connector lines + division-tinted slots + logos */
+.ppw-bracket { display: flex; gap: 34px; overflow-x: auto; padding: 4px 2px 10px; color: rgba(255,255,255,.4); }
+.ppw-col { justify-content: space-around; gap: 12px; min-width: 122px; position: relative; }
+.ppw-match, .ppw-col .ppw-rh { position: relative; z-index: 1; }
+.ppw-match { overflow: hidden; }
+.ppw-slot { display: flex; align-items: center; gap: 7px; padding: 6px 8px; min-width: 0; font-size: var(--text-2xs); background: color-mix(in srgb, var(--slot-c, #586761) 28%, transparent); }
+.ppw-match .ppw-slot + .ppw-slot { border-top: 1px solid var(--pk-line); }
+.ppw-slot .ppw-name { color: inherit; font-weight: var(--w-bold); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ppw-slogo { flex: 0 0 auto; width: 17px; height: 17px; border-radius: 4px; object-fit: contain; background: rgba(255,255,255,.92); padding: 1px; }
+.ppw-match.ppw-gold { border-left-color: var(--gold); }
+.ppw-preview-toggle { display: inline-flex; gap: 2px; padding: 2px; margin: 9px 0 3px; border-radius: var(--radius-sm); background: rgba(255,255,255,.06); }
+.ppw-preview-toggle button { border: 0; background: transparent; color: var(--pk-mut); font-family: inherit; font-weight: var(--w-bold); font-size: var(--text-2xs); padding: 5px 13px; border-radius: var(--radius-chip); cursor: pointer; }
+.ppw-preview-toggle button.active { background: var(--field); color: #fff; }
+.ppw-preview-toggle button:focus-visible { outline: 2px solid var(--field-mid); outline-offset: 1px; }

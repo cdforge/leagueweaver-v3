@@ -57,6 +57,7 @@ import {
   PLAYOFF_THEME_COLORS,
 } from "@/lib/playoffs";
 import { projectConsolationBracket } from "@/lib/consolation";
+import { BracketConnectorLayer, type BracketConnection } from "@/components/season/BracketConnectorLayer";
 import { teamDisplayName, teamInitials, teamMonogram } from "@/lib/teamIdentity";
 import type { Division, GeneratedSchedule, ImportPreview, LeagueSetupInput, SavedLeagueIdentity, SavedLeaguePreset, Team } from "@/lib/types";
 import { GenerationReveal } from "@/components/builder/GenerationReveal";
@@ -489,6 +490,7 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   const p = setup.playoffs;
   const [subPage, setSubPage] = useState<"format" | "rules" | "brand" | "logos">("format");
   const [expandedRounds, setExpandedRounds] = useState<number[]>([]);
+  const [previewView, setPreviewView] = useState<"championship" | "consolation">("championship");
   const divisionCount = setup.divisions.length;
   const maxFieldSize = getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, p.bracketType);
   const patch = (next: Partial<LeagueSetupInput["playoffs"]>) =>
@@ -605,58 +607,114 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
     patch({ gameLogoUrls: next });
   };
 
-  // Live preview shows STRUCTURAL slots (seed + division), not specific teams — so it reads as
-  // "which spots are locked to which division", especially for division halves and leader byes.
+  // Live preview — a real left-to-right bracket (one column per round) with connector lines,
+  // structural slots (seed + division, not sample teams), division logos/colors, and a
+  // championship ↔ consolation toggle.
   const divisions = setup.divisions;
   const divById = new Map(divisions.map((d) => [d.id, d]));
   const seeded = [...setup.teams].sort((a, b) => (a.overallRank ?? 99) - (b.overallRank ?? 99));
   const divOfSeed = (seed: number) => { const t = seeded[seed - 1]; return t ? divById.get(t.divisionId) : undefined; };
   const divInitials = (d?: Division) => (d?.initials?.trim() || d?.name || "D").slice(0, 3).toUpperCase();
-  const divChip = (d?: Division) => <b className="ppw-dchip" style={{ background: d?.color ?? "#3a4740", color: d ? readableTextColor(d.color) : "#fff" } as React.CSSProperties}>{divInitials(d)}</b>;
-  const numChip = (n: number) => <b className="ppw-seed">{n}</b>;
-  const divSlot = (d: Division | undefined, label: string) => <span className="ppw-team">{divChip(d)}<span className="ppw-name">{label}</span></span>;
-  const seedSlot = (seed: number, label: string) => <span className="ppw-team">{numChip(seed)}<span className="ppw-name">{label}</span></span>;
   const previewHalves = p.placementMode === "division-halves" && halvesUsable && divisions.length >= 2;
-  const previewColumns = () => {
+
+  type PSlot = { division?: Division; label: string };
+  type PMatch = { id: string; accent?: string; gold?: boolean; slots: PSlot[] };
+  type PRound = { name: string; matches: PMatch[] };
+  type PBracket = { rounds: PRound[]; connections: BracketConnection[] };
+
+  const buildChampionship = (): PBracket => {
+    const rounds: PRound[] = []; const conns: BracketConnection[] = [];
+    const link = (source: string, target: string, color?: string) => conns.push({ id: `k-${source}-${target}`, sourceGameId: source, targetGameId: target, outcome: "winner", color });
     const n = p.fieldSize;
     if (p.bracketType === "ladder") {
-      return <div className="ppw-col"><span className="ppw-rh">The climb</span>{Array.from({ length: n }, (_, i) => n - i).map((seed) =>
-        <div key={seed} className="ppw-match" style={{ "--ppw-accent": divOfSeed(seed)?.color ?? "#3fbf7f" } as React.CSSProperties}>{seedSlot(seed, `#${seed} seed`)}<span className="ppw-tag ppw-plain">enters week {Math.max(1, n - seed)}</span></div>)}</div>;
+      rounds.push({ name: "The climb", matches: Array.from({ length: n }, (_, i) => n - i).map((s) => ({ id: `pv-l-${s}`, accent: divOfSeed(s)?.color, slots: [{ division: divOfSeed(s), label: `#${s} seed · enters wk ${Math.max(1, n - s)}` }] })) });
+      return { rounds, connections: conns };
     }
     if (previewHalves) {
-      const per = Math.ceil(n / 2);
-      const halfByes = Math.max(0, Math.floor(byeCount / 2));
-      return <>{[0, 1].map((hi) => {
+      const per = Math.ceil(n / 2); const hb = Math.floor(byeCount / 2);
+      const wildCard: PMatch[] = []; const divFinals: PMatch[] = [];
+      [0, 1].forEach((hi) => {
         const d = divisions[hi] ?? divisions[0];
-        const localPlaying: number[] = [];
-        for (let s = halfByes + 1; s <= per; s++) localPlaying.push(s);
-        return <div key={hi} className="ppw-col">
-          <span className="ppw-half" style={{ color: d?.color } as React.CSSProperties}>{divChip(d)}{d?.name ?? `Half ${hi + 1}`}</span>
-          <span className="ppw-rh">Wild card</span>
-          {Array.from({ length: halfByes }, (_, i) => i + 1).map((s) => <div key={s} className="ppw-match ppw-bye" style={{ "--ppw-accent": d?.color ?? "var(--gold)" } as React.CSSProperties}>{divSlot(d, `#${s} seed`)}<span className="ppw-tag">Bye · division leader</span></div>)}
-          {localPlaying.slice(0, Math.floor(localPlaying.length / 2)).map((s, j) => <div key={s} className="ppw-match" style={{ "--ppw-accent": d?.color ?? "#3fbf7f" } as React.CSSProperties}>{divSlot(d, `#${s} seed`)}{divSlot(d, `#${localPlaying[localPlaying.length - 1 - j]} seed`)}</div>)}
-          <span className="ppw-rh ppw-rh-sub">Division final</span>
-          <div className="ppw-match" style={{ "--ppw-accent": d?.color ?? "#3fbf7f" } as React.CSSProperties}>{divSlot(d, halfByes ? "#1 seed" : "Wild card winner")}{divSlot(d, "Wild card winner")}</div>
-        </div>;
-      })}<div className="ppw-col ppw-final"><span className="ppw-rh">Championship</span>
-        <div className="ppw-match" style={{ "--ppw-accent": "var(--gold)" } as React.CSSProperties}>{divSlot(divisions[0], `${divisions[0]?.name ?? "Half 1"} champ`)}{divSlot(divisions[1], `${divisions[1]?.name ?? "Half 2"} champ`)}</div>
-      </div></>;
+        const playing: number[] = []; for (let s = hb + 1; s <= per; s++) playing.push(s);
+        const hf: PMatch = { id: `pv-h${hi}-hf`, accent: d?.color, slots: [{ division: d, label: hb ? "#1 seed" : "WC winner" }, { division: d, label: "WC winner" }] };
+        for (let j = 0; j < Math.floor(playing.length / 2); j++) {
+          const m: PMatch = { id: `pv-h${hi}-r1-${j}`, accent: d?.color, slots: [{ division: d, label: `#${playing[j]} seed` }, { division: d, label: `#${playing[playing.length - 1 - j]} seed` }] };
+          wildCard.push(m); link(m.id, hf.id, d?.color);
+        }
+        divFinals.push(hf);
+      });
+      const final: PMatch = { id: "pv-final", gold: true, slots: [{ division: divisions[0], label: `${divisions[0]?.name ?? "Top"} champ` }, { division: divisions[1], label: `${divisions[1]?.name ?? "Bottom"} champ` }] };
+      divFinals.forEach((m, hi) => link(m.id, final.id, divisions[hi]?.color));
+      if (wildCard.length) rounds.push({ name: "Wild card", matches: wildCard });
+      rounds.push({ name: "Divisional Championship", matches: divFinals });
+      rounds.push({ name: "Championship", matches: [final] });
+      rounds.forEach((round, i) => { if (roundNames[i]) round.name = roundNames[i]; });
+      return { rounds, connections: conns };
     }
-    // overall / leaders — global seeds, tinted by the division each seed lands in
-    const playing: number[] = [];
-    for (let s = byeCount + 1; s <= n; s++) playing.push(s);
-    const afterR1 = byeCount + Math.floor(playing.length / 2);
-    const seedMatch = (a: number, c: number) => <div className="ppw-match" style={{ "--ppw-accent": divOfSeed(a)?.color ?? "#3fbf7f" } as React.CSSProperties}>{seedSlot(a, `#${a} seed`)}{seedSlot(c, `#${c} seed`)}</div>;
-    const seedBye = (s: number) => <div className="ppw-match ppw-bye" style={{ "--ppw-accent": "var(--gold)" } as React.CSSProperties}>{seedSlot(s, `#${s} seed`)}<span className="ppw-tag">Bye → round 2</span></div>;
-    return <>
-      <div className="ppw-col"><span className="ppw-rh">Round 1</span>
-        {Array.from({ length: byeCount }, (_, i) => i + 1).map((s) => <span key={s}>{seedBye(s)}</span>)}
-        {playing.slice(0, Math.floor(playing.length / 2)).map((s, j) => <span key={s}>{seedMatch(s, playing[playing.length - 1 - j])}</span>)}
-      </div>
-      {afterR1 >= 4 && <div className="ppw-col"><span className="ppw-rh">Semifinals</span>{seedMatch(1, 4)}{seedMatch(2, 3)}</div>}
-      <div className="ppw-col ppw-final"><span className="ppw-rh">Championship</span>{seedMatch(1, 2)}</div>
-    </>;
+    const playing: number[] = []; for (let s = byeCount + 1; s <= n; s++) playing.push(s);
+    const r1: PMatch[] = [];
+    for (let j = 0; j < Math.floor(playing.length / 2); j++) { const a = playing[j], c = playing[playing.length - 1 - j]; r1.push({ id: `pv-r1-${j}`, accent: divOfSeed(a)?.color, slots: [{ division: divOfSeed(a), label: `#${a} seed` }, { division: divOfSeed(c), label: `#${c} seed` }] }); }
+    const afterR1 = byeCount + r1.length;
+    if (r1.length) rounds.push({ name: "Round 1", matches: r1 });
+    const final: PMatch = { id: "pv-final", gold: true, slots: [{ division: divOfSeed(1), label: "#1 seed" }, { division: divOfSeed(2), label: "#2 seed" }] };
+    if (afterR1 >= 4) {
+      const semis: PMatch[] = [
+        { id: "pv-sf-0", accent: divOfSeed(1)?.color, slots: [{ division: divOfSeed(1), label: byeCount ? "#1 seed" : "WC winner" }, { division: undefined, label: "WC winner" }] },
+        { id: "pv-sf-1", accent: divOfSeed(2)?.color, slots: [{ division: divOfSeed(2), label: byeCount ? "#2 seed" : "WC winner" }, { division: undefined, label: "WC winner" }] },
+      ];
+      r1.forEach((m, i) => link(m.id, semis[i % 2].id));
+      semis.forEach((m) => link(m.id, final.id));
+      rounds.push({ name: "Semifinals", matches: semis });
+    } else {
+      r1.forEach((m) => link(m.id, final.id));
+    }
+    rounds.push({ name: "Championship", matches: [final] });
+    rounds.forEach((round, i) => { if (roundNames[i]) round.name = roundNames[i]; });
+    return { rounds, connections: conns };
   };
+
+  const buildConsolation = (): PBracket => {
+    const rounds: PRound[] = []; const conns: BracketConnection[] = [];
+    const roundOrder = [...new Map(consolationSlots.map((s) => [s.roundIndex, s.roundName])).entries()].sort((a, b) => a[0] - b[0]);
+    roundOrder.forEach(([roundIndex, roundName]) => {
+      const slots = consolationSlots.filter((s) => s.roundIndex === roundIndex);
+      rounds.push({ name: roundName, matches: slots.map((slot) => ({ id: `pv-${slot.id}`, accent: "#8a6bd1", slots: [{ division: undefined, label: slot.label }] })) });
+    });
+    for (let r = 0; r < rounds.length - 1; r++) {
+      rounds[r].matches.forEach((m, i) => { const target = rounds[r + 1].matches[Math.min(i, rounds[r + 1].matches.length - 1)]; if (target) conns.push({ id: `k-${m.id}-${target.id}`, sourceGameId: m.id, targetGameId: target.id, outcome: "winner" }); });
+    }
+    return { rounds, connections: conns };
+  };
+
+  const showConsolationView = previewView === "consolation" && consolationSlots.length > 0;
+  const bracketSignature = [
+    showConsolationView, p.fieldSize, p.bracketType, p.placementMode, byeCount, previewHalves,
+    roundNames.join("~"),
+    divisions.map((d) => `${d.id}:${d.color}:${d.logoUrl ?? ""}`).join(","),
+    setup.teams.map((t) => `${t.id}:${t.overallRank}:${t.divisionId}`).join(","),
+    consolationSlots.map((s) => s.id).join(","),
+  ].join("|");
+  // Stabilize the bracket (and its connections array) so BracketConnectorLayer measures once
+  // instead of churning on every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const previewBracket = useMemo(() => (showConsolationView ? buildConsolation() : buildChampionship()), [bracketSignature]);
+
+  const renderSlot = (slot: PSlot, key: number) => {
+    const d = slot.division;
+    const color = d?.color ?? "#586761";
+    return <span key={key} className="ppw-slot" style={{ "--slot-c": color, color: accessibleAccentColor(color, "#161d18") } as React.CSSProperties}>
+      {d?.logoUrl ? <img className="ppw-slogo" src={d.logoUrl} alt="" /> : <b className="ppw-dchip" style={{ background: color, color: readableTextColor(color) } as React.CSSProperties}>{d ? divInitials(d) : "#"}</b>}
+      <span className="ppw-name">{slot.label}</span>
+    </span>;
+  };
+  const renderBracket = (data: PBracket) => (
+    <BracketConnectorLayer className="ppw-bracket" connections={data.connections}>
+      {data.rounds.map((round, ri) => <div key={ri} className={`ppw-col ${ri === data.rounds.length - 1 ? "ppw-final" : ""}`}>
+        <span className="ppw-rh">{round.name}</span>
+        {round.matches.map((m) => <div key={m.id} data-bracket-game-id={m.id} className={`ppw-match ${m.gold ? "ppw-gold" : ""}`} style={{ "--ppw-accent": m.gold ? "var(--gold)" : (m.accent ?? "#3fbf7f") } as React.CSSProperties}>{m.slots.map(renderSlot)}</div>)}
+      </div>)}
+    </BracketConnectorLayer>
+  );
 
   const subPages: Array<{ key: typeof subPage; label: string; sub: string }> = [
     { key: "format", label: "Format", sub: "Field & bracket" },
@@ -775,10 +833,13 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
 
       <aside className="playoff-wizard-preview" aria-label="Live bracket preview">
         <div className="ppw-preview-head"><span className="ppw-preview-eyebrow">Live preview</span><span className="ppw-preview-live">Updates as you set</span></div>
-        <strong className="ppw-preview-title">{p.bracketType === "ladder" ? "The playoff ladder" : "Road to the title"}</strong>
-        <small className="ppw-preview-sub">{p.fieldSize} teams · {previewHalves ? "division halves" : p.placementMode === "overall" ? "overall seeds" : "auto seeding"} · {byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"}` : "no byes"}</small>
-        <div className="ppw-bracket">{previewColumns()}</div>
-        {p.consolationMode !== "off" && <div className="ppw-cons"><span className="ppw-cons-h">Consolation placement</span><div className="ppw-cons-row">{Array.from({ length: Math.min(4, Math.max(0, setup.teams.length - p.fieldSize)) }, (_, i) => p.fieldSize + 1 + i).map((s) => <span key={s} className="ppw-pill">#{s} · {divInitials(divOfSeed(s))}</span>)}</div></div>}
+        {consolationSlots.length > 0 && <div className="ppw-preview-toggle" role="tablist" aria-label="Preview bracket">
+          <button type="button" role="tab" aria-selected={!showConsolationView} className={!showConsolationView ? "active" : ""} onClick={() => setPreviewView("championship")}>Championship</button>
+          <button type="button" role="tab" aria-selected={showConsolationView} className={showConsolationView ? "active" : ""} onClick={() => setPreviewView("consolation")}>Consolation</button>
+        </div>}
+        <strong className="ppw-preview-title">{showConsolationView ? "Placement bracket" : p.bracketType === "ladder" ? "The playoff ladder" : "Road to the title"}</strong>
+        <small className="ppw-preview-sub">{showConsolationView ? `${Math.max(0, setup.teams.length - p.fieldSize)} teams outside the title hunt` : `${p.fieldSize} teams · ${previewHalves ? "division halves" : p.placementMode === "overall" ? "overall seeds" : "auto seeding"} · ${byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"}` : "no byes"}`}</small>
+        {renderBracket(previewBracket)}
         <div className="ppw-facts">
           <span className="ppw-fact">🏟 <b>{p.championshipVenueMode === "neutral-site" ? "Neutral site" : "Higher seed hosts"}</b></span>
           <span className="ppw-fact">🔀 <b>{p.reseedMode === "each-round" ? "Reseed each round" : p.reseedMode === "protected" ? "Protected" : "Fixed bracket"}</b></span>
