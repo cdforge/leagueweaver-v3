@@ -809,17 +809,20 @@ function PlayoffsView({
   const mainConnections: BracketConnection[] = projectedMainRounds.slice(0, -1).flatMap((round) => {
     const nextRound = projectedMainRounds[round.roundIndex + 1];
     if (!nextRound) return [];
-    return round.matchups.map((matchup, gameIndex) => {
+    return round.matchups.flatMap((matchup, gameIndex) => {
       const projectedWinner = Math.min(matchup.homeSeed, matchup.awaySeed);
-      const targetIndex = Math.max(0, nextRound.matchups.findIndex((next) => next.homeSeed === projectedWinner || next.awaySeed === projectedWinner));
-      return {
+      const targetIndex = nextRound.matchups.findIndex((next) => next.homeSeed === projectedWinner || next.awaySeed === projectedWinner);
+      // No matching next-round slot (e.g. the projected winner drew a bye or the
+      // lookup fails): draw nothing rather than a confidently-wrong line to game 1.
+      if (targetIndex < 0) return [];
+      return [{
         id: `main-winner-r${round.roundIndex + 1}-g${gameIndex + 1}`,
         sourceGameId: `main-r${round.roundIndex + 1}-g${gameIndex + 1}`,
         targetGameId: `main-r${round.roundIndex + 2}-g${targetIndex + 1}`,
         outcome: "winner" as const,
         pending: settings.reseedMode !== "fixed",
         label: settings.reseedMode === "fixed" ? "Winner advances" : "Projected reseed path",
-      };
+      }];
     });
   });
   const consolationConnections: BracketConnection[] = consolationProjection?.rounds.flatMap((round) => round.games.flatMap((game) =>

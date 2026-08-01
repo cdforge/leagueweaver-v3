@@ -978,7 +978,6 @@ export function LeagueBuilder() {
     <section className="builder-section" aria-label="League schedule builder">
       <div className="page-width builder-heading-row">
         <div><p className="eyebrow">Fantasy football schedule maker</p><h2>Build the season your league deserves.</h2></div>
-        <p>Results-based matchups. Marquee weeks. Real rivalries.</p>
       </div>
       <div className="page-width wizard-progress" aria-label="Setup progress">
         <div className="wizard-progress-summary">

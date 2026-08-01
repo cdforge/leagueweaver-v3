@@ -133,7 +133,10 @@ export function BracketConnectorLayer({ connections, children, className }: Brac
         style={{
           position: "absolute",
           inset: 0,
-          zIndex: 3,
+          // Sit beneath the cards: the isolate wrapper contains this negative
+          // layer, so connectors show through the gaps but never paint over a
+          // card face (audit H12 — "cards over lines").
+          zIndex: 0,
           overflow: "visible",
           pointerEvents: "none",
         }}
