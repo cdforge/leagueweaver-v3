@@ -914,23 +914,23 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .welcome-hero { position: relative; display: flex; align-items: center; min-height: 460px; border-bottom: 1px solid var(--line); background-color: var(--field-soft); background-image: linear-gradient(to right, var(--field-soft) 0%, var(--field-soft) 42%, rgba(234, 245, 239, 0.88) 58%, rgba(234, 245, 239, 0) 82%), url("/branding/hero-welcome-marquee.jpg"); background-size: cover, cover; background-position: center, right center; background-repeat: no-repeat; }
 .welcome-hero-inner { width: 100%; padding: 56px 0; max-width: 720px; }
 .welcome-hero h1 { margin: 0; font-family: var(--font-barlow-condensed), sans-serif; font-size: clamp(40px, 1.75vw + 31px, 54px); line-height: 0.96; letter-spacing: -0.01em; color: var(--ink); }
-.welcome-lede { margin: 18px 0 0; max-width: 500px; color: var(--muted); font-size: var(--text-lg); line-height: 1.6; }
-.welcome-actions { margin-top: 28px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-.welcome-actions small { color: var(--muted); font-size: var(--text-2xs); }
-.welcome-actions--end { margin-top: 34px; }
-.welcome-cta { min-height: 50px; padding: 0 24px; font-size: var(--text-md); }
-.welcome-capabilities { padding: 48px 0; background: white; }
-.welcome-capability-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+.welcome-lede { margin: 16px 0 0; max-width: 500px; color: var(--muted); font-size: var(--text-lg); line-height: 1.6; }
+.welcome-actions { margin-top: 32px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.welcome-actions small { color: var(--muted); font-size: var(--text-xs); font-weight: var(--w-medium); }
+.welcome-actions--end { margin-top: 32px; }
+.welcome-cta { min-height: 56px; padding: 0 32px; font-size: var(--text-lg); }
+.welcome-capabilities { padding: 56px 0; background: white; }
+.welcome-capability-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
 .welcome-capability { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: white; box-shadow: var(--shadow-sm); }
 .welcome-capability-media { display: block; aspect-ratio: 4 / 3; overflow: hidden; background: var(--field-soft); border-bottom: 1px solid var(--line); }
 .welcome-capability-media img { display: block; width: 100%; height: 100%; object-fit: cover; transform: scale(1.22); transform-origin: bottom center; }
-.welcome-capability strong { padding: 15px 18px 0; color: var(--ink); font-size: var(--text-md); }
-.welcome-capability small { padding: 6px 18px 20px; color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
-.welcome-steps { padding: 20px 0 64px; background: white; }
+.welcome-capability strong { padding: 16px 16px 0; color: var(--ink); font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); line-height: 1.05; letter-spacing: -0.01em; }
+.welcome-capability small { padding: 8px 16px 24px; color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
+.welcome-steps { padding: 56px 0 64px; background: var(--field-soft); border-top: 1px solid var(--line); }
 .welcome-steps h2 { margin: 0 0 24px; font-family: var(--font-barlow-condensed), sans-serif; font-size: clamp(28px, 1.1vw + 22px, 34px); line-height: 1; color: var(--ink); }
-.welcome-step-row { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-.welcome-step-row li { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 24px 22px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--canvas); }
-.welcome-step-index { position: absolute; top: 18px; right: 20px; font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--num-lg); line-height: 1; color: var(--line-strong); }
+.welcome-step-row { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.welcome-step-row li { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: white; }
+.welcome-step-index { position: absolute; top: 16px; right: 24px; font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--num-lg); line-height: 1; color: var(--line-strong); }
 .welcome-step-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: var(--radius); background: white; border: 1px solid var(--line); color: var(--field); }
 .welcome-step-icon svg { width: 20px; }
 .welcome-step-row strong { color: var(--ink); font-size: var(--text-lg); }
@@ -938,7 +938,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 
 /* Welcome — platform trust row */
 .welcome-platforms { border-bottom: 1px solid var(--line); background: white; }
-.welcome-platforms-inner { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 18px 0; text-align: center; }
+.welcome-platforms-inner { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 16px 0; text-align: center; }
 .welcome-platform-chip { flex: 0 0 auto; width: 40px; height: 40px; border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
 .welcome-platform-chip img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .welcome-platforms-inner p { margin: 0; color: var(--ink); font-size: var(--text-sm); font-weight: var(--w-medium); line-height: 1.5; }
@@ -946,11 +946,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 /* Welcome — product showcase */
 .welcome-showcase { padding: 56px 0; background: var(--canvas); border-bottom: 1px solid var(--line); }
 .welcome-showcase h2 { margin: 0 0 8px; font-family: var(--font-barlow-condensed), sans-serif; font-size: clamp(28px, 1.1vw + 22px, 34px); line-height: 1.02; color: var(--ink); }
-.welcome-showcase-lede { margin: 0 0 26px; max-width: 620px; color: var(--muted); font-size: var(--text-md); line-height: 1.6; }
+.welcome-showcase-lede { margin: 0 0 24px; max-width: 620px; color: var(--muted); font-size: var(--text-md); line-height: 1.6; }
 .welcome-showcase-frame { border: 1px solid var(--line-strong); border-radius: var(--radius-lg); overflow: hidden; background: white; box-shadow: var(--shadow-lg); }
-.welcome-showcase-bar { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--canvas); }
+.welcome-showcase-bar { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--canvas); }
 .welcome-showcase-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line-strong); }
-.welcome-preview { padding: 20px 22px 24px; background: white; }
+.welcome-preview { padding: 24px; background: white; }
 .wp-topline { display: flex; align-items: center; gap: 10px; margin-bottom: 13px; }
 .wp-league-mark { flex: 0 0 auto; }
 .wp-topline strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); color: var(--ink); }
@@ -1020,8 +1020,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .start-divider::before, .start-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 
 @media (max-width: 720px) {
-  .welcome-hero { min-height: auto; background-image: none; }
-  .welcome-hero-inner { padding: 44px 0 40px; }
+  /* Mobile keeps the hero art, dropped to a faded band below the copy. */
+  .welcome-hero { min-height: auto; background-image: linear-gradient(to bottom, var(--field-soft) 0%, var(--field-soft) 56%, rgba(234, 245, 239, 0.6) 74%, rgba(234, 245, 239, 0) 100%), url("/branding/hero-welcome-marquee.jpg"); background-size: cover, 150% auto; background-position: center, center bottom; }
+  .welcome-hero-inner { padding: 40px 0 176px; }
   .welcome-capability-grid { grid-template-columns: 1fr 1fr; }
   .welcome-platforms-inner { gap: 12px; }
   .welcome-showcase { padding: 40px 0; }
