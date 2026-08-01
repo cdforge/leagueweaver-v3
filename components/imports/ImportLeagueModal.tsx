@@ -14,7 +14,7 @@ export type ImportSource = ImportPreview["provider"];
 const TEAM_COLORS = ["#B91C1C", "#1D4ED8", "#7C3AED", "#C2410C", "#047857", "#BE185D", "#0369A1", "#4D7C0F", "#A16207", "#4338CA", "#0F766E", "#9F1239", "#6D28D9", "#166534", "#1E40AF", "#854D0E"];
 const ESPN_IMPORT_HISTORY_KEY = "leagueweaver:v3:espn-imports";
 const MAX_PASTE_IMPORT_CHARS = 50_000;
-const MAX_IMPORT_TEAMS = 16;
+const MAX_IMPORT_TEAMS = 32;
 const CSV_TEMPLATE = "City,Team,Manager,Division,Rank,Venue,Color\n,,,,,,\n,,,,,,";
 const SAMPLE_ROSTER = [
   "City,Team,Manager,Division,Rank,Venue,Color",
@@ -113,7 +113,7 @@ function readImage(file: File) {
 function parsePastedRoster(value: string, provider: "csv" | "paste"): ImportPreview {
   const warnings: string[] = [];
   if (value.length > MAX_PASTE_IMPORT_CHARS) {
-    warnings.push("Only the first 50,000 characters were reviewed. Paste 8–16 team rows for the cleanest import.");
+    warnings.push("Only the first 50,000 characters were reviewed. Paste 8–32 team rows for the cleanest import.");
   }
   const lines = value.slice(0, MAX_PASTE_IMPORT_CHARS).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const firstCells = lines[0]?.split(/\t|,/).map((cell) => cell.trim().toLowerCase()) ?? [];
@@ -121,7 +121,7 @@ function parsePastedRoster(value: string, provider: "csv" | "paste"): ImportPrev
   const headers = hasHeader ? firstCells : [];
   const dataLines = (hasHeader ? lines.slice(1) : lines).slice(0, MAX_IMPORT_TEAMS);
   if ((hasHeader ? lines.slice(1) : lines).length > MAX_IMPORT_TEAMS) {
-    warnings.push("Only the first 16 team rows were imported. League Weaver supports 8–16 teams.");
+    warnings.push("Only the first 32 team rows were imported. League Weaver supports 8–32 teams.");
   }
   const names = new Map<string, number>();
   const teams = dataLines.map((line, index) => {
@@ -244,7 +244,7 @@ export function ImportLeagueModal({ source, setup, onClose, onConfirm }: {
     .map((team) => team.name.trim().toLowerCase())
     .filter(Boolean)
     .filter((name, index, names) => names.indexOf(name) !== index) : [];
-  const rosterMessage = preview && !supported ? `League Weaver needs an even roster of 8–16 teams. This preview has ${preview.teams.length}.` : null;
+  const rosterMessage = preview && !supported ? `League Weaver needs an even roster of 8–32 teams. This preview has ${preview.teams.length}.` : null;
   const duplicateMessage = duplicatePreviewNames.length ? "Rename duplicate teams before importing. Duplicate names make score entry, standings, and exports confusing." : null;
   // The per-team blockers a commissioner can actually fix in review (unnamed or duplicate).
   // A wrong-count/odd roster isn't in here because jumping to a row wouldn't help with it.
@@ -486,7 +486,7 @@ export function ImportLeagueModal({ source, setup, onClose, onConfirm }: {
             </div>
             <div className="import-review-foot">
               <button type="button" className="import-review-add" disabled={preview.teams.length >= MAX_IMPORT_TEAMS} onClick={addTeam}><Plus />Add a team</button>
-              <small>{preview.teams.length} of 8–16 teams · League Weaver needs an even roster.</small>
+              <small>{preview.teams.length} of 8–32 teams · League Weaver needs an even roster.</small>
             </div>
           </div>
         )}

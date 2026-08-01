@@ -10,8 +10,8 @@ const savedLeagueSchema = z.object({
     league: z.object({
       name: z.string().max(80), abbreviation: z.string().max(6), initials: z.string().max(4).optional(), description: z.string().max(220), color: z.string(), logoUrl: z.string().optional(),
     }),
-    divisions: z.array(z.unknown()).min(2).max(4),
-    teams: z.array(z.unknown()).min(8).max(16),
+    divisions: z.array(z.unknown()).min(2).max(8),
+    teams: z.array(z.unknown()).min(8).max(32),
     display: z.object({ cityNames: z.boolean(), managers: z.boolean(), venues: z.boolean() }),
     priorSeason: z.unknown().optional(),
     platformConnection: z.unknown().optional(),

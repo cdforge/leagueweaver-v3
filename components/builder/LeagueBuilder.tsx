@@ -42,7 +42,8 @@ import { EntityLogo } from "@/components/ui/EntityLogo";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { createBlankSetup, createDefaultSetup, createDivisions, createTeams } from "@/lib/defaults";
 import { identityFromSetup, normalizeSavedLeague } from "@/lib/savedLeagues";
-import { generateLeagueSchedule, getNflWeeks, getNflWeekWindow, getWeekDateLabel } from "@/lib/schedule";
+import { getNflWeeks, getNflWeekWindow, getWeekDateLabel } from "@/lib/schedule";
+import { generateScheduleAsync } from "@/lib/generateScheduleAsync";
 import { createLocalSeasonId, listLocalSeasons, loadSetup, saveSeason, saveSetup } from "@/lib/storage";
 import { divisionAcronym, entityMonogram, leagueAcronym, resolveInitials } from "@/lib/monograms";
 import { accessibleAccentColor } from "@/lib/colorContrast";
@@ -283,6 +284,52 @@ function LeagueStep({ setup, setSetup, presets, loadedPreset, onQuickImport, onS
   );
 }
 
+// League-size bounds, anchored to what the import platforms allow (Sleeper: up
+// to 32 teams / plenty of divisions; ESPN: 20 / 4). See the ESPN over-limit notice.
+const MAX_TEAMS = 32;
+const MAX_DIVISIONS = 8;
+
+// Balanced split of `teamCount` into `divisionCount` groups (sizes differ by ≤1).
+function divisionSizesFor(teamCount: number, divisionCount: number): number[] {
+  const base = Math.floor(teamCount / divisionCount);
+  const remainder = teamCount % divisionCount;
+  return Array.from({ length: divisionCount }, (_, index) => base + (index < remainder ? 1 : 0));
+}
+
+// A division of `size` fits a 14-week, bye-free fantasy season when its guaranteed
+// divisional games (2 per opponent) leave room: even sizes up to 8, odd up to 7
+// (an odd division must send a team cross every week, needing weeks ≥ 2·size).
+function sizeSchedulable(size: number): boolean {
+  return size % 2 === 0 ? 2 * (size - 1) <= 14 : 2 * size <= 14;
+}
+
+// Whether `teamCount` can split into `divisionCount` balanced, schedulable divisions.
+function divisionCountSchedulable(teamCount: number, divisionCount: number): boolean {
+  if (divisionCount < 2 || divisionCount > MAX_DIVISIONS) return false;
+  const sizes = divisionSizesFor(teamCount, divisionCount);
+  if (Math.min(...sizes) < 2) return false;
+  if (!sizes.every(sizeSchedulable)) return false;
+  // Reliability guard: divisions of 7–8 only schedule cleanly as a simple two-way
+  // (bipartite) split. With 3+ divisions, size-7/8 members leave the cross-division
+  // allocator a sparse odd-degree problem it solves slowly or not at all — so steer
+  // to divisions of ≤6 there (i.e. use more, smaller divisions). Larger divisions
+  // across 3+ groups are deferred to a later engine-hardening pass.
+  if (divisionCount >= 3 && Math.max(...sizes) > 6) return false;
+  return true;
+}
+
+// The division counts the builder offers for a given roster (min size 2, capped at 8).
+function divisionCountOptions(teamCount: number): number[] {
+  const max = Math.min(MAX_DIVISIONS, Math.floor(teamCount / 2));
+  return Array.from({ length: Math.max(0, max - 1) }, (_, index) => index + 2);
+}
+
+// Smallest schedulable division count — the fallback when a roster change makes the
+// current division count infeasible (e.g. bumping to 32 teams while on 2 divisions).
+function minSchedulableDivisions(teamCount: number): number {
+  return divisionCountOptions(teamCount).find((count) => divisionCountSchedulable(teamCount, count)) ?? 2;
+}
+
 function TeamsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; setSetup: React.Dispatch<React.SetStateAction<LeagueSetupInput>>; showErrors: boolean }) {
   const updateTeam = (id: string, patch: Partial<Team>) => setSetup((current) => ({
     ...current,
@@ -293,8 +340,21 @@ function TeamsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; s
     }),
   }));
   const setTeamCount = (count: number) => {
-    const next = Math.max(8, Math.min(16, count + (count % 2)));
-    setSetup((current) => ({ ...current, teams: createTeams(next, current.divisions), priorSeason: { ...current.priorSeason, enabled: false, hasData: false, entryMode: "none" } }));
+    const next = Math.max(8, Math.min(MAX_TEAMS, count + (count % 2)));
+    setSetup((current) => {
+      // Keep the roster schedulable: if the new team count can't split into the
+      // current number of divisions (e.g. 32 teams over 2 divisions), fall back to
+      // the smallest division count that fits so generation never hits a dead end.
+      const divisions = divisionCountSchedulable(next, current.divisions.length)
+        ? current.divisions
+        : createDivisions(minSchedulableDivisions(next));
+      return {
+        ...current,
+        divisions,
+        teams: createTeams(next, divisions),
+        priorSeason: { ...current.priorSeason, enabled: false, hasData: false, entryMode: "none" },
+      };
+    });
   };
   const updateDisplay = (patch: Partial<LeagueSetupInput["display"]>) => setSetup((current) => ({ ...current, display: { ...current.display, ...patch } }));
   const teamColumns = ["60px", setup.display.cityNames && "112px", "minmax(145px,1.2fr)", "72px", setup.display.managers && "118px", setup.display.venues && "minmax(140px,1fr)"].filter(Boolean).join(" ");
@@ -321,7 +381,7 @@ function TeamsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; s
 }
 
 function DivisionsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; setSetup: React.Dispatch<React.SetStateAction<LeagueSetupInput>>; showErrors: boolean }) {
-  const setDivisionCount = (count: 2 | 3 | 4) => {
+  const setDivisionCount = (count: number) => {
     const divisions = createDivisions(count);
     setSetup((current) => ({
       ...current,
@@ -337,7 +397,7 @@ function DivisionsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInpu
   return <div className="step-stack">
     <div className="section-heading"><span className="step-kicker">Step 4 of 9</span><h1>Build the divisions.</h1><p>Name each group, keep its color and logo visible, then place every team.</p></div>
     <div className="division-stage">
-      <div className="compact-controls division-controls"><div><FieldLabel>Divisions</FieldLabel><div className="segmented"><button type="button" className={setup.divisions.length === 2 ? "active" : ""} onClick={() => setDivisionCount(2)}>2</button><button type="button" className={setup.divisions.length === 3 ? "active" : ""} onClick={() => setDivisionCount(3)}>3</button><button type="button" className={setup.divisions.length === 4 ? "active" : ""} onClick={() => setDivisionCount(4)}>4</button></div></div><div className={`roster-status ${balanced ? "" : "warning"}`}>{balanced ? <Check /> : <CircleAlert />}<span><strong>{balanced ? "Balanced divisions" : "Divisions need rebalancing"}</strong><small>{counts.join(" · ")} teams</small></span></div></div>
+      <div className="compact-controls division-controls"><div><FieldLabel>Divisions</FieldLabel><div className="segmented segmented-wrap">{divisionCountOptions(setup.teams.length).map((count) => { const schedulable = divisionCountSchedulable(setup.teams.length, count); return <button key={count} type="button" disabled={!schedulable} title={schedulable ? undefined : `${setup.teams.length} teams can’t split into ${count} balanced divisions within a 14-week season`} className={setup.divisions.length === count ? "active" : ""} onClick={() => setDivisionCount(count)}>{count}</button>; })}</div></div><div className={`roster-status ${balanced ? "" : "warning"}`}>{balanced ? <Check /> : <CircleAlert />}<span><strong>{balanced ? "Balanced divisions" : "Divisions need rebalancing"}</strong><small>{counts.join(" · ")} teams</small></span></div></div>
       <div className="division-strip">{setup.divisions.map((division) => <div className="division-identity-edit" key={division.id}><IdentityColorPicker compact name={`${division.name} division`} abbreviation={resolveInitials(division.initials, divisionAcronym(division.name))} color={division.color} logoUrl={division.logoUrl} onChange={(next) => updateDivision(division.id, next)} /><div><input aria-label={`${division.name} division name`} aria-invalid={showErrors && !division.name.trim()} value={division.name} onChange={(event) => updateDivision(division.id, { name: event.target.value })} /><input aria-label={`${division.name} division initials override`} maxLength={4} placeholder={`Auto: ${divisionAcronym(division.name)}`} value={division.initials ?? ""} onChange={(event) => updateDivision(division.id, { initials: event.target.value || undefined })} /></div></div>)}</div>
       <div className="division-assignments"><div className="division-assign-head"><strong>Place each team</strong><span>Keep each division within one team of the others.</span></div><div>{setup.teams.map((team) => <div className="division-assign-row" key={team.id}><EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} /><span>{setup.display.cityNames && team.city && <small className="team-city">{team.city}</small>}<strong>{team.name}</strong>{setup.display.managers && <small>{team.manager || "No manager"}</small>}</span><CustomSelect label={`${teamDisplayName(team)} division`} value={team.divisionId} onChange={(divisionId) => updateTeam(team.id, divisionId)} options={setup.divisions.map((division) => ({ value: division.id, label: division.name, swatch: division.color, logoUrl: division.logoUrl, monogram: resolveInitials(division.initials, divisionAcronym(division.name)) }))} /></div>)}</div></div>
     </div>
@@ -699,7 +759,7 @@ export function LeagueBuilder() {
   const validationError = useMemo(() => {
     if (step === 1 && !setup.name.trim()) return "Enter a league name before continuing.";
     if (step === 2) {
-      if (setup.teams.length < 8 || setup.teams.length > 16 || setup.teams.length % 2) return "Use an even number of teams from 8 through 16.";
+      if (setup.teams.length < 8 || setup.teams.length > 32 || setup.teams.length % 2) return "Use an even number of teams from 8 through 32.";
       const missingTeam = setup.teams.findIndex((team) => !team.name.trim());
       if (missingTeam >= 0) return "Enter a name for every team before continuing — the missing one is highlighted below.";
     }
@@ -852,7 +912,10 @@ export function LeagueBuilder() {
   };
   const applyImport = (preview: ImportPreview) => {
     const importedDivisionNames = Array.from(new Set(preview.teams.map((team) => team.division?.replace(/\s+division$/i, "").trim()).filter((name): name is string => Boolean(name))));
-    const divisionCount: 2 | 3 | 4 = importedDivisionNames.length === 4 ? 4 : importedDivisionNames.length === 3 ? 3 : 2;
+    const importedDivisionCount = Math.min(MAX_DIVISIONS, Math.max(2, importedDivisionNames.length || 2));
+    const divisionCount = divisionCountSchedulable(preview.teams.length, importedDivisionCount)
+      ? importedDivisionCount
+      : minSchedulableDivisions(preview.teams.length);
     const divisions = createDivisions(divisionCount).map((division, index) => ({
       ...division,
       name: importedDivisionNames[index] || division.name,
@@ -916,9 +979,13 @@ export function LeagueBuilder() {
     setGuestGenerateWarning(false);
     setGenerating(true);
     setError(null);
-    window.setTimeout(() => {
-      try {
-        const season = generateLeagueSchedule(setup);
+    // Generation runs off the main thread in a Web Worker, so even the largest
+    // leagues (the solver can search for up to ~25s) never freeze the UI — the
+    // "Weaving schedule…" state stays live and responsive. The reveal (and its
+    // skip control) only mounts once the finished schedule resolves below, so the
+    // user can never skip ahead to a schedule that isn't ready yet.
+    generateScheduleAsync(setup)
+      .then((season) => {
         // Give every guest schedule its own device-local id so a new season never
         // overwrites an earlier one. Signing in later claims it into the account.
         const localSeason = { ...season, id: createLocalSeasonId() };
@@ -926,11 +993,11 @@ export function LeagueBuilder() {
         // Keep `generating` true so the button stays locked; the reveal overlay
         // now owns the transition and routes to the workspace when it finishes.
         setRevealSeason(localSeason);
-      } catch (caught) {
+      })
+      .catch((caught) => {
         setError(caught instanceof Error ? caught.message : "We couldn’t build this schedule yet.");
         setGenerating(false);
-      }
-    }, 80);
+      });
   };
   const generate = () => {
     if (generating) return;
