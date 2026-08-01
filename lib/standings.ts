@@ -191,9 +191,22 @@ export function resolveStandings(schedule: GeneratedSchedule, options: Standings
         for (const opponentId of commonOpponents) if (!opponents.has(opponentId)) commonOpponents.delete(opponentId);
       }
     }
+    // #36.2 — head-to-head only decides a tie group where every tied team has
+    // played every other tied team; otherwise a team that never met the others got
+    // `null` and was shoved to the bottom. Skip the rule uniformly when partial.
+    let h2hFullyPlayed = true;
+    if (rule === "head-to-head") {
+      const idList = [...tiedIds];
+      const playedPairs = new Set<string>();
+      for (const completed of completedGames) {
+        const { homeTeamId, awayTeamId } = completed.game;
+        if (tiedIds.has(homeTeamId) && tiedIds.has(awayTeamId)) playedPairs.add([homeTeamId, awayTeamId].sort().join("|"));
+      }
+      h2hFullyPlayed = idList.every((a, index) => idList.slice(index + 1).every((b) => playedPairs.has([a, b].sort().join("|"))));
+    }
     return new Map(bucket.map((row): [string, number | null] => {
       if (rule === "win-percentage") return [row.teamId, row.winPercentage];
-      if (rule === "head-to-head") return [row.teamId, recordAgainst(row.teamId, completedGames, tiedIds)];
+      if (rule === "head-to-head") return [row.teamId, h2hFullyPlayed ? recordAgainst(row.teamId, completedGames, tiedIds) : null];
       if (rule === "division-percentage") return [row.teamId, recordPercentage(row.divisionWins, row.divisionLosses, row.divisionTies)];
       if (rule === "common-opponents") return [row.teamId, commonOpponents?.size ? recordAgainst(row.teamId, completedGames, commonOpponents) : null];
       if (rule === "strength-of-victory") return [row.teamId, strengthOfVictory.get(row.teamId) ?? null];
