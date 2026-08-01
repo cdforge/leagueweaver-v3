@@ -41,7 +41,8 @@ export default function WelcomePage() {
     <main>
       <AppHeader />
       <section className="welcome-hero" aria-labelledby="welcome-title">
-        <div className="page-width welcome-hero-inner">
+        <div className="page-width">
+          <div className="welcome-hero-inner">
           <p className="eyebrow">Fantasy Football Commissioner Studio</p>
           <h1 id="welcome-title">Welcome to League Weaver.</h1>
           <p className="welcome-lede">
@@ -49,8 +50,9 @@ export default function WelcomePage() {
             seeded off last year&rsquo;s finish, with rivalry weeks and marquee games that actually mean something.
           </p>
           <div className="welcome-actions">
-            <StartBuildingButton />
-            <small>Takes about five minutes &middot; No account needed to start.</small>
+            <StartBuildingButton label="Start building" />
+            <small>Free to start &middot; No account needed &middot; about 5 minutes.</small>
+          </div>
           </div>
         </div>
       </section>

@@ -132,8 +132,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .topnav { display: flex; align-items: center; gap: 24px; font-size: var(--text-sm); font-weight: var(--w-bold); }
 .topnav a { min-height: 44px; display: inline-flex; align-items: center; color: var(--muted); transition: color var(--transition); }
 .topnav a:hover { color: var(--ink); }
-.account-link { gap: 8px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: var(--radius); color: var(--ink) !important; transition: border-color var(--transition), background var(--transition); }
-.account-link:hover { border-color: var(--field) !important; background: var(--field-soft); }
+.account-link { gap: 8px; padding: 0 10px; border: 0; border-radius: var(--radius); color: var(--ink) !important; transition: background var(--transition); }
+.account-link:hover { background: var(--field-soft); }
 .account-identity { min-width: 0; justify-content: flex-start; }
 .account-identity.loading { color: var(--muted) !important; }
 .account-avatar { width: 32px; height: 32px; flex: 0 0 32px; overflow: hidden; border-radius: var(--radius-chip); background: var(--field); color: white; display: grid; place-items: center; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: 0; }
@@ -147,6 +147,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .pro-badge.compact { min-height: 18px; gap: 3px; padding: 3px 5px; font-size: var(--text-2xs); }
 .pro-badge.compact svg { width: 9px; height: 9px; }
 .account-identity-copy .pro-badge { flex: 0 0 auto; }
+
+/* Header "resume my latest schedule" jump. Only rendered on non-workspace pages. */
+.topnav .resume-latest { min-width: 0; display: inline-flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 13px 0 11px; border-radius: var(--radius); color: var(--ink); background: var(--field-soft); transition: background var(--transition), color var(--transition); }
+.topnav .resume-latest:hover { background: color-mix(in srgb, var(--field-soft) 60%, var(--field) 40%); color: var(--field-dark); }
+.resume-latest > svg { width: 17px; flex: 0 0 auto; color: var(--field); }
+.resume-latest-copy { min-width: 0; display: flex; flex-direction: column; gap: 1px; line-height: 1.15; text-align: left; }
+.resume-latest-copy small { font-size: var(--text-micro); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: 0.05em; color: var(--field); }
+.resume-latest-copy strong { max-width: 168px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--text-xs); font-weight: var(--w-black); }
 
 .builder-section { padding: 36px 0 56px; }
 .builder-heading-row { display: flex; align-items: end; justify-content: space-between; gap: 28px; margin-bottom: 24px; }
@@ -304,12 +312,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
    near-identical swatches, which read as one confusing "double swatch". Here we fold the
    colour toggle into a small pip on the corner of the logo tile, so the row shows a single
    identity control: the tile is the team's logo/colour, the pip edits the colour. */
-.import-review-identity .identity-picker-compact { position: relative; gap: 0; width: 40px; min-height: 40px; }
-.import-review-identity .identity-picker-compact .identity-logo-button { width: 40px; min-width: 40px; height: 40px; min-height: 40px; }
-.import-review-identity .identity-picker-compact .tooltip-wrap:last-of-type { position: absolute; right: -5px; bottom: -5px; z-index: 2; }
-.import-review-identity .identity-picker-compact .identity-palette-toggle { width: 18px; min-width: 18px; height: 18px; min-height: 18px; }
-.import-review-identity .identity-picker-compact .identity-palette-toggle > span { width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .18), 0 0 0 2px var(--surface); }
-.import-review-identity .identity-picker-compact .identity-palette-toggle svg { width: 10px; height: 10px; }
+/* The manual team builder (.team-editor-row) reuses the exact same folded corner-pip
+   identity control as the import review, so both surfaces share these rules. */
+.import-review-identity .identity-picker-compact, .team-editor-row .identity-picker-compact { position: relative; gap: 0; width: 40px; min-height: 40px; }
+.import-review-identity .identity-picker-compact .identity-logo-button, .team-editor-row .identity-picker-compact .identity-logo-button { width: 40px; min-width: 40px; height: 40px; min-height: 40px; }
+.import-review-identity .identity-picker-compact .tooltip-wrap:last-of-type, .team-editor-row .identity-picker-compact .tooltip-wrap:last-of-type { position: absolute; right: -5px; bottom: -5px; z-index: 2; }
+.import-review-identity .identity-picker-compact .identity-palette-toggle, .team-editor-row .identity-picker-compact .identity-palette-toggle { width: 18px; min-width: 18px; height: 18px; min-height: 18px; }
+.import-review-identity .identity-picker-compact .identity-palette-toggle > span, .team-editor-row .identity-picker-compact .identity-palette-toggle > span { width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .18), 0 0 0 2px var(--surface); }
+.import-review-identity .identity-picker-compact .identity-palette-toggle svg, .team-editor-row .identity-picker-compact .identity-palette-toggle svg { width: 10px; height: 10px; }
 .custom-select { position: relative; min-width: 0; }
 .custom-select-trigger { width: 100%; min-height: 44px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: white; color: var(--ink); display: flex; align-items: center; gap: 9px; padding: 6px 10px; text-align: left; cursor: pointer; transition: border-color var(--transition), box-shadow var(--transition); }
 .custom-select-trigger:hover:not(:disabled) { border-color: color-mix(in srgb, var(--field) 40%, var(--line-strong)); }
@@ -392,7 +402,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .save-league-row > div { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
 .save-league-row a { color: var(--field); font-size: var(--text-2xs); font-weight: var(--w-black); }
 
-.builder-actions { min-height: 74px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; padding: 14px 40px; background: var(--canvas); }
+/* Desktop: the footer sticks to the viewport bottom so Back/Continue stay reachable while
+   scrolling long steps. Below 980px this footer is hidden (see media query) and the fixed
+   blueprint bar takes over, so the sticky behavior is desktop-only in practice. */
+.builder-actions { min-height: 74px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; padding: 14px 40px; background: var(--canvas); position: sticky; bottom: 0; z-index: 3; border-radius: 0 0 calc(var(--radius) - 1px) calc(var(--radius) - 1px); box-shadow: 0 -8px 20px -14px rgba(21, 35, 28, 0.32); }
 .button-primary, .button-secondary { min-height: 44px; border-radius: var(--radius); padding: 0 18px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; font-size: var(--text-sm); font-weight: var(--w-black); cursor: pointer; transition: background var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform 80ms ease; }
 .button-primary { border: 1px solid var(--brand, var(--field)); background: var(--brand, var(--field)); color: var(--brand-on, white); }
 .button-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--brand, var(--field)) 84%, #000); border-color: color-mix(in srgb, var(--brand, var(--field)) 84%, #000); box-shadow: 0 2px 8px rgba(17, 122, 69, 0.28); }
@@ -904,23 +917,23 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .welcome-hero { position: relative; display: flex; align-items: center; min-height: 460px; border-bottom: 1px solid var(--line); background-color: var(--field-soft); background-image: linear-gradient(to right, var(--field-soft) 0%, var(--field-soft) 42%, rgba(234, 245, 239, 0.88) 58%, rgba(234, 245, 239, 0) 82%), url("/branding/hero-welcome-marquee.jpg"); background-size: cover, cover; background-position: center, right center; background-repeat: no-repeat; }
 .welcome-hero-inner { width: 100%; padding: 56px 0; max-width: 720px; }
 .welcome-hero h1 { margin: 0; font-family: var(--font-barlow-condensed), sans-serif; font-size: clamp(40px, 1.75vw + 31px, 54px); line-height: 0.96; letter-spacing: -0.01em; color: var(--ink); }
-.welcome-lede { margin: 18px 0 0; max-width: 500px; color: var(--muted); font-size: var(--text-lg); line-height: 1.6; }
-.welcome-actions { margin-top: 28px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-.welcome-actions small { color: var(--muted); font-size: var(--text-2xs); }
-.welcome-actions--end { margin-top: 34px; }
-.welcome-cta { min-height: 50px; padding: 0 24px; font-size: var(--text-md); }
-.welcome-capabilities { padding: 48px 0; background: white; }
-.welcome-capability-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+.welcome-lede { margin: 16px 0 0; max-width: 500px; color: var(--muted); font-size: var(--text-lg); line-height: 1.6; }
+.welcome-actions { margin-top: 32px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.welcome-actions small { color: var(--muted); font-size: var(--text-xs); font-weight: var(--w-medium); }
+.welcome-actions--end { margin-top: 32px; }
+.welcome-cta { min-height: 56px; padding: 0 32px; font-size: var(--text-lg); }
+.welcome-capabilities { padding: 56px 0; background: white; }
+.welcome-capability-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
 .welcome-capability { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: white; box-shadow: var(--shadow-sm); }
 .welcome-capability-media { display: block; aspect-ratio: 4 / 3; overflow: hidden; background: var(--field-soft); border-bottom: 1px solid var(--line); }
 .welcome-capability-media img { display: block; width: 100%; height: 100%; object-fit: cover; transform: scale(1.22); transform-origin: bottom center; }
-.welcome-capability strong { padding: 15px 18px 0; color: var(--ink); font-size: var(--text-md); }
-.welcome-capability small { padding: 6px 18px 20px; color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
-.welcome-steps { padding: 20px 0 64px; background: white; }
+.welcome-capability strong { padding: 16px 16px 0; color: var(--ink); font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); line-height: 1.05; letter-spacing: -0.01em; }
+.welcome-capability small { padding: 8px 16px 24px; color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
+.welcome-steps { padding: 56px 0 64px; background: var(--field-soft); border-top: 1px solid var(--line); }
 .welcome-steps h2 { margin: 0 0 24px; font-family: var(--font-barlow-condensed), sans-serif; font-size: clamp(28px, 1.1vw + 22px, 34px); line-height: 1; color: var(--ink); }
-.welcome-step-row { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-.welcome-step-row li { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 24px 22px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--canvas); }
-.welcome-step-index { position: absolute; top: 18px; right: 20px; font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--num-lg); line-height: 1; color: var(--line-strong); }
+.welcome-step-row { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.welcome-step-row li { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: white; }
+.welcome-step-index { position: absolute; top: 16px; right: 24px; font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--num-lg); line-height: 1; color: var(--line-strong); }
 .welcome-step-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: var(--radius); background: white; border: 1px solid var(--line); color: var(--field); }
 .welcome-step-icon svg { width: 20px; }
 .welcome-step-row strong { color: var(--ink); font-size: var(--text-lg); }
@@ -928,7 +941,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 
 /* Welcome — platform trust row */
 .welcome-platforms { border-bottom: 1px solid var(--line); background: white; }
-.welcome-platforms-inner { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 18px 0; text-align: center; }
+.welcome-platforms-inner { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 16px 0; text-align: center; }
 .welcome-platform-chip { flex: 0 0 auto; width: 40px; height: 40px; border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
 .welcome-platform-chip img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .welcome-platforms-inner p { margin: 0; color: var(--ink); font-size: var(--text-sm); font-weight: var(--w-medium); line-height: 1.5; }
@@ -936,11 +949,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 /* Welcome — product showcase */
 .welcome-showcase { padding: 56px 0; background: var(--canvas); border-bottom: 1px solid var(--line); }
 .welcome-showcase h2 { margin: 0 0 8px; font-family: var(--font-barlow-condensed), sans-serif; font-size: clamp(28px, 1.1vw + 22px, 34px); line-height: 1.02; color: var(--ink); }
-.welcome-showcase-lede { margin: 0 0 26px; max-width: 620px; color: var(--muted); font-size: var(--text-md); line-height: 1.6; }
+.welcome-showcase-lede { margin: 0 0 24px; max-width: 620px; color: var(--muted); font-size: var(--text-md); line-height: 1.6; }
 .welcome-showcase-frame { border: 1px solid var(--line-strong); border-radius: var(--radius-lg); overflow: hidden; background: white; box-shadow: var(--shadow-lg); }
-.welcome-showcase-bar { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--canvas); }
+.welcome-showcase-bar { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--canvas); }
 .welcome-showcase-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line-strong); }
-.welcome-preview { padding: 20px 22px 24px; background: white; }
+.welcome-preview { padding: 24px; background: white; }
 .wp-topline { display: flex; align-items: center; gap: 10px; margin-bottom: 13px; }
 .wp-league-mark { flex: 0 0 auto; }
 .wp-topline strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); color: var(--ink); }
@@ -1010,8 +1023,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .start-divider::before, .start-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 
 @media (max-width: 720px) {
-  .welcome-hero { min-height: auto; background-image: none; }
-  .welcome-hero-inner { padding: 44px 0 40px; }
+  /* Mobile keeps the hero art, dropped to a faded band below the copy. */
+  .welcome-hero { min-height: auto; background-image: linear-gradient(to bottom, var(--field-soft) 0%, var(--field-soft) 56%, rgba(234, 245, 239, 0.6) 74%, rgba(234, 245, 239, 0) 100%), url("/branding/hero-welcome-marquee.jpg"); background-size: cover, 150% auto; background-position: center, center bottom; }
+  .welcome-hero-inner { padding: 40px 0 176px; }
   .welcome-capability-grid { grid-template-columns: 1fr 1fr; }
   .welcome-platforms-inner { gap: 12px; }
   .welcome-showcase { padding: 40px 0; }
@@ -1026,6 +1040,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .welcome-capability-grid { grid-template-columns: 1fr; }
   .wp-rating b { display: none; }
   .wp-center > small { display: none; }
+  /* The 3-up match (team · venue · team) can't fit a phone — stack it: home, venue, away,
+     with both teams normalized to seed → logo → name so the row reads left-to-right. */
+  .wp-match { grid-template-columns: 1fr; gap: 8px; }
+  .wp-team, .wp-team.wp-right { justify-content: flex-start; }
+  .wp-team.wp-right { flex-direction: row-reverse; justify-content: flex-end; }
+  .wp-team.wp-right .wp-name { align-items: flex-start; text-align: left; }
+  .wp-center { align-items: flex-start; padding-left: 40px; }
 }
 
 /* Season workspace */
@@ -1054,8 +1075,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
    shell; pin it under the top bar and drop the rail below it so the rail — and the
    switcher pinned to its bottom — always fit the viewport instead of overflowing. */
 .workspace-page.has-scorebar { --sb-strip-h: 91px; }
+/* Collapsed, the strip is a single 40px line — reclaim the rest so the rail rises to meet it. */
+.workspace-page.has-scorebar.scorebar-collapsed { --sb-strip-h: 40px; }
 .workspace-page.has-scorebar > .sb { position: sticky; top: 66px; z-index: 20; }
-.workspace-page.has-scorebar .workspace-rail { top: calc(66px + var(--sb-strip-h)); height: calc(100vh - 66px - var(--sb-strip-h)); }
+.workspace-page.has-scorebar .workspace-rail { top: calc(66px + var(--sb-strip-h)); height: calc(100vh - 66px - var(--sb-strip-h)); transition: top var(--transition), height var(--transition); }
 .workspace-rail nav { display: grid; gap: 2px; }
 .workspace-rail nav button { position: relative; min-height: 42px; border: 0; border-radius: var(--radius); background: transparent; color: rgba(255,255,255,0.58); display: flex; align-items: center; gap: 10px; padding: 0 11px; font-size: var(--text-2xs); font-weight: var(--w-bold); cursor: pointer; text-align: left; transition: background var(--transition), color var(--transition); }
 .workspace-rail nav button:hover { background: rgba(255,255,255,.09); color: rgba(255,255,255,0.88); }
@@ -3258,6 +3281,10 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .topnav .account-identity span:not(.account-avatar) { display: none !important; }
   .topnav .account-identity > span:not(.account-avatar):not(.account-identity-copy) { display: none; }
   .topnav .account-identity-copy { display: none; }
+  .topnav { gap: 12px; }
+  /* Collapse to an icon-only jump, matching the account pill. */
+  .topnav .resume-latest { width: 44px; padding: 0; justify-content: center; }
+  .topnav .resume-latest .resume-latest-copy { display: none; }
   .builder-section { padding-top: 24px; }
   .builder-heading-row { display: block; }
   .builder-heading-row > p { margin-top: 8px; text-align: left; }
@@ -4034,11 +4061,12 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .sb-games-wrap.can-left::before { opacity: 1; }
 .sb-games-wrap.can-right::after { opacity: 1; }
 
-.sb-games { width: 100%; display: flex; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: thin; cursor: grab; overscroll-behavior-x: contain; }
+/* Still scrolls (drag, wheel, auto-scroll) but the bar is hidden — the edge fades signal
+   overflow, and the auto-scroll no longer flashes a scrollbar as it pans. */
+.sb-games { width: 100%; display: flex; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; -ms-overflow-style: none; cursor: grab; overscroll-behavior-x: contain; }
 .sb-games.autoscrolling, .sb-games.dragging { scroll-snap-type: none; }
 .sb-games.dragging { cursor: grabbing; user-select: none; }
-.sb-games::-webkit-scrollbar { height: 7px; }
-.sb-games::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 99px; }
+.sb-games::-webkit-scrollbar { display: none; }
 .sb-empty { flex: 1; display: grid; place-items: center; padding: 18px; color: var(--muted); font-size: var(--text-xs); font-weight: var(--w-medium); }
 
 /* Grow to fill the available width; lock to the basis and scroll only once the
@@ -4560,3 +4588,84 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .ppw-col { justify-content: flex-start; }
 .ppw-col .ppw-rh { flex: 0 0 auto; margin-bottom: 8px; }
 .ppw-col-games { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: space-around; gap: 12px; min-height: 0; }
+
+/* ===================================================================
+   "Stakes" — current-week clinch/elimination scenario panel.
+   Dark broadcast-style overlay; trigger lives in the week-header bar.
+   =================================================================== */
+.stakes-trigger { position: relative; display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px 0 10px; border: 1px solid var(--field); border-radius: var(--radius); background: var(--field-soft); color: var(--field-dark); font-size: var(--text-xs); font-weight: var(--w-black); cursor: pointer; transition: background var(--transition), box-shadow var(--transition); }
+.stakes-trigger:hover { background: #dff0e7; }
+.stakes-trigger.arrive, .stakes-trigger { animation: stakes-arrive 1.7s ease-out 1; }
+@keyframes stakes-arrive { 0% { box-shadow: 0 0 0 0 rgb(17 122 69 / .4); } 70% { box-shadow: 0 0 0 7px rgb(17 122 69 / 0); } 100% { box-shadow: 0 0 0 0 rgb(17 122 69 / 0); } }
+@media (prefers-reduced-motion: reduce) { .stakes-trigger { animation: none; } }
+.stakes-trigger-icon { width: 15px; height: 15px; }
+.stakes-trigger-label { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-md); letter-spacing: .01em; text-transform: uppercase; }
+.stakes-trigger-count { display: inline-grid; place-items: center; min-width: 19px; height: 19px; padding: 0 5px; border-radius: var(--radius-pill); background: var(--field); color: #fff; font-family: var(--font-barlow-condensed), sans-serif; font-weight: var(--w-black); font-size: var(--text-xs); }
+.stakes-dot-cluster { display: inline-flex; gap: 3px; }
+.stakes-dot { width: 7px; height: 7px; border-radius: var(--radius-pill); box-shadow: inset 0 0 0 1px rgb(0 0 0 / .08); }
+.stakes-dot.seed { background: var(--gold); } .stakes-dot.div { background: #4f5bd5; } .stakes-dot.play { background: var(--field-mid); } .stakes-dot.elim { background: var(--live); }
+
+.stakes-overlay { position: fixed; inset: 0; z-index: var(--z-modal-elevated); display: grid; place-items: start center; padding: max(24px, 5vh) 16px 24px; background: rgb(10 14 12 / .55); overflow-y: auto; animation: modalBackdropIn 160ms ease; }
+.stakes-panel { width: min(760px, 100%); border-radius: var(--radius-lg); overflow: hidden; border: 1px solid #0d100e; background:
+  radial-gradient(120% 80% at 50% -10%, #232c27 0%, transparent 60%),
+  repeating-linear-gradient(135deg, rgb(255 255 255 / .014) 0 2px, transparent 2px 6px),
+  #171d1a;
+  box-shadow: 0 18px 44px rgb(0 0 0 / .34); animation: modalPanelIn 180ms ease; color: #f3f7f5; }
+.stakes-panel-head { display: flex; align-items: center; gap: 14px; padding: 16px 18px 13px; border-bottom: 1px solid #33403a; }
+.stakes-title { display: flex; flex-direction: column; gap: 3px; }
+.stakes-title strong { font-family: var(--font-barlow-condensed), sans-serif; font-weight: var(--w-black); font-style: italic; font-size: 27px; line-height: .9; text-transform: uppercase; color: #fff; text-shadow: 0 1px 0 #000; }
+.stakes-title small { font-family: var(--font-barlow-condensed), sans-serif; font-weight: var(--w-black); font-size: var(--text-xs); letter-spacing: .13em; text-transform: uppercase; color: var(--field-mid); }
+.stakes-ct { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; color: #94a49c; font-size: var(--text-xs); }
+.stakes-ct b { color: #fff; font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-md); }
+.stakes-x { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid #33403a; border-radius: var(--radius); background: transparent; color: #94a49c; cursor: pointer; }
+.stakes-x:hover { color: #fff; border-color: #4a5a52; }
+.stakes-x svg { width: 16px; height: 16px; }
+.stakes-panel-body { max-height: min(64vh, 640px); overflow-y: auto; }
+
+.stakes-team-bar { padding: 12px 18px 14px; border-bottom: 1px solid #33403a; }
+.stakes-team-bar:last-child { border-bottom: 0; }
+.stakes-team-bar.elim { background: linear-gradient(90deg, rgb(214 64 39 / .10), transparent 60%); }
+.stakes-bhead { display: flex; align-items: stretch; gap: 10px; }
+.stakes-blogo { width: 42px; height: 42px; flex: 0 0 42px; border-radius: 8px; display: grid; place-items: center; background: rgb(255 255 255 / .05); box-shadow: inset 0 0 0 2px var(--stakes-team-color); }
+.stakes-bbar { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; padding: 0 14px; border-radius: 8px; background: linear-gradient(180deg, color-mix(in srgb, var(--stakes-team-color) 88%, #fff 12%), var(--stakes-team-color)); box-shadow: inset 0 1px 0 rgb(255 255 255 / .22), inset 0 -2px 6px rgb(0 0 0 / .18); }
+.stakes-out { font-family: var(--font-barlow-condensed), sans-serif; font-weight: var(--w-black); font-style: italic; font-size: 19px; line-height: 1; text-transform: uppercase; color: inherit; text-shadow: 0 1px 1px rgb(0 0 0 / .3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stakes-out-icon { width: 19px; height: 19px; flex: 0 0 auto; }
+.stakes-dmark { width: 20px; height: 20px; flex: 0 0 20px; display: inline-grid; place-items: center; filter: brightness(0) invert(1); }
+.stakes-dmark .division-mark { width: 20px !important; height: 20px !important; }
+
+.stakes-bsub { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 10px; margin: 9px 0 3px; padding-left: 52px; }
+.stakes-name { font-family: var(--font-barlow-condensed), sans-serif; font-weight: var(--w-black); font-size: var(--text-lg); color: #fff; }
+.stakes-gameref { display: inline-flex; align-items: center; gap: 5px; color: #94a49c; font-size: var(--text-xs); }
+.stakes-mini { flex: 0 0 auto; border-radius: 3px; display: inline-grid; place-items: center; overflow: hidden; vertical-align: -3px; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12); }
+.stakes-mini img { width: 100%; height: 100%; object-fit: contain; }
+.stakes-mini b { font-family: var(--font-barlow-condensed), sans-serif; font-weight: var(--w-black); font-size: 9px; line-height: 1; }
+.stakes-goto { display: inline-flex; align-items: center; gap: 3px; border: 0; background: transparent; padding: 0; color: var(--field-mid); font-size: var(--text-xs); font-weight: var(--w-black); cursor: pointer; }
+.stakes-goto:hover { color: #fff; }
+.stakes-goto svg { width: 13px; height: 13px; }
+
+.stakes-conds { list-style: none; margin: 6px 0 0; padding: 0 0 0 52px; display: flex; flex-direction: column; gap: 5px; }
+.stakes-cond { display: flex; align-items: baseline; gap: 9px; }
+.stakes-num { flex: 0 0 auto; width: 18px; height: 18px; margin-top: 1px; border-radius: var(--radius-pill); display: grid; place-items: center; font-family: var(--font-barlow-condensed), sans-serif; font-weight: var(--w-black); font-size: var(--text-2xs); background: rgb(255 255 255 / .08); color: #94a49c; }
+.stakes-cond.clean .stakes-num { background: var(--field); color: #fff; }
+.stakes-cond-body { min-width: 0; color: #dfe7e3; font-size: var(--text-sm); line-height: 1.45; }
+.stakes-cond.clean .stakes-cond-body { color: #fff; font-weight: var(--w-bold); }
+.stakes-tm { font-weight: var(--w-black); color: #fff; white-space: nowrap; }
+.stakes-inline-team { font-weight: var(--w-black); color: #fff; white-space: nowrap; }
+.stakes-op { color: var(--field-mid); font-weight: var(--w-black); }
+.stakes-cond-game { color: #94a49c; font-size: var(--text-xs); }
+.stakes-alt { color: #94a49c; font-style: italic; }
+.stakes-hardway { padding-left: 52px; margin-top: 7px; }
+.stakes-hardway .stakes-conds { padding-left: 0; opacity: .85; }
+.stakes-hardway .stakes-cond-body { font-size: var(--text-xs); }
+.stakes-eyebrow { display: flex; align-items: center; gap: 7px; color: #94a49c; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .05em; text-transform: uppercase; margin-bottom: 3px; }
+.stakes-eyebrow i { flex: 1; height: 1px; background: #33403a; }
+
+.stakes-panel-foot { display: flex; align-items: flex-start; gap: 9px; padding: 12px 18px 15px; color: #94a49c; font-size: var(--text-xs); line-height: 1.5; border-top: 1px solid #33403a; }
+.stakes-panel-foot svg { width: 15px; height: 15px; flex: 0 0 auto; margin-top: 1px; color: var(--gold); }
+
+@media (max-width: 560px) {
+  .stakes-trigger-label { display: none; }
+  .stakes-out { font-size: 16px; white-space: normal; }
+  .stakes-bsub, .stakes-conds, .stakes-hardway { padding-left: 0; }
+  .stakes-cond-game { display: block; }
+}

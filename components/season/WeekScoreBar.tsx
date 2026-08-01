@@ -54,6 +54,8 @@ export interface WeekScoreBarProps {
   playoffPictureSummary?: string | null;
   /** Opens the Playoff Picture modal. Chip renders only when both this and the summary are set. */
   onOpenPlayoffPicture?: () => void;
+  /** Notified when the collapsed state changes, so the layout can reclaim the strip height. */
+  onCollapsedChange?: (collapsed: boolean) => void;
   className?: string;
 }
 
@@ -218,6 +220,7 @@ export function WeekScoreBar({
   onSelectGame,
   playoffPictureSummary,
   onOpenPlayoffPicture,
+  onCollapsedChange,
   className = "",
 }: WeekScoreBarProps) {
   const pictureChip = onOpenPlayoffPicture && playoffPictureSummary ? (
@@ -273,6 +276,8 @@ export function WeekScoreBar({
       try { window.localStorage.setItem("lw:scorebar:collapsed", next ? "1" : "0"); } catch { /* ignore */ }
       return next;
     });
+  // Let the surrounding layout know the strip's height changed so the sidebar can move up.
+  useEffect(() => { onCollapsedChange?.(collapsed); }, [collapsed, onCollapsedChange]);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const scRef = useRef<HTMLDivElement>(null);
