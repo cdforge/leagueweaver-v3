@@ -5,7 +5,7 @@ import { ArrowRight } from "lucide-react";
 import { markWelcomed } from "@/lib/welcome";
 
 export function StartBuildingButton({
-  href = "/",
+  href = "/build",
   label = "Get started",
   className = "button-primary welcome-cta",
 }: {

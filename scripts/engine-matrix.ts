@@ -11,12 +11,12 @@ function check(value: unknown, message: string) {
   checks += 1;
 }
 
-function setupFor(teamCount: number, weeks: 13 | 14, divisionCount: 2 | 3): LeagueSetupInput {
+function setupFor(teamCount: number, weeks: 13 | 14, divisionCount: 2 | 3 | 4): LeagueSetupInput {
   const divisions = createDivisions(divisionCount);
   return { ...createDefaultSetup(), id: `matrix-${teamCount}-${divisionCount}-${weeks}`, name: `${teamCount} Team Matrix`, weeks, divisions, teams: createTeams(teamCount, divisions) };
 }
 
-function verify(teamCount: number, weeks: 13 | 14, divisionCount: 2 | 3) {
+function verify(teamCount: number, weeks: 13 | 14, divisionCount: 2 | 3 | 4) {
   const setup = setupFor(teamCount, weeks, divisionCount);
   const sizes = setup.divisions.map((division) => setup.teams.filter((team) => team.divisionId === division.id).length);
   const expectedInfeasible = weeks === 13 && ((divisionCount === 3 && teamCount === 10) || sizes.some((size) => 2 * (size - 1) > weeks || (size % 2 === 1 && weeks < 2 * size)));
@@ -75,6 +75,15 @@ for (const teamCount of [8, 12, 14, 16]) {
 }
 verify(10, 14, 3);
 
+// Four-division shapes. [3,3,3,3] (12 teams) is the all-odd case whose final-week
+// cross reservation once broke inventory construction — see the complete-cross
+// shortcut in phases/inventory.ts. Every four-division shape is feasible at 13 and
+// 14 weeks, so all generate.
+for (const teamCount of [8, 10, 12, 14, 16]) {
+  verify(teamCount, 13, 4);
+  verify(teamCount, 14, 4);
+}
+
 const deterministicSetup = setupFor(12, 14, 3);
 const first = generateLeagueSchedule(deterministicSetup, "deterministic-check");
 const second = generateLeagueSchedule(deterministicSetup, "deterministic-check");
@@ -116,4 +125,4 @@ const repairedLegacyWeeks = normalizeSeriesGameNumbers(legacyWeeks);
 check(repairedLegacyWeeks[0].games[0].seriesGame === 1, "saved Week 1 series numbering is repaired");
 check(repairedLegacyWeeks[1].games[0].seriesGame === 2, "saved later series numbering follows chronology");
 
-console.log(`Engine matrix passed: ${checks} checks across 19 league shapes.`);
+console.log(`Engine matrix passed: ${checks} checks across 29 league shapes.`);

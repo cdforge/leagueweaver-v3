@@ -19,7 +19,7 @@ export default function PricingPage() {
       <article className="plan-panel plan-pro">
         <div className="plan-recommended"><ShieldCheck />MVP ACCESS</div>
         <div><span>BASE MVP</span><h2>$0</h2><p>The release version is focused on schedule creation and regular-season management.</p></div>
-        <Link className="button-primary" href="/"><CalendarDays />Open the builder</Link>
+        <Link className="button-primary" href="/build"><CalendarDays />Open the builder</Link>
       </article>
       <article className="plan-panel"><div><span>LATER</span><h2>Pro</h2><p>Playoffs, simulator, and deeper automation can return after the MVP is live and stable.</p></div></article>
     </section>

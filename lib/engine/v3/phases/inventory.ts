@@ -311,18 +311,26 @@ export function buildInventory(
         degree.set(a, (degree.get(a) ?? 0) - 1);
         degree.set(b, (degree.get(b) ?? 0) - 1);
       }
-      // Two equal odd divisions can land on an exact complete cross round robin.
-      // For 5/5 teams over 13 weeks, every team needs all five cross opponents
-      // once. The final-week reservation above already owns one of those pairs;
-      // feeding only the residual degrees to the priority allocator makes it
-      // select that same-seed pair again and reject an otherwise valid shape.
-      const groupLists = [...groupsIds.values()];
-      const completeCrossRoundRobin = groupLists.length === 2 &&
-        groupLists[0].length === groupLists[1].length &&
-        weeks - 2 * (groupLists[0].length - 1) === groupLists[1].length;
-      if (completeCrossRoundRobin) {
-        for (const a of groupLists[0]) {
-          for (const b of groupLists[1]) {
+      // Complete-cross shortcut. When every team's cross-degree equals its number
+      // of cross-division opponents, each team must play every out-of-division team
+      // exactly once — the cross graph is the complete multipartite graph, with no
+      // allocation freedom at all. Build it directly instead of routing through the
+      // priority allocator. This covers two equal divisions (e.g. 5/5 over 13 weeks,
+      // each needing all five cross opponents once) AND any number of divisions that
+      // saturate cross play (e.g. four 3-team divisions over 13 weeks: 9 cross games
+      // = 9 cross opponents). The latter is exactly where the allocator otherwise
+      // chokes: the final-week reservation above leaves an uneven residual degree
+      // sequence it can't realize, rejecting a schedule that provably exists. The
+      // reserved pairs are already members of this graph, so only add the rest.
+      const completeCross = [...groupsIds.values()].every(
+        (members) => weeks - 2 * (members.length - 1) === teamIds.length - members.length,
+      );
+      if (completeCross) {
+        for (let i = 0; i < teamIds.length; i += 1) {
+          for (let j = i + 1; j < teamIds.length; j += 1) {
+            const a = teamIds[i];
+            const b = teamIds[j];
+            if (groupOf.get(a) === groupOf.get(b)) continue;
             const key = a < b ? `${a}|${b}` : `${b}|${a}`;
             if (!map.has(key)) addPair(map, a, b, 1, "cross");
           }

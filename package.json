@@ -7,10 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "npm run test:engine && npm run test:playoffs && npm run test:stats",
+    "test": "npm run test:engine && npm run test:playoffs && npm run test:stats && npm run test:clinch && npm run test:scenarios && npm run test:mapping",
     "test:engine": "tsx scripts/engine-matrix.ts",
     "test:playoffs": "tsx scripts/playoff-matrix.ts",
-    "test:stats": "tsx scripts/statistics-matrix.ts"
+    "test:stats": "tsx scripts/statistics-matrix.ts",
+    "test:clinch": "tsx scripts/clinch-matrix.ts",
+    "test:scenarios": "tsx scripts/scenarios-matrix.ts",
+    "test:mapping": "tsx scripts/team-mapping-matrix.ts"
   },
   "dependencies": {
     "@ai-sdk/gateway": "4.0.32",

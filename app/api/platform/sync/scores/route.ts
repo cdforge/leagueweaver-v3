@@ -98,7 +98,7 @@ export async function POST(request: Request) {
   if (!connection?.provider || !connection.providerLeagueId) return NextResponse.json({ error: "This season is not connected to ESPN or Sleeper." }, { status: 400 });
   try {
     const result = connection.provider === "espn"
-      ? mapEspnScores(schedule, await fetchEspnLeague(connection.providerLeagueId, connection.seasonYear, ["mScoreboard"], await loadEspnAuth(schedule)))
+      ? mapEspnScores(schedule, await fetchEspnLeague(connection.providerLeagueId, connection.seasonYear, ["mMatchup", "mScoreboard"], await loadEspnAuth(schedule)))
       : await mapSleeperScores(schedule, parsed.data.week ?? 1);
     await persistScores(schedule, result);
     return NextResponse.json(result);
