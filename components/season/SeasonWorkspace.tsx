@@ -938,6 +938,19 @@ function PlayoffsView({
       })}</div>
     </section>;
   };
+  const championCapstone = (
+    <div className={`champion-capstone${champion ? " is-crowned" : ""} playoff-theme-${settings.theme}`}>
+      <span className="champion-capstone-glow" aria-hidden="true" />
+      {champion ? <>
+        <span className="champion-crest"><EntityLogo color={champion.color} logoUrl={champion.logoUrl} monogram={teamInitials(champion)} size={72} /></span>
+        <span className="champion-copy"><span className="champion-eyebrow"><Trophy />League Champion</span><strong>{teamDisplayName(champion, showCity)}</strong><small>Wins the {settings.name}</small></span>
+        <span className="champion-trophy"><Trophy /></span>
+      </> : <>
+        <span className="champion-trophy ghost"><Trophy /></span>
+        <span className="champion-copy"><span className="champion-eyebrow">Projected champion</span><strong>Awaiting the title game</strong><small>{championshipCopy}</small></span>
+      </>}
+    </div>
+  );
   return <div className="workspace-stack playoff-workspace" style={{ "--playoff-color": settings.color } as React.CSSProperties}>
     {mode === "settings" ? (<>
     <div className={`playoff-topline playoff-theme-${settings.theme}`}><div>{settings.logoUrl && <EntityLogo color={settings.color} logoUrl={settings.logoUrl} monogram="PO" imagePresentation="bare" />}<span><strong>{settings.name}</strong><small>{fieldSize} teams · {formatLabel} · Higher seed hosts before title · {championshipVenueCopy}</small></span></div><div className="playoff-field-actions">{simulationMode ? <span className="projected-pill simulation"><Gamepad2 />SIMULATED BRACKET</span> : <><span className={`projected-pill ${settings.fieldStatus === "locked" ? "locked" : ""}`}>{settings.fieldStatus === "locked" ? "FIELD LOCKED" : "LIVE PROJECTION"}</span><button type="button" onClick={lockField}><LockKeyhole />{settings.fieldStatus === "locked" ? "Unlock field" : "Lock field"}</button></>}</div></div>
@@ -961,16 +974,16 @@ function PlayoffsView({
       {hasConsolation && <button type="button" role="tab" aria-selected={boardSection === "consolation"} className={boardSection === "consolation" ? "active" : ""} onClick={() => setBoardSection("consolation")}>Consolation</button>}
       <button type="button" role="tab" aria-selected={boardSection === "placement"} className={boardSection === "placement" ? "active" : ""} onClick={() => setBoardSection("placement")}>Final placement</button>
     </div>
-    {boardSection === "championship" && <div className="postseason-map-scroll" aria-label="Championship bracket">
+    {boardSection === "championship" && <div className="pp-champ-section"><div className="postseason-map-scroll" aria-label="Championship bracket">
       <BracketConnectorLayer connections={mainConnections} className={`postseason-map-canvas rounds-${rounds.length}`}>
         <section className="championship-picture" aria-labelledby="championship-picture-title">
           <header><span><Trophy /><span><small>TITLE BRACKET</small><strong id="championship-picture-title">Road to the championship</strong></span></span><em>{settings.fieldStatus === "locked" ? "Locked field" : "Live projection"}</em></header>
           <div className="championship-bracket-grid" style={{ gridTemplateColumns: `repeat(${rounds.length}, minmax(270px, 1fr))` }}>
-            {projectedMainRounds.map((round) => <section key={round.roundIndex}><RoundHeading index={round.roundIndex} /><div className="main-playoff-round-games">{orderedRoundMatchups(round).map(({ matchup, gameIndex }) => <MainPlayoffGame key={`${round.roundIndex}-${gameIndex}`} roundIndex={round.roundIndex} gameIndex={gameIndex} homeSeed={matchup.homeSeed} awaySeed={matchup.awaySeed} bracketSide={matchup.bracketSide} />)}{round.roundIndex === 0 && round.byeSeeds.length > 0 && <div className="playoff-bye-strip"><strong>{round.byeSeeds.length} BYE{round.byeSeeds.length === 1 ? "" : "S"}</strong><span>{round.byeSeeds.map((byeSeed) => <Slot key={byeSeed} number={byeSeed} />)}</span></div>}{round.roundIndex === projectedMainRounds.length - 1 && <div className={`championship-outcome playoff-theme-${settings.theme}`}><Trophy />{champion ? <><EntityLogo color={champion.color} logoUrl={champion.logoUrl} monogram={teamInitials(champion)} size={52} /><strong>{teamDisplayName(champion, showCity)}</strong><small>League Champion</small></> : <><strong>League Champion</strong><small>{championshipCopy}</small></>}</div>}</div></section>)}
+            {projectedMainRounds.map((round) => <section key={round.roundIndex}><RoundHeading index={round.roundIndex} /><div className="main-playoff-round-games">{orderedRoundMatchups(round).map(({ matchup, gameIndex }) => <MainPlayoffGame key={`${round.roundIndex}-${gameIndex}`} roundIndex={round.roundIndex} gameIndex={gameIndex} homeSeed={matchup.homeSeed} awaySeed={matchup.awaySeed} bracketSide={matchup.bracketSide} />)}{round.roundIndex === 0 && round.byeSeeds.length > 0 && <div className="playoff-bye-strip"><strong>{round.byeSeeds.length} BYE{round.byeSeeds.length === 1 ? "" : "S"}</strong><span>{round.byeSeeds.map((byeSeed) => <Slot key={byeSeed} number={byeSeed} />)}</span></div>}</div></section>)}
           </div>
         </section>
       </BracketConnectorLayer>
-    </div>}
+    </div>{championCapstone}</div>}
     {boardSection === "consolation" && hasConsolation && <div className="postseason-map-scroll" aria-label="Consolation and placement bracket">
       <BracketConnectorLayer connections={consolationInternalConnections} className="postseason-map-canvas">
         <EliminationTransferRail />

@@ -4315,3 +4315,26 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .pp-subtabs button:hover:not(.active) { color: var(--pk-ink); }
 .pp-subtabs button.active { background: var(--field); color: #fff; }
 .pp-subtabs button:focus-visible { outline: 2px solid var(--field-mid); outline-offset: 2px; }
+
+/* Champion capstone — the crescendo at the end of the road to the championship */
+.pp-champ-section { display: flex; flex-direction: column; gap: 14px; }
+.champion-capstone { position: relative; overflow: hidden; display: flex; align-items: center; gap: 18px; min-height: 100px; padding: 16px 22px; border-radius: var(--radius-lg); border: 1px solid rgba(227,185,64,.38);
+  background: linear-gradient(120deg, rgba(227,185,64,.12), rgba(227,185,64,.03) 60%, transparent), var(--pk-2); }
+.champion-capstone.is-crowned { border-color: rgba(227,185,64,.72);
+  background: linear-gradient(120deg, rgba(227,185,64,.30), rgba(227,185,64,.10) 55%, rgba(227,185,64,.04)), var(--pk-2);
+  box-shadow: inset 0 0 0 1px rgba(227,185,64,.25), 0 16px 44px -16px rgba(227,185,64,.55); }
+.champion-crest { flex: 0 0 auto; }
+.champion-crest .entity-logo { width: 72px !important; height: 72px !important; border-radius: 14px; box-shadow: 0 0 0 3px rgba(227,185,64,.6), 0 8px 20px rgba(0,0,0,.45); }
+.champion-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.champion-eyebrow { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--gold); }
+.champion-eyebrow svg { width: 15px; height: 15px; }
+.champion-copy strong { font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-style: italic; font-size: clamp(24px, 2vw + 14px, 32px); line-height: .95; letter-spacing: .01em; text-transform: uppercase; color: #fff; text-shadow: 0 1px 0 #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.champion-copy small { color: var(--pk-mut); font-size: 12px; }
+.champion-trophy { margin-left: auto; flex: 0 0 auto; display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: radial-gradient(circle at 40% 34%, #f2dd86, var(--gold) 72%); color: #3a2c06; box-shadow: 0 6px 18px rgba(227,185,64,.5); }
+.champion-trophy svg { width: 30px; height: 30px; }
+.champion-trophy.ghost { margin-left: auto; background: rgba(255,255,255,.05); color: var(--gold); box-shadow: inset 0 0 0 1px var(--pk-line); }
+.champion-capstone-glow { position: absolute; inset: 0; pointer-events: none; opacity: 0; }
+.champion-capstone.is-crowned .champion-capstone-glow { opacity: 1; background: linear-gradient(105deg, transparent 30%, rgba(255,255,255,.35) 48%, transparent 66%); transform: translateX(-120%); animation: champion-sweep 1.7s ease-out .25s 1 forwards; }
+@keyframes champion-sweep { to { transform: translateX(120%); } }
+@media (prefers-reduced-motion: reduce) { .champion-capstone.is-crowned .champion-capstone-glow { animation: none; opacity: 0; } }
+@media (max-width: 560px) { .champion-copy strong { white-space: normal; } .champion-trophy { display: none; } }
