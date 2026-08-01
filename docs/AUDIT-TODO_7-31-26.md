@@ -105,7 +105,7 @@ Every story is self-contained — an engineer or designer should be able to pick
 **Deps:** V8, V10.
 
 ## H8 · Make the 6 stats tabs a real tablist ✓LIVE
-**Type:** a11y · **Status:** open
+**Type:** a11y · **Status:** ✅ DONE (2026-08-01, branch `feat/audit-followups-7-31`) — The Standings sub-tab strip now implements the APG tabs pattern: roving `tabIndex` (0 on selected, −1 on rest via `statsTabRefs`), an `onKeyDown` handler for **ArrowLeft/Right/Home/End** (automatic activation, wraps), each tab `aria-controls` its panel, and every panel got `role="tabpanel" id="stats-panel-…" aria-labelledby="stats-tab-…" tabIndex={0}`. Playoff-stats is now `aria-disabled` (was `disabled`) so it **stays focusable/discoverable** with an explanatory `aria-label` ("available once playoff games have final scores"); its lock icon is `aria-hidden`. **Verified live**: real ArrowRight moved Standings→Rank race (selection + focus + panel all followed). *Note:* the nested `.leader-category-tabs` (league-leaders) still needs the same pattern — small follow-up.
 **Problem:** The Standings sub-tab strip announces `role="tablist"` but doesn't behave like one — arrow keys do nothing (verified with a real ArrowRight: focus and selection stayed put), all tabs are `tabindex=0`, there are no `aria-controls`, and there are **zero `tabpanel`s**. The disabled "Playoff stats" tab drops out of focus order and its lock icon has no text alternative.
 **Where:** `StatsWorkspace.tsx:619` (also league-leader tabs `:640`).
 **Current (verified live):** 6 tabs, all `tabindex=0`, `aria-controls: null`, 0 tabpanels, arrows dead.
