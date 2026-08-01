@@ -9,6 +9,8 @@ export interface BracketConnection {
   outcome: "winner" | "loser";
   pending?: boolean;
   label?: string;
+  /** When a game is decided, the advancing team's (accent) color to tint the connector. */
+  color?: string;
 }
 
 type BracketConnectorLayerProps = {
@@ -155,17 +157,18 @@ export function BracketConnectorLayer({ connections, children, className }: Brac
             data-bracket-connection-label={connection.label}
             data-bracket-connection-outcome={connection.outcome}
             data-bracket-connection-pending={connection.pending || undefined}
+            style={connection.color ? { color: connection.color } : undefined}
           >
             <path
               d={connection.path}
               fill="none"
               stroke="currentColor"
-              strokeWidth="2"
+              strokeWidth={connection.color ? "2.5" : "2"}
               strokeDasharray={isDashed ? dashPattern : undefined}
               strokeLinecap="square"
               strokeLinejoin="round"
               markerEnd={`url(#${markerId}-${connection.outcome})`}
-              opacity={connection.pending ? .42 : connection.outcome === "loser" ? .52 : .68}
+              opacity={connection.color ? .95 : connection.pending ? .42 : connection.outcome === "loser" ? .52 : .68}
               vectorEffect="non-scaling-stroke"
             />
           </g>;

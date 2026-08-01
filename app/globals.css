@@ -4348,3 +4348,11 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
    gotcha) so it swipes sideways instead of pushing the whole page wide on narrow screens */
 .pp-board, .pp-champ-section { min-width: 0; }
 .pp-board .postseason-map-scroll { max-width: 100%; }
+
+/* #5: division-halves lanes — each game's left accent + half label carry the division color */
+.pp-board .main-playoff-game:not(.is-final) { border-left-color: var(--game-half-color, var(--playoff-color)); }
+.pp-board .main-playoff-game > header small { color: var(--game-half-accent, var(--pk-mut)); }
+.pp-board .main-playoff-game > header small .division-mark { display: inline-grid; place-items: center; vertical-align: -2px; margin-right: 4px; color: var(--game-half-accent); }
+
+/* the dark reskin sets `border-color: var(--pk-line)` (shorthand) — force the half accent on the left edge */
+.pp-board .main-playoff-game:not(.is-final) { border-left-color: var(--game-half-color, var(--playoff-color)) !important; }

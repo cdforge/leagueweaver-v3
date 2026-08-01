@@ -59,7 +59,8 @@ import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { apiErrorMessage } from "@/lib/apiErrors";
 import { downloadCsv } from "@/lib/csv";
-import { readableTextColor } from "@/lib/colorContrast";
+import { accessibleAccentColor, readableTextColor } from "@/lib/colorContrast";
+import { DivisionMark } from "@/components/ui/DivisionIdentity";
 import { isDivisionHalvesConsolationUsable, projectConsolationBracket } from "@/lib/consolation";
 import { buildPlayoffPicture } from "@/lib/playoffPicture";
 import { downloadSchedulePdf } from "@/lib/pdf";
@@ -769,6 +770,10 @@ function PlayoffsView({
     const divisionNames = [...new Set(seeds.filter((item) => item.bracketSide === side).map((item) => divisionById.get(item.divisionId)?.name).filter(Boolean))];
     return divisionNames.length ? divisionNames.join(" + ") : `Half ${side}`;
   };
+  const sideDivision = (side: "A" | "B") => {
+    const entry = seeds.find((item) => item.bracketSide === side);
+    return entry ? divisionById.get(entry.divisionId) : undefined;
+  };
   const mainGameBrandingLabel = (slot: typeof mainGameBrandingSlots[number]) => {
     const sameRound = mainGameBrandingSlots.filter((item) => item.roundIndex === slot.roundIndex);
     if (placement === "division-halves" && schedule.setup.divisions.length === 2 && sameRound.length === 2 && slot.roundIndex < rounds.length - 1) {
@@ -823,13 +828,18 @@ function PlayoffsView({
       // No matching next-round slot (e.g. the projected winner drew a bye or the
       // lookup fails): draw nothing rather than a confidently-wrong line to game 1.
       if (targetIndex < 0) return [];
+      const sourceId = `main-r${round.roundIndex + 1}-g${gameIndex + 1}`;
+      const recorded = (schedule.playoffGames ?? []).find((game) => game.bracket === "main" && game.id === sourceId);
+      const decided = recorded != null && recorded.homeScore != null && recorded.awayScore != null && recorded.homeScore !== recorded.awayScore;
+      const winnerTeam = decided ? teamById.get(recorded!.homeScore! > recorded!.awayScore! ? recorded!.homeTeamId : recorded!.awayTeamId) : undefined;
       return [{
         id: `main-winner-r${round.roundIndex + 1}-g${gameIndex + 1}`,
-        sourceGameId: `main-r${round.roundIndex + 1}-g${gameIndex + 1}`,
+        sourceGameId: sourceId,
         targetGameId: `main-r${round.roundIndex + 2}-g${targetIndex + 1}`,
         outcome: "winner" as const,
-        pending: settings.reseedMode !== "fixed",
-        label: settings.reseedMode === "fixed" ? "Winner advances" : "Projected reseed path",
+        pending: decided ? false : settings.reseedMode !== "fixed",
+        color: winnerTeam ? accessibleAccentColor(winnerTeam.color, "#171d1a") : undefined,
+        label: winnerTeam ? `${teamDisplayName(winnerTeam, showCity)} advances` : settings.reseedMode === "fixed" ? "Winner advances" : "Projected reseed path",
       }];
     });
   });
@@ -891,7 +901,10 @@ function PlayoffsView({
     const awayWon = Boolean(played && recorded!.awayScore! > recorded!.homeScore!);
     const route = transferRoutes.find((connection) => connection.sourceGameId === gameId);
     const side = bracketSide || seed(homeSeed)?.bracketSide;
-    const sideCopy = placement === "division-halves" && side && roundIndex < projectedMainRounds.length - 1 ? `${sideName(side)} tournament` : undefined;
+    const halfDivision = placement === "division-halves" && side && roundIndex < projectedMainRounds.length - 1 ? sideDivision(side) : undefined;
+    const sideCopy = placement === "division-halves" && side && roundIndex < projectedMainRounds.length - 1
+      ? <>{halfDivision && <DivisionMark division={halfDivision} size={13} />}{sideName(side)} bracket</>
+      : undefined;
     const defaultName = projectedMainRounds[roundIndex]?.matchups.length > 1
       ? `${rounds[roundIndex] || `Round ${roundIndex + 1}`} · Game ${gameIndex + 1}`
       : rounds[roundIndex] || `Round ${roundIndex + 1}`;
@@ -920,7 +933,7 @@ function PlayoffsView({
         bracket: "main",
       });
     };
-    return <article className={`main-playoff-game ${played ? "is-final" : "is-projected"}`} data-bracket-game-id={gameId}>
+    return <article className={`main-playoff-game ${played ? "is-final" : "is-projected"}`} data-bracket-game-id={gameId} style={{ "--game-half-color": halfDivision?.color, "--game-half-accent": halfDivision ? accessibleAccentColor(halfDivision.color, "#171d1a") : undefined } as React.CSSProperties}>
       <header><PlayoffGameBrand roundIndex={roundIndex} gameIndex={gameIndex} /><span><strong>{gameName}</strong><small>{sideCopy || (played ? "Final result" : settings.reseedMode === "fixed" ? "Fixed bracket path" : "Projected path")}</small></span><em>{played ? "FINAL" : "PROJECTED"}</em></header>
       <div className="main-playoff-game-teams">{recorded ? <><SimulatedPlayoffTeam teamId={recorded.awayTeamId} score={recorded.awayScore} winner={awayWon} /><SimulatedPlayoffTeam teamId={recorded.homeTeamId} score={recorded.homeScore} winner={homeWon} /></> : <><Slot number={homeSeed} host /><Slot number={awaySeed} /></>}</div>
       {!simulationMode && homeTeam && awayTeam && <InlinePlayoffScoreEditor awayName={teamDisplayName(awayTeam, showCity)} homeName={teamDisplayName(homeTeam, showCity)} awayScore={recorded?.awayScore} homeScore={recorded?.homeScore} onSave={(awayScore, homeScore) => saveScore(awayScore, homeScore)} onClear={() => saveScore(undefined, undefined)} />}
