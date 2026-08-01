@@ -3085,7 +3085,7 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .consolation-entrant.is-result small { color: var(--muted); font-size: var(--text-2xs); }
 
 .postseason-map-scroll { overflow-x: auto; border: 1px solid var(--line); background: #f7f9f8; scrollbar-width: thin; overscroll-behavior-inline: contain; }
-.postseason-map-canvas { position: relative; min-width: max(100%, 920px); display: grid; gap: 18px; padding: 18px; }
+.postseason-map-canvas { position: relative; width: max-content; min-width: max(100%, 920px); display: grid; gap: 18px; padding: 18px; }
 .postseason-map-canvas.rounds-4 { min-width: max(100%, 1210px); }
 .bracket-connection { color: var(--playoff-color); }
 .bracket-connection-loser { color: #68766f; }
