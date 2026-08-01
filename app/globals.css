@@ -2026,6 +2026,15 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .gotw-summary strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-2xl); font-variant-numeric: tabular-nums; }
 .gotw-summary small { color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; }
 .gotw-timeline { display: grid; gap: 18px; }
+/* H4 — empty timeline + unresolved-team fallback (never blank/crash the view). */
+.gotw-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 200px; border: 1px solid var(--line); border-radius: var(--radius); background: white; padding: 32px 24px; text-align: center; }
+.gotw-empty svg { width: 30px; height: 30px; color: var(--gold-mid, #876700); margin-bottom: 4px; }
+.gotw-empty strong { font-size: var(--text-md); color: var(--ink); }
+.gotw-empty small { color: var(--muted); font-size: var(--text-2xs); }
+.gotw-unavailable { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--line); padding: 16px; color: var(--muted); }
+.gotw-unavailable svg { width: 20px; height: 20px; flex: 0 0 auto; color: var(--danger); }
+.gotw-unavailable strong { display: block; font-size: var(--text-sm); color: var(--ink); }
+.gotw-unavailable small { font-size: var(--text-2xs); }
 .gotw-timeline-item { min-width: 0; }
 .gotw-timeline-item > header { min-height: 58px; display: grid; grid-template-columns: minmax(135px, 1fr) auto 84px; align-items: center; gap: 10px; border: 1px solid var(--line); border-bottom: 0; border-left: 4px solid var(--gold); border-radius: var(--radius) var(--radius) 0 0; background: var(--canvas); padding: 8px 12px; }
 .gotw-week-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
@@ -2700,8 +2709,11 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .team-directory-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .team-directory-card { position: relative; min-width: 0; display: grid; grid-template-columns: minmax(230px, 1fr) minmax(150px, .72fr); gap: 12px 18px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--team-brand) 28%, var(--line)); border-left: 5px solid var(--team-brand); border-radius: var(--radius); background: white; padding: 14px 15px 12px; color: var(--ink); text-align: left; cursor: pointer; }
 .team-directory-card::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; background: var(--team-brand); }
-.team-directory-card:hover { border-color: color-mix(in srgb, var(--team-brand) 55%, var(--line)); background: color-mix(in srgb, var(--team-brand) 4%, white); }
-.team-directory-card:focus-visible { outline: 3px solid color-mix(in srgb, var(--team-brand), white 52%); outline-offset: 2px; }
+.team-directory-card:has(.team-directory-open:hover) { border-color: color-mix(in srgb, var(--team-brand) 55%, var(--line)); background: color-mix(in srgb, var(--team-brand) 4%, white); }
+/* H6 — the stretched, labeled button carries the click + focus ring; the card is a
+   plain container so its name/stats stay in the a11y tree. */
+.team-directory-open { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; border: 0; background: transparent; cursor: pointer; border-radius: inherit; }
+.team-directory-open:focus-visible { outline: 3px solid color-mix(in srgb, var(--team-brand), white 52%); outline-offset: -2px; }
 .team-directory-card > .team-identity-block { align-self: center; }
 .team-directory-group { min-width: 0; align-self: center; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .team-directory-group .division-identity { max-width: 100%; }

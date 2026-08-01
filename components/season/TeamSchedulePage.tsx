@@ -202,14 +202,19 @@ function TeamScheduleDirectory({ schedule, summaries, clinches, onSelectTeam }: 
         {sortedSummaries.map((summary) => {
           const division = divisionById.get(summary.team.divisionId);
           return (
-            <button
-              type="button"
+            <div
               className="team-directory-card"
               style={teamBrandStyle(summary.team.color)}
-              onClick={() => onSelectTeam(summary.team.id)}
-              aria-label={`Open ${teamDisplayName(summary.team, showCity)} schedule`}
               key={summary.team.id}
             >
+              {/* H6 — the click is a stretched empty button (no flow content inside a
+                  button); the name + stats stay in the DOM and are read by AT. */}
+              <button
+                type="button"
+                className="team-directory-open"
+                onClick={() => onSelectTeam(summary.team.id)}
+                aria-label={`Open ${teamDisplayName(summary.team, showCity)} schedule`}
+              />
               <TeamIdentityBlock
                 team={summary.team}
                 division={division}
@@ -230,7 +235,7 @@ function TeamScheduleDirectory({ schedule, summaries, clinches, onSelectTeam }: 
                 <div><dt>Avg rating</dt><dd>{summary.averageRating.toFixed(1)}</dd></div>
                 <div><dt>SOS</dt><dd>{ordinal(summary.sosRank)} hardest</dd></div>
               </dl>
-            </button>
+            </div>
           );
         })}
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { ShieldCheck, Sparkles } from "lucide-react";
+import { CircleAlert, ShieldCheck, Sparkles } from "lucide-react";
 import { MatchupCard } from "@/components/season/MatchupPresentation";
 import { getMatchupRatingRange, getMatchupSignal } from "@/lib/matchups";
 import { getNflWeekWindow } from "@/lib/schedule";
@@ -27,10 +27,23 @@ export function GotwWorkspace({ schedule, simulationResults = {}, simulationProb
       <span><ShieldCheck /><strong>{selectedCount}</strong><small>GOTW</small></span>
       <span><Sparkles /><strong>{counts.projected}</strong><small>Projected</small></span>
     </div>
+    {signals.gotwTimeline.length === 0 ? (
+      <div className="gotw-empty" role="status">
+        <Sparkles aria-hidden="true" />
+        <strong>No Game of the Week selected yet</strong>
+        <small>Check back after Week 1.</small>
+      </div>
+    ) : (
     <div className="gotw-timeline">
       {signals.gotwTimeline.map((entry) => {
-        const away = teamById.get(entry.game.awayTeamId)!;
-        const home = teamById.get(entry.game.homeTeamId)!;
+        const away = teamById.get(entry.game.awayTeamId);
+        const home = teamById.get(entry.game.homeTeamId);
+        if (!away || !home) {
+          return <section className="gotw-timeline-item status-unavailable" key={entry.weekNumber}>
+            <header><span className="gotw-week-copy"><strong>Week {entry.weekNumber}</strong><small>{entry.dateLabel}</small></span></header>
+            <div className="gotw-unavailable"><CircleAlert aria-hidden="true" /><span><strong>Matchup unavailable</strong><small>A team in this game was removed after the schedule was generated.</small></span></div>
+          </section>;
+        }
         const rankSnapshot = getEnteringWeekRankSnapshot(schedule, entry.weekNumber);
         const standingsByTeam = new Map(rankSnapshot.rows.map((row) => [row.teamId, row]));
         const recordFor = (teamId: string) => {
@@ -72,5 +85,6 @@ export function GotwWorkspace({ schedule, simulationResults = {}, simulationProb
         </section>;
       })}
     </div>
+    )}
   </div>;
 }

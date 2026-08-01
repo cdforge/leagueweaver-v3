@@ -27,10 +27,10 @@ Every story is self-contained — an engineer or designer should be able to pick
 | League Schedule | ✅ | ✅ preseason + played |
 | Team Schedule — directory / single team | ✅ | ✅ / ✅ |
 | Game of the Week | ✅ | ⚠️ badge only |
-| Matchup Ratings | ✅ | ❌ |
+| Matchup Ratings | ✅ | ✅ played (2026-08-01 — see MR cluster) |
 | Standings — table | ✅ | ✅ preseason + played |
 | — Rank race | ✅ | ✅ preseason |
-| — Team leaders / League leaders / Team stats | ✅ | ❌ |
+| — Team leaders / League leaders / Team stats | ✅ | ⚠️ code-read addendum 7-31 (#39–#41) |
 | — Playoff stats | ✅ | 🔒 gated |
 | — Season odds | ✅ | ✅ played |
 | Settings | ✅ | ❌ |
@@ -72,7 +72,7 @@ Every story is self-contained — an engineer or designer should be able to pick
 **Acceptance:** Values differ across teams (option a) or the misleading per-row column is gone (option b); no dead label branches.
 
 ## H4 · GOTW crash guard + empty state
-**Type:** correctness · **Status:** open
+**Type:** correctness · **Status:** ✅ DONE (2026-08-01, branch `feat/audit-followups-7-31`) — Dropped the non-null assertions in `GotwWorkspace.tsx`: each timeline entry now resolves `away`/`home` safely and renders a **"Matchup unavailable — a team was removed"** fallback card (mirrors the TeamSchedule pattern) instead of throwing `undefined.divisionId`. When `gotwTimeline` is empty, the view renders a centered empty state ("No Game of the Week selected yet — check back after Week 1", `role="status"`). New `.gotw-empty` / `.gotw-unavailable` CSS. `tsc` green.
 **Problem:** The Game of the Week view throws and blanks entirely if a featured game references a team that was deleted after generation (non-null assertions, no guard). It also renders nothing (no message) when there are no featured games.
 **Where:** `GotwWorkspace.tsx:32-33` (`teamById.get(...)!`); empty case `:30-74`.
 **Current:** `undefined.divisionId` → throw → white view.
@@ -88,7 +88,7 @@ Every story is self-contained — an engineer or designer should be able to pick
 **Acceptance:** With a screen reader, copying the share link / saving / a sync result is announced without moving focus.
 
 ## H6 · Team-directory cards: fix a11y markup ✓LIVE
-**Type:** a11y · **Status:** open
+**Type:** a11y · **Status:** ✅ DONE (2026-08-01, branch `feat/audit-followups-7-31`) — The directory card is now a plain `<div>` (was a `<button>` wrapping `<div>/<dl>` — invalid, and its `aria-label` masked all the stats). The click is a **stretched empty `<button className="team-directory-open">`** (absolute inset:0, z-index 1) carrying `aria-label="Open <team> schedule"` and the focus ring; the `TeamIdentityBlock` + `<dl>` stats now sit outside any button and are exposed to AT normally. Hover/focus moved to `:has(.team-directory-open:hover)` / `.team-directory-open:focus-visible`. Card stays fully clickable. `tsc` green.
 **Problem:** On the Team Schedule directory, each team card is a `<button aria-label="Open X schedule">`. The `aria-label` overrides the whole subtree, so a screen-reader user hears only "Open Bandera Decoupes schedule" — the live rank, record, byes, avg rating, SOS, and clinch badges (the entire reason for the directory) are silent. The button also nests invalid flow content (`<div>/<dl>/<dt>/<dd>`), a spec violation.
 **Where:** `TeamSchedulePage.tsx:205-234`; `TeamIdentityBlock` `MatchupPresentation.tsx:49`.
 **Current (verified live):** accessible name = just the aria-label; visible text (all stats) not exposed.
@@ -229,6 +229,26 @@ Every story is self-contained — an engineer or designer should be able to pick
 
 ---
 
+## #39 · Standings tabs: scope + week filters silently apply to only 2 of 6 tabs
+**Type:** usability/correctness-of-presentation · **Status:** open · **Added:** 2026-07-31 (standings-tab addendum)
+**Problem:** The Standings page's control band — the **scope select** (`League` vs each division) and the **history select** (`Current` / `Preseason` / each past week) — renders **only** on the *Standings* and *Rank race* tabs. The `divisionId` and `standingsWeek` state persists when you switch tabs, but *Team leaders*, *League leaders*, and *Team stats* never read it: they always compute league-wide and season-to-date, with no control to change scope and no label saying so. So a commissioner who filters to one division on Standings, then clicks *Team stats*, silently sees all teams again; if they pick "After Week 5" then open *Team leaders*, they still get full-season podiums. The selection looks sticky (the other selects remember it) but is a no-op on 4 of 6 tabs. **Second defect, same family — a within-tab temporal mismatch:** on the *Standings* tab itself, choosing a past week rewinds the table, tie groups, and clinch badges (`selectedClinches` `:566`), but the **Season odds** panel below it (`odds` `:556`, `visibleOdds` `:595`) is always the present-day projection with no "as of now" label — so one tab shows Week-5 standings stacked directly on top of live playoff odds.
+**Where:** filter bar only in `StatsWorkspace.tsx:636` (standings) + `:650` (rank-race); absent from `:654` (team-leaders), `:655` (league-leaders), `:657` (team-stats). Those blocks use `completedTeams`/`regularGames`/`sortRows` — none reference `divisionId` or `selectedRankSnapshot`. Odds temporal mismatch: `:642-645`.
+**Current (code-read, this pass):** scope/week affect 2 tabs; the other 3 ignore both silently; Season odds panel ignores the selected historical week.
+**Target:** Decide the scope contract and make it visible. Preferred: **hoist the filter bar so it persists across all applicable tabs**, and actually apply it — Team stats and Team leaders filter to the selected division and (where meaningful) compute through the selected week; League leaders filter its game set to the division. Where a filter genuinely can't apply to a tab, still render the bar but **disable that control with a reason** ("Team leaders are season-to-date") rather than dropping it. For the Season odds panel, add an explicit "live projection — as of now" caption whenever `standingsWeek` is a past week, so the two time frames don't read as one.
+**Acceptance:** the scope/week you pick either applies on every tab or is shown disabled-with-reason; no tab silently discards a selection; on a historical week the odds panel is labelled as present-day, not implied to match the rewound table.
+**Deps:** relates to R1 (if the tabs become pages, each page owns its own scope control) and H8 (tab semantics).
+
+## #40 · Team-stats tab: forced desktop scroll + DIV-record display drift
+**Type:** visual/responsive + correctness/consistency · **Status:** open · **Added:** 2026-07-31 (standings-tab addendum)
+**Problem:** (1) The Team-stats table is `min-width:1360px` (`globals.css:2472`) inside the ~1180px workspace shell, so its 15-column grid is **permanently horizontally scrolling on desktop** — a sticky first column plus an always-live scrollbar, before any narrow viewport. This is a *different, wider* table than the one V5 addresses (`team-schedule-table`, 1280px), so V5 does not cover it. (2) The **DIV** column prints `W-L` with **no ties** (`StatsWorkspace.tsx:657`: `{row.divisionWins}-{row.divisionLosses}`), while the Standings tab's **DIV REC** column of the same data includes them (`:640`: `…{row.divisionTies ? \`-${divisionTies}\` : ""}`) — so a `3-1-1` division record reads `3-1` here and `3-1-1` one tab over. (Row rhythm / near-black header / no-hover on this table are already logged under **V9**; the gold sort-active indicator is folded into **V4** below.)
+**Where:** width `globals.css:2472`; DIV cell `StatsWorkspace.tsx:657` vs standings `:640`.
+**Current (code-read):** 1360px table always side-scrolls at desktop widths; DIV column silently drops ties.
+**Target:** Trim the table to fit a normal laptop without horizontal scroll — tighten per-column mins and/or make the lowest-value columns (SOV/SOS/GOTW WINS/BEST STREAK) opt-in via a "Display" toggle, or widen the shell when this tab is active; under ~720px stack to cards (mirror V5). Print DIV as `W-L(-T)` exactly as the Standings table does, from one shared record-formatter.
+**Acceptance:** the Team-stats table fits a 1280px viewport with no horizontal scroll; DIV records render identically (ties included) in both the Standings and Team-stats tables.
+**Deps:** V5 (responsive pattern), V9 (table craft), #36 (division-record ties in ranking).
+
+---
+
 # 🟡 LOW
 
 ## #22 · Polish bucket (~15 items)
@@ -247,6 +267,7 @@ Each is small and independent:
 - `scope="col"` missing on ratings-table headers (`SeasonWorkspace.tsx:473`).
 - Week-tab `aria-label` omits the slate strength sighted users see (`SeasonWorkspace.tsx:374`).
 - Score-entry week selector lacks the schedule rail's `aria-current`/`aria-label` (`SeasonWorkspace.tsx:520`).
+- **Standings tabs, no/1-division leagues** — division-scoped views are permanently empty and unhideable: League leaders' "Divisional" category filters `matchupType === "division"` (`StatsWorkspace.tsx:629`) → always "No completed results yet"; Team leaders' "Best division record" + "Best division point diff" cards (`:654`) can never populate (`divisionsPlayed` never true). Gate all three on `schedule.setup.divisions.length > 1` — hide the Divisional sub-tab and the two division podium cards when the league has one/zero divisions (parity with #22's division-chip gating).
 **Acceptance:** each ticked off independently.
 
 ---
@@ -312,6 +333,7 @@ Migrate hardcoded px to these; collapse the multi-layer font-size overrides into
 - **Sim/override** → one desaturated accent (fold teal+blue together).
 - **Green (`--field`/`--brand`)** → brand/primary.
 - Rule: **at most one solid brand-accent edge/fill per card.**
+- **Also fold in:** the Team-stats table's sort-active header uses `var(--gold)` for both text and arrow (`globals.css:2479-2480`) — another "gold means many things" instance. Retarget the sorted-column indicator to `--brand`/`--ink`, reserving gold for GOTW/marquee.
 **Acceptance:** grepping the palette, gold appears only for GOTW; a single card never shows more than one accent edge; each accent maps to one documented meaning.
 **Deps:** V1.
 
@@ -387,6 +409,21 @@ Migrate hardcoded px to these; collapse the multi-layer font-size overrides into
 
 ---
 
+## V11 · Mobile site-footer: tap targets + centering polish
+**Type:** a11y + visual · **Status:** open
+**Scope note:** on the landing (`/`) and build-intro (`/build`) pages — outside the original post-generation audit scope, captured here by request.
+**Problem (measured live @375px):** The two legal links are the most touch-hostile control on the page. Measured on the running app, each renders **~36×18px with `padding:0`** — far below the WCAG **2.5.8 (24×24 min)** and **2.5.5 (44×44)** target-size thresholds. They also carry **no underline at rest** (underline is hover-only, and touch has no hover), so on mobile "Privacy"/"Terms" read as color-only links — a WCAG **1.4.1 (use of color)** smell. Contrast is fine (copyright 5.23:1, links 5.39:1) and type steps up to 12px on mobile, so those are *not* the issue. Vertical centering is also already correct — measured 11px above / 11px below — so a literal "center it" edit is a no-op; the win is to spend that dead vertical space on bigger hit areas.
+**Where:** markup `app/page.tsx:109-117` + `app/build/page.tsx:29-37`; base rules `app/globals.css:1196-1199`; mobile override `app/globals.css:3859` (`@media (max-width:720px)`).
+**Current:** `.footer-row nav a { color:var(--field); transition:color … }` with underline only on `:hover`; mobile `.footer-row { …; gap:10px }` and no per-link padding, so hit areas equal the text box.
+**Target (explicit spec):**
+- Base `.footer-row nav a` → `display:inline-flex; align-items:center; min-height:44px; text-decoration:underline; text-underline-offset:3px;` and move the color change to `:hover` only (drop the hover-only underline). 44px fits inside the 68px desktop row with no layout shift.
+- Mobile `@media (max-width:720px)`: `.footer-row { gap:6px; padding:14px 0; }` · `.footer-row nav { gap:2px; margin-left:-10px; }` · `.footer-row nav a { padding:0 10px; }`. This grows each link to ~44px tall / ~48px wide while the `nav` `margin-left:-10px` cancels the first link's `10px` left pad so **"Privacy" stays flush with the "© 2026 League Weaver" line** (no negative-margin overhang), and text-to-text spacing stays ~22px.
+**Acceptance:** on a ≤720px viewport each legal link's hit box measures ≥44×44 (verify with `getBoundingClientRect`), and never below 24×24; links are underlined at rest (not color-only); "Privacy" left edge aligns with the copyright line; computed contrast unchanged (≥4.5); no desktop regression — links still sit on one line with ~22px gap inside the 68px row.
+**Deferred (not in this story — from the footer brainstorm, captured so they aren't lost):** (a) add a Support/Contact link (footer currently offers nowhere to get help); (b) a soft end-of-scroll secondary action (Contact or a repeat "Start building") for warm leads who read to the bottom; (c) surface a slim legal+support footer *inside* the app/workspaces, which are currently `display:none` for the footer ≤980px (`globals.css:1342`).
+**Evidence:** live probe on `leagueweaver-dev` @375px — links `{h:18,w:39/33, pad:"0px"}`, footer row 68px with content centered 11/11.
+
+---
+
 # 🧭 STRUCTURE / NAVIGATION (IA)
 
 ## R1 · Promote analytics tabs to top-level pages
@@ -435,6 +472,82 @@ Team Schedule ▾
 - **Standings** — today: one 13-col table + tie groups + Season odds stacked. **Target:** **division-grouped by default** with a league toggle; move Season odds / projections to Rank Race or a "Playoff Picture" area; collapse the 228px STATUS column when empty (V9); keep the core table focused.
 **Acceptance:** each page leads with its primary job; the team page's schedule (not its stat ribbon) dominates; GOTW reads as a marquee; the rating is explained before it's shown; standings default to division groups.
 **Deps:** R1, R2, V5, V9.
+
+---
+
+# 🔬 MATCHUP RATINGS — live audit (2026-08-01)
+
+**What/why:** The Matchup Ratings page (`MatchupRatingsView`, `SeasonWorkspace.tsx:569`) was the one row in the coverage matrix never exercised live. This pass drove it in the browser on a real played league (`ff4f2ab3…`, 12 teams / 3 divisions / 14 weeks, **72 of 84 games scored** — so played, pending, and GOTW rows were all on screen) and measured the rendered DOM. **0 console errors.** What's already solid (don't touch): loser score contrast **8.19:1**; rank pills **5.39–6.57:1** (AA pass via `accessibleTeamColor`/`readableTextColor`); pending games render `— NOT PLAYED` and still compute a rating from ranks; controls stack cleanly at 375px; the legend + "Lower is better" controls label are present. The findings below are the gaps. IDs are `MR#` to avoid colliding with the H/#/V/R numbering.
+
+## MR1 · Home team names clip to ~42px in the ratings table 🔴 HIGH
+**Type:** visual/correctness · **Status:** open
+**Problem (measured live):** Every **home** team name in the table is truncated to the logo-width track — "Sunday Architects" → **"Sun…"**, "Chicago…" → "Chi…", "Nashville…" → "Nash…". Measured: in equal-width **265px** cells, the away name span is **140px** (full: "Goal Line Guild") but the home name span is **42px** and clips (`scrollWidth 114 > clientWidth 42`). Half the teams in the marquee analytics table are unreadable.
+**Root cause:** The `.mirrored` grid-*placement* rules (`app/globals.css:1871-1873`: name→col2, mark→col3, rank→col4) are written for the **4-column with-record** template. The ratings table uses `<TeamIdentityBlock mirrored compact showRecord={false}>` (`SeasonWorkspace.tsx:635`) → classes `compact mirrored without-record`; the compact/without-record templates (`:1877/:1879`) fight those placements, so the name lands in the **42px logo track**. Measured computed template on the home block: `22px 42px 112px 22px` (a phantom 4th column). The **away** block (`:633`, not mirrored) is correct: `22px 42px 140px`.
+**Where:** usage `SeasonWorkspace.tsx:633` (away) / `:635` (home); CSS conflict `app/globals.css:1871-1873` (mirrored placement) vs `:1877` (`.compact.mirrored`) / `:1879` (`.compact.without-record`).
+**Target:** Add an explicit rule for the mirrored + compact + without-record combination so the **name occupies the `1fr` track** and the rank/logo sit in the fixed side tracks — e.g. `.team-identity-block.compact.mirrored.without-record { grid-template-columns: auto 42px minmax(0,1fr); }` with matching placement (name→col3 right-aligned, mark→col2, rank→col1), or more robustly give `.mirrored.without-record` its own 3-col template+placement. Verify the home name span width ≈ the away name span width in the same row.
+**Acceptance:** In the ratings table, a home team name renders as much text as the away name of equal cell width (no `scrollWidth > clientWidth` on the home name at desktop widths); "Sunday Architects" shows in full or truncates identically to how an away name of the same length would.
+**Evidence:** live probe `ff4f2ab3…?view=matchup-ratings` — away name `{w:140, overflow:false}`, home name `{w:42, overflow:true, scrollW:114}`; home block computed grid `22px 42px 112px 22px`.
+
+## MR2 · Ratings table side-scrolls on desktop (permanent) 🟠 MEDIUM
+**Type:** visual/responsive · **Status:** open
+**Problem (measured live):** `.matchup-ratings-table` sets `min-width: 1110px` (`app/globals.css:2067`) inside a wrap that is **1030px** on a normal desktop shell → `scrollWidth 1110 > clientWidth 1030`, so the horizontal scrollbar is **engaged at rest** on desktop (same failure class as **V5**'s team-schedule table). At 375px the wrap contains its own side-scroll (349 → 1110) — no document overflow, but the table never stacks to cards, so mobile users see ~2 columns at a time and must side-scroll a 7-column grid.
+**Where:** `app/globals.css:2067` (`min-width: 1110px`); the redundant rank sub-label (MR4) and the Result column both add avoidable width.
+**Target:** Bring the table under the shell width (~980–1000px) — tighten/drop the Rating sub-label (MR4 removes ~90px), let low-value columns (Game #, Matchup series) collapse at narrow widths, or widen the shell when this view is shown. Under ~720px, stack each game into a card (mirror the schedule-table treatment R3/V5 proposes) instead of side-scrolling the whole grid.
+**Acceptance:** the table fits a ~1280px viewport with no horizontal scroll (`scrollWidth ≤ clientWidth`); on mobile it stacks or the primary columns (teams + rating) are visible without scroll.
+**Evidence:** desktop wrap `client 1030 / scroll 1110 → horizScroll true`; mobile wrap `client 349 / scroll 1110`.
+**Deps:** V5 (same pattern), MR4.
+
+## MR3 · Team-name links swallow the rank for screen readers 🟠 MEDIUM (a11y)
+**Type:** a11y · **Status:** open
+**Problem (verified live):** Both team blocks are `<a aria-label="Open <Team> schedule">` (`MatchupPresentation.tsx:52`). The blanket `aria-label` overrides the subtree, so the **rank pill (#1/#2)** — a core datum of a *ranking* table — is not announced; a SR user hears only "Open Brooklyn Sunday Architects schedule". With 84 rows × 2 links there are **168 near-identical "Open … schedule"** links to wade through. This is the same root cause as **H6** (team-directory cards), now confirmed on this page too.
+**Where:** `MatchupPresentation.tsx:33-52` (`TeamIdentityBlock`, `aria-label` at `:52`), as consumed by the ratings table `SeasonWorkspace.tsx:633,635`.
+**Target:** Resolve with **H6** — make the team name the focusable link (its own accessible name) and expose the rank pill as normal text (or fold the rank into the link's accessible name, e.g. "Brooklyn Sunday Architects, rank 1"). Don't blanket-label the whole block.
+**Acceptance:** AT announces the team's rank alongside its name in each Away/Home cell; the link list isn't 168 identical strings.
+**Deps:** H6 (shared fix).
+
+## MR4 · Rating cell repeats the rank pills already in the row 🟡 LOW
+**Type:** clarity/visual · **Status:** open
+**Problem (verified live):** The Rating cell renders `3.7` **plus** a sub-label `W1 ranks · #2 vs #1` (`SeasonWorkspace.tsx:637`). The `#2 vs #1` is an exact duplicate of the rank pills already shown in the **Away** and **Home** columns of the same row, and the "W{n} ranks" prefix restates the Wk column. It's redundant ink that also widens an already-overflowing table (MR2).
+**Where:** `SeasonWorkspace.tsx:637` (`.table-rating-ranks` sub-label).
+**Target:** Drop the `#a vs #b` duplication; keep at most the bars + number. If a per-lens note is wanted, surface it once (e.g. a column header tooltip "ranks entering each week"), not per row.
+**Acceptance:** the Rating cell no longer restates the row's own rank pills; table min-width drops accordingly.
+**Deps:** feeds MR2.
+
+## MR5 · Tier labels claim "thirds" but bucketing is value-normalized 🟡 LOW
+**Type:** correctness/clarity · **Status:** open
+**Problem (measured live):** The tier filter options read "Competitive — **Strongest third**", "Neutral — **Middle third**", "Lopsided — **Widest ranking gaps**" (`SeasonWorkspace.tsx:596-601`), implying equal-count terciles. But `getMatchupSignal` (`lib/matchups.ts:47-54`) buckets by the rating's **normalized position in the min–max range** (`≤1/3`, `≤2/3`, else), not by count. Measured distribution on the real league: **29 / 38 / 17** — not ~28/28/28. On a schedule with clustered ratings a tier could hold almost everything or almost nothing, contradicting the "third" copy.
+**Where:** labels `SeasonWorkspace.tsx:596-601`; bucketing `lib/matchups.ts:47-54`.
+**Target:** Either bucket by actual terciles (rank the ratings and split by count) so "third" is true, or change the copy to describe the real behavior ("strongest end of the range", "middle of the range", "widest gaps"). Keep the option descriptions and the legend (`MatchupRatingLegend`) consistent with whichever is chosen.
+**Acceptance:** the tier copy matches the bucketing method; a first-time user reading "Middle third" gets roughly what the words say.
+
+## MR6 · No empty state when a filter yields zero rows 🟡 LOW
+**Type:** usability · **Status:** open
+**Problem:** The `<tbody>` maps `visibleGames` with no fallback (`SeasonWorkspace.tsx:621-639`); confirmed no empty-state markup exists in the view. If a lens/tier combination (or a very small league) yields 0 games, the table renders the 7 headers over a **blank body** with no message. The per-week ratings list already does this right with `.rating-filter-empty` (`SeasonWorkspace.tsx:561`) — this view is the inconsistent one.
+**Where:** `SeasonWorkspace.tsx:621-639`.
+**Target:** When `visibleGames.length === 0`, render a centered empty state in the table body ("No games match this filter — try 'All tiers'.").
+**Acceptance:** a zero-result filter shows guidance, never a headers-only blank table.
+
+## MR7 · Ratings-table headers lack `scope`, aren't sortable 🟡 LOW
+**Type:** a11y/usability · **Status:** open
+**Problem (verified live):** All 7 `<th>` (Wk / Game / Away / Result / Home / Matchup / Rating) have `scope: null` (`SeasonWorkspace.tsx:620`) — no column association for AT. Separately, sorting lives only in a `CustomSelect` dropdown; the column headers are inert, so clicking "Rating" or "Wk" does nothing, defying the data-table convention. (Note: **#22** tracks missing `scope` on a *different* ratings table at `:473`; this is the `MatchupRatingsView` table.)
+**Where:** `SeasonWorkspace.tsx:620` (headers), `:614` (sort select).
+**Target:** Add `scope="col"` to each `<th>`. Optional enhancement: make Wk / Rating headers clickable sort toggles with `aria-sort`, keeping the dropdown as the explicit control.
+**Acceptance:** every header carries `scope="col"`; if sortable headers are added they expose `aria-sort` and move selection.
+
+## MR8 · GOTW gold floods the top of the table when sorted best-first 🟡 LOW
+**Type:** visual/color · **Status:** open
+**Problem (verified live):** 14 of 84 rows are GOTW and get a gold row tint (`.matchup-ratings-table tbody tr.is-gotw`, `app/globals.css:2071`) **plus** a gold "★ GOTW" chip in the Game column. Because GOTWs are the strongest games, the default **Best-first** sort clusters all 14 near the top — the entire first screen is a wall of gold, so the marker stops signaling "special." Reinforces the gold-overload theme in **V4**.
+**Where:** row tint `app/globals.css:2071-2072`; GOTW chip `SeasonWorkspace.tsx:632`.
+**Target:** Pick one gold cue per row (chip **or** a subtle left-border accent), not a full-row wash **and** a chip; lighten the tint so stacked GOTW rows don't merge into one gold block. Align with the V4 "gold = GOTW only, one accent per row" rule.
+**Acceptance:** a run of consecutive GOTW rows still reads as distinct rows; GOTW is marked once per row, not twice.
+**Deps:** V4.
+
+## MR9 · "Strongest week" summary tile mixes metrics 🟡 LOW
+**Type:** clarity · **Status:** open
+**Problem:** The summary strip shows "Rating range 3.7–30.7" and "Games shown 84" (both per-**game** rating metrics, matching the table) beside "**Strongest week** — Week 1 #1", which is the per-**week** slate rank (`week.matchupRank`, `SeasonWorkspace.tsx:606`) — a different metric that isn't otherwise on this page. Sitting between two rating stats, it invites reading "#1" as a rating.
+**Where:** `SeasonWorkspace.tsx:602,606`.
+**Target:** Either relabel to make the metric explicit ("Strongest slate — Week 1") and visually distinguish it from the rating stats, or replace it with a rating-native stat (e.g. "Best game — W1 3.7") so all three tiles speak the same language.
+**Acceptance:** the three summary tiles read as the same kind of number, or the odd one is clearly labeled as a slate/week metric.
 
 ---
 
