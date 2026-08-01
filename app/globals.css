@@ -1548,6 +1548,10 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .matchup-score strong.loser { color: #9aa39e; }
 .matchup-score > span { color: var(--muted); font-size: var(--text-lg); }
 .matchup-score small { grid-column: 1 / -1; color: var(--muted); font-family: var(--font-archivo), sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); }
+/* Projected (not-yet-played) matchup: one neutral "Projected" pill in place of the
+   score. Field-green tint, never gold — gold stays GOTW-only. */
+.matchup-score.is-projected { display: flex; align-items: center; justify-content: center; }
+.matchup-score.is-projected em { font-style: normal; font-family: var(--font-archivo), sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: .08em; color: var(--field-dark); background: var(--field-soft); border-radius: var(--radius-chip); padding: 5px 12px; white-space: nowrap; }
 .game-details-desktop { margin-top: 9px; border-top: 1px solid var(--line); padding-top: 8px; }
 .game-detail-items { min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
 .game-detail-items > span { min-width: 0; display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
@@ -3880,6 +3884,9 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .matchup-card-main { order: 1; display: flex; flex-direction: column; align-items: stretch; gap: 3px; }
   .matchup-card .game-details-mobile { order: 3; }
   .matchup-card-main > .matchup-score { display: none; }
+  /* Projected cards have no per-team inline score, so keep the centered
+     "Projected" pill visible on phones too. */
+  .matchup-card-main > .matchup-score.is-projected { display: flex; }
   /* Team row = identity + inline score */
   .matchup-team-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
   .matchup-team-row > .team-identity-block { flex: 1; min-width: 0; min-height: 0; border: 0; background: transparent; padding: 0; }
