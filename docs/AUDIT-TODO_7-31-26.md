@@ -27,10 +27,10 @@ Every story is self-contained — an engineer or designer should be able to pick
 | League Schedule | ✅ | ✅ preseason + played |
 | Team Schedule — directory / single team | ✅ | ✅ / ✅ |
 | Game of the Week | ✅ | ⚠️ badge only |
-| Matchup Ratings | ✅ | ❌ |
+| Matchup Ratings | ✅ | ✅ played (2026-08-01 — see MR cluster) |
 | Standings — table | ✅ | ✅ preseason + played |
 | — Rank race | ✅ | ✅ preseason |
-| — Team leaders / League leaders / Team stats | ✅ | ❌ |
+| — Team leaders / League leaders / Team stats | ✅ | ⚠️ code-read (#39–#41) + 📱 live @375px (#42) |
 | — Playoff stats | ✅ | 🔒 gated |
 | — Season odds | ✅ | ✅ played |
 | Settings | ✅ | ❌ |
@@ -72,7 +72,7 @@ Every story is self-contained — an engineer or designer should be able to pick
 **Acceptance:** Values differ across teams (option a) or the misleading per-row column is gone (option b); no dead label branches.
 
 ## H4 · GOTW crash guard + empty state
-**Type:** correctness · **Status:** open
+**Type:** correctness · **Status:** ✅ DONE (2026-08-01, branch `feat/audit-followups-7-31`) — Dropped the non-null assertions in `GotwWorkspace.tsx`: each timeline entry now resolves `away`/`home` safely and renders a **"Matchup unavailable — a team was removed"** fallback card (mirrors the TeamSchedule pattern) instead of throwing `undefined.divisionId`. When `gotwTimeline` is empty, the view renders a centered empty state ("No Game of the Week selected yet — check back after Week 1", `role="status"`). New `.gotw-empty` / `.gotw-unavailable` CSS. `tsc` green.
 **Problem:** The Game of the Week view throws and blanks entirely if a featured game references a team that was deleted after generation (non-null assertions, no guard). It also renders nothing (no message) when there are no featured games.
 **Where:** `GotwWorkspace.tsx:32-33` (`teamById.get(...)!`); empty case `:30-74`.
 **Current:** `undefined.divisionId` → throw → white view.
@@ -88,7 +88,7 @@ Every story is self-contained — an engineer or designer should be able to pick
 **Acceptance:** With a screen reader, copying the share link / saving / a sync result is announced without moving focus.
 
 ## H6 · Team-directory cards: fix a11y markup ✓LIVE
-**Type:** a11y · **Status:** open
+**Type:** a11y · **Status:** ✅ DONE (2026-08-01, branch `feat/audit-followups-7-31`) — The directory card is now a plain `<div>` (was a `<button>` wrapping `<div>/<dl>` — invalid, and its `aria-label` masked all the stats). The click is a **stretched empty `<button className="team-directory-open">`** (absolute inset:0, z-index 1) carrying `aria-label="Open <team> schedule"` and the focus ring; the `TeamIdentityBlock` + `<dl>` stats now sit outside any button and are exposed to AT normally. Hover/focus moved to `:has(.team-directory-open:hover)` / `.team-directory-open:focus-visible`. Card stays fully clickable. `tsc` green.
 **Problem:** On the Team Schedule directory, each team card is a `<button aria-label="Open X schedule">`. The `aria-label` overrides the whole subtree, so a screen-reader user hears only "Open Bandera Decoupes schedule" — the live rank, record, byes, avg rating, SOS, and clinch badges (the entire reason for the directory) are silent. The button also nests invalid flow content (`<div>/<dl>/<dt>/<dd>`), a spec violation.
 **Where:** `TeamSchedulePage.tsx:205-234`; `TeamIdentityBlock` `MatchupPresentation.tsx:49`.
 **Current (verified live):** accessible name = just the aria-label; visible text (all stats) not exposed.
@@ -105,7 +105,7 @@ Every story is self-contained — an engineer or designer should be able to pick
 **Deps:** V8, V10.
 
 ## H8 · Make the 6 stats tabs a real tablist ✓LIVE
-**Type:** a11y · **Status:** open
+**Type:** a11y · **Status:** ✅ DONE (2026-08-01, branch `feat/audit-followups-7-31`) — The Standings sub-tab strip now implements the APG tabs pattern: roving `tabIndex` (0 on selected, −1 on rest via `statsTabRefs`), an `onKeyDown` handler for **ArrowLeft/Right/Home/End** (automatic activation, wraps), each tab `aria-controls` its panel, and every panel got `role="tabpanel" id="stats-panel-…" aria-labelledby="stats-tab-…" tabIndex={0}`. Playoff-stats is now `aria-disabled` (was `disabled`) so it **stays focusable/discoverable** with an explanatory `aria-label` ("available once playoff games have final scores"); its lock icon is `aria-hidden`. **Verified live**: real ArrowRight moved Standings→Rank race (selection + focus + panel all followed). *Note:* the nested `.leader-category-tabs` (league-leaders) still needs the same pattern — small follow-up.
 **Problem:** The Standings sub-tab strip announces `role="tablist"` but doesn't behave like one — arrow keys do nothing (verified with a real ArrowRight: focus and selection stayed put), all tabs are `tabindex=0`, there are no `aria-controls`, and there are **zero `tabpanel`s**. The disabled "Playoff stats" tab drops out of focus order and its lock icon has no text alternative.
 **Where:** `StatsWorkspace.tsx:619` (also league-leader tabs `:640`).
 **Current (verified live):** 6 tabs, all `tabindex=0`, `aria-controls: null`, 0 tabpanels, arrows dead.
@@ -156,7 +156,7 @@ Every story is self-contained — an engineer or designer should be able to pick
 # 🟠 MEDIUM
 
 ## #18 · Correctness & security cluster
-**Type:** correctness/security · **Status:** open
+**Type:** correctness/security · **Status:** ✅ DONE (2026-08-01, branch `feat/audit-followups-7-31`) — (1) `lib/csv.ts` `cell()` now prefixes any cell starting with `= + - @` / tab / CR with an apostrophe → CSV opens inert in Excel/Sheets. (2) `parseScore` clamps **0–300** (`Math.min(300, Math.max(0, …))`). (3) *Moot* — the rating-tier filter that hid the GOTW no longer exists (`visibleGames = orderedGames`, no tier drop). (4) Silent game-drop: a `droppedGameCount` is computed and the week renders a `role="alert"` **data-integrity warning** ("N matchups can't be shown — a team was removed") instead of just showing fewer games. (5) Regenerate now `saveSetup(activeSchedule.setup)` before `router.push("/build")`, so the builder opens **seeded with this league** (was a blank `/build`). `tsc` green.
 **Problem/Target (5 fixes):**
 1. **CSV formula injection** — `lib/csv.ts:4-7` quotes cells but doesn't neutralize a leading `= + - @`; a team/manager named `=HYPERLINK(...)` executes on open in Excel/Sheets. Prefix such cells with a leading apostrophe before quoting.
 2. **No score ceiling** — `parseScore` `SeasonWorkspace.tsx:514` clamps ≥0 but has no max; `999999` propagates into standings/odds. Clamp 0–300 (parity with the simulator's `:166`).
@@ -166,14 +166,14 @@ Every story is self-contained — an engineer or designer should be able to pick
 **Acceptance:** Each of the five behaves as described; CSV opens inert in Excel/Sheets.
 
 ## #19 · Preseason standings cleanup ✓LIVE
-**Type:** correctness/clarity · **Status:** open
+**Type:** correctness/clarity · **Status:** ✅ DONE (2026-08-01, branch `feat/audit-followups-7-31`) — At preseason (`isPreseason = selectedRankSnapshot.weekNumber === 0`): the leading column relabels **"PRE RK" → "SEED"**, and the redundant **PRE RK + FROM PRE** columns (header `<th>` and body `<td>`) are suppressed, killing the duplicate-seed / meaningless-movement-arrow columns. DIV REC already renders ties (`W-L-T`). RECORD now sorts by `wins + winPercentage` (wins first, win% breaks ties) so the RECORD and WIN% headers no longer sort identically. **Deferred:** division-grouping in the league table is the larger layout change tracked under **R3** (per-page restructure), not folded here.
 **Problem (verified live):** At preseason (week 0) the standings show **two "PRE RK" columns** and a "FROM PRE" column of meaningless `—`/movement arrows computed against a nonexistent prior week.
 **Where:** `StatsWorkspace.tsx:625` header + `:588-594` rank header logic.
 **Target:** Relabel the leading column **"SEED"** in preseason mode and **suppress** the FROM-PRE / movement columns when `weekNumber === 0`. Also fold in: DIV record must include ties; RECORD and WIN% must not sort identically (sort RECORD by wins then win%); offer division grouping in the league standings (headers within the table or a two-column layout).
 **Acceptance:** No duplicate PRE RK; no movement arrows at preseason; DIV record shows ties; the two sort headers differ.
 
 ## #20 · Clarity: ratings, home/away, empty states
-**Type:** usability · **Status:** open
+**Type:** usability · **Status:** 🟡 PARTIAL (2026-08-01, branch `feat/audit-followups-7-31`) — Parts 3/4/5 done + verified live on PVE season. (3) Rank-race now guards on `rankHistory.some(s => s.playedGames > 0)` — a genuinely preseason league shows a `.stats-empty-state` "Enter Week 1 scores to start the race." card instead of a degenerate single-column chart (`StatsWorkspace.tsx:680`). (4) GOTW page: each timeline item carries a `.gotw-why` rationale line — "Featured because it earned the week's highest matchup rating (X.X)[ and swings the playoff race][ — a <holiday> spotlight]." (`GotwWorkspace.tsx:62`), verified all 14 items render with gold accent. (5) Team-stats tab now leads with a `.stats-abbr-legend` key (PF/PA, DIFF, GOTW WINS, SOV, SOS, PLAYOFF %) above the table (`StatsWorkspace.tsx:688`). `tsc` green. **Deferred:** part 1 (rating inline-scale explainer + legend placement) and part 2 (home/away visual differentiation + own-first score order) fold into the V-series visual work (V2 hierarchy / V10 color) since they restyle the shared MatchupCard — tracked there rather than duplicated here.
 **Problem/Target:**
 1. **"Matchup rating" unexplained** — users meet a bare "3.7 · #2 vs #1" with the legend buried below the whole list. Add a one-line inline scale ("lower = closer, two stronger teams") next to the first occurrence and move the legend above the list / into the section bar. Explain the preseason-vs-live lens in one sentence.
 2. **Home vs away (verified live)** — carried only by a tiny `@`/`vs` glyph on identical-background chips, and the per-team score is always printed `away@home` while the W/L chip is team-perspective. Differentiate H/A visually (fill vs outline, or an explicit "HOME"/"@ Opp" label) and order the per-team score own-first.
@@ -183,7 +183,7 @@ Every story is self-contained — an engineer or designer should be able to pick
 **Acceptance:** A first-time commissioner can explain the rating, tell home from away at a glance, and never sees a blank/degenerate analytics panel without guidance.
 
 ## #21 · Share / sync / notify UX
-**Type:** usability/trust · **Status:** open
+**Type:** usability/trust · **Status:** ✅ DONE (2026-08-01, branch `feat/audit-followups-7-31`) — (1) Public subscribe form now carries a `.public-subscribe-consent` line ("only get emails when the commissioner publishes a change · unsubscribe from the link in every email · Privacy Policy" linking `/privacy`) below the CTA (`PublicScheduleView.tsx`). (4) ESPN PDF export now tracks a `pdfBusy` state: the button disables + shows a spinner + "Building…", sets `aria-busy`, guards against concurrent builds, and surfaces a notice on failure (`SeasonWorkspace.tsx` toolbar). (5) Platform Sync card is now gated on the `canAccessPlatformSync` entitlement — non-Pro users get a locked, informational `.platform-sync-card.is-locked` state (LockKeyhole, "manual entry always available") instead of the Connect flow; the card was already reworked to a real two-mode Manual/Automatic select with a details panel, so the "single-option select / phantom credential fields" premise was already stale. (2)+(3) already resolved by prior refactors: SeasonWorkspace no longer has the bare-bell `window.confirm` send-update or the misleading guest-Share "Saved on this device" path (Share routes through a busy-gated ConfirmDialog). **Verified live** on PVE: toolbar renders with ESPN PDF `aria-busy` wired, Settings platform card renders, 0 console errors; `tsc` green. *(Public consent line + locked platform state are display-only/entitlement-gated; verified by code + typecheck since the fixture is Pro/published.)*
 **Problem/Target:**
 1. **Public subscribe form** `PublicScheduleView.tsx:53` collects email with no consent/privacy/unsubscribe line — add a short consent sentence linking to the privacy policy; ensure sent emails carry an unsubscribe link.
 2. **Guest Share** `SeasonWorkspace.tsx:1688` fails with a misleading "Saved on this device…" message that never mentions publishing needs an account. Detect not-signed-in up front and prompt sign-in with share-specific copy.
@@ -200,7 +200,7 @@ Every story is self-contained — an engineer or designer should be able to pick
 **Acceptance:** No float artifacts anywhere; numbers are tabular-aligned; `0` diff is neutral; unplayed PCT is `—`.
 
 ## #36 · Division win% + head-to-head tie correctness
-**Type:** correctness · **Status:** open
+**Type:** correctness · **Status:** ✅ DONE (2026-08-01, branch `feat/audit-followups-7-31`) — (1) Division win% now counts a tie as half a win — `(W + T*0.5)/(W+L+T)` — at the team-stats DIV sort (`StatsWorkspace.tsx:532`), the "Best division record" podium (`:654`), and `divisionsPlayed` (`:611`, now includes ties); podium label shows the tie count. A `3-0-2` team no longer scores `1.000` over `4-1-0`. (2) Head-to-head (`lib/standings.ts`) now only decides a tie group when **every** tied team has played **every** other tied team (`h2hFullyPlayed`); otherwise the rule is skipped uniformly instead of nulling — and sinking — the team that hadn't met the others. `tsc` green.
 **Problem:** (1) Division win% ranking drops ties — `StatsWorkspace.tsx:530,596,639` use `W/(W+L)`, so a `3-0-2` team scores `1.000` and outranks `4-1-0`; contradicts `lib/standings.ts:195` which counts a tie as half a win. (2) The head-to-head tiebreaker fires on partial results — in a 3+ way tie, a team that never played the others gets `null` and is shoved to the bottom (`lib/standings.ts:194`, `recordAgainst :118-132`).
 **Target:** Use `(W + T*0.5)/(W+L+T)` (or the existing `recordPercentage`) everywhere division records are ranked. Only apply head-to-head when every tied team has played every other tied team; otherwise skip to the next rule.
 **Acceptance:** Division records including ties rank consistently across Standings and Team-stats; H2H only decides a fully-round-robined tie group.
@@ -229,6 +229,45 @@ Every story is self-contained — an engineer or designer should be able to pick
 
 ---
 
+## #39 · Standings tabs: scope + week filters silently apply to only 2 of 6 tabs
+**Type:** usability/correctness-of-presentation · **Status:** open · **Added:** 2026-07-31 (standings-tab addendum)
+**Problem:** The Standings page's control band — the **scope select** (`League` vs each division) and the **history select** (`Current` / `Preseason` / each past week) — renders **only** on the *Standings* and *Rank race* tabs. The `divisionId` and `standingsWeek` state persists when you switch tabs, but *Team leaders*, *League leaders*, and *Team stats* never read it: they always compute league-wide and season-to-date, with no control to change scope and no label saying so. So a commissioner who filters to one division on Standings, then clicks *Team stats*, silently sees all teams again; if they pick "After Week 5" then open *Team leaders*, they still get full-season podiums. The selection looks sticky (the other selects remember it) but is a no-op on 4 of 6 tabs. **Second defect, same family — a within-tab temporal mismatch:** on the *Standings* tab itself, choosing a past week rewinds the table, tie groups, and clinch badges (`selectedClinches` `:566`), but the **Season odds** panel below it (`odds` `:556`, `visibleOdds` `:595`) is always the present-day projection with no "as of now" label — so one tab shows Week-5 standings stacked directly on top of live playoff odds.
+**Where:** filter bar only in `StatsWorkspace.tsx:636` (standings) + `:650` (rank-race); absent from `:654` (team-leaders), `:655` (league-leaders), `:657` (team-stats). Those blocks use `completedTeams`/`regularGames`/`sortRows` — none reference `divisionId` or `selectedRankSnapshot`. Odds temporal mismatch: `:642-645`.
+**Current (code-read, this pass):** scope/week affect 2 tabs; the other 3 ignore both silently; Season odds panel ignores the selected historical week.
+**Target:** Decide the scope contract and make it visible. Preferred: **hoist the filter bar so it persists across all applicable tabs**, and actually apply it — Team stats and Team leaders filter to the selected division and (where meaningful) compute through the selected week; League leaders filter its game set to the division. Where a filter genuinely can't apply to a tab, still render the bar but **disable that control with a reason** ("Team leaders are season-to-date") rather than dropping it. For the Season odds panel, add an explicit "live projection — as of now" caption whenever `standingsWeek` is a past week, so the two time frames don't read as one.
+**Acceptance:** the scope/week you pick either applies on every tab or is shown disabled-with-reason; no tab silently discards a selection; on a historical week the odds panel is labelled as present-day, not implied to match the rewound table.
+**Deps:** relates to R1 (if the tabs become pages, each page owns its own scope control) and H8 (tab semantics).
+
+## #40 · Team-stats tab: forced desktop scroll + DIV-record display drift
+**Type:** visual/responsive + correctness/consistency · **Status:** open · **Added:** 2026-07-31 (standings-tab addendum)
+**Problem:** (1) The Team-stats table is `min-width:1360px` (`globals.css:2472`) inside the ~1180px workspace shell, so its 15-column grid is **permanently horizontally scrolling on desktop** — a sticky first column plus an always-live scrollbar, before any narrow viewport. This is a *different, wider* table than the one V5 addresses (`team-schedule-table`, 1280px), so V5 does not cover it. (2) The **DIV** column prints `W-L` with **no ties** (`StatsWorkspace.tsx:657`: `{row.divisionWins}-{row.divisionLosses}`), while the Standings tab's **DIV REC** column of the same data includes them (`:640`: `…{row.divisionTies ? \`-${divisionTies}\` : ""}`) — so a `3-1-1` division record reads `3-1` here and `3-1-1` one tab over. (Row rhythm / near-black header / no-hover on this table are already logged under **V9**; the gold sort-active indicator is folded into **V4** below.)
+**Where:** width `globals.css:2472`; DIV cell `StatsWorkspace.tsx:657` vs standings `:640`.
+**Current (code-read):** 1360px table always side-scrolls at desktop widths; DIV column silently drops ties.
+**Target:** Trim the table to fit a normal laptop without horizontal scroll — tighten per-column mins and/or make the lowest-value columns (SOV/SOS/GOTW WINS/BEST STREAK) opt-in via a "Display" toggle, or widen the shell when this tab is active; under ~720px stack to cards (mirror V5). Print DIV as `W-L(-T)` exactly as the Standings table does, from one shared record-formatter.
+**Acceptance:** the Team-stats table fits a 1280px viewport with no horizontal scroll; DIV records render identically (ties included) in both the Standings and Team-stats tables.
+**Deps:** V5 (responsive pattern), V9 (table craft), #36 (division-record ties in ranking).
+
+## #42 · Standings tabs: mobile (≤375px) — off-screen tabs, crushed podium, peephole tables ✓LIVE
+**Type:** visual/responsive + a11y · **Status:** open · **Added:** 2026-07-31 (standings-tab mobile addendum) · **Verified live @375px** on a generated 10-team/2-division league scored through Week 12.
+**Problem (all measured live at viewport 375px):**
+1. **Sub-tab strip hides 3 of 6 tabs with no affordance and no active-into-view.** `.stats-tabs` is `overflow-x:auto` with 6 × 128px min buttons: clientWidth **349px**, scrollWidth **768px** → **419px (55%) off-screen**. "Team stats" lives at left **653–781px** — entirely past the 375px edge. Selecting it leaves `strip.scrollLeft = 0`, so **the active tab is fully off-screen while its panel shows below** — the visible strip shows *no* active indicator at all (screenshotted). There's no edge fade / arrow to signal more tabs exist. Same defect the schedule week-tabs have under #22; `.stats-tabs` + `.leader-category-tabs` were not included there.
+2. **Team-leaders podium stays 3-up inside a full-width card → every name clips.** At ≤720px `.team-leader-grid` correctly collapses 2-up→1-up, but `.podium-columns` stays `repeat(3, …)`: three **116px** columns inside a 351px card. Team `strong` names (14px) overflow — measured `scrollWidth > clientWidth` on "Huddle House" and "End Zone Office"; on screen they render "Hudd…", "Blitz…", "End Z…", "Goal…", "Fourt…". Affects all 7 podium cards.
+3. **Three data tables become frozen-column peepholes.** Sticky identity columns eat the majority of the viewport, leaving a sliver to scroll the real data:
+   - **Standings** — table content 1271px; rank col **55px** *plus* team col **234px** both sticky = **289px = 77% of 375px**, leaving a **~60px** window for 11 data columns.
+   - **Season odds** (same tab) — `min-width:820px`, 216px sticky first col — same peephole.
+   - **Team stats** — 1360px, 15 columns, sticky first col **224px = 60%**, leaving a **125px** data window.
+   *Good news (credited):* document-level horizontal overflow measured **0px** on every tab — the scroll is properly contained in the table wraps (matches the existing "Non-issues" note). The problem is the intra-table peephole + no card fallback, not page overflow.
+**Where:** `globals.css:2285` (`.stats-tabs`), `:2440` (`.leader-category-tabs`), `:2421` (`.podium-columns`, mobile only touches min-height at `:3954`), `:2163-2165` (standings dual sticky cols), `:2398-2399` (odds sticky), `:2472,:2497` (team-stats 1360px + 224px sticky). No `scrollIntoView` on tab select in `StatsWorkspace.tsx:634`.
+**Current (measured):** 3 tabs unreachable-looking with the active one off-screen; podium names truncated; standings usable through a 60px slot, team-stats through 125px.
+**Target:**
+- **Tab strips:** on select *and* on mount, `activeTab.scrollIntoView({inline:"center", block:"nearest"})` for `.stats-tabs` and `.leader-category-tabs`; add a right-edge fade/gradient (or a subtle chevron) whenever `scrollWidth > clientWidth` so off-screen tabs are discoverable. (Roll this into #22's scroll-into-view fix rather than duplicating it.)
+- **Podium:** below ~560px collapse `.podium-columns` to a **single column** — stack Gold→Silver→Bronze as full-width rows (medal pill + logo + full, unclipped name + value). Never clip the team name.
+- **Tables:** below ~720px, **stack Standings / Season odds / Team stats into per-team cards** (a header row of team identity, then label:value pairs) instead of a horizontal peephole — mirror the card-stack V5 prescribes for the team-schedule table. Minimum bar if cards are deferred: drop the *second* sticky column on Standings and shrink the sticky team column so the data window is ≥ ~55% of the viewport.
+**Acceptance (re-measure @375px):** all 6 stats tabs reachable with the **active tab visible** after selection; an edge affordance appears when tabs overflow; **no podium name clips** (`scrollWidth ≤ clientWidth`); no standings/odds/team-stats table presents its data through a window narrower than ~55% of the viewport (either card-stacked or with materially reduced sticky width); document horizontal overflow stays 0.
+**Deps:** #22 (shared tab scroll-into-view), #40 (team-stats width), V5 (table→card responsive pattern), V9 (table craft).
+
+---
+
 # 🟡 LOW
 
 ## #22 · Polish bucket (~15 items)
@@ -247,6 +286,7 @@ Each is small and independent:
 - `scope="col"` missing on ratings-table headers (`SeasonWorkspace.tsx:473`).
 - Week-tab `aria-label` omits the slate strength sighted users see (`SeasonWorkspace.tsx:374`).
 - Score-entry week selector lacks the schedule rail's `aria-current`/`aria-label` (`SeasonWorkspace.tsx:520`).
+- **Standings tabs, no/1-division leagues** — division-scoped views are permanently empty and unhideable: League leaders' "Divisional" category filters `matchupType === "division"` (`StatsWorkspace.tsx:629`) → always "No completed results yet"; Team leaders' "Best division record" + "Best division point diff" cards (`:654`) can never populate (`divisionsPlayed` never true). Gate all three on `schedule.setup.divisions.length > 1` — hide the Divisional sub-tab and the two division podium cards when the league has one/zero divisions (parity with #22's division-chip gating).
 **Acceptance:** each ticked off independently.
 
 ---
@@ -312,6 +352,7 @@ Migrate hardcoded px to these; collapse the multi-layer font-size overrides into
 - **Sim/override** → one desaturated accent (fold teal+blue together).
 - **Green (`--field`/`--brand`)** → brand/primary.
 - Rule: **at most one solid brand-accent edge/fill per card.**
+- **Also fold in:** the Team-stats table's sort-active header uses `var(--gold)` for both text and arrow (`globals.css:2479-2480`) — another "gold means many things" instance. Retarget the sorted-column indicator to `--brand`/`--ink`, reserving gold for GOTW/marquee.
 **Acceptance:** grepping the palette, gold appears only for GOTW; a single card never shows more than one accent edge; each accent maps to one documented meaning.
 **Deps:** V1.
 
@@ -387,6 +428,21 @@ Migrate hardcoded px to these; collapse the multi-layer font-size overrides into
 
 ---
 
+## V11 · Mobile site-footer: tap targets + centering polish
+**Type:** a11y + visual · **Status:** ✅ DONE (verified 2026-08-01, branch `feat/audit-followups-7-31`) — the spec is already in place (`.footer-row nav a` = inline-flex, `min-height:44px`, underline at rest, color-on-hover; mobile `padding:0 10px` + `nav margin-left:-10px`). **Verified live @375px:** Privacy 59×44, Terms 53×44 (both ≥44×44 ≫ the 24×24 floor), underlined at rest, first link's text flush with the copyright line. No change required.
+**Scope note:** on the landing (`/`) and build-intro (`/build`) pages — outside the original post-generation audit scope, captured here by request.
+**Problem (measured live @375px):** The two legal links are the most touch-hostile control on the page. Measured on the running app, each renders **~36×18px with `padding:0`** — far below the WCAG **2.5.8 (24×24 min)** and **2.5.5 (44×44)** target-size thresholds. They also carry **no underline at rest** (underline is hover-only, and touch has no hover), so on mobile "Privacy"/"Terms" read as color-only links — a WCAG **1.4.1 (use of color)** smell. Contrast is fine (copyright 5.23:1, links 5.39:1) and type steps up to 12px on mobile, so those are *not* the issue. Vertical centering is also already correct — measured 11px above / 11px below — so a literal "center it" edit is a no-op; the win is to spend that dead vertical space on bigger hit areas.
+**Where:** markup `app/page.tsx:109-117` + `app/build/page.tsx:29-37`; base rules `app/globals.css:1196-1199`; mobile override `app/globals.css:3859` (`@media (max-width:720px)`).
+**Current:** `.footer-row nav a { color:var(--field); transition:color … }` with underline only on `:hover`; mobile `.footer-row { …; gap:10px }` and no per-link padding, so hit areas equal the text box.
+**Target (explicit spec):**
+- Base `.footer-row nav a` → `display:inline-flex; align-items:center; min-height:44px; text-decoration:underline; text-underline-offset:3px;` and move the color change to `:hover` only (drop the hover-only underline). 44px fits inside the 68px desktop row with no layout shift.
+- Mobile `@media (max-width:720px)`: `.footer-row { gap:6px; padding:14px 0; }` · `.footer-row nav { gap:2px; margin-left:-10px; }` · `.footer-row nav a { padding:0 10px; }`. This grows each link to ~44px tall / ~48px wide while the `nav` `margin-left:-10px` cancels the first link's `10px` left pad so **"Privacy" stays flush with the "© 2026 League Weaver" line** (no negative-margin overhang), and text-to-text spacing stays ~22px.
+**Acceptance:** on a ≤720px viewport each legal link's hit box measures ≥44×44 (verify with `getBoundingClientRect`), and never below 24×24; links are underlined at rest (not color-only); "Privacy" left edge aligns with the copyright line; computed contrast unchanged (≥4.5); no desktop regression — links still sit on one line with ~22px gap inside the 68px row.
+**Deferred (not in this story — from the footer brainstorm, captured so they aren't lost):** (a) add a Support/Contact link (footer currently offers nowhere to get help); (b) a soft end-of-scroll secondary action (Contact or a repeat "Start building") for warm leads who read to the bottom; (c) surface a slim legal+support footer *inside* the app/workspaces, which are currently `display:none` for the footer ≤980px (`globals.css:1342`).
+**Evidence:** live probe on `leagueweaver-dev` @375px — links `{h:18,w:39/33, pad:"0px"}`, footer row 68px with content centered 11/11.
+
+---
+
 # 🧭 STRUCTURE / NAVIGATION (IA)
 
 ## R1 · Promote analytics tabs to top-level pages
@@ -438,6 +494,230 @@ Team Schedule ▾
 
 ---
 
+# 🔬 MATCHUP RATINGS — live audit (2026-08-01)
+
+**What/why:** The Matchup Ratings page (`MatchupRatingsView`, `SeasonWorkspace.tsx:569`) was the one row in the coverage matrix never exercised live. This pass drove it in the browser on a real played league (`ff4f2ab3…`, 12 teams / 3 divisions / 14 weeks, **72 of 84 games scored** — so played, pending, and GOTW rows were all on screen) and measured the rendered DOM. **0 console errors.** What's already solid (don't touch): loser score contrast **8.19:1**; rank pills **5.39–6.57:1** (AA pass via `accessibleTeamColor`/`readableTextColor`); pending games render `— NOT PLAYED` and still compute a rating from ranks; controls stack cleanly at 375px; the legend + "Lower is better" controls label are present. The findings below are the gaps. IDs are `MR#` to avoid colliding with the H/#/V/R numbering.
+
+## MR1 · Home team names clip to ~42px in the ratings table 🔴 HIGH
+**Type:** visual/correctness · **Status:** open
+**Problem (measured live):** Every **home** team name in the table is truncated to the logo-width track — "Sunday Architects" → **"Sun…"**, "Chicago…" → "Chi…", "Nashville…" → "Nash…". Measured: in equal-width **265px** cells, the away name span is **140px** (full: "Goal Line Guild") but the home name span is **42px** and clips (`scrollWidth 114 > clientWidth 42`). Half the teams in the marquee analytics table are unreadable.
+**Root cause:** The `.mirrored` grid-*placement* rules (`app/globals.css:1871-1873`: name→col2, mark→col3, rank→col4) are written for the **4-column with-record** template. The ratings table uses `<TeamIdentityBlock mirrored compact showRecord={false}>` (`SeasonWorkspace.tsx:635`) → classes `compact mirrored without-record`; the compact/without-record templates (`:1877/:1879`) fight those placements, so the name lands in the **42px logo track**. Measured computed template on the home block: `22px 42px 112px 22px` (a phantom 4th column). The **away** block (`:633`, not mirrored) is correct: `22px 42px 140px`.
+**Where:** usage `SeasonWorkspace.tsx:633` (away) / `:635` (home); CSS conflict `app/globals.css:1871-1873` (mirrored placement) vs `:1877` (`.compact.mirrored`) / `:1879` (`.compact.without-record`).
+**Target:** Add an explicit rule for the mirrored + compact + without-record combination so the **name occupies the `1fr` track** and the rank/logo sit in the fixed side tracks — e.g. `.team-identity-block.compact.mirrored.without-record { grid-template-columns: auto 42px minmax(0,1fr); }` with matching placement (name→col3 right-aligned, mark→col2, rank→col1), or more robustly give `.mirrored.without-record` its own 3-col template+placement. Verify the home name span width ≈ the away name span width in the same row.
+**Acceptance:** In the ratings table, a home team name renders as much text as the away name of equal cell width (no `scrollWidth > clientWidth` on the home name at desktop widths); "Sunday Architects" shows in full or truncates identically to how an away name of the same length would.
+**Evidence:** live probe `ff4f2ab3…?view=matchup-ratings` — away name `{w:140, overflow:false}`, home name `{w:42, overflow:true, scrollW:114}`; home block computed grid `22px 42px 112px 22px`.
+
+## MR2 · Ratings table side-scrolls on desktop (permanent) 🟠 MEDIUM
+**Type:** visual/responsive · **Status:** open
+**Problem (measured live):** `.matchup-ratings-table` sets `min-width: 1110px` (`app/globals.css:2067`) inside a wrap that is **1030px** on a normal desktop shell → `scrollWidth 1110 > clientWidth 1030`, so the horizontal scrollbar is **engaged at rest** on desktop (same failure class as **V5**'s team-schedule table). At 375px the wrap contains its own side-scroll (349 → 1110) — no document overflow, but the table never stacks to cards, so mobile users see ~2 columns at a time and must side-scroll a 7-column grid.
+**Where:** `app/globals.css:2067` (`min-width: 1110px`); the redundant rank sub-label (MR4) and the Result column both add avoidable width.
+**Target:** Bring the table under the shell width (~980–1000px) — tighten/drop the Rating sub-label (MR4 removes ~90px), let low-value columns (Game #, Matchup series) collapse at narrow widths, or widen the shell when this view is shown. Under ~720px, stack each game into a card (mirror the schedule-table treatment R3/V5 proposes) instead of side-scrolling the whole grid.
+**Acceptance:** the table fits a ~1280px viewport with no horizontal scroll (`scrollWidth ≤ clientWidth`); on mobile it stacks or the primary columns (teams + rating) are visible without scroll.
+**Evidence:** desktop wrap `client 1030 / scroll 1110 → horizScroll true`; mobile wrap `client 349 / scroll 1110`.
+**Deps:** V5 (same pattern), MR4.
+
+## MR3 · Team-name links swallow the rank for screen readers 🟠 MEDIUM (a11y)
+**Type:** a11y · **Status:** open
+**Problem (verified live):** Both team blocks are `<a aria-label="Open <Team> schedule">` (`MatchupPresentation.tsx:52`). The blanket `aria-label` overrides the subtree, so the **rank pill (#1/#2)** — a core datum of a *ranking* table — is not announced; a SR user hears only "Open Brooklyn Sunday Architects schedule". With 84 rows × 2 links there are **168 near-identical "Open … schedule"** links to wade through. This is the same root cause as **H6** (team-directory cards), now confirmed on this page too.
+**Where:** `MatchupPresentation.tsx:33-52` (`TeamIdentityBlock`, `aria-label` at `:52`), as consumed by the ratings table `SeasonWorkspace.tsx:633,635`.
+**Target:** Resolve with **H6** — make the team name the focusable link (its own accessible name) and expose the rank pill as normal text (or fold the rank into the link's accessible name, e.g. "Brooklyn Sunday Architects, rank 1"). Don't blanket-label the whole block.
+**Acceptance:** AT announces the team's rank alongside its name in each Away/Home cell; the link list isn't 168 identical strings.
+**Deps:** H6 (shared fix).
+
+## MR4 · Rating cell repeats the rank pills already in the row 🟡 LOW
+**Type:** clarity/visual · **Status:** open
+**Problem (verified live):** The Rating cell renders `3.7` **plus** a sub-label `W1 ranks · #2 vs #1` (`SeasonWorkspace.tsx:637`). The `#2 vs #1` is an exact duplicate of the rank pills already shown in the **Away** and **Home** columns of the same row, and the "W{n} ranks" prefix restates the Wk column. It's redundant ink that also widens an already-overflowing table (MR2).
+**Where:** `SeasonWorkspace.tsx:637` (`.table-rating-ranks` sub-label).
+**Target:** Drop the `#a vs #b` duplication; keep at most the bars + number. If a per-lens note is wanted, surface it once (e.g. a column header tooltip "ranks entering each week"), not per row.
+**Acceptance:** the Rating cell no longer restates the row's own rank pills; table min-width drops accordingly.
+**Deps:** feeds MR2.
+
+## MR5 · Tier labels claim "thirds" but bucketing is value-normalized 🟡 LOW
+**Type:** correctness/clarity · **Status:** open
+**Problem (measured live):** The tier filter options read "Competitive — **Strongest third**", "Neutral — **Middle third**", "Lopsided — **Widest ranking gaps**" (`SeasonWorkspace.tsx:596-601`), implying equal-count terciles. But `getMatchupSignal` (`lib/matchups.ts:47-54`) buckets by the rating's **normalized position in the min–max range** (`≤1/3`, `≤2/3`, else), not by count. Measured distribution on the real league: **29 / 38 / 17** — not ~28/28/28. On a schedule with clustered ratings a tier could hold almost everything or almost nothing, contradicting the "third" copy.
+**Where:** labels `SeasonWorkspace.tsx:596-601`; bucketing `lib/matchups.ts:47-54`.
+**Target:** Either bucket by actual terciles (rank the ratings and split by count) so "third" is true, or change the copy to describe the real behavior ("strongest end of the range", "middle of the range", "widest gaps"). Keep the option descriptions and the legend (`MatchupRatingLegend`) consistent with whichever is chosen.
+**Acceptance:** the tier copy matches the bucketing method; a first-time user reading "Middle third" gets roughly what the words say.
+
+## MR6 · No empty state when a filter yields zero rows 🟡 LOW
+**Type:** usability · **Status:** open
+**Problem:** The `<tbody>` maps `visibleGames` with no fallback (`SeasonWorkspace.tsx:621-639`); confirmed no empty-state markup exists in the view. If a lens/tier combination (or a very small league) yields 0 games, the table renders the 7 headers over a **blank body** with no message. The per-week ratings list already does this right with `.rating-filter-empty` (`SeasonWorkspace.tsx:561`) — this view is the inconsistent one.
+**Where:** `SeasonWorkspace.tsx:621-639`.
+**Target:** When `visibleGames.length === 0`, render a centered empty state in the table body ("No games match this filter — try 'All tiers'.").
+**Acceptance:** a zero-result filter shows guidance, never a headers-only blank table.
+
+## MR7 · Ratings-table headers lack `scope`, aren't sortable 🟡 LOW
+**Type:** a11y/usability · **Status:** open
+**Problem (verified live):** All 7 `<th>` (Wk / Game / Away / Result / Home / Matchup / Rating) have `scope: null` (`SeasonWorkspace.tsx:620`) — no column association for AT. Separately, sorting lives only in a `CustomSelect` dropdown; the column headers are inert, so clicking "Rating" or "Wk" does nothing, defying the data-table convention. (Note: **#22** tracks missing `scope` on a *different* ratings table at `:473`; this is the `MatchupRatingsView` table.)
+**Where:** `SeasonWorkspace.tsx:620` (headers), `:614` (sort select).
+**Target:** Add `scope="col"` to each `<th>`. Optional enhancement: make Wk / Rating headers clickable sort toggles with `aria-sort`, keeping the dropdown as the explicit control.
+**Acceptance:** every header carries `scope="col"`; if sortable headers are added they expose `aria-sort` and move selection.
+
+## MR8 · GOTW gold floods the top of the table when sorted best-first 🟡 LOW
+**Type:** visual/color · **Status:** open
+**Problem (verified live):** 14 of 84 rows are GOTW and get a gold row tint (`.matchup-ratings-table tbody tr.is-gotw`, `app/globals.css:2071`) **plus** a gold "★ GOTW" chip in the Game column. Because GOTWs are the strongest games, the default **Best-first** sort clusters all 14 near the top — the entire first screen is a wall of gold, so the marker stops signaling "special." Reinforces the gold-overload theme in **V4**.
+**Where:** row tint `app/globals.css:2071-2072`; GOTW chip `SeasonWorkspace.tsx:632`.
+**Target:** Pick one gold cue per row (chip **or** a subtle left-border accent), not a full-row wash **and** a chip; lighten the tint so stacked GOTW rows don't merge into one gold block. Align with the V4 "gold = GOTW only, one accent per row" rule.
+**Acceptance:** a run of consecutive GOTW rows still reads as distinct rows; GOTW is marked once per row, not twice.
+**Deps:** V4.
+
+## MR9 · "Strongest week" summary tile mixes metrics 🟡 LOW
+**Type:** clarity · **Status:** open
+**Problem:** The summary strip shows "Rating range 3.7–30.7" and "Games shown 84" (both per-**game** rating metrics, matching the table) beside "**Strongest week** — Week 1 #1", which is the per-**week** slate rank (`week.matchupRank`, `SeasonWorkspace.tsx:606`) — a different metric that isn't otherwise on this page. Sitting between two rating stats, it invites reading "#1" as a rating.
+**Where:** `SeasonWorkspace.tsx:602,606`.
+**Target:** Either relabel to make the metric explicit ("Strongest slate — Week 1") and visually distinguish it from the rating stats, or replace it with a rating-native stat (e.g. "Best game — W1 3.7") so all three tiles speak the same language.
+**Acceptance:** the three summary tiles read as the same kind of number, or the odd one is clearly labeled as a slate/week metric.
+
+---
+
+# 👥 TEAM SCHEDULE — directory + single-team page (2026-08-01, by request)
+
+**Scope note:** Audit of the "Team Schedule" rail view — the **all-teams directory** (`TeamScheduleDirectory`) and the **single-team page** (`TeamScheduleView`, `components/season/TeamSchedulePage.tsx`). Grounded live at **1280px and 375px** on an injected 10-team / 2-division league scored through Week 12. Much of this surface was already logged (H6 directory a11y — DONE; V5 table width; R3 restructure; #20.2 home/away; V10 color) — this pass adds fresh measurements and two new small items.
+
+**What's already solid (verified live — spend energy elsewhere):**
+- **Responsive is done right.** The single-team table correctly swaps to a card list on mobile (`.team-schedule-table` → `display:none`, `.team-schedule-cards` → 14-card `grid` @375) with **0px document horizontal overflow**; the directory grid collapses 2-col → 1-col cleanly (stat grid 3→2 columns, no value clipping). This surface is markedly healthier than the Standings tabs (#42) — no card-stack work needed.
+- **Hero contrast passes** — team name computes white on `#B91C1C` = **6.47:1** (AA). The team switcher is a real listbox trigger (`aria-haspopup="listbox"`).
+
+**Confirmed here, owned by existing stories (fresh numbers):**
+- **Single-team table side-scrolls on desktop** — `min-width:1280px` renders **1366px** inside a **1030px** wrap = **336px permanent overflow** @1280. Reinforces **V5** (update its evidence with these measured values).
+- **Mobile 15-stat performance panel = a 1022px single-column wall** below the 14 game cards. At desktop that same panel is **572px vs the table's 962px**, so **R3**'s "the performance ribbon *dwarfs* the schedule" is **overstated at desktop** — the schedule table dominates; the depth-of-stats concern is real only on mobile. Feeds **R3** (correct the "dwarfs" wording; the mobile wall is the real target).
+
+**Ruled out — do NOT log as a bug (tooling artifact):** a `WeekScoreBar` runtime overlay — *"Cannot read properties of undefined (reading 'length')"* — appeared on the `/season/[id]/team/[teamId]` route. But the Next overlay was flagged **`(stale)`**, the identical `WeekScoreBar` renders fine on the directory route with identical props (`activeSchedule.weeks`), and **touching `WeekScoreBar.tsx` to force a fresh Turbopack compile cleared it completely**. Stale dev chunk — same class as the `teamInitials` non-issue. (Added to Non-issues.)
+
+## TS1 · Directory "Avg rating" is unexplained and the "Toughest" sort mislabels it 🟡 LOW
+**Type:** clarity · **Status:** open
+**Problem (verified live):** The single-team page renders `<MatchupRatingLegend />` (`TeamSchedulePage.tsx:594`), but the **directory has no legend**, so its per-team **AVG RATING** stat (`:235`) shows a bare **"18.0" / "13.0"** with no scale and no "lower is better." The value is the matchup-rating formula `((awayRank+homeRank)/2 + 2.2·|rankGap|)` (`lib/matchups.ts:35`) — roughly 3–30 for a 10-team league — which nobody can infer from "18.0". Worse, the sort option is labelled **"Toughest avg rating · Lower matchup rating first"** (`:51`), but a *low* rating means *close, high-quality* games, **not** a hard schedule — schedule hardness is what the separate **SOS** stat/sort already measures (`averageOpponentSeed`, `:52,:151`). So "Toughest" conflates *competitiveness* with *strength-of-schedule*, and both rating figures sit on the card with no key.
+**Where:** legend only at `TeamSchedulePage.tsx:594`; directory AVG RATING cell `:235`; sort label `:51`; SOS sort/stat `:52,:151`.
+**Target:** Add a one-line rating key to the directory toolbar (or a tooltip on the "Avg rating" stat): *"matchup rating — lower = closer, higher-quality games."* Relabel the sort to **"Most competitive (lowest avg rating)"** and keep **"Hardest SOS"** as the distinct strength-of-schedule sort so the two stop overlapping in meaning. Optionally surface `MatchupRatingLegend` on the directory too.
+**Acceptance:** a first-time commissioner can tell what "Avg rating 18.0" means and that lower is better; the rating sort no longer reads as a strength-of-schedule sort.
+**Deps:** same class as **#20**.1 (matchup rating unexplained) — this is the directory instance.
+
+## TS2 · Directory card: the stat number outweighs the team name (both in identical brand ink) 🟡 LOW
+**Type:** visual/hierarchy · **Status:** open (directory instance of V2/V10)
+**Problem (measured live @1280):** On a directory card the stat **value** (`.team-directory-stats dd`) computes **16px / weight 850**, while the **team name** computes **14px / weight 700** — the number is bigger *and* heavier than the identity it describes. Both also render in the **identical team-brand ink** (measured `rgb(67,56,202)` for the indigo team), so the name can't win on color either; the squint test lands on "7 / 18.0", not on who the team is. (Contrast itself is fine — dd vs card background = 7.90:1; this is hierarchy, not legibility.)
+**Where:** dd markup `TeamSchedulePage.tsx:235`; `.team-directory-stats dd` (16px/850) vs the identity name (14px/700) in `globals.css`; brand ink from `teamBrandStyle :112` (`--team-brand-ink`).
+**Target:** This is the directory instance of **V2** (name must win) + **V10** (color discipline). Team name → `--text-lg`/`--w-black`/full ink (or brand ink); stat values → `--text-sm`–`--text-md`, `--w-medium`, **neutral** `--ink`/`--muted` — *not* the team brand color — so the identity dominates and the numbers recede. (Also updates V2's now-stale "directory stat dd 18px" to the V1-migrated **16px**.)
+**Acceptance:** on every directory card the team name is the largest/heaviest element and the stat values are not painted in the team brand color; blurring the card, the eye lands on the team, not its numbers.
+**Deps:** V2, V10.
+
+## TS3 · Mobile directory card: shrink it — stats ≤20%, drop low-value stats, fix name/logo alignment, remove the sort filter 🟠 MEDIUM
+**Type:** visual/IA/mobile · **Status:** ✅ DONE (2026-08-01, verified live @375px) — Directory card rebuilt (`TeamSchedulePage.tsx` + `globals.css`): sort toolbar removed; the 6-item `<dl>` replaced by a compact single-row **H/A `7-7` · Div · SOS** (Byes + Avg rating dropped) in neutral `--ink` (not brand); the city + name are vertically centered as **one block** against the avatar (matching the record column). **Root cause of the persistent "text sits high" look (TS6):** a shared responsive rule shrinks `.team-identity-mark` to 40px at narrow widths while the `EntityLogo` inside keeps its 48px size prop — so the avatar overflowed its box by 8px and the grid centered text on the 40px box, not the 48px avatar. Fixed by pinning the directory mark + logo to the same 48px, then a +4px optical nudge on the name/record columns to counter line-leading. **Measured @375px:** mark == logo == 48px (aligned); city+name space **7px above / 8px below** the avatar (1px imbalance) — consistent across all cards and matched to the record column; **11px horizontal gap** between avatar and text (pinning the logo to 48px had pushed it into the responsively-narrowed 40px grid column and touched the name → fixed by giving the directory identity block a 48px mark column + 11px column-gap); card height **341 → ~195px**; stat block **≤20%**; 0 console errors; 0 document overflow. **Owner directive (2026-08-01)** — captured from live review at 375px.
+**Problem (measured live @375px):** The all-teams directory card is **too tall and stat-heavy** on mobile. Measured on the Atlanta card: **card height 341px**, of which the `<dl>` stat block is **186px = 55% of the card** — the stats dominate the very thing the card is for (picking a team to open). Three specific issues:
+1. **Stat block is oversized and carries low-value stats.** Six stats in a 2-col grid — **Home · Away · Byes · Divisional · Avg rating · SOS** (`TeamSchedulePage.tsx:230-237`). **Byes is always `0`** in an even-team league (dead stat); Home/Away are usually a balanced `7 / 7` (low differentiation).
+2. **Name/city not aligned to the logo.** The identity block centers the *two-line* city+name column against the logo, so the **bold team name renders 7px below the logo's vertical center** (measured: logo center Y 517 vs name-strong center Y 524) — the 13px city label stacked above the 15px name pushes the name you actually read downward, so it looks off. (`TeamIdentityBlock`, `MatchupPresentation.tsx`, `.team-identity-name` column.)
+3. **The "All team schedules" sort control is unwanted** on mobile — the `CustomSelect` ("Team A–Z", `TeamSchedulePage.tsx:193-198`) plus its toolbar copy eats a full block above the cards before any team is visible.
+**Where:** card + stats `TeamSchedulePage.tsx:205-237`; identity alignment `MatchupPresentation.tsx` (`.team-identity-name`); sort toolbar `TeamSchedulePage.tsx:188-199`; card CSS `globals.css` `.team-directory-card` / `.team-directory-stats`.
+**Current (measured):** 341px card, 186px (55%) stats, name 7px below logo center, sort control present.
+**Target (owner spec):**
+- **Cut card vertical height** materially; the **stat block must be ≤20% of the card** (~≤68px at today's height). Replace the 6-item 2-col `<dl>` with a **single compact inline row of ~3 high-signal stats**. **Drop Byes** (always 0). Drop or merge Home/Away (schedule shape) — *stat selection is an open decision (see below)*.
+- **Align name + city to the logo** — the primary bold name should sit on the logo's vertical center (city as a small eyebrow that doesn't shove the name off-center), so logo, name, and city read as one aligned unit.
+- **Remove the "All team schedules" sort control** (and trim/absorb the toolbar copy) so cards start higher.
+- Pairs with **TS2** (name must outweigh the stats; stat values in neutral ink, not brand color).
+**Stats chosen (owner, 2026-08-01):** **Home/Away · Divisional · SOS.** Home/Away collapses to a single schedule-shape stat (e.g. `7-7`). Byes and Avg rating are **removed** from the card — which also means the card no longer needs the TS1 rating legend.
+**Acceptance (re-measure @375px):** directory card is materially shorter; the stat row measures ≤20% of card height; Byes is gone; the bold team name is centered to the logo (|name-center − logo-center| ≤ 2px); the sort control is absent; no value clipping.
+**Deps:** TS1 (rating legend if Avg rating stays), TS2/V2/V10 (hierarchy + neutral stat ink).
+
+## TS4 · Cloud save-conflict prompt is a tall in-content banner on every view (worst on mobile) 🟠 MEDIUM
+**Type:** IA/mobile · **Status:** open · **Surfaced 2026-08-01** during the team-schedule mobile pass (workspace-wide, not team-schedule-specific).
+**Problem:** The **save-conflict guard** — "SAVED SEASON FOUND · Update this season or make a copy?" with **Later / Create copy / Overwrite** — renders as a full-width banner *in the content flow of every workspace view* (`.workspace-conflict-notice`, `SeasonWorkspace.tsx:2140-2152`). It fires when a save/claim hits an existing cloud season (`openSaveConflict`, `code === "SEASON_EXISTS"`, `:1465`). The *guard is correct and must stay* — it prevents silently overwriting or duplicating a saved season — but as a persistent in-content banner it pushes the actual page down on **every** view (Team Schedule, Standings, …), and **on mobile @375px it consumes ~45% of the viewport above the content**. It also can't move "to the generate state" (a common instinct) because the conflict is only detectable at **save/claim** time, not at generation.
+**Where:** banner `SeasonWorkspace.tsx:2140-2152`; trigger `openSaveConflict :1465-1471`; resolvers `resolveSaveConflict`/`dismissSaveConflict :1917-1947`.
+**Current:** tall in-flow `<section>` re-rendered on each view; ~45% of a 375px viewport.
+**Target:** Keep the guard, change the delivery — surface it **once as a focus-trapped `Modal`/`ConfirmDialog` at the moment the conflict is detected** (the blocked save/claim), or as a **slim top-bar chip** ("Saved season exists — resolve") that opens that modal. Do **not** render it as a content-flow banner repeated on every view. Preserve the three actions (Overwrite / Create copy / Later) and the existing `blockedCloudSnapshot` gating.
+**Acceptance:** resolving/ dismissing behaves identically; the prompt no longer occupies workspace content height on any view; on a 375px viewport the page's primary content is visible without scrolling past a save-conflict banner.
+**Note:** its prominence during this audit was amplified by the injected test fixture colliding with the real "Sunday Night League" cloud season; normal users hit it only on a genuine local-vs-cloud fork.
+
+## TS5 · Directory: dedicated clinch-badge row + division grouping 🟢 DONE
+**Type:** IA/visual · **Status:** ✅ DONE (2026-08-01, owner directive, verified live desktop + @375px) — Two directory changes in `TeamSchedulePage.tsx` (`TeamScheduleDirectory`) + `globals.css`:
+1. **Dedicated badge row.** Clinch badges (PLAYOFF / DIV CHAMP / #1 SEED / ELIMINATED) moved out of the old `.team-directory-group` into their own `.team-directory-badges` row between the identity block and the stat row. It **collapses to zero height** (`:empty`) when a team has no clinch status, so cards without badges don't reserve space. Verified: 10 cards, 3 badge rows visible, 7 collapsed; 0 console errors.
+2. **Division grouping.** The flat card grid is now grouped into `.team-directory-division-group` sections, each with a `.team-directory-division-head` (division mark + name + team count), teams sorted by **live rank** within the division. **Conferences:** there is **no conference entity in the model** (`Division` has no `conferenceId`; `LeagueBuilder.tsx:298` confirms), so **no conference dividers are shown** — matching the owner's "if there are no conferences, don't divide by conference." The code is structured so conference wrappers nest above the division sections once a `conferences` grouping is added to the setup. Grouping only engages when `divisions.length > 1` (single/zero-division leagues fall back to the flat A–Z grid). The card was also converted from a 2-col grid to a single-column flex stack (identity → badges → stats), and the redundant `.team-directory-group` (division identity + "League rank #N", both now conveyed by the section header + rank pill) was removed.
+**Follow-up (not done):** true **conference** support needs a data-model addition — a `Conference` entity (or `conferenceId` on `Division`) + builder UI + `setup.conferences` grouping. Until then the directory groups by division only. Logged as a separate need if the owner wants conferences as a first-class concept.
+**Where:** `TeamSchedulePage.tsx` `TeamScheduleDirectory` (renderCard + division grouping); `globals.css` `.team-directory-division-group` / `.team-directory-division-head` / `.team-directory-badges` / `.team-directory-card` (flex).
+
+## TS7 · Team schedule card view reuses the League Schedule's `MatchupCard` 🟢 DONE
+**Type:** consistency · **Status:** ✅ DONE (2026-08-01, owner directive, verified live @375px on the real SNL season) — The individual team schedule's mobile card view rendered a bespoke `.team-week-card` (week link + single opponent + result chip), which looked nothing like the League Schedule's rich `MatchupCard`. Replaced it with the **shared `MatchupCard`** (`components/season/MatchupPresentation.tsx`) so the two are pixel-identical: badges row (GOTW / series / medals / game badges), both team identity blocks with records, center score + FINAL/SCHEDULED, venue, and signal bars. The week is carried on the card's own slots (`gameLabel="Week N"` + `dateLabel`), and the container now uses `.matchup-list.matchup-card-list` (same canvas panel). Byes render a small matchup-card-shaped placeholder. Removed the dead `.team-week-card` / `.twc-*` CSS (~19 rules). **Verified:** 14 cards, 5 GOTW variants, 0 byes on this team; `tsc` clean; 0 fresh console errors across all cards.
+**Scope:** the **≤560px card view** only — the **desktop table** (`.team-schedule-table`, with its Display-fields toggle + per-row actions) is intentionally unchanged, so at desktop the team schedule is still a dense table while the League Schedule is cards. **Open option:** if full parity is wanted, replace the desktop table with the same `MatchupCard` list (loses the table's Display toggle + row actions) — owner to decide.
+**Where:** `TeamSchedulePage.tsx` `TeamScheduleView` card list (`.team-schedule-cards`); `globals.css` `.team-schedule-cards` / `.team-week-bye-card`.
+**Follow-ups (2026-08-01, owner, done + verified live):** (a) **Removed the card-list container frame** — dropped the `.matchup-list.matchup-card-list` classes so `.team-schedule-cards` is a plain transparent grid (no gray canvas bg, no 1px border); each `.matchup-card` keeps its own border. (b) **Division-mark acronym centering** — the monogram (`DivisionMark`, `components/ui/DivisionIdentity.tsx`) rendered its acronym at a fixed `--text-2xs`, so a 3-char code ("NFC") filled an 18px box edge-to-edge (0.5px margin → read as cramped/off-center). Now the `<b>` font-size is **proportional to the box** (`max(7, round(size·0.5))px`, `line-height:1`), giving ~2.7px margin each side and a clean center at every size (card chip, hero, score bar, clinch badges). Verified @375px: acronym 9px in the 18px chip mark, 2.7px each side, 0/0 centered; 0 console errors; `tsc` clean.
+
+## TS8 · Team-schedule header: switcher trigger reuses the match-card team-row layout 🟢 DONE
+**Type:** consistency/visual · **Status:** ✅ DONE (2026-08-01, owner directive, verified live desktop + @375px). Several header changes on the **branded (team-color) hero** — the color/banner and the existing team-switcher *dropdown functionality* are unchanged:
+1. **Removed the "Display" fields button** (`.team-schedule-controls` FloatingPopover) — field visibility is now fixed to the league's display settings (`display` is a const). Cleaned up `DISPLAY_OPTIONS`, `toggleDisplay`, and the `useState`/`SlidersHorizontal` imports.
+2. **No-logo avatars are a lighter shade** — `EntityLogo` monogram tiles now use `tintColor(color)` bg + `accessibleTeamColor(color)` initials (a soft tint of the team color) instead of a solid slab, everywhere the primitive renders.
+3. **Switcher trigger reorganized to match the match-card team row** — the hero's `TeamIdentityBlock` (inside the `CustomSelect` trigger) now uses the exact `.matchup-card-main` grid: rank · 54px crest · city/name over a parenthesised division record (`5-7 (3-4) SFC`), same sizes/fonts (name `--text-md`, record `--text-sm`). Text stays **white/`--team-brand-on`** for accessibility on the team color, and the **division mark by the record is forced to the readable-on-brand ink** (it was the division color on text → invisible red-on-blue at **1.02** contrast; a filled tile couldn't fix it since division ≈ team luminance, so recoloring the text was the real fix).
+**Owner course-correction captured:** an earlier attempt de-branded the hero into a light card — reverted; the owner wanted the team color kept and only the *component's layout + accessible text* changed.
+**Where:** `TeamSchedulePage.tsx` (`TeamScheduleView` hero, `display` const, removed controls); `components/ui/EntityLogo.tsx` (monogram tint); `globals.css` `.team-schedule-hero .team-identity-*` (match-card layout + white division mark).
+
+## TS9 · Team-schedule cards: per-week record + rank ("through this game"), not the final record 🟢 DONE
+**Type:** correctness · **Status:** ✅ DONE (2026-08-01, verified live). The team-schedule cards showed each team's **final full-season record on every week** (reused the League Schedule's current-record helper `recordFor`, which reads the last-week snapshot), so Week 1 claimed a team was already "5-7". Ranks used the *entering-week* snapshot (off-by-one). Fixed: each card now derives record **and** rank from `getWeekRankSnapshot(schedule, week.weekNumber)` — the state **through/after that week's game** — so a finished Week 1 win shows **1-0** in Week 1 and the record/rank tick up week by week; unplayed future weeks resolve to the current record (the tally freezes at "now"). The hero header still shows the team's current overall record (correct for a header). **Verified live** (Austin): W1 `0-1` #10 → W3 `1-2` → W7 `4-3` #4 → W12 `5-7` (final) → W13–14 frozen at `5-7`; opponent Brooklyn W1 `1-0` #3; division records also per-week (`(0-0)` on the cross-div Week 1). 0 console errors; `tsc` clean.
+**Where:** `TeamSchedulePage.tsx` `TeamScheduleView` card loop (`throughSnapshot`/`recordThroughWeek`/`rankFor`).
+
+---
+
+# 🧱 BUILDER / ONBOARDING — pre-generation flow (2026-08-01, by request)
+
+**Scope note:** These three live *before* a schedule is generated — the entry screen and the 10-step setup wizard (`components/builder/LeagueBuilder.tsx`), outside the original post-generation audit but captured here by request. Grounded on the source (server was down for a fresh live capture this pass); markup quoted is from `LeagueBuilder.tsx` at the lines cited. **Today's flow:** `SourceStep` (Step 1: manual / ESPN / Sleeper / CSV) → `LeagueStep` (Step 2, where saved-league *resume* is buried) → Teams → Divisions → Season → Seeding → Week 1 → Rules → Playoffs → Review, a fixed **10 steps** (`STEPS` `:66-77`). Import (`applyImport :1340`) and saved-league resume (`applySavedLeaguePreset :1213`) both drop you at **Step 1 (League)** and then make you walk all remaining steps — there is no fast path.
+
+## B1 · Promote "saved league" to a first-class entry source (right of Manual, opens a modal)
+**Type:** IA/onboarding · **Status:** ✅ DONE (2026-08-01) — Step 1 (`SourceStep`) now shows **Start manually** + **Continue a saved league** as peer primary options (`.start-primary-row`, gated on `presets.length > 0`); the saved tile opens a focus-trapped `Modal` (`.saved-league-modal`) listing every saved league via `SavedLeagueRow` ("Last used" pinned first). Step 2's `SavedLeagueShortcut` was trimmed to only the loaded-confirm bar. **Verified live** (signed-in PVE account, 3 saved leagues): entry row renders 2-up on desktop / stacks 1-col at 375px with no overflow; modal is `role="dialog"`, focus-trapped on the close button, lists all 3; picking a connected preset routes through the existing "Use connected league data?" prompt. One bug found + fixed live — the modal panel had no background (base `Modal` supplies none) so the header floated over the dim. **Follow-up (2026-08-01):** picker refactored into `SavedLeaguePicker`, restyled to reuse the **import (Connect ESPN) modal chrome** (`.import-modal` head/body/footer grid, icon tile + `step-kicker` + condensed title + `icon-button` close) and given **pagination** (`SAVED_PAGE_SIZE = 5`; Previous / "Page X of Y · N leagues" / Next in the footer, shown only when it overflows one page) so a large account stays manageable. All added copy is em-dash-free per direction. Verified live: chrome matches the import modal; pager pages correctly (page 2 shows the tail league, Previous/Next disable at the ends). 0 console errors; `tsc` + `next build` green.
+**Problem:** A saved league is conceptually a *data source* — peer to ESPN/Sleeper/CSV — but it isn't on the entry screen. `SourceStep` (`:210-254`) offers only Manual (main) + the import row; the saved-league picker (`SavedLeagueShortcut :178-207`) is rendered one step later inside `LeagueStep` (`:264`), so returning commissioners (the highest-intent users) don't see "continue where you left off" until after they've already committed to a path. The inline list also doesn't scale — with many saved leagues (a real case given large-league/multi-league use) it becomes a long stack with only a "show more" disclosure (`:202`).
+**Where:** entry `LeagueBuilder.tsx:210-254`; current picker `:178-207`; rows `SavedLeagueRow :158`; data = `savedLeagues` (account-scoped, `/api/saved-leagues`).
+**Target (what it should look like):**
+- Restructure `start-grid` into a **2-up primary row**: **Start manually** (left) and **Continue a saved league** (right, same visual weight), with the ESPN/Sleeper/CSV import row beneath — so the entry screen reads "fresh · resume · import."
+- The saved-league tile opens a **modal picker** (reuse `Modal`/focus-trap): a scrollable, searchable list of `SavedLeagueRow`s (Last-used pinned first, "Updated · date", connected-platform badge), each row = Load. Scales past ~5 leagues where the inline list doesn't.
+- **Gating:** show the tile only when `savedLeagues.length > 0`; for signed-out users show it as a sign-in invite ("Sign in to pick up a saved league") rather than hiding the concept.
+- Step 2 keeps only the **"loaded — eyeball your roster for churn"** confirm bar (`saved-league-loaded` `:183-192`) — the *selection* moves to the entry modal, the *review* stays inline (matches the existing "no silent jump" intent `:1229-1231`).
+**Acceptance:** From the first builder screen a returning user can open a modal, pick a saved league, and land on the loaded-confirm — without the picker competing with the form; the modal is focus-trapped, Escape-closable, and scrolls for N leagues; the option is absent (or a sign-in nudge) when there are none.
+**Deps:** pairs with B2 (the modal's "Load" can hand off straight into the Quick/Full fork).
+
+## B2 · "Quick create" vs "Full experience" fork after teams resolve
+**Type:** onboarding/conversion · **Status:** ✅ DONE (2026-08-01) — `BuildForkCard` renders at the top of the League step once a roster is loaded (`quickStartAvailable`, set by `applyImport` + `applySavedLeaguePreset`). Per direction, **Customize everything is the emphasized primary** (green, "Recommended", → dismisses the card and continues the wizard); **Quick create is secondary**, showing a live settings preview + the note *"These lock in when you generate. To change them later you'll regenerate the schedule."* Defaults are the real **PVE (Prodigies vs. Esteemed) house settings** pulled from the account (`QUICK_CREATE_DEFAULTS` + `applyQuickCreateDefaults`): 14-week season, 6-team gold single-elim playoff (fixed reseed, 3rd-place game, placement auto-resolved halves→leaders→overall, field clamped to team count), prior-season seeding, PVE fairness — applied over the entered roster (teams/divisions untouched). The roster line uses a **conference-aware `rosterGroupingNoun`** (reads "Teams and Divisions" today; upgrades to "…, Divisions and Conferences" if a conference entity is ever added — there is none now). **Verified live**: fork renders correctly; Customize dismisses to the populated form; Quick create applied the defaults and generated a valid season — confirmed the saved schedule = 14 weeks / 6-team / gold / division-halves / fixed reseed / prior-season / streak 3; 0 console errors. `tsc` + `next build` green. *(Note: a test season "Prodigies vs Esteemed FFL" was generated during live QA — safe to delete.)*
+**Problem:** Every path — manual roster, ESPN, Sleeper, CSV, saved league — funnels into the same 8 remaining steps. A commissioner who just wants "same as last year, regenerated" still clicks through Divisions, Season, Seeding, Week 1, Rules, and Playoffs. There's no way to accept smart defaults and go.
+**Where:** both entry points land on Step 1 then walk linearly (`applyImport :1401`, `applySavedLeaguePreset :1231`, `next :1234`). Defaults already exist to lean on: `createDefaultSetup` (`lib/defaults`), the auto-recommended playoff placement (`:601-607`), `getMaximumPlayoffFieldSize`, `normalizePlayoffSettings`.
+**Target — the fork:** Once teams are populated (post-import / post-saved-load / after the manual Teams step), present a **fork card**:
+- **Quick create (recommended)** — apply defaults to every remaining decision and jump to a single **confirmation summary**, then Generate.
+- **Customize everything** — the current step-by-step wizard (or the merged one from B3).
+**Target — where defaults come from (two tiers):**
+1. **Personalized — "same as last time"** (preferred when available): seed every hidden decision from the user's **last generated schedule / the loaded saved league** (its week count, division structure, seeding source, fairness preset, playoff format). This is the strongest version of the feature and the natural payoff of B1's saved-league path.
+2. **Population defaults — "most common"** (fallback for first-timers): baked constants representing the most-chosen values.
+
+| Hidden step | Population default | Personalized (last schedule / import) |
+|---|---|---|
+| Divisions | imported division names, else auto-balanced 2 (`divisionSizesFor`) | last league's division count + names |
+| Season length/year | standard reg-season on current NFL windows | last schedule's week count + `seasonYear` (import provides year) |
+| Seeding (prior order) | off, unless import carries `overallRank`/`hasPriorSeasonRanks` | last schedule's seeding source |
+| Week 1 ranking | derive from seeding/`overallRank` | last schedule's ranking source |
+| Schedule rules (fairness) | balanced preset | last schedule's fairness settings |
+| Playoffs | auto-recommended placement (division-halves→leaders→overall `:604`), common field size, gold theme, consolation off | last schedule's full playoff format |
+
+**Target — the process (Quick path):**
+1. Source resolved → teams in hand.
+2. **Fork card**: Quick (recommended) vs Customize.
+3. Quick → a compact **"Here's what we'll build" summary** — one line per defaulted decision ("12 teams · 3 divisions · 14 weeks · 6-team playoff, division-halves · gold"), each with an inline **Change** that deep-links into just that (merged) step; plus, for imports, a **roster-churn glance** so a changed roster isn't silently accepted.
+4. **Only truly-required fields block Generate** — league name (`:1187`) and team-count parity (`:1188-1193`); everything else is defaulted. Respect the existing guest-generate warning (`:1406`).
+5. Big **Generate** → straight to `runGenerate`/reveal.
+**Acceptance:** A returning commissioner can go source → Quick → Generate in ≤2 screens with last season's settings pre-applied and visible; a first-timer gets sensible population defaults; every default is shown and one-click-editable before generating; no required validation is bypassed.
+**Deps:** B1 (saved-league path feeds the personalized tier); composes with B3 (Change links target merged steps).
+**Open question:** where the personalized defaults are read from — the saved-league preset (`identityFromSetup`) carries identity but confirm it also carries season/rules/playoff settings, or read them from the last `saveSeason` record. Decide the source of "last time."
+
+## B3 · Collapse the 10-step tracker into ~6 grouped steps (the Playoffs sub-tab pattern)
+**Type:** IA/visual · **Status:** open (proposal)
+**Problem:** The tracker renders all **10** `STEPS` as an equal-weight pill rail (`:1482-1484`) with a "Step X of 10 · N% complete" bar (`:1477-1480`). Ten pills reads as a long, menacing commitment on the very first screen — even though several steps are short or optional (Seeding is explicitly optional `:489`; Week 1 Ranking `:512` and Schedule Rules `:551` are advanced tuning).
+**Precedent (reuse it):** The **Playoffs** step already solved this — rather than four top-level steps for Format / Rules / Branding / Logos, it is **one** tracker pill with an internal sub-tab bar (`playoff-wizard-subnav`, `role="tablist"`, `:844-855`; `subPage` state `:575`). Apply the same "one pill, internal sub-tabs" collapse to the sibling steps.
+**Target (proposed grouping — 10 → 6):**
+```
+Start · League · [Teams & Divisions] · [Season & Rules] · Playoffs · Review
+```
+- **Teams & Divisions** — merge Teams (`:364`) + Divisions (`:414`) into one step with sub-tabs (they're tightly coupled: you place teams into divisions).
+- **Season & Rules** — merge Season (`:440`) + Seeding (`:477`) + Week 1 Ranking (`:512`) + Schedule Rules (`:551`) into one step; sub-tabs "Season / Seeding / Week 1 / Rules", the last three flagged Optional (mirror the playoff "Optional" tag `:909`). 4→1.
+- Keep Start, League, Playoffs, Review as-is.
+- Net: **6 pills**, "Step X of 6", a fuller-feeling progress bar per click, and the advanced knobs still reachable as sub-tabs (nothing removed).
+**Also:** validation currently keys off numeric `step` indices (`:1187-1206`, `skipDraftRankForNow :1267`) — merging steps means moving those checks to fire on the merged step's Next / sub-tab, and the logo-save `nextStep` math (`:1258`) must follow the new indices.
+**Acceptance:** the tracker shows ~6 grouped pills, no capability is lost (every current field reachable via a sub-tab), per-step validation still fires before advancing, and the progress bar advances in larger, less-daunting increments.
+**Deps:** none required; strong synergy with B2 (Quick create defaults the "Season & Rules" group; its Change links open the relevant sub-tab).
+**Tension to decide:** B2 (skip via defaults) and B3 (fewer, grouped steps) both cut the wizard burden but differently — B2 is a bypass, B3 restructures the path. They **compose** (6 grouped steps *and* a quick-create fast-path); just don't ship B2 as a reason to skip B3 — the "Customize everything" branch still wants the shorter rail.
+
+---
+
 ## Redesign proposals (component-level quick reference)
 1. **Matchup row** — name loudest (`--text-lg`/`--w-black`/`--ink`); record one muted 12px line; kill the 2nd "0-0" (division → tooltip); loser = `--muted` (not 0.52 opacity); score `--num-lg`, winner bold + checkmark. (V2, V10)
 2. **Standings movement cell** — merge PRE RK + FROM PRE into `#5 ▲4`, computed in the active scope (fixes H10). (H10, #19)
@@ -447,6 +727,7 @@ Team Schedule ▾
 
 ## Non-issues (ruled out — do not "fix")
 - **`teamInitials is not defined` on `/account`** — a **stale Turbopack chunk**; clean on fresh compile; `teamInitials` is correctly imported everywhere.
+- **`WeekScoreBar` "Cannot read properties of undefined (reading 'length')" on `/season/[id]/team/[teamId]`** (seen 2026-08-01) — another **stale Turbopack chunk**: overlay was flagged `(stale)`, the same component renders fine on the directory route with identical props, and touching `WeekScoreBar.tsx` to force a recompile cleared it. Not a real null-deref.
 - **Win probability on decided games** — correctly hidden (`MatchupPresentation.tsx:159` gates on `!played`).
 - **Team-name contrast** — genuinely guaranteed via `accessibleTeamColor`.
 - **Dark mode** — intentionally light-only; not a bug.

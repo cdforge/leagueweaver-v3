@@ -5,6 +5,8 @@ export interface WeekSelectorItem {
   weekNumber: number;
   dateLabel: string;
   matchupRank?: number;
+  /** 0.1–10.0 slate score (same scale as matchups); shown beside the rank. */
+  slateScore?: number;
   isThanksgiving?: boolean;
 }
 
@@ -45,7 +47,7 @@ export function WeekSelector({
         {item.isThanksgiving && <span className="week-thanksgiving-mark" title="Thanksgiving week" aria-hidden="true">🦃</span>}
         <span>W{item.weekNumber}</span>
         <small>{item.dateLabel.split(",")[0]}</small>
-        {showRank && <WeekMatchupRank rank={item.matchupRank} total={totalWeeks} compact />}
+        {showRank && <WeekMatchupRank rank={item.matchupRank} total={totalWeeks} score={item.slateScore} compact />}
       </button>
     ))}
     {trailing}

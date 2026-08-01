@@ -1,4 +1,5 @@
 import { conferenceDivisionGroups } from "./conferences";
+import { isGamePlayed } from "./game";
 import { projectPlayoffSeeds, resolvePlayoffPlacementMode } from "./playoffs";
 import { calculateDivisionStandings, calculateStandings } from "./standings";
 import type { GeneratedSchedule, StandingsRow } from "./types";
@@ -32,7 +33,7 @@ export function standingsPoints(row: Pick<StandingsRow, "wins" | "ties">) {
 
 export function getLatestScoredWeek(schedule: GeneratedSchedule) {
   return schedule.weeks.reduce((latest, week) => (
-    week.games.some((game) => game.homeScore != null && game.awayScore != null)
+    week.games.some(isGamePlayed)
       ? Math.max(latest, week.weekNumber)
       : latest
   ), 0);
@@ -42,7 +43,7 @@ export function isRegularSeasonComplete(schedule: GeneratedSchedule, throughWeek
   return schedule.weeks.every((week) => (
     week.weekNumber > throughWeek
       ? week.games.length === 0
-      : week.games.every((game) => game.homeScore != null && game.awayScore != null)
+      : week.games.every(isGamePlayed)
   ));
 }
 
@@ -56,7 +57,7 @@ export function buildTeamRanges(schedule: GeneratedSchedule, throughWeek: number
     for (const game of week.games) {
       totalGames.set(game.homeTeamId, (totalGames.get(game.homeTeamId) ?? 0) + 1);
       totalGames.set(game.awayTeamId, (totalGames.get(game.awayTeamId) ?? 0) + 1);
-      if (week.weekNumber <= throughWeek && game.homeScore != null && game.awayScore != null) {
+      if (week.weekNumber <= throughWeek && isGamePlayed(game)) {
         playedGames.set(game.homeTeamId, (playedGames.get(game.homeTeamId) ?? 0) + 1);
         playedGames.set(game.awayTeamId, (playedGames.get(game.awayTeamId) ?? 0) + 1);
       }

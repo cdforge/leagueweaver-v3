@@ -371,7 +371,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .saved-league-row:hover { border-color: var(--field); }
 .saved-league-row:focus-visible { outline: 2px solid var(--field); outline-offset: 2px; }
 .saved-league-row-who { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.saved-league-row-who strong { overflow: hidden; display: flex; align-items: center; gap: 7px; font-size: var(--text-md); text-overflow: ellipsis; white-space: nowrap; }
+.saved-league-row-who strong { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: var(--text-md); }
+.saved-league-row-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .saved-league-row-who small { color: var(--muted); font-size: var(--text-2xs); line-height: 1.3; }
 .saved-league-recency { flex: 0 0 auto; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: 0.03em; text-transform: uppercase; color: var(--field); background: var(--field-soft); border-radius: var(--radius-pill); padding: 2px 7px; }
 .saved-league-when { color: var(--muted); font-size: var(--text-2xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -1291,6 +1292,54 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .start-divider { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; margin: 6px 0; color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: 0.06em; }
 .start-divider::before, .start-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 
+/* Entry: Manual + Continue-saved-league as peer primary options (B1). */
+.start-primary-row { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.start-primary-row.has-saved { grid-template-columns: 1fr 1fr; }
+.start-primary-row .start-option--main { grid-column: auto; }
+.start-option--saved { border-color: var(--field); background: var(--field-soft); padding: 26px; }
+.start-option--saved .start-option-icon { width: 54px; height: 54px; }
+.start-option--saved .start-option-copy strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-2xl); line-height: 1; }
+
+/* Saved-league picker modal (B1). */
+/* Saved-league picker modal (B1) — reuses the import (Connect ESPN) modal chrome
+   (.import-modal head/body/footer grid); these are the only deltas. */
+.import-modal.saved-league-modal { width: min(560px, 100%); }
+.import-provider-mark.saved { background: var(--field); }
+.saved-league-pager .button-secondary { display: inline-flex; align-items: center; gap: 6px; }
+.saved-league-pager .button-secondary svg { width: 16px; }
+.saved-league-pager .button-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
+.saved-league-pager-count { color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-bold); font-variant-numeric: tabular-nums; }
+
+/* Quick-create ⁄ Customize fork card on the League step (B2). Customize is the
+   emphasized primary; Quick create is the secondary shortcut with a settings
+   preview + a "you'll regenerate to change these" note. */
+.build-fork { border: 1px solid var(--line-strong); border-radius: var(--radius); background: white; box-shadow: var(--shadow-sm); overflow: hidden; }
+.build-fork-head { border-bottom: 1px solid var(--line); padding: 14px 16px; display: flex; flex-direction: column; gap: 3px; }
+.build-fork-head strong { font-size: var(--text-lg); }
+.build-fork-head small { color: var(--muted); font-size: var(--text-xs); }
+.build-fork-options { display: grid; grid-template-columns: 1.15fr 1fr; }
+.build-fork-primary { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; border: 0; border-right: 1px solid var(--line); background: var(--field-soft); padding: 18px 16px; cursor: pointer; transition: background var(--transition); }
+.build-fork-primary:hover { background: color-mix(in srgb, var(--field) 12%, white); }
+.build-fork-primary strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); line-height: 1.05; color: var(--ink); }
+.build-fork-primary small { color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
+.build-fork-primary:focus-visible { outline: 3px solid color-mix(in srgb, var(--field), white 58%); outline-offset: -3px; }
+.build-fork-tag { align-self: flex-start; font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: 0.05em; color: var(--field-dark); background: white; border: 1px solid var(--field); border-radius: var(--radius-pill); padding: 2px 8px; }
+.build-fork-go { margin-top: 4px; display: inline-flex; align-items: center; gap: 6px; color: var(--field-dark); font-weight: var(--w-bold); font-size: var(--text-sm); }
+.build-fork-go svg { width: 16px; }
+.build-fork-secondary { display: flex; flex-direction: column; gap: 8px; padding: 18px 16px; background: var(--canvas); }
+.build-fork-secondary-head { display: inline-flex; align-items: center; gap: 6px; }
+.build-fork-secondary-head svg { width: 16px; color: var(--field); }
+.build-fork-secondary-head strong { font-size: var(--text-md); }
+.build-fork-secondary > small { color: var(--muted); font-size: var(--text-xs); }
+.build-fork-summary { list-style: none; margin: 2px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.build-fork-summary li { position: relative; padding-left: 16px; font-size: var(--text-xs); color: var(--ink); line-height: 1.35; }
+.build-fork-summary li::before { content: ""; position: absolute; left: 2px; top: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--field); }
+.build-fork-summary b { font-weight: var(--w-bold); }
+.build-fork-note { display: flex; align-items: flex-start; gap: 6px; font-size: var(--text-2xs); color: var(--muted); line-height: 1.35; }
+.build-fork-note svg { flex: 0 0 auto; width: 13px; margin-top: 1px; color: #b06a00; }
+.build-fork-quick { align-self: flex-start; margin-top: 2px; display: inline-flex; align-items: center; gap: 7px; }
+.build-fork-quick svg { width: 15px; }
+
 @media (max-width: 720px) {
   /* Mobile keeps the hero art, dropped to a faded band below the copy. */
   .welcome-hero { min-height: auto; background-image: linear-gradient(to bottom, var(--field-soft) 0%, var(--field-soft) 56%, rgba(234, 245, 239, 0.6) 74%, rgba(234, 245, 239, 0) 100%), url("/branding/hero-welcome-marquee.jpg"); background-size: cover, 150% auto; background-position: center, center bottom; }
@@ -1302,6 +1351,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .start-import-row { grid-template-columns: 1fr; }
   .start-import-row .start-option { flex-direction: row; align-items: center; }
   .start-option--main { padding: 22px; }
+  .start-primary-row.has-saved { grid-template-columns: 1fr; }
+  .start-option--saved { padding: 22px; }
+  .build-fork-options { grid-template-columns: 1fr; }
+  .build-fork-primary { border-right: 0; border-bottom: 1px solid var(--line); }
 }
 
 @media (max-width: 560px) {
@@ -1751,7 +1804,9 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .matchup-venue > svg { width: 13px; flex: 0 0 auto; color: var(--field); }
 .matchup-venue > img { width: 22px; height: 22px; flex: 0 0 auto; object-fit: contain; background: transparent; }
 .matchup-venue > strong { overflow: hidden; font-size: var(--text-2xs); text-overflow: ellipsis; white-space: nowrap; }
-.matchup-signal { display: inline-flex; align-items: flex-start; flex-direction: column; gap: 2px; }
+/* Rating pill reads inline at every width (bars · rating · #a vs #b), matching
+   the mobile card — never stacked. */
+.matchup-signal { display: inline-flex; align-items: center; flex-direction: row; gap: 8px; }
 .matchup-signal-main { display: inline-flex; align-items: center; gap: 6px; }
 .matchup-signal-main > b, .table-signal > strong { color: var(--ink); font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-md); font-variant-numeric: tabular-nums; line-height: 1; }
 .matchup-probability { position: relative; isolation: isolate; width: 146px; min-height: 24px; overflow: hidden; border-radius: var(--radius-chip); background: var(--gold-soft); display: grid; grid-template-columns: 1fr 1fr; align-items: center; }
@@ -1782,6 +1837,13 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .week-matchup-rank em { padding-left: 6px; border-left: 1px solid color-mix(in srgb, currentColor 18%, transparent); font-size: var(--text-2xs); font-style: normal; font-weight: var(--w-black); }
 .week-matchup-rank.compact { min-height: 18px; gap: 4px; border-radius: var(--radius-chip); padding: 2px 5px; }
 .week-matchup-rank.compact strong { font-size: var(--text-2xs); }
+/* Slate score (0–10, same scale as matchups) shown beside the rank; tracks the strength color. */
+.week-matchup-rank-score { display: inline-flex; align-items: baseline; gap: 1px; padding-left: 6px; border-left: 1px solid color-mix(in srgb, currentColor 18%, transparent); font-family: var(--font-barlow-condensed), sans-serif; font-variant-numeric: tabular-nums; font-size: var(--text-lg); font-weight: var(--w-black); line-height: 1; color: color-mix(in srgb, var(--field-dark) calc(var(--sig-t) * 100%), var(--strength-fg)); }
+.week-matchup-rank-score small { font-size: var(--text-micro); font-weight: var(--w-black); color: var(--muted); }
+.week-matchup-rank.compact .week-matchup-rank-score { padding-left: 4px; font-size: var(--text-2xs); }
+.week-matchup-rank.compact .week-matchup-rank-score small { display: none; }
+.schedule-week-header .week-matchup-rank-score { color: white; border-left-color: rgba(255,255,255,.24); }
+.schedule-week-header .week-matchup-rank-score small { color: rgba(255,255,255,.78); }
 .strongest-week-value { display: flex; align-items: center; gap: 7px; }
 .matchup-ratings-summary .strongest-week-value > strong { font-size: var(--text-xl); }
 .matchup-rating-legend { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1px solid var(--line); background: white; padding: 6px 10px; }
@@ -1805,6 +1867,11 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .matchup-rating-legend .legend-lopsided { background: var(--strength-bg); }
 .matchup-rating-legend .legend-lopsided .active { background: var(--strength-fg); }
 .rating-filter-empty { min-height: 116px; display: flex; align-items: center; justify-content: center; gap: 12px; border-bottom: 1px solid var(--line); background: white; color: var(--muted); padding: 18px; }
+/* #18.4 — data-integrity warning when a week's games reference a removed team. */
+.week-data-warning { display: flex; align-items: center; gap: 10px; border: 1px solid color-mix(in srgb, var(--danger) 34%, var(--line)); border-radius: var(--radius); background: color-mix(in srgb, var(--danger) 6%, white); padding: 10px 13px; margin-bottom: 10px; }
+.week-data-warning svg { width: 20px; height: 20px; flex: 0 0 auto; color: var(--danger); }
+.week-data-warning strong { display: block; font-size: var(--text-sm); color: var(--ink); }
+.week-data-warning small { color: var(--muted); font-size: var(--text-2xs); }
 .rating-filter-empty strong { font-size: var(--text-xs); }
 .rating-filter-empty button { min-height: 44px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: white; color: var(--field-dark); padding: 8px 12px; font-weight: var(--w-black); cursor: pointer; }
 .matchup-card-main { order: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 86px minmax(0, 1fr); align-items: center; gap: 18px; }
@@ -1845,6 +1912,10 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .matchup-card-main .team-identity-block.mirrored .team-identity-rank { grid-column: 3; grid-row: 1 / span 2; }
 .matchup-card-main .team-identity-block.mirrored .team-identity-mark { grid-column: 2; grid-row: 1 / span 2; }
 .matchup-card-main .team-identity-block.mirrored .team-identity-name { grid-column: 1; grid-row: 1; text-align: right; }
+/* Placeholder rows carry no record, so span the name across both rows and center
+   it against the "?" avatar instead of sitting in the top half. */
+.matchup-card-main .playoff-tbd-block .team-identity-name,
+.matchup-card-main .team-identity-block.mirrored.playoff-tbd-block .team-identity-name { grid-row: 1 / span 2; align-self: center; }
 .matchup-card-main .team-identity-block.mirrored .team-identity-record { grid-column: 1; grid-row: 2; justify-content: flex-end; }
 .matchup-card.is-simulated { box-shadow: inset 3px 0 #1b7180; }
 .matchup-card.is-simulated.is-gotw { box-shadow: inset 4px 0 var(--gold), inset 7px 0 #1b7180; }
@@ -1888,10 +1959,14 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .matchup-score strong.loser { color: #9aa39e; }
 .matchup-score > span { color: var(--muted); font-size: var(--text-lg); }
 .matchup-score small { grid-column: 1 / -1; color: var(--muted); font-family: var(--font-archivo), sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); }
-/* Projected (not-yet-played) matchup: one neutral "Projected" pill in place of the
-   score. Field-green tint, never gold — gold stays GOTW-only. */
-.matchup-score.is-projected { display: flex; align-items: center; justify-content: center; }
-.matchup-score.is-projected em { font-style: normal; font-family: var(--font-archivo), sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: .08em; color: var(--field-dark); background: var(--field-soft); border-radius: var(--radius-chip); padding: 5px 12px; white-space: nowrap; }
+/* Week + date caption, centered above the score (mirrors the FINAL/SCHEDULED label below). */
+.matchup-score-date { margin-bottom: 2px; color: var(--muted); font-weight: var(--w-semibold, 600); text-transform: none; letter-spacing: .01em; white-space: nowrap; }
+/* Projected (not-yet-played) matchup: a neutral "— @ —" placeholder, same grid as
+   a scheduled score. The "Projected" word lives in the card header (top-right),
+   not here. Field-green tint on the flag, never gold — gold stays GOTW-only. */
+.matchup-score.is-projected strong { color: var(--muted); }
+.matchup-projected-flag { order: -1; }
+.matchup-projected-flag em { font-style: normal; font-family: var(--font-archivo), sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: .08em; color: var(--field-dark); background: var(--field-soft); border-radius: var(--radius-chip); padding: 4px 10px; white-space: nowrap; }
 /* Projected playoff matchup whose teams aren't known yet (later rounds / pending
    consolation results) — a lightweight card that mirrors the projected look. */
 .playoff-tbd-card { justify-content: center; }
@@ -1920,25 +1995,13 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .team-schedule-filter > .custom-select, .gotw-filter > .custom-select { width: min(300px, 55%); }
 .team-schedule-table-wrap { overflow: auto; border: 1px solid var(--line); background: white; }
 /* Mobile card view (shown ≤560px in place of the wide table — see the 560px block). */
-.team-schedule-cards { display: none; list-style: none; gap: 8px; margin: 0; padding: 0; }
-.team-week-card { display: grid; gap: 9px; border: 1px solid var(--line); border-radius: var(--radius); background: white; padding: 11px 12px; }
-.team-week-card.is-gotw { background: #fffaf0; box-shadow: inset 4px 0 var(--gold); }
-.team-week-card .twc-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.team-week-card .twc-top .team-week-link { width: auto; min-height: 0; padding: 0; }
-.team-week-card .twc-tags { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
-.team-week-card .twc-body { display: flex; align-items: center; gap: 10px; }
-.team-week-card .twc-body > .team-identity-block { flex: 1; min-width: 0; }
-.team-week-card .twc-result { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
-.team-week-card .twc-score { font-family: var(--font-barlow-condensed), sans-serif; white-space: nowrap; }
-.team-week-card .twc-score > strong.score-winner { color: var(--ink); font-size: var(--text-xl); font-weight: var(--w-black); }
-.team-week-card .twc-score > strong.score-loser { color: #7d8882; font-size: var(--text-md); font-weight: var(--w-bold); }
-.team-week-card .twc-score > strong.score-tied { color: var(--ink); font-size: var(--text-md); font-weight: var(--w-bold); }
-.team-week-card .twc-score > i { margin-inline: 3px; color: var(--muted); font-style: normal; }
-.team-week-card .twc-scheduled small { color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; }
-.team-week-card .twc-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; color: var(--muted); font-size: var(--text-2xs); }
-.team-week-card .twc-meta > span { display: inline-flex; align-items: center; min-width: 0; }
-.team-week-card .twc-meta svg { width: 12px; height: 12px; margin-right: 4px; flex: 0 0 auto; }
-.team-week-card .twc-bye-label { color: var(--muted); font-size: var(--text-sm); }
+/* Card view is a plain transparent grid of shared <MatchupCard>s — no container
+   frame/background (each card carries its own border). Hidden on desktop (table
+   shows there), shown as a grid ≤560px (below). */
+.team-schedule-cards { display: none; gap: 10px; }
+.team-week-bye-card .team-week-bye-main { display: flex; align-items: baseline; gap: 10px; padding: 12px 14px; }
+.team-week-bye-card .team-week-bye-main strong { font-size: var(--text-md); font-weight: var(--w-black); }
+.team-week-bye-card .team-week-bye-main small { color: var(--muted); font-size: var(--text-xs); }
 .team-schedule-table { min-width: 1280px; width: 100%; border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
 .team-schedule-table th { position: sticky; z-index: 3; top: 0; height: 40px; border-bottom: 1px solid color-mix(in srgb, var(--team-brand, var(--ink)), black 18%); background: var(--team-brand, var(--ink)); color: var(--team-brand-on, white); padding: 0 9px; text-align: left; font-weight: var(--w-black); letter-spacing: 0.04em; text-transform: uppercase; }
 .team-schedule-table th > svg { width: 14px; height: 14px; vertical-align: middle; }
@@ -2026,6 +2089,15 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .gotw-summary strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-2xl); font-variant-numeric: tabular-nums; }
 .gotw-summary small { color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; }
 .gotw-timeline { display: grid; gap: 18px; }
+/* H4 — empty timeline + unresolved-team fallback (never blank/crash the view). */
+.gotw-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 200px; border: 1px solid var(--line); border-radius: var(--radius); background: white; padding: 32px 24px; text-align: center; }
+.gotw-empty svg { width: 30px; height: 30px; color: var(--gold-mid, #876700); margin-bottom: 4px; }
+.gotw-empty strong { font-size: var(--text-md); color: var(--ink); }
+.gotw-empty small { color: var(--muted); font-size: var(--text-2xs); }
+.gotw-unavailable { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--line); padding: 16px; color: var(--muted); }
+.gotw-unavailable svg { width: 20px; height: 20px; flex: 0 0 auto; color: var(--danger); }
+.gotw-unavailable strong { display: block; font-size: var(--text-sm); color: var(--ink); }
+.gotw-unavailable small { font-size: var(--text-2xs); }
 .gotw-timeline-item { min-width: 0; }
 .gotw-timeline-item > header { min-height: 58px; display: grid; grid-template-columns: minmax(135px, 1fr) auto 84px; align-items: center; gap: 10px; border: 1px solid var(--line); border-bottom: 0; border-left: 4px solid var(--gold); border-radius: var(--radius) var(--radius) 0 0; background: var(--canvas); padding: 8px 12px; }
 .gotw-week-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
@@ -2036,7 +2108,7 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .gotw-rating small { color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-black); white-space: nowrap; }
 .gotw-rating strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); }
 .playoff-impact-marker { background: #e9eef8; color: #304d78; box-shadow: inset 0 0 0 1px #bdc9dc; }
-.gotw-timeline-item > .matchup-card { border: 1px solid var(--line); border-left: 4px solid var(--gold); border-radius: 0 0 var(--radius) var(--radius); padding: 18px; }
+.gotw-timeline-item > .matchup-card { border: 1px solid var(--line); border-left: 4px solid var(--gold); border-radius: var(--radius); padding: 18px; }
 .gotw-view .matchup-card-main { min-height: 104px; grid-template-columns: minmax(0, 1fr) 210px minmax(0, 1fr); gap: 24px; }
 .gotw-view .team-identity-block { grid-template-columns: 24px 50px minmax(0, 1fr); grid-template-rows: auto auto; }
 .gotw-view .team-identity-block .team-identity-rank { grid-column: 1; grid-row: 1 / span 2; }
@@ -2048,7 +2120,7 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .gotw-view .team-identity-block.mirrored .team-identity-record { grid-column: 1; grid-row: 2; align-items: center; justify-content: flex-end; }
 .gotw-view .team-identity-block.mirrored .team-identity-mark { grid-column: 2; grid-row: 1 / span 2; }
 .gotw-view .team-identity-block.mirrored .team-identity-rank { grid-column: 3; grid-row: 1 / span 2; }
-.gotw-view .matchup-score { width: 210px; border-radius: var(--radius-sm); background: rgba(255, 255, 255, .62); padding: 10px 9px 8px; }
+.gotw-view .matchup-score { width: 210px; background: transparent; padding: 4px 0; }
 .gotw-view .team-identity-name strong { font-size: var(--text-lg); }
 .gotw-view .matchup-score strong { font-size: var(--text-3xl); }
 .gotw-holiday { width: fit-content; }
@@ -2064,6 +2136,12 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .matchup-ratings-controls > span small { color: var(--muted); font-size: var(--text-2xs); }
 .matchup-ratings-controls > div { width: min(720px, 72%); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .matchup-ratings-table-wrap { overflow-x: auto; border: 1px solid var(--line); background: white; }
+/* Tablet/phone: swap the ratings table for the shared match cards. */
+.matchup-ratings-cards { display: none; }
+@media (max-width: 900px) {
+  .matchup-ratings-table-wrap { display: none; }
+  .matchup-ratings-cards { display: grid; gap: 10px; }
+}
 .matchup-ratings-table { width: 100%; min-width: 1110px; border-collapse: collapse; }
 .matchup-ratings-table th { height: 42px; border-bottom: 1px solid var(--line-strong); background: var(--canvas); color: var(--muted); padding: 7px 10px; font-size: var(--text-2xs); font-weight: var(--w-black); text-align: left; text-transform: uppercase; letter-spacing: 0.04em; }
 .matchup-ratings-table td { height: 64px; border-bottom: 1px solid var(--line); padding: 7px 10px; font-size: var(--text-xs); font-variant-numeric: tabular-nums; transition: background var(--transition); }
@@ -2287,6 +2365,10 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .stats-filter-bar > .custom-select { width: min(300px, 48%); }
 .stats-filter-controls { width: min(620px, 62%); display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .stats-filter-controls > .custom-select { width: min(290px, 50%); }
+/* Filter bar reduced to just the two selects (no redundant heading) — let them fill the row. */
+.stats-filter-bar.controls-only { min-height: 0; padding: 10px; }
+.stats-filter-bar.controls-only .stats-filter-controls { width: 100%; justify-content: stretch; }
+.stats-filter-bar.controls-only .stats-filter-controls > .custom-select { flex: 1; width: auto; }
 .season-race-panel { min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: white; }
 .season-race-panel > header { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); background: var(--canvas); padding: 10px 13px; }
 .season-race-panel > header > span { min-width: 0; display: flex; align-items: center; gap: 9px; }
@@ -2394,6 +2476,14 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .season-odds-meter em { color: var(--ink); font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-lg); font-style: normal; font-weight: var(--w-bold); font-variant-numeric: tabular-nums; }
 .season-odds-meter i { position: relative; width: 64px; height: 4px; overflow: hidden; border-radius: var(--radius-chip); background: #dce4e0; }
 .season-odds-meter i b { position: absolute; inset: 0 auto 0 0; border-radius: inherit; }
+.stats-abbr-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0 0; border-left: 3px solid var(--line-strong, var(--line)); background: var(--surface-2, var(--canvas)); padding: 9px 13px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.stats-abbr-legend > div { display: flex; align-items: baseline; gap: 5px; }
+.stats-abbr-legend dt { font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: 0.04em; }
+.stats-abbr-legend dd { margin: 0; color: var(--muted); font-size: var(--text-2xs); }
+.stats-empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 220px; border: 1px dashed var(--line); border-radius: var(--radius); background: var(--surface-2, var(--canvas)); padding: 32px 20px; text-align: center; }
+.stats-empty-state > svg { width: 34px; height: 34px; color: var(--muted); }
+.stats-empty-state strong { font-size: var(--text-md); }
+.stats-empty-state span { max-width: 42ch; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
 .stats-rule-strip { min-height: 64px; display: flex; align-items: center; gap: 10px; border-left: 3px solid var(--gold); background: var(--gold-soft); padding: 10px 13px; }
 .stats-rule-strip > svg { width: 28px; height: 28px; flex: 0 0 auto; border-radius: var(--radius-sm); background: white; color: #806000; padding: 6px; }
 .stats-rule-strip > span:not(.badge-legend) { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
@@ -2469,24 +2559,38 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .game-highlight-open { min-height: 28px; display: inline-flex; align-items: center; border-radius: var(--radius-chip); color: var(--field-dark); padding: 0 6px; font-size: var(--text-2xs); font-weight: var(--w-black); }
 .playoff-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .team-stats-table-wrap { max-width: 100%; overflow: auto; border: 1px solid var(--line); background: white; }
-.team-stats-table { min-width: 1360px; width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--text-2xs); font-variant-numeric: tabular-nums; }
+.team-stats-table { min-width: 1000px; width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--text-2xs); font-variant-numeric: tabular-nums; }
 .team-stats-table th { position: sticky; z-index: 3; top: 0; height: 40px; border-bottom: 1px solid var(--line-strong); background: var(--ink); color: white; text-align: right; }
-.team-stats-table th:first-child { left: 0; z-index: 5; width: 224px; min-width: 224px; max-width: 224px; text-align: left; }
-.team-stats-table th button { width: 100%; min-height: 40px; border: 0; background: transparent; color: inherit; display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; padding: 0 9px; font-size: var(--text-2xs); font-weight: var(--w-black); cursor: pointer; }
-.team-stats-table th:first-child button { justify-content: flex-start; }
+.team-stats-table th.team-stats-logo-head { left: 0; z-index: 5; width: 44px; min-width: 44px; max-width: 44px; }
+.team-stats-table th:nth-child(2) { left: 44px; z-index: 5; width: 132px; min-width: 132px; max-width: 132px; text-align: left; }
+.team-stats-table th button { width: 100%; min-height: 40px; border: 0; background: transparent; color: inherit; display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; padding: 0 7px; font-size: var(--text-2xs); font-weight: var(--w-black); cursor: pointer; white-space: nowrap; }
+.team-stats-table th:nth-child(2) button { justify-content: flex-start; }
 .team-stats-table th button svg { width: 11px; opacity: 0.45; transition: opacity var(--transition), color var(--transition); }
 .team-stats-table th button:hover svg { opacity: 0.8; }
 .team-stats-table th button.is-sorted { color: var(--gold); }
 .team-stats-table th button.is-sorted svg { opacity: 1; color: var(--gold); }
 .team-stats-table td { height: 58px; border-bottom: 1px solid var(--line); padding: 7px 9px; text-align: right; }
 .team-stats-table tbody tr:last-child td { border-bottom: 0; }
-.team-stats-table td:first-child { position: sticky; z-index: 2; left: 0; width: 224px; min-width: 224px; max-width: 224px; background: white; box-shadow: 1px 0 var(--line); text-align: left; }
-.team-stats-table td:first-child > a { min-width: 0; display: flex; align-items: center; gap: 8px; color: inherit; text-decoration: none; }
-.team-stats-table td:first-child > a > span:not(.division-identity) { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
-.team-stats-table td:first-child strong, .team-stats-table td:first-child small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.team-stats-table td:first-child strong { font-size: var(--text-2xs); }
-.team-stats-table td:first-child small { color: var(--muted); font-size: var(--text-2xs); }
-.team-stats-table td:first-child .division-identity-icon { margin-left: auto; }
+/* Logo column — frozen at every width (icon only). */
+.team-stats-table td.team-stats-logo-cell { position: sticky; z-index: 2; left: 0; width: 44px; min-width: 44px; max-width: 44px; background: white; text-align: left; padding: 7px 0 7px 12px; }
+.team-stats-table td.team-stats-logo-cell > a { display: inline-flex; }
+.team-stats-table td.team-stats-logo-cell .entity-logo { flex: 0 0 auto; width: 28px !important; height: 28px !important; min-width: 28px; min-height: 28px; }
+/* Team-name column — frozen on desktop/tablet, scrolls on phones. */
+.team-stats-table td.team-stats-name-cell { position: sticky; z-index: 2; left: 44px; width: 132px; min-width: 132px; max-width: 132px; background: white; box-shadow: 1px 0 var(--line); text-align: left; }
+.team-stats-table td.team-stats-name-cell > a { min-width: 0; display: flex; color: inherit; text-decoration: none; }
+.team-stats-table td.team-stats-name-cell > a > span { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.team-stats-table td.team-stats-name-cell strong, .team-stats-table td.team-stats-name-cell small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-stats-table td.team-stats-name-cell strong { font-size: var(--text-2xs); }
+.team-stats-table td.team-stats-name-cell small { color: var(--muted); font-size: var(--text-2xs); }
+/* Division is its own column (identity: mark + name), left-aligned, never frozen. */
+.team-stats-table th.team-stats-division-head { z-index: 3; width: 116px; min-width: 116px; max-width: 116px; text-align: left; padding: 0 9px; font-size: var(--text-2xs); font-weight: var(--w-black); }
+.team-stats-table td.team-stats-division-cell { width: 116px; min-width: 116px; max-width: 116px; text-align: left; }
+.team-stats-table td.team-stats-division-cell .division-identity { min-width: 0; max-width: 100%; }
+/* Phones: only the logo stays frozen; the team name scrolls with the stats. */
+@media (max-width: 560px) {
+  .team-stats-table th:nth-child(2), .team-stats-table td.team-stats-name-cell { position: static; box-shadow: none; }
+  .team-stats-table td.team-stats-logo-cell { box-shadow: 1px 0 var(--line); }
+}
 .schedule-medal { flex: 0 0 auto; }
 
 .playoff-field-actions { display: flex; align-items: center; gap: 8px; }
@@ -2611,9 +2715,27 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .workspace-page .team-schedule-hero .team-identity-name strong,
 .workspace-page .team-schedule-hero .team-identity-record,
 .workspace-page .team-schedule-hero .team-identity-division-record { color: var(--team-brand-on, white); }
-.workspace-page .team-schedule-hero .team-identity-name strong { font-size: var(--text-lg); }
-.workspace-page .team-schedule-hero .team-identity-name small { font-size: var(--text-xs); }
-.workspace-page .team-schedule-hero .team-identity-record > strong { font-size: var(--text-2xl); }
+/* The record's division mark keeps its own division-color ink (calibrated for white),
+   which washes out on the team-color hero. Use the readable-on-brand ink so the mark's
+   text is accessible against the team color, like the rest of the record. */
+.workspace-page .team-schedule-hero .team-identity-division-record .division-mark { color: var(--team-brand-on, white) !important; }
+/* Lay the switcher's team out exactly like a match-card team row — rank | 54px crest |
+   (city/name over a parenthesised division record) — same positioning, size and font.
+   Only the colors stay white for accessibility on the team-color hero; the dropdown
+   functionality is unchanged. Mirrors the .matchup-card-main .team-identity-block spec. */
+.team-schedule-hero .team-identity-block { grid-template-columns: 24px auto minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 11px; row-gap: 2px; align-items: center; }
+.team-schedule-hero .team-identity-rank { grid-column: 1; grid-row: 1 / span 2; align-self: center; }
+.team-schedule-hero .team-identity-mark { grid-column: 2; grid-row: 1 / span 2; align-self: center; width: 54px; height: 54px; }
+.team-schedule-hero .team-identity-mark .entity-logo { width: 54px !important; height: 54px !important; min-width: 0; min-height: 0; }
+.team-schedule-hero .team-identity-name { grid-column: 3; grid-row: 1; }
+.workspace-page .team-schedule-hero .team-identity-name small { display: block; font-size: var(--text-2xs); line-height: 1.1; }
+.workspace-page .team-schedule-hero .team-identity-name strong { font-size: var(--text-md); line-height: 1.15; }
+.team-schedule-hero .team-identity-record { grid-column: 3; grid-row: 2; min-width: 0; flex-direction: row; align-items: center; justify-content: flex-start; gap: 6px; }
+.workspace-page .team-schedule-hero .team-identity-record > strong { font-family: var(--font-archivo), sans-serif; font-size: var(--text-sm); font-weight: var(--w-bold); }
+.team-schedule-hero .team-identity-division-record { align-items: center; gap: 3px; }
+.team-schedule-hero .team-identity-division-record > b { font-size: var(--text-2xs); }
+.team-schedule-hero .team-identity-division-record > b::before { content: "("; }
+.team-schedule-hero .team-identity-division-record > b::after { content: ")"; }
 .team-schedule-facts { min-width: 0; display: flex; flex-direction: column; gap: 6px; border-left: 1px solid color-mix(in srgb, var(--team-brand-on, white) 24%, transparent); padding-left: 24px; }
 .team-schedule-facts > .division-identity { width: fit-content; }
 .team-schedule-facts .division-identity strong,
@@ -2653,9 +2775,9 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .team-schedule-controls { position: absolute; top: 50%; right: 16px; bottom: auto; transform: translateY(-50%); z-index: 5; display: flex; width: auto; grid-template-columns: none; }
 /* Tidy the name stack next to the logo: a tight city eyebrow over a stronger
    name, vertically centered against the crest. */
-.team-schedule-hero .team-identity-name { gap: 2px; justify-content: center; }
-.team-schedule-hero .team-identity-name small { font-size: var(--text-xs); line-height: 1; opacity: 0.82; }
-.workspace-page .team-schedule-hero .team-identity-name strong { font-size: var(--text-xl); line-height: 1.03; }
+.team-schedule-hero .team-identity-name { gap: 2px; }
+.team-schedule-hero .team-identity-name small { font-size: var(--text-2xs); line-height: 1.1; opacity: 0.82; }
+.workspace-page .team-schedule-hero .team-identity-name strong { font-size: var(--text-md); line-height: 1.15; }
 .team-display-menu .floating-popover-trigger { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--team-brand, var(--field)) 24%, var(--line)); border-radius: var(--radius-sm); background: white; color: var(--team-brand-ink, var(--field-dark)); cursor: pointer; font-size: 0; }
 .team-display-menu .floating-popover-trigger svg { width: 18px; }
 .team-display-menu .floating-popover-trigger:hover { background: color-mix(in srgb, var(--team-brand, var(--field)) 8%, white); }
@@ -2691,35 +2813,55 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
   .team-performance-grid > div:nth-last-child(2):nth-child(odd) { border-bottom: 0; }
 }
 
-.team-schedule-directory { display: grid; gap: 12px; }
-.team-directory-toolbar { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border: 1px solid var(--line); background: white; padding: 11px 14px; }
-.team-directory-toolbar > span { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.team-directory-toolbar > span strong { font-size: var(--text-md); }
-.team-directory-toolbar > span small { color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
-.team-directory-toolbar > .custom-select { width: min(300px, 48%); }
+.team-schedule-directory { display: flex; flex-direction: column; gap: 20px; }
+/* Division section — header + its grid of team cards. Conference wrappers would
+   nest above these when a conference entity exists (none today). */
+.team-directory-division-group { display: flex; flex-direction: column; gap: 10px; }
+.team-directory-division-head { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 2px solid color-mix(in srgb, var(--line-strong), transparent 30%); }
+.team-directory-division-head > strong { font-size: var(--text-md); font-weight: var(--w-black); }
 .team-directory-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
-.team-directory-card { position: relative; min-width: 0; display: grid; grid-template-columns: minmax(230px, 1fr) minmax(150px, .72fr); gap: 12px 18px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--team-brand) 28%, var(--line)); border-left: 5px solid var(--team-brand); border-radius: var(--radius); background: white; padding: 14px 15px 12px; color: var(--ink); text-align: left; cursor: pointer; }
+.team-directory-card { position: relative; min-width: 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--team-brand) 28%, var(--line)); border-left: 5px solid var(--team-brand); border-radius: var(--radius); background: white; padding: 14px 15px 12px; color: var(--ink); text-align: left; cursor: pointer; }
 .team-directory-card::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; background: var(--team-brand); }
-.team-directory-card:hover { border-color: color-mix(in srgb, var(--team-brand) 55%, var(--line)); background: color-mix(in srgb, var(--team-brand) 4%, white); }
-.team-directory-card:focus-visible { outline: 3px solid color-mix(in srgb, var(--team-brand), white 52%); outline-offset: 2px; }
-.team-directory-card > .team-identity-block { align-self: center; }
-.team-directory-group { min-width: 0; align-self: center; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-.team-directory-group .division-identity { max-width: 100%; }
-.team-directory-group > small { color: var(--team-brand-ink); font-size: var(--text-xs); font-weight: var(--w-black); }
-.team-directory-stats { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(6, minmax(72px, 1fr)); margin: 0; border-top: 1px solid var(--line); }
-.team-directory-stats > div { min-width: 0; min-height: 58px; display: flex; flex-direction: column; justify-content: center; gap: 3px; border-right: 1px solid var(--line); padding: 8px 10px; }
+.team-directory-card:has(.team-directory-open:hover) { border-color: color-mix(in srgb, var(--team-brand) 55%, var(--line)); background: color-mix(in srgb, var(--team-brand) 4%, white); }
+/* H6 — the stretched, labeled button carries the click + focus ring; the card is a
+   plain container so its name/stats stay in the a11y tree. */
+.team-directory-open { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; border: 0; background: transparent; cursor: pointer; border-radius: inherit; }
+.team-directory-open:focus-visible { outline: 3px solid color-mix(in srgb, var(--team-brand), white 52%); outline-offset: -2px; }
+.team-directory-card > .team-identity-block { align-self: stretch; }
+/* Dedicated clinch-badge row; collapses entirely when the team has no status. */
+.team-directory-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+.team-directory-badges:empty { display: none; }
+.team-directory-badges > .clinch-badges { margin-top: 0; }
+/* TS3/TS6 — vertically center the city + name as ONE block against the avatar
+   (matching the record column), so the two lines have equal space above the city
+   and below the name. Tight line-heights keep the pair compact and balanced. */
+.team-directory-card .team-identity-name { justify-content: center; gap: 0; }
+.team-directory-card .team-identity-name small { line-height: 1.2; }
+.team-directory-card .team-identity-name strong { line-height: 1.2; }
+/* TS6 — real cause of the "text sits high" look: the shared responsive rules
+   shrink .team-identity-mark to 40px at narrow widths but the EntityLogo keeps its
+   48px size prop, so the avatar overflows its box by 8px and the grid centers the
+   text on the 40px box, not the 48px avatar. Pin mark + logo to the same size so
+   the box == the visible avatar and the name centers on it. */
+.team-directory-card .team-identity-mark { width: 48px; height: 48px; }
+.team-directory-card .team-identity-mark .entity-logo { width: 48px !important; height: 48px !important; min-width: 0 !important; min-height: 0 !important; }
+/* Give the 48px avatar its own 48px column + a real column-gap so it doesn't
+   overflow the (responsively-narrowed) mark column and touch the name. */
+.team-directory-card .team-identity-block { grid-template-columns: 24px 48px minmax(0, 1fr) auto; column-gap: 11px; }
+/* Grid centers the text BOX, which carries line-leading below the last line, so the
+   visible glyphs sit ~4px high in the 48px avatar row. Nudge both text columns down
+   to optically center the glyphs on the avatar (name + record stay matched). */
+.team-directory-card .team-identity-name,
+.team-directory-card .team-identity-record { position: relative; top: 4px; }
+.team-directory-stats { display: grid; grid-template-columns: repeat(3, 1fr); margin: 0; border-top: 1px solid var(--line); }
+.team-directory-stats > div { min-width: 0; min-height: 34px; display: flex; flex-direction: row; align-items: baseline; gap: 6px; border-right: 1px solid var(--line); padding: 7px 10px; }
 .team-directory-stats > div:first-child { padding-left: 0; }
 .team-directory-stats > div:last-child { border-right: 0; padding-right: 0; }
 .team-directory-stats dt { color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; white-space: nowrap; }
-.team-directory-stats dd { overflow: hidden; margin: 0; color: var(--team-brand-ink); font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-lg); font-weight: var(--w-black); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.team-directory-stats dd { overflow: hidden; margin: 0; color: var(--ink); font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-md); font-weight: var(--w-bold); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (min-width: 1280px) {
   .team-directory-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .team-directory-card { grid-template-columns: minmax(200px, 1fr) minmax(130px, .7fr); }
-  .team-directory-stats { grid-template-columns: repeat(3, 1fr); }
-  .team-directory-stats > div:nth-child(3) { border-right: 0; }
-  .team-directory-stats > div:nth-child(-n+3) { border-bottom: 1px solid var(--line); }
-  .team-directory-stats > div:nth-child(4) { padding-left: 0; }
 }
 
 .simulator-control { flex-wrap: wrap; }
@@ -2899,9 +3041,12 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .platform-sync-card { min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 15px; border-bottom: 1px solid var(--line); }
 .platform-sync-card > div, .platform-cookie-fields > div, .platform-sync-note { display: flex; align-items: center; gap: 11px; }
 .platform-sync-card svg, .platform-cookie-fields > div > svg { width: 34px; height: 34px; padding: 7px; border-radius: var(--radius-sm); color: white; background: var(--field); }
+.platform-sync-card .platform-sync-provider-mark { flex: 0 0 auto; width: 34px; height: 34px; padding: 5px; border-radius: var(--radius-sm); background: white; box-shadow: inset 0 0 0 1px var(--line); object-fit: contain; }
 .platform-sync-card span, .platform-cookie-fields span { display: flex; flex-direction: column; gap: 3px; }
 .platform-sync-card strong, .platform-cookie-fields strong { font-size: var(--text-2xs); }
 .platform-sync-card small, .platform-cookie-fields small, .platform-sync-note { color: var(--muted); font-size: var(--text-2xs); line-height: 1.4; }
+.platform-sync-card.is-locked { border-bottom: 0; }
+.platform-sync-card.is-locked svg { color: var(--muted); background: var(--surface-2, var(--canvas)); box-shadow: inset 0 0 0 1px var(--line); }
 .platform-sync-details { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
 .platform-sync-details span { min-height: 58px; padding: 11px 14px; display: flex; flex-direction: column; justify-content: center; gap: 4px; border-right: 1px solid var(--line); }
 .platform-sync-details span:last-child { border-right: 0; }
@@ -3509,6 +3654,8 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .public-subscribe label { display: grid; gap: 6px; font-size: var(--text-2xs); font-weight: var(--w-black); }
 .public-subscribe input { min-height: 44px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 0 10px; }
 .public-subscribe button { width: 100%; }
+.public-subscribe-consent { margin: 0; color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-medium); line-height: 1.4; }
+.public-subscribe-consent a { color: var(--field-dark); text-decoration: underline; text-underline-offset: 2px; }
 .public-subscribe-message { color: var(--field); display: flex; align-items: center; gap: 5px; font-size: var(--text-2xs); }
 .public-subscribe-message svg { width: 14px; }
 .public-footer { border-top: 1px solid var(--line); padding: 22px; color: var(--muted); font-size: var(--text-2xs); text-align: center; }
@@ -3892,9 +4039,8 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .workspace-rail nav button.active span { display: block; max-width: 74px; overflow: hidden; font-size: var(--text-2xs); line-height: 1; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
   /* Bottom bar: collapse the schedule switcher to an icon-only trigger so it
      sits at the end of the bar instead of stacking on top of the tabs. */
-  .workspace-rail .rail-bottom { flex: 0 0 auto; margin: 0; border-top: 0; padding: 0; }
-  .workspace-rail .rail-bottom .workspace-switcher-copy { display: none; }
-  .workspace-rail .rail-bottom .workspace-switcher-face { min-width: 48px; min-height: 48px; justify-content: center; padding: 0; gap: 0; }
+  /* Drop the schedule-switcher on the mobile tab bar so the page tabs get the room. */
+  .workspace-rail .rail-bottom { display: none; }
   .workspace-main { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
   .workspace-toolbar { align-items: flex-start; flex-direction: column; padding: 13px 14px; }
   .draft-rank-reminder { grid-template-columns: 30px minmax(0, 1fr); padding: 11px 14px; }
@@ -4103,16 +4249,7 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
      sit together on one screen instead of behind a 3.9× horizontal scroll. */
   .team-schedule-table-wrap { display: none; }
   .team-schedule-cards { display: grid; }
-  .team-directory-toolbar { align-items: stretch; flex-direction: column; }
-  .team-directory-toolbar > .custom-select { width: 100%; }
-  .team-directory-card { grid-template-columns: 1fr; gap: 10px; padding: 14px 12px 10px; }
-  .team-directory-group { padding-left: 2px; }
-  .team-directory-stats { grid-template-columns: repeat(2, 1fr); }
-  .team-directory-stats > div { min-height: 54px; border-bottom: 1px solid var(--line); padding-inline: 8px; }
-  .team-directory-stats > div:nth-child(even) { border-right: 0; }
-  .team-directory-stats > div:nth-child(odd) { padding-left: 0; }
-  .team-directory-stats > div:nth-last-child(-n+2) { border-bottom: 0; }
-  .team-directory-stats dd { font-size: var(--text-lg); }
+  .team-directory-card { gap: 8px; padding: 12px 12px 10px; }
   .ad-wrap-workspace { display: none; }
   .saved-league-row { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; }
   .saved-league-when { display: none; }
@@ -4231,8 +4368,15 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .matchup-card .game-details-mobile { order: 3; }
   .matchup-card-main > .matchup-score { display: none; }
   /* Projected cards have no per-team inline score, so keep the centered
-     "Projected" pill visible on phones too. */
-  .matchup-card-main > .matchup-score.is-projected { display: flex; }
+     "— @ —" placeholder visible on phones too (the "Projected" flag is in the header). */
+  .matchup-card-main > .matchup-score.is-projected { display: grid; }
+  /* A week+date caption should survive even though the numeric center score
+     collapses into the per-team inline scores — show just the caption, centered. */
+  .matchup-card-main > .matchup-score:has(.matchup-score-date) { display: flex; flex-direction: column; align-items: stretch; order: -1; min-height: 0; padding: 0 0 2px; background: transparent; border: 0; border-radius: 0; }
+  .matchup-card-main > .matchup-score:has(.matchup-score-date) > strong,
+  .matchup-card-main > .matchup-score:has(.matchup-score-date) > span,
+  .matchup-card-main > .matchup-score:has(.matchup-score-date) > small:not(.matchup-score-date) { display: none; }
+  .matchup-card-main > .matchup-score:has(.matchup-score-date) > .matchup-score-date { width: 100%; margin: 0; text-align: left; white-space: normal; }
   /* Team row = identity + inline score */
   .matchup-team-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
   .matchup-team-row > .team-identity-block { flex: 1; min-width: 0; min-height: 0; border: 0; background: transparent; padding: 0; }
@@ -4245,6 +4389,8 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .matchup-card-main .team-identity-mark, .matchup-card-main .team-identity-block.mirrored .team-identity-mark { grid-area: 1 / 2 / 3 / 3; align-self: center; width: 54px; height: 54px; }
   .matchup-card-main .team-identity-mark .entity-logo { width: 54px !important; height: 54px !important; min-width: 0; min-height: 0; }
   .matchup-card-main .team-identity-name, .matchup-card-main .team-identity-block.mirrored .team-identity-name { grid-area: 1 / 3 / 2 / 4; text-align: left; }
+  /* Placeholder rows have no record row — center the "Winner of / game" name against the "?" avatar. */
+  .matchup-card-main .playoff-tbd-block .team-identity-name { grid-area: 1 / 3 / 3 / 4; align-self: center; }
   .matchup-card-main .team-identity-name small { display: block; font-size: var(--text-2xs); line-height: 1.05; }
   .matchup-card-main .team-identity-name strong { -webkit-line-clamp: 1; font-size: var(--text-lg); line-height: 1.1; }
   .matchup-card-main .team-identity-record, .matchup-card-main .team-identity-block.mirrored .team-identity-record { grid-area: 2 / 3 / 3 / 4; flex-direction: row; align-items: center; justify-content: flex-start; gap: 8px; margin-top: 2px; }
@@ -4622,6 +4768,8 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .sb-slate-label { display: flex; flex-direction: column; line-height: 1.05; }
 .sb-slate-label b { font-family: var(--font-barlow-condensed), sans-serif; font-weight: var(--w-bold); font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--gold-mid); }
 .sb-slate-label span { font-size: 9.5px; color: var(--muted); font-weight: var(--w-medium); }
+.sb-slate-score { display: inline-flex; align-items: baseline; gap: 1px; padding-left: 8px; margin-left: 1px; border-left: 1px solid var(--gold); font-family: var(--font-barlow-condensed), sans-serif; font-variant-numeric: tabular-nums; font-weight: var(--w-bold); font-size: 16px; line-height: 1; color: var(--gold-mid); }
+.sb-slate-score small { font-size: 9.5px; font-weight: var(--w-bold); color: var(--muted); }
 .sb-badge { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-barlow-condensed), sans-serif; font-weight: var(--w-bold); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; }
 .sb-badge small { font-family: var(--font-archivo), sans-serif; font-weight: var(--w-medium); font-size: 10px; letter-spacing: 0; text-transform: none; color: var(--muted); }
 .sb-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); }
@@ -4701,6 +4849,8 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .sb-collapsed-title { font-family: var(--font-barlow-condensed), sans-serif; font-weight: var(--w-bold); font-size: 16px; letter-spacing: -.01em; color: var(--ink); white-space: nowrap; }
 .sb-collapsed-rank { font-size: 11px; color: var(--muted); font-weight: var(--w-medium); white-space: nowrap; }
 .sb-collapsed-rank b { color: var(--gold-mid); font-weight: var(--w-bold); }
+.sb-collapsed-score { margin-left: 5px; font-style: normal; color: var(--gold-mid); font-weight: var(--w-bold); }
+.sb-collapsed-score small { color: var(--muted); font-weight: var(--w-medium); font-size: 9px; }
 .sb-collapsed-hint { font-size: 11px; color: var(--muted); font-weight: var(--w-medium); white-space: nowrap; }
 
 /* Thanksgiving week — warm styling on the header/rail only */
@@ -4716,6 +4866,28 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .sb-slate-label { display: none; }
   .sb-game { flex-basis: 172px; }
   .sb-collapsed-hint { display: none; }
+}
+
+@media (max-width: 560px) {
+  /* Two compact rows so the games strip spans the full screen width and scrolls,
+     without adding height: a short rail with the collapse chevron inline on the
+     top row, then the slate below. (Crammed inline-left, it barely read as
+     scrollable; a third full-width toggle row made it too tall.) */
+  .sb { flex-wrap: wrap; align-items: stretch; }
+  .sb-rail { order: 0; flex: 1 1 auto; justify-content: space-between; gap: 10px; padding: 5px 12px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .sb-rail::after { top: auto; bottom: 0; left: 0; width: 100%; height: 3px; }
+  .sb-meta { flex-direction: row; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+  .sb-kick { display: none; }
+  .sb-num { font-size: 18px; }
+  .sb-dates { font-size: 10.5px; }
+  .sb-state { flex-direction: row; align-items: center; gap: 9px; }
+  /* Blend the chevron into the rail: same gradient, and continue the green
+     baseline accent under it so the top row reads as one edge-to-edge bar. */
+  .sb-toggle { order: 1; flex: 0 0 auto; width: 42px; position: relative; background: linear-gradient(180deg, var(--field-soft), var(--surface)); border-left: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .sb-toggle::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--field); }
+  .sb.is-thanksgiving .sb-toggle::after { background: var(--gold-mid); }
+  .sb-picture-row { order: 2; flex: 1 1 100%; }
+  .sb-games-wrap { order: 3; flex: 1 1 100%; width: 100%; }
 }
 
 /* ============ PLAYOFF PICTURE — dark broadcast panel ============ */

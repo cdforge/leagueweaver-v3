@@ -76,6 +76,29 @@ export function getWeekDateLabel(seasonYear: number, weekNumber: number) {
   return getNflWeekWindow(seasonYear, weekNumber).label;
 }
 
+/**
+ * The week the live scoreboard should show, derived from the clock alone.
+ *
+ * Each fantasy week's window starts Tue 4:00 AM ET; the *display* advances 24h
+ * later, at Wed 4:00 AM ET. So Wed 4 AM → the next Tue 4 AM shows the current
+ * week's live/available scores, and the Tue 4 AM → Wed 4 AM gap keeps the
+ * just-finished week's finals up before rolling to the next week. Before the
+ * season opens it stays on Week 1; after it ends it holds the final week.
+ * Result is clamped to [1, weekCount].
+ */
+export function getCurrentSlateWeek(now: Date, seasonYear: number, weekCount: number): number {
+  if (weekCount <= 0) return 1;
+  const t = now.getTime();
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  let current = 1;
+  for (let week = 1; week <= weekCount; week++) {
+    const anchor = Date.parse(getNflWeekWindow(seasonYear, week).startsAt) + DAY_MS; // Wed 4:00 AM ET
+    if (Number.isFinite(anchor) && t >= anchor) current = week;
+    else break;
+  }
+  return current;
+}
+
 export function getNflWeeks(seasonYear: number, count: 13 | 14) {
   return Array.from({ length: count }, (_, index) => getNflWeekWindow(seasonYear, index + 1));
 }

@@ -20,7 +20,9 @@ export function DivisionMark({ division, size = 18, className = "" }: { division
     } as CSSProperties}
     aria-hidden="true"
   >
-    {hasImage ? <img src={division.logoUrl} alt="" /> : <b>{initials}</b>}
+    {/* Size the acronym to the box so a 2–3 char monogram keeps a visible margin
+        (a box-filling acronym reads as cramped/off-center) and centers cleanly. */}
+    {hasImage ? <img src={division.logoUrl} alt="" /> : <b style={{ fontSize: `${Math.max(7, Math.round(size * 0.5))}px`, lineHeight: 1 }}>{initials}</b>}
   </span>;
 }
 

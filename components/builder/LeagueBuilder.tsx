@@ -30,13 +30,16 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   RotateCcw,
+  FolderClock,
+  Zap,
 } from "lucide-react";
 import { ImportLeagueModal, type ImportSource } from "@/components/imports/ImportLeagueModal";
 import { useAuthModal } from "@/components/account/AuthModalProvider";
 import { createClient } from "@/lib/supabase/client";
 import { CustomSelect } from "@/components/ui/CustomSelect";
-import { ConfirmDialog } from "@/components/ui/Modal";
+import { ConfirmDialog, Modal } from "@/components/ui/Modal";
 import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -164,7 +167,7 @@ function SavedLeagueRow({ preset, latest, onChoose }: { preset: SavedLeaguePrese
     <button type="button" className="saved-league-row" style={{ "--row-accent": league.color } as React.CSSProperties} onClick={() => onChoose(preset)}>
       <EntityLogo size={32} color={league.color} logoUrl={league.logoUrl} monogram={resolveInitials(league.initials, leagueAcronym(league.name))} />
       <span className="saved-league-row-who">
-        <strong>{league.name || preset.name}{latest && <span className="saved-league-recency">Last used</span>}</strong>
+        <strong><span className="saved-league-row-name">{league.name || preset.name}</span>{latest && <span className="saved-league-recency">Last used</span>}</strong>
         <small>{preset.data.teams.length} teams · {preset.data.divisions.length} divisions{connection ? ` · ${connection}` : ""}</small>
       </span>
       {updated && <span className="saved-league-when">Updated · <b>{updated}</b></span>}
@@ -173,42 +176,140 @@ function SavedLeagueRow({ preset, latest, onChoose }: { preset: SavedLeaguePrese
   );
 }
 
-// Step 2's picker only ever *resumes* a saved league. Doing nothing here and
-// filling in the form below is how a new league is started, so there is no
-// "new league" button. First-timers (no presets) see nothing at all.
-function SavedLeagueShortcut({ presets, loadedPreset, onChoose, onStartFresh }: { presets: SavedLeaguePreset[]; loadedPreset: SavedLeaguePreset | null; onChoose: (preset: SavedLeaguePreset) => void; onStartFresh: () => void }) {
-  const [expanded, setExpanded] = useState(false);
-  if (!presets.length) return null;
-  if (loadedPreset) {
-    return (
-      <div className="saved-league-shortcut saved-league-loaded">
-        <span className="saved-league-loaded-check"><Check aria-hidden="true" /></span>
-        <div className="saved-league-loaded-copy">
-          <strong>{loadedPreset.data.league.name || loadedPreset.name}</strong>
-          <small>Teams, divisions, colors &amp; logos loaded — edit below, or continue to Season.</small>
-        </div>
-        <button type="button" className="saved-league-startfresh" onClick={onStartFresh}><RotateCcw aria-hidden="true" />Start fresh instead</button>
-      </div>
-    );
-  }
-  const [latest, ...rest] = presets;
+// League selection now lives on Step 1 (the "Continue a saved league" entry +
+// modal), so Step 2 only shows the *loaded* confirmation bar — a place to eyeball
+// the roster for churn before continuing. First-timers / not-yet-loaded see nothing.
+function SavedLeagueShortcut({ loadedPreset, onStartFresh }: { loadedPreset: SavedLeaguePreset | null; onStartFresh: () => void }) {
+  if (!loadedPreset) return null;
   return (
-    <div className="saved-league-shortcut">
-      <div className="saved-league-resume-head"><strong>Continue a saved league</strong><span>or ignore this and start fresh below</span></div>
-      <div className="saved-league-rows">
-        <SavedLeagueRow preset={latest} latest onChoose={onChoose} />
-        {expanded && rest.map((preset) => <SavedLeagueRow key={preset.id} preset={preset} onChoose={onChoose} />)}
+    <div className="saved-league-shortcut saved-league-loaded">
+      <span className="saved-league-loaded-check"><Check aria-hidden="true" /></span>
+      <div className="saved-league-loaded-copy">
+        <strong>{loadedPreset.data.league.name || loadedPreset.name}</strong>
+        <small>Teams, divisions, colors, and logos loaded. Edit below, or continue to Season.</small>
       </div>
-      {rest.length > 0 && (
-        <button type="button" className="saved-league-disclosure" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
-          {expanded ? "Show fewer" : `Other saved leagues (${rest.length})`}<ChevronDown aria-hidden="true" />
-        </button>
-      )}
+      <button type="button" className="saved-league-startfresh" onClick={onStartFresh}><RotateCcw aria-hidden="true" />Start fresh instead</button>
     </div>
   );
 }
 
-function SourceStep({ onManual, onImport }: { onManual: () => void; onImport: (source: ImportSource) => void }) {
+// The Quick create ⁄ Customize fork — a card at the top of the League step, shown
+// once a roster is loaded (import or saved league). "Customize everything" is the
+// primary path (the full wizard); "Quick create" is the secondary shortcut that
+// applies the PVE house settings and generates immediately.
+function BuildForkCard({ setup, onQuickCreate }: { setup: LeagueSetupInput; onQuickCreate: () => void }) {
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
+  const fieldSize = quickCreateFieldSize(setup);
+  const grouping = rosterGroupingNoun(setup);
+  return (
+    <div className="build-fork">
+      <div className="build-fork-head">
+        <strong>Your teams are in. How do you want to finish?</strong>
+        <small>Fine-tune every detail, or let us build it now with your usual settings.</small>
+      </div>
+      <div className="build-fork-options">
+        <button type="button" className="build-fork-primary" onClick={() => setDismissed(true)}>
+          <span className="build-fork-tag">Recommended</span>
+          <strong>Customize everything</strong>
+          <small>Walk each step: divisions, season, seeding, rules, and playoffs, exactly how you want them.</small>
+          <span className="build-fork-go" aria-hidden="true">Continue setup <ArrowRight /></span>
+        </button>
+        <div className="build-fork-secondary">
+          <span className="build-fork-secondary-head"><Zap aria-hidden="true" /><strong>Quick create</strong></span>
+          <small>Skip ahead and generate now with these settings:</small>
+          <ul className="build-fork-summary">
+            <li>{grouping} · <b>{setup.teams.length} teams</b>{setup.divisions.length > 1 ? ` · ${setup.divisions.length} divisions` : ""}</li>
+            <li><b>14-week</b> regular season</li>
+            <li><b>{fieldSize}-team</b> playoff · gold · single-elimination</li>
+            <li>Seeded by <b>last season</b></li>
+            <li>Balanced schedule rules &amp; standard tiebreakers</li>
+          </ul>
+          <p className="build-fork-note"><CircleAlert aria-hidden="true" />These lock in when you generate. To change them later you’ll regenerate the schedule.</p>
+          <button type="button" className="button-secondary build-fork-quick" onClick={onQuickCreate}><Zap aria-hidden="true" />Quick create schedule</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// PVE (Prodigies vs. Esteemed) — the commissioner's house settings, pulled from
+// the real league and baked as the Quick Create defaults. These are applied on
+// top of whatever roster the user entered; teams/divisions always come from the
+// import/saved league, never from PVE.
+const QUICK_CREATE_DEFAULTS = {
+  weeks: 14,
+  playoffs: {
+    fieldSize: 6,
+    theme: "gold",
+    bracketType: "single-elimination",
+    reseedMode: "fixed",
+    consolationMode: "standard",
+    thirdPlaceGame: true,
+  },
+  priorSeason: { enabled: true, source: "regular-season", entryMode: "manual", hasData: false },
+  weekOne: { rankingSource: "prior-season" },
+  fairness: { maxHomeAwayStreak: 3, finalWeekDivisional: true, prioritizeOpeningWeek: true, prioritizeThanksgiving: true, preventImmediateRematches: true },
+  display: { venues: true, managers: true, cityNames: true },
+} as const;
+
+// Resolve the "auto" placement the same way the Playoffs step's mount effect does
+// (halves preferred → leaders → overall), so Quick Create never ships an unresolved
+// "auto" past generation.
+function resolveQuickPlacement(divisionCount: number, fieldSize: number): LeagueSetupInput["playoffs"]["placementMode"] {
+  if (isPlayoffPlacementUsable("division-halves", divisionCount, fieldSize)) return "division-halves";
+  if (isPlayoffPlacementUsable("division-leaders", divisionCount, fieldSize)) return "division-leaders";
+  return "overall";
+}
+
+// The playoff field is clamped to what the team count / season length can support,
+// so a small imported league still gets a valid bracket.
+function quickCreateFieldSize(setup: LeagueSetupInput): number {
+  const max = getMaximumPlayoffFieldSize(setup.teams.length, QUICK_CREATE_DEFAULTS.weeks, QUICK_CREATE_DEFAULTS.playoffs.bracketType);
+  return Math.min(QUICK_CREATE_DEFAULTS.playoffs.fieldSize, max);
+}
+
+function applyQuickCreateDefaults(setup: LeagueSetupInput): LeagueSetupInput {
+  const d = QUICK_CREATE_DEFAULTS;
+  const fieldSize = quickCreateFieldSize(setup);
+  const placementMode = resolveQuickPlacement(setup.divisions.length, fieldSize);
+  return {
+    ...setup,
+    weeks: d.weeks,
+    priorSeason: { ...setup.priorSeason, ...d.priorSeason },
+    weekOne: { ...setup.weekOne, ...d.weekOne },
+    fairness: { ...setup.fairness, ...d.fairness },
+    display: { ...setup.display, ...d.display },
+    playoffs: {
+      ...setup.playoffs,
+      fieldSize,
+      placementMode,
+      theme: d.playoffs.theme,
+      color: PLAYOFF_THEME_COLORS[d.playoffs.theme],
+      bracketType: d.playoffs.bracketType,
+      reseedMode: d.playoffs.reseedMode,
+      consolationMode: d.playoffs.consolationMode,
+      thirdPlaceGame: d.playoffs.thirdPlaceGame && fieldSize >= 4,
+      fieldStatus: "live",
+      lockedTeamIds: [],
+    },
+  };
+}
+
+// Roster grouping noun — conference-aware. There is no conference entity today
+// (grouping is divisions only), so this reads "Teams and Divisions"; if a
+// `conferences` grouping is ever added to the setup it upgrades automatically.
+function rosterGroupingNoun(setup: LeagueSetupInput): string {
+  const parts = ["Teams"];
+  if (setup.divisions.length > 0) parts.push("Divisions");
+  const conferences = (setup as { conferences?: unknown[] }).conferences;
+  if (Array.isArray(conferences) && conferences.length > 0) parts.push("Conferences");
+  if (parts.length === 1) return parts[0];
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+function SourceStep({ presets, onManual, onChooseSaved, onImport }: { presets: SavedLeaguePreset[]; onManual: () => void; onChooseSaved: () => void; onImport: (source: ImportSource) => void }) {
+  const hasSaved = presets.length > 0;
   return (
     <div className="step-stack">
       <div className="section-heading">
@@ -217,14 +318,26 @@ function SourceStep({ onManual, onImport }: { onManual: () => void; onImport: (s
         <p>Build from scratch, or bring in your teams from ESPN, Sleeper, or a CSV. You’ll confirm every step before we generate the schedule.</p>
       </div>
       <div className="source-step start-grid" role="group" aria-label="Choose how to enter your league data">
-        <button type="button" className="start-option start-option--main" onClick={onManual}>
-          <span className="start-option-icon"><PencilRuler aria-hidden="true" /></span>
-          <span className="start-option-copy">
-            <strong>Start manually</strong>
-            <small>Build a clean league from scratch. We’ll walk you through every step.</small>
-          </span>
-          <span className="start-option-go" aria-hidden="true"><ArrowRight /></span>
-        </button>
+        <div className={`start-primary-row${hasSaved ? " has-saved" : ""}`}>
+          <button type="button" className="start-option start-option--main" onClick={onManual}>
+            <span className="start-option-icon"><PencilRuler aria-hidden="true" /></span>
+            <span className="start-option-copy">
+              <strong>Start manually</strong>
+              <small>Build a clean league from scratch. We’ll walk you through every step.</small>
+            </span>
+            <span className="start-option-go" aria-hidden="true"><ArrowRight /></span>
+          </button>
+          {hasSaved && (
+            <button type="button" className="start-option start-option--saved" onClick={onChooseSaved}>
+              <span className="start-option-icon"><FolderClock aria-hidden="true" /></span>
+              <span className="start-option-copy">
+                <strong>Continue a saved league</strong>
+                <small>Pick up a league you saved before. {presets.length} ready.</small>
+              </span>
+              <span className="start-option-go" aria-hidden="true"><ArrowRight /></span>
+            </button>
+          )}
+        </div>
         <div className="start-divider"><span>or bring in your league</span></div>
         <div className="start-import-row">
           <button type="button" className="start-option" onClick={() => onImport("espn")}>
@@ -254,7 +367,40 @@ function SourceStep({ onManual, onImport }: { onManual: () => void; onImport: (s
   );
 }
 
-function LeagueStep({ setup, setSetup, presets, loadedPreset, onQuickImport, onStartFresh, onLeagueLogoUploaded }: { setup: LeagueSetupInput; setSetup: React.Dispatch<React.SetStateAction<LeagueSetupInput>>; presets: SavedLeaguePreset[]; loadedPreset: SavedLeaguePreset | null; onQuickImport: (preset: SavedLeaguePreset) => void; onStartFresh: () => void; onLeagueLogoUploaded: (logoUrl: string) => void }) {
+// Saved-league picker modal. Mirrors the import (Connect ESPN) modal chrome —
+// same header / scroll-body / footer grid — and paginates the list so a large
+// account stays manageable.
+const SAVED_PAGE_SIZE = 5;
+function SavedLeaguePicker({ presets, onChoose, onClose }: { presets: SavedLeaguePreset[]; onChoose: (preset: SavedLeaguePreset) => void; onClose: () => void }) {
+  const [page, setPage] = useState(0);
+  const pageCount = Math.max(1, Math.ceil(presets.length / SAVED_PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const start = safePage * SAVED_PAGE_SIZE;
+  const visible = presets.slice(start, start + SAVED_PAGE_SIZE);
+  return (
+    <Modal className="import-modal saved-league-modal" labelledBy="saved-league-modal-title" onClose={onClose}>
+      <header className="import-modal-head">
+        <span className="import-provider-mark saved"><FolderClock aria-hidden="true" /></span>
+        <div><span className="step-kicker">Saved leagues</span><h2 id="saved-league-modal-title">Continue a saved league</h2><p>Pick one to load its teams, divisions, colors, and logos.</p></div>
+        <button type="button" className="icon-button" aria-label="Close saved leagues" onClick={onClose}><X aria-hidden="true" /></button>
+      </header>
+      <div className="import-modal-body saved-league-modal-list">
+        {visible.map((preset, index) => (
+          <SavedLeagueRow key={preset.id} preset={preset} latest={start + index === 0} onChoose={onChoose} />
+        ))}
+      </div>
+      {pageCount > 1 && (
+        <footer className="import-modal-actions saved-league-pager">
+          <button type="button" className="button-secondary" disabled={safePage === 0} onClick={() => setPage(safePage - 1)}><ChevronLeft aria-hidden="true" />Previous</button>
+          <span className="saved-league-pager-count">Page {safePage + 1} of {pageCount} · {presets.length} leagues</span>
+          <button type="button" className="button-secondary" disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)}>Next<ChevronRight aria-hidden="true" /></button>
+        </footer>
+      )}
+    </Modal>
+  );
+}
+
+function LeagueStep({ setup, setSetup, presets, loadedPreset, quickStartAvailable, onQuickCreate, onStartFresh, onLeagueLogoUploaded }: { setup: LeagueSetupInput; setSetup: React.Dispatch<React.SetStateAction<LeagueSetupInput>>; presets: SavedLeaguePreset[]; loadedPreset: SavedLeaguePreset | null; quickStartAvailable: boolean; onQuickCreate: () => void; onStartFresh: () => void; onLeagueLogoUploaded: (logoUrl: string) => void }) {
   return (
     <div className="step-stack">
       <div className="section-heading">
@@ -262,7 +408,8 @@ function LeagueStep({ setup, setSetup, presets, loadedPreset, onQuickImport, onS
         <h1>Start with your league.</h1>
         <p>{presets.length ? "Pick up where you left off, or just fill in the form to start fresh." : "Name it, then set its colors and logo."}</p>
       </div>
-      <SavedLeagueShortcut presets={presets} loadedPreset={loadedPreset} onChoose={onQuickImport} onStartFresh={onStartFresh} />
+      {quickStartAvailable && <BuildForkCard setup={setup} onQuickCreate={onQuickCreate} />}
+      <SavedLeagueShortcut loadedPreset={loadedPreset} onStartFresh={onStartFresh} />
       <div className="field-grid two-col">
         <div>
           <FieldLabel hint="Required">League name</FieldLabel>
@@ -1146,6 +1293,11 @@ export function LeagueBuilder() {
   const [, setLeagueSaveState] = useState<string | null>(null);
   const [activeSavedLeagueId, setActiveSavedLeagueId] = useState<string | null>(null);
   const [loadedPreset, setLoadedPreset] = useState<SavedLeaguePreset | null>(null);
+  // Step-1 saved-league picker (B1) + the Quick/Customize fork state (B2). The
+  // fork only offers itself once a roster is loaded via import or saved league.
+  const [savedPickerOpen, setSavedPickerOpen] = useState(false);
+  const [quickStartAvailable, setQuickStartAvailable] = useState(false);
+  const [pendingQuickGenerate, setPendingQuickGenerate] = useState(false);
   const [connectedSavedLeaguePrompt, setConnectedSavedLeaguePrompt] = useState<SavedLeaguePreset | null>(null);
   const [logoSavePrompt, setLogoSavePrompt] = useState<LogoSavePrompt | null>(null);
   const [logoSaveBusy, setLogoSaveBusy] = useState(false);
@@ -1169,10 +1321,17 @@ export function LeagueBuilder() {
     logoBaseline.current = new Map(setupLogoEntries(blankSetup));
     setActiveSavedLeagueId(null);
     setLoadedPreset(null);
+    setQuickStartAvailable(false);
     dismissedLogoFingerprint.current = null;
     savePromptResolved.current = false;
     setLeagueSaveState(null);
     setStep(1);
+  };
+  // Manual entry from Step 1 — a clean slate, no Quick-create fork (there's no
+  // roster to fast-forward yet).
+  const startManual = () => {
+    setQuickStartAvailable(false);
+    advanceToStep(1);
   };
 
   useEffect(() => {
@@ -1269,6 +1428,7 @@ export function LeagueBuilder() {
     logoBaseline.current = new Map(savedLogoEntries(preset.data));
     dismissedLogoFingerprint.current = null;
     setConnectedSavedLeaguePrompt(null);
+    setQuickStartAvailable(true);
     // Stay on the League step and show the "loaded" confirm bar so the user can
     // eyeball the roster for churn before continuing — no silent jump to Season.
     setStep(1);
@@ -1440,6 +1600,7 @@ export function LeagueBuilder() {
     });
     setImportSource(null);
     setActiveSavedLeagueId(null);
+    setQuickStartAvailable(true);
     dismissedLogoFingerprint.current = null;
     setStep(1);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1496,6 +1657,21 @@ export function LeagueBuilder() {
     }
     runGenerate();
   };
+  // Quick create (B2): apply the PVE house defaults to the current roster, then
+  // run the normal generate path (same validation, save-league prompt, and guest
+  // warning). setSetup is async, so we flip a flag and let the effect below fire
+  // generate() once the defaulted setup has committed.
+  const quickCreateSchedule = () => {
+    if (generating) return;
+    setSetup((current) => applyQuickCreateDefaults(current));
+    setPendingQuickGenerate(true);
+  };
+  useEffect(() => {
+    if (!pendingQuickGenerate) return;
+    setPendingQuickGenerate(false);
+    generate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingQuickGenerate]);
   const dismissSavePrompt = () => {
     savePromptResolved.current = true;
     setSaveLeaguePrompt(false);
@@ -1530,8 +1706,8 @@ export function LeagueBuilder() {
         <div className="builder-tool">
           <p className="sr-only" aria-live="polite">Step {step + 1} of {STEPS.length}: {STEPS[step].label}</p>
           <div className="builder-content" ref={builderContentRef} tabIndex={-1}>
-            {step === 0 && <SourceStep onManual={() => advanceToStep(1)} onImport={(source) => setImportSource(source)} />}
-            {step === 1 && <LeagueStep setup={setup} setSetup={setSetup} presets={savedLeagues} loadedPreset={loadedPreset} onQuickImport={quickImportSavedLeague} onStartFresh={startNewLeague} onLeagueLogoUploaded={suggestAvatarFromLogo} />}
+            {step === 0 && <SourceStep presets={savedLeagues} onManual={startManual} onChooseSaved={() => setSavedPickerOpen(true)} onImport={(source) => setImportSource(source)} />}
+            {step === 1 && <LeagueStep setup={setup} setSetup={setSetup} presets={savedLeagues} loadedPreset={loadedPreset} quickStartAvailable={quickStartAvailable} onQuickCreate={quickCreateSchedule} onStartFresh={startNewLeague} onLeagueLogoUploaded={suggestAvatarFromLogo} />}
             {step === 2 && <TeamsStep setup={setup} setSetup={setSetup} showErrors={showFieldErrors} />}
             {step === 3 && <DivisionsStep setup={setup} setSetup={setSetup} showErrors={showFieldErrors} />}
             {step === 4 && <SeasonStep setup={setup} setSetup={setSetup} />}
@@ -1550,6 +1726,13 @@ export function LeagueBuilder() {
       </div>
       <BuilderBlueprintBar setup={setup} step={step} open={blueprintOpen} onToggle={() => setBlueprintOpen((current) => !current)} actions={{ step, generating, skipDraftRankForNow, back, next, generate }} />
       {importSource && <ImportLeagueModal source={importSource} setup={setup} onClose={() => setImportSource(null)} onConfirm={applyImport} />}
+      {savedPickerOpen && (
+        <SavedLeaguePicker
+          presets={savedLeagues}
+          onChoose={(chosen) => { setSavedPickerOpen(false); quickImportSavedLeague(chosen); }}
+          onClose={() => setSavedPickerOpen(false)}
+        />
+      )}
       {connectedSavedLeaguePrompt && <ConfirmDialog
         markClassName="provider-app-icon"
         mark={connectedSavedLeaguePrompt.data.platformConnection?.provider === "espn" ? <img src="/providers/espn.png" alt="" /> : <img src="/providers/sleeper.png" alt="" />}

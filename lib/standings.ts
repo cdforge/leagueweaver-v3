@@ -1,3 +1,4 @@
+import { isGamePlayed } from "./game";
 import { getWeekOneRankMap } from "./rankings";
 import { normalizeTiebreakerSettings, TIEBREAKER_RULE_LABELS } from "./tiebreakers";
 import type {
@@ -57,7 +58,7 @@ function buildRawStandings(schedule: GeneratedSchedule, throughWeek: number) {
     for (const game of week.games) {
       // A 0-0 "result" is never a real fantasy score — it means the game hasn't
       // been played, so it must not count as a played tie (or any result).
-      if (game.homeScore == null || game.awayScore == null || (game.homeScore === 0 && game.awayScore === 0)) continue;
+      if (!isGamePlayed(game)) continue;
       const home = rows.get(game.homeTeamId);
       const away = rows.get(game.awayTeamId);
       if (!home || !away) continue;
@@ -191,9 +192,22 @@ export function resolveStandings(schedule: GeneratedSchedule, options: Standings
         for (const opponentId of commonOpponents) if (!opponents.has(opponentId)) commonOpponents.delete(opponentId);
       }
     }
+    // #36.2 — head-to-head only decides a tie group where every tied team has
+    // played every other tied team; otherwise a team that never met the others got
+    // `null` and was shoved to the bottom. Skip the rule uniformly when partial.
+    let h2hFullyPlayed = true;
+    if (rule === "head-to-head") {
+      const idList = [...tiedIds];
+      const playedPairs = new Set<string>();
+      for (const completed of completedGames) {
+        const { homeTeamId, awayTeamId } = completed.game;
+        if (tiedIds.has(homeTeamId) && tiedIds.has(awayTeamId)) playedPairs.add([homeTeamId, awayTeamId].sort().join("|"));
+      }
+      h2hFullyPlayed = idList.every((a, index) => idList.slice(index + 1).every((b) => playedPairs.has([a, b].sort().join("|"))));
+    }
     return new Map(bucket.map((row): [string, number | null] => {
       if (rule === "win-percentage") return [row.teamId, row.winPercentage];
-      if (rule === "head-to-head") return [row.teamId, recordAgainst(row.teamId, completedGames, tiedIds)];
+      if (rule === "head-to-head") return [row.teamId, h2hFullyPlayed ? recordAgainst(row.teamId, completedGames, tiedIds) : null];
       if (rule === "division-percentage") return [row.teamId, recordPercentage(row.divisionWins, row.divisionLosses, row.divisionTies)];
       if (rule === "common-opponents") return [row.teamId, commonOpponents?.size ? recordAgainst(row.teamId, completedGames, commonOpponents) : null];
       if (rule === "strength-of-victory") return [row.teamId, strengthOfVictory.get(row.teamId) ?? null];
@@ -305,13 +319,17 @@ export function getLiveRankHistory(schedule: GeneratedSchedule): RankHistorySnap
     buildSnapshot(0, true, 0);
   }
   for (const week of [...schedule.weeks].sort((left, right) => left.weekNumber - right.weekNumber)) {
-    const savedSnapshot = savedSnapshots.get(week.weekNumber);
+    const playedGames = week.games.filter(isGamePlayed).length;
+    // Only trust a persisted snapshot for a week that actually has a played game.
+    // A saved "week complete" snapshot whose games are all unplayed (e.g. a 0-0
+    // preseason slate) would otherwise resurrect phantom records/ties/movement that
+    // the recompute correctly zeroes out.
+    const savedSnapshot = playedGames > 0 ? savedSnapshots.get(week.weekNumber) : undefined;
     if (savedSnapshot) {
       snapshots.push(savedSnapshot);
       previousRanks = new Map(savedSnapshot.rows.map((row) => [row.teamId, row.rank]));
       continue;
     }
-    const playedGames = week.games.filter((game) => game.homeScore != null && game.awayScore != null).length;
     buildSnapshot(week.weekNumber, week.games.length > 0 && playedGames === week.games.length, playedGames);
   }
   return snapshots;
@@ -344,4 +362,9 @@ export function freezeCompletedRankHistory(schedule: GeneratedSchedule): Generat
 
 export function formatRecord(row: StandingsRow) {
   return row.ties ? `${row.wins}-${row.losses}-${row.ties}` : `${row.wins}-${row.losses}`;
+}
+
+/** Division record W-L(-T) — one formatter so every table renders ties the same way. */
+export function formatDivisionRecord(row: Pick<StandingsRow, "divisionWins" | "divisionLosses" | "divisionTies">) {
+  return row.divisionTies ? `${row.divisionWins}-${row.divisionLosses}-${row.divisionTies}` : `${row.divisionWins}-${row.divisionLosses}`;
 }
