@@ -12,3 +12,5 @@ node_modules/
 .vercel
 tmp/
 qa-artifacts/
+.next-wt/
+.next-dist/
