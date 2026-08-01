@@ -156,7 +156,7 @@ Every story is self-contained — an engineer or designer should be able to pick
 # 🟠 MEDIUM
 
 ## #18 · Correctness & security cluster
-**Type:** correctness/security · **Status:** open
+**Type:** correctness/security · **Status:** ✅ DONE (2026-08-01, branch `feat/audit-followups-7-31`) — (1) `lib/csv.ts` `cell()` now prefixes any cell starting with `= + - @` / tab / CR with an apostrophe → CSV opens inert in Excel/Sheets. (2) `parseScore` clamps **0–300** (`Math.min(300, Math.max(0, …))`). (3) *Moot* — the rating-tier filter that hid the GOTW no longer exists (`visibleGames = orderedGames`, no tier drop). (4) Silent game-drop: a `droppedGameCount` is computed and the week renders a `role="alert"` **data-integrity warning** ("N matchups can't be shown — a team was removed") instead of just showing fewer games. (5) Regenerate now `saveSetup(activeSchedule.setup)` before `router.push("/build")`, so the builder opens **seeded with this league** (was a blank `/build`). `tsc` green.
 **Problem/Target (5 fixes):**
 1. **CSV formula injection** — `lib/csv.ts:4-7` quotes cells but doesn't neutralize a leading `= + - @`; a team/manager named `=HYPERLINK(...)` executes on open in Excel/Sheets. Prefix such cells with a leading apostrophe before quoting.
 2. **No score ceiling** — `parseScore` `SeasonWorkspace.tsx:514` clamps ≥0 but has no max; `999999` propagates into standings/odds. Clamp 0–300 (parity with the simulator's `:166`).
@@ -548,6 +548,71 @@ Team Schedule ▾
 **Where:** `SeasonWorkspace.tsx:602,606`.
 **Target:** Either relabel to make the metric explicit ("Strongest slate — Week 1") and visually distinguish it from the rating stats, or replace it with a rating-native stat (e.g. "Best game — W1 3.7") so all three tiles speak the same language.
 **Acceptance:** the three summary tiles read as the same kind of number, or the odd one is clearly labeled as a slate/week metric.
+
+---
+
+# 🧱 BUILDER / ONBOARDING — pre-generation flow (2026-08-01, by request)
+
+**Scope note:** These three live *before* a schedule is generated — the entry screen and the 10-step setup wizard (`components/builder/LeagueBuilder.tsx`), outside the original post-generation audit but captured here by request. Grounded on the source (server was down for a fresh live capture this pass); markup quoted is from `LeagueBuilder.tsx` at the lines cited. **Today's flow:** `SourceStep` (Step 1: manual / ESPN / Sleeper / CSV) → `LeagueStep` (Step 2, where saved-league *resume* is buried) → Teams → Divisions → Season → Seeding → Week 1 → Rules → Playoffs → Review, a fixed **10 steps** (`STEPS` `:66-77`). Import (`applyImport :1340`) and saved-league resume (`applySavedLeaguePreset :1213`) both drop you at **Step 1 (League)** and then make you walk all remaining steps — there is no fast path.
+
+## B1 · Promote "saved league" to a first-class entry source (right of Manual, opens a modal)
+**Type:** IA/onboarding · **Status:** open (proposal)
+**Problem:** A saved league is conceptually a *data source* — peer to ESPN/Sleeper/CSV — but it isn't on the entry screen. `SourceStep` (`:210-254`) offers only Manual (main) + the import row; the saved-league picker (`SavedLeagueShortcut :178-207`) is rendered one step later inside `LeagueStep` (`:264`), so returning commissioners (the highest-intent users) don't see "continue where you left off" until after they've already committed to a path. The inline list also doesn't scale — with many saved leagues (a real case given large-league/multi-league use) it becomes a long stack with only a "show more" disclosure (`:202`).
+**Where:** entry `LeagueBuilder.tsx:210-254`; current picker `:178-207`; rows `SavedLeagueRow :158`; data = `savedLeagues` (account-scoped, `/api/saved-leagues`).
+**Target (what it should look like):**
+- Restructure `start-grid` into a **2-up primary row**: **Start manually** (left) and **Continue a saved league** (right, same visual weight), with the ESPN/Sleeper/CSV import row beneath — so the entry screen reads "fresh · resume · import."
+- The saved-league tile opens a **modal picker** (reuse `Modal`/focus-trap): a scrollable, searchable list of `SavedLeagueRow`s (Last-used pinned first, "Updated · date", connected-platform badge), each row = Load. Scales past ~5 leagues where the inline list doesn't.
+- **Gating:** show the tile only when `savedLeagues.length > 0`; for signed-out users show it as a sign-in invite ("Sign in to pick up a saved league") rather than hiding the concept.
+- Step 2 keeps only the **"loaded — eyeball your roster for churn"** confirm bar (`saved-league-loaded` `:183-192`) — the *selection* moves to the entry modal, the *review* stays inline (matches the existing "no silent jump" intent `:1229-1231`).
+**Acceptance:** From the first builder screen a returning user can open a modal, pick a saved league, and land on the loaded-confirm — without the picker competing with the form; the modal is focus-trapped, Escape-closable, and scrolls for N leagues; the option is absent (or a sign-in nudge) when there are none.
+**Deps:** pairs with B2 (the modal's "Load" can hand off straight into the Quick/Full fork).
+
+## B2 · "Quick create" vs "Full experience" fork after teams resolve
+**Type:** onboarding/conversion · **Status:** open (proposal)
+**Problem:** Every path — manual roster, ESPN, Sleeper, CSV, saved league — funnels into the same 8 remaining steps. A commissioner who just wants "same as last year, regenerated" still clicks through Divisions, Season, Seeding, Week 1, Rules, and Playoffs. There's no way to accept smart defaults and go.
+**Where:** both entry points land on Step 1 then walk linearly (`applyImport :1401`, `applySavedLeaguePreset :1231`, `next :1234`). Defaults already exist to lean on: `createDefaultSetup` (`lib/defaults`), the auto-recommended playoff placement (`:601-607`), `getMaximumPlayoffFieldSize`, `normalizePlayoffSettings`.
+**Target — the fork:** Once teams are populated (post-import / post-saved-load / after the manual Teams step), present a **fork card**:
+- **Quick create (recommended)** — apply defaults to every remaining decision and jump to a single **confirmation summary**, then Generate.
+- **Customize everything** — the current step-by-step wizard (or the merged one from B3).
+**Target — where defaults come from (two tiers):**
+1. **Personalized — "same as last time"** (preferred when available): seed every hidden decision from the user's **last generated schedule / the loaded saved league** (its week count, division structure, seeding source, fairness preset, playoff format). This is the strongest version of the feature and the natural payoff of B1's saved-league path.
+2. **Population defaults — "most common"** (fallback for first-timers): baked constants representing the most-chosen values.
+
+| Hidden step | Population default | Personalized (last schedule / import) |
+|---|---|---|
+| Divisions | imported division names, else auto-balanced 2 (`divisionSizesFor`) | last league's division count + names |
+| Season length/year | standard reg-season on current NFL windows | last schedule's week count + `seasonYear` (import provides year) |
+| Seeding (prior order) | off, unless import carries `overallRank`/`hasPriorSeasonRanks` | last schedule's seeding source |
+| Week 1 ranking | derive from seeding/`overallRank` | last schedule's ranking source |
+| Schedule rules (fairness) | balanced preset | last schedule's fairness settings |
+| Playoffs | auto-recommended placement (division-halves→leaders→overall `:604`), common field size, gold theme, consolation off | last schedule's full playoff format |
+
+**Target — the process (Quick path):**
+1. Source resolved → teams in hand.
+2. **Fork card**: Quick (recommended) vs Customize.
+3. Quick → a compact **"Here's what we'll build" summary** — one line per defaulted decision ("12 teams · 3 divisions · 14 weeks · 6-team playoff, division-halves · gold"), each with an inline **Change** that deep-links into just that (merged) step; plus, for imports, a **roster-churn glance** so a changed roster isn't silently accepted.
+4. **Only truly-required fields block Generate** — league name (`:1187`) and team-count parity (`:1188-1193`); everything else is defaulted. Respect the existing guest-generate warning (`:1406`).
+5. Big **Generate** → straight to `runGenerate`/reveal.
+**Acceptance:** A returning commissioner can go source → Quick → Generate in ≤2 screens with last season's settings pre-applied and visible; a first-timer gets sensible population defaults; every default is shown and one-click-editable before generating; no required validation is bypassed.
+**Deps:** B1 (saved-league path feeds the personalized tier); composes with B3 (Change links target merged steps).
+**Open question:** where the personalized defaults are read from — the saved-league preset (`identityFromSetup`) carries identity but confirm it also carries season/rules/playoff settings, or read them from the last `saveSeason` record. Decide the source of "last time."
+
+## B3 · Collapse the 10-step tracker into ~6 grouped steps (the Playoffs sub-tab pattern)
+**Type:** IA/visual · **Status:** open (proposal)
+**Problem:** The tracker renders all **10** `STEPS` as an equal-weight pill rail (`:1482-1484`) with a "Step X of 10 · N% complete" bar (`:1477-1480`). Ten pills reads as a long, menacing commitment on the very first screen — even though several steps are short or optional (Seeding is explicitly optional `:489`; Week 1 Ranking `:512` and Schedule Rules `:551` are advanced tuning).
+**Precedent (reuse it):** The **Playoffs** step already solved this — rather than four top-level steps for Format / Rules / Branding / Logos, it is **one** tracker pill with an internal sub-tab bar (`playoff-wizard-subnav`, `role="tablist"`, `:844-855`; `subPage` state `:575`). Apply the same "one pill, internal sub-tabs" collapse to the sibling steps.
+**Target (proposed grouping — 10 → 6):**
+```
+Start · League · [Teams & Divisions] · [Season & Rules] · Playoffs · Review
+```
+- **Teams & Divisions** — merge Teams (`:364`) + Divisions (`:414`) into one step with sub-tabs (they're tightly coupled: you place teams into divisions).
+- **Season & Rules** — merge Season (`:440`) + Seeding (`:477`) + Week 1 Ranking (`:512`) + Schedule Rules (`:551`) into one step; sub-tabs "Season / Seeding / Week 1 / Rules", the last three flagged Optional (mirror the playoff "Optional" tag `:909`). 4→1.
+- Keep Start, League, Playoffs, Review as-is.
+- Net: **6 pills**, "Step X of 6", a fuller-feeling progress bar per click, and the advanced knobs still reachable as sub-tabs (nothing removed).
+**Also:** validation currently keys off numeric `step` indices (`:1187-1206`, `skipDraftRankForNow :1267`) — merging steps means moving those checks to fire on the merged step's Next / sub-tab, and the logo-save `nextStep` math (`:1258`) must follow the new indices.
+**Acceptance:** the tracker shows ~6 grouped pills, no capability is lost (every current field reachable via a sub-tab), per-step validation still fires before advancing, and the progress bar advances in larger, less-daunting increments.
+**Deps:** none required; strong synergy with B2 (Quick create defaults the "Season & Rules" group; its Change links open the relevant sub-tab).
+**Tension to decide:** B2 (skip via defaults) and B3 (fewer, grouped steps) both cut the wizard burden but differently — B2 is a bypass, B3 restructures the path. They **compose** (6 grouped steps *and* a quick-create fast-path); just don't ship B2 as a reason to skip B3 — the "Customize everything" branch still wants the shorter rail.
 
 ---
 

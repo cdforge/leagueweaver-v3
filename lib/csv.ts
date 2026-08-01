@@ -2,7 +2,11 @@ import type { GeneratedSchedule } from "./types";
 import { teamDisplayName } from "./teamIdentity";
 
 function cell(value: string | number | undefined) {
-  const text = String(value ?? "");
+  let text = String(value ?? "");
+  // #18.1 — neutralize CSV/formula injection: a cell beginning with = + - @ (or a
+  // tab/CR) is executed as a formula by Excel/Sheets on open, so a team or manager
+  // named `=HYPERLINK(...)` would run. Prefix with an apostrophe so it renders inert.
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
   return `"${text.replaceAll('"', '""')}"`;
 }
 

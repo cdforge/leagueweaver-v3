@@ -1805,6 +1805,11 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .matchup-rating-legend .legend-lopsided { background: var(--strength-bg); }
 .matchup-rating-legend .legend-lopsided .active { background: var(--strength-fg); }
 .rating-filter-empty { min-height: 116px; display: flex; align-items: center; justify-content: center; gap: 12px; border-bottom: 1px solid var(--line); background: white; color: var(--muted); padding: 18px; }
+/* #18.4 — data-integrity warning when a week's games reference a removed team. */
+.week-data-warning { display: flex; align-items: center; gap: 10px; border: 1px solid color-mix(in srgb, var(--danger) 34%, var(--line)); border-radius: var(--radius); background: color-mix(in srgb, var(--danger) 6%, white); padding: 10px 13px; margin-bottom: 10px; }
+.week-data-warning svg { width: 20px; height: 20px; flex: 0 0 auto; color: var(--danger); }
+.week-data-warning strong { display: block; font-size: var(--text-sm); color: var(--ink); }
+.week-data-warning small { color: var(--muted); font-size: var(--text-2xs); }
 .rating-filter-empty strong { font-size: var(--text-xs); }
 .rating-filter-empty button { min-height: 44px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: white; color: var(--field-dark); padding: 8px 12px; font-weight: var(--w-black); cursor: pointer; }
 .matchup-card-main { order: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 86px minmax(0, 1fr); align-items: center; gap: 18px; }

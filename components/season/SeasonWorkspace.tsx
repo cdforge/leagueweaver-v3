@@ -7,6 +7,7 @@ import {
   BarChart3,
   CalendarDays,
   Check,
+  CircleAlert,
   Cloud,
   Copy,
   Download,
@@ -98,7 +99,7 @@ import {
 import { calculateStandings, formatRecord, freezeCompletedRankHistory, getEnteringWeekRankSnapshot } from "@/lib/standings";
 import { formatPoints, gameOfWeekStatusLabel, getScheduleGameSignals } from "@/lib/statistics";
 import { formatDraftPlace, getTeamsMissingDraftPlaces, getWeekOneRankMap, getWeekOneTeamOrder, hasCompleteDraftRanking } from "@/lib/rankings";
-import { loadSeasonById, normalizeSeason, removeLocalSeason, saveSeason } from "@/lib/storage";
+import { loadSeasonById, normalizeSeason, removeLocalSeason, saveSeason, saveSetup } from "@/lib/storage";
 import { getNflWeekWindow, getWeekDateLabel, updateGameScore } from "@/lib/schedule";
 import { getWeekPhase } from "@/lib/weekPhase";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
@@ -478,6 +479,9 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
   const byeTeams = schedule.setup.teams.filter((team) => !playingTeamIds.has(team.id));
   const orderedGames = sortGamesForDisplay(week.games.filter((game) => teamById.has(game.homeTeamId) && teamById.has(game.awayTeamId)), displayedRanks);
   const visibleGames = orderedGames;
+  // #18.4 — don't silently drop games whose teams were removed; count them so the
+  // week can flag the missing matchups instead of just showing fewer games.
+  const droppedGameCount = week.games.length - orderedGames.length;
   const gotwPureAway = gotwEntry ? teamById.get(gotwEntry.pureGame.awayTeamId) : undefined;
   const gotwPureHome = gotwEntry ? teamById.get(gotwEntry.pureGame.homeTeamId) : undefined;
   const gotwOverrideDetails = gotwEntry?.playoffImplication && gotwEntry.pureGame.id !== gotwEntry.game.id && gotwPureAway && gotwPureHome
@@ -551,6 +555,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
           <span><Star fill="currentColor" /></span>
           <div><small>LATE-SEASON PLAYOFF IMPACT</small><strong>Why this won the rating tie</strong><p>This {gotwOverrideDetails.featuredRanks} matchup shares the week&apos;s best {gotwEntry.rating.toFixed(1)} rating and crosses the {schedule.setup.playoffs.fieldSize}-team playoff cutline. Playoff impact moved it ahead of <span>{gotwOverrideDetails.pureMatchup}</span> after the rating tie. Lower ratings always remain first.</p></div>
         </section>}
+        {droppedGameCount > 0 && <div className="week-data-warning" role="alert"><CircleAlert /><span><strong>{droppedGameCount} matchup{droppedGameCount === 1 ? "" : "s"} can’t be shown</strong><small>A team in {droppedGameCount === 1 ? "it was" : "them was"} removed after the schedule was generated.</small></span></div>}
         <div className="matchup-list matchup-card-list">{visibleGames.map((game) => {
           const analytics = scheduleSignals.byGameId.get(game.id);
           const featured = game.id === gameOfWeekId;
@@ -661,7 +666,9 @@ function ScoresView({ schedule, selectedWeek, setSelectedWeek, onScore, onFinali
   const parseScore = (value: string) => {
     if (value === "") return undefined;
     const score = Number(value);
-    return Number.isFinite(score) ? Math.round(Math.max(0, score) * 100) / 100 : undefined;
+    // #18.2 — clamp 0–300 (parity with the simulator) so a fat-fingered 999999
+    // can't poison standings/odds.
+    return Number.isFinite(score) ? Math.round(Math.min(300, Math.max(0, score)) * 100) / 100 : undefined;
   };
   return <div className="workspace-stack">
     <div className="week-selector" aria-label="Select score entry week">{schedule.weeks.map((item) => <button type="button" className={item.weekNumber === selectedWeek ? "active" : ""} key={item.weekNumber} onClick={() => setSelectedWeek(item.weekNumber)}><span>W{item.weekNumber}</span><small>{item.dateLabel.split(",")[0]}</small></button>)}</div>
@@ -2213,7 +2220,8 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
           title: "Build a new matchup slate?",
           body: <p>This builds a new matchup slate and <strong>clears any entered scores and standings.</strong></p>,
           confirmLabel: "Edit & regenerate", confirmIcon: <Pencil />,
-          run: () => router.push("/build"),
+          // #18.5 — seed the builder with THIS league's setup (was a blank /build).
+          run: () => { saveSetup(activeSchedule.setup); router.push("/build"); },
         },
       };
       const config = configs[confirmAction];
