@@ -63,8 +63,9 @@ export async function mapSleeperScores(schedule: GeneratedSchedule, week: number
       unmatched.push({ week, providerHomeId: home?.providerId, providerAwayId: away?.providerId, reason: "No Sleeper score matched this generated game." });
       continue;
     }
-    const sameMatchup = homeMatchup.matchup_id != null && homeMatchup.matchup_id === awayMatchup.matchup_id;
-    rows.push({ gameId: game.id, week, homeTeamId: game.homeTeamId, awayTeamId: game.awayTeamId, homeScore: homeMatchup.points, awayScore: awayMatchup.points, confidence: sameMatchup ? "high" : "review", source: "sleeper" });
+    // Each team's weekly points are the values a commissioner would type by hand,
+    // so they auto-apply — the LeagueWeaver pairing needn't mirror Sleeper's.
+    rows.push({ gameId: game.id, week, homeTeamId: game.homeTeamId, awayTeamId: game.awayTeamId, homeScore: homeMatchup.points, awayScore: awayMatchup.points, confidence: "high", source: "sleeper" });
   }
   return { rows, unmatched, warnings: unmatched.length ? ["Some Sleeper games did not match the generated LeagueWeaver slate."] : [], syncedAt: new Date().toISOString() };
 }

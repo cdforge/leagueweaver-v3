@@ -1083,7 +1083,7 @@ export function LeagueBuilder() {
       >
         <p id="save-league-description">We’ll remember your teams, divisions, colors, and logos — so next year you skip straight to Season. You can edit or delete it any time from your account.</p>
       </ConfirmDialog>}
-      {revealSeason && <GenerationReveal schedule={revealSeason} onComplete={() => router.push(`/season/${revealSeason.id}`)} />}
+      {revealSeason && <GenerationReveal schedule={revealSeason} onComplete={() => router.push(`/season/${revealSeason.id}${revealSeason.setup.platformConnection || revealSeason.setup.teams.some((team) => team.providerId && !/^(manual|screenshot)-/.test(team.providerId)) ? "" : "?connect=scores"}`)} />}
       {avatarNudge && <div className="avatar-nudge" role="status">
         <span className="avatar-nudge-thumb"><img src={avatarNudge} alt="" /></span>
         <div className="avatar-nudge-copy">

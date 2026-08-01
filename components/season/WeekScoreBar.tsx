@@ -6,6 +6,7 @@ import { readableTextColor, tintColor } from "@/lib/colorContrast";
 import { formatGameDateTimeOverride } from "@/lib/matchups";
 import { getNflWeekWindow } from "@/lib/schedule";
 import { getWeekPhase, type WeekPhaseState } from "@/lib/weekPhase";
+import { formatPoints } from "@/lib/statistics";
 import { DivisionMark } from "@/components/ui/DivisionIdentity";
 
 /**
@@ -132,7 +133,7 @@ function TeamRow({
       <span className="sb-rank">{rank != null ? `#${rank}` : ""}</span>
       <Crest team={team} />
       <span className="sb-name">{teamLabel(team, displayCityNames)}</span>
-      <span className="sb-score">{score == null ? "–" : score}</span>
+      <span className="sb-score">{score == null ? "–" : formatPoints(score)}</span>
     </div>
   );
 }

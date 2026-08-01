@@ -54,6 +54,8 @@ import { getLiveWeek } from "@/lib/scenarios";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { Modal, ConfirmDialog } from "@/components/ui/Modal";
 import { EntityLogo } from "@/components/ui/EntityLogo";
+import { ConnectScoresModal } from "@/components/platform/ConnectScoresModal";
+import { SaveConnectionPrompt } from "@/components/platform/SaveConnectionPrompt";
 import { WorkspaceSwitcher } from "@/components/season/WorkspaceSwitcher";
 import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -92,7 +94,7 @@ import {
   type SimulationSandbox,
 } from "@/lib/simulator";
 import { calculateStandings, formatRecord, freezeCompletedRankHistory, getEnteringWeekRankSnapshot } from "@/lib/standings";
-import { gameOfWeekStatusLabel, getScheduleGameSignals } from "@/lib/statistics";
+import { formatPoints, gameOfWeekStatusLabel, getScheduleGameSignals } from "@/lib/statistics";
 import { formatDraftPlace, getTeamsMissingDraftPlaces, getWeekOneRankMap, getWeekOneTeamOrder, hasCompleteDraftRanking } from "@/lib/rankings";
 import { loadSeasonById, normalizeSeason, removeLocalSeason, saveSeason } from "@/lib/storage";
 import { getNflWeekWindow, getWeekDateLabel, updateGameScore } from "@/lib/schedule";
@@ -277,9 +279,9 @@ function PlayoffWeekSchedule({ schedule, roundIndex }: { schedule: GeneratedSche
           <span className="playoff-week-game-label">{matchup.logoUrl && <EntityLogo color={settings.color} logoUrl={matchup.logoUrl} monogram={`G${index + 1}`} size={34} />}<span><small>GAME {index + 1}</small><strong>{played ? "Final" : matchup.recorded ? "Scheduled" : "Projected"}</strong></span></span>
           <TeamSlot teamId={matchup.awayTeamId} seedNumber={matchup.awaySeed} result={awayResult} />
           <span className="playoff-week-score" aria-label={played ? `Away ${matchup.awayScore}, home ${matchup.homeScore}, final` : "Projected matchup"}>
-            <strong className={awayResult === "loser" ? "loser" : ""}>{matchup.awayScore ?? "—"}</strong>
+            <strong className={awayResult === "loser" ? "loser" : ""}>{matchup.awayScore != null ? formatPoints(matchup.awayScore) : "—"}</strong>
             <b aria-label="at">@</b>
-            <strong className={homeResult === "loser" ? "loser" : ""}>{matchup.homeScore ?? "—"}</strong>
+            <strong className={homeResult === "loser" ? "loser" : ""}>{matchup.homeScore != null ? formatPoints(matchup.homeScore) : "—"}</strong>
             <small>{played ? "FINAL" : "PROJECTED"}</small>
           </span>
           <TeamSlot mirrored teamId={matchup.homeTeamId} seedNumber={matchup.homeSeed} result={homeResult} />
@@ -504,7 +506,7 @@ function MatchupRatingsView({ schedule }: { schedule: GeneratedSchedule }) {
             <td><Link href={`/season/${schedule.id}?week=${game.week}#${game.id}`}>W{game.week}</Link></td>
             <td>{isGameOfWeek ? <GameBadgeChip badge="GOTW" /> : <span className="matchup-table-game-label">Game {game.gameNumber ?? "—"}</span>}</td>
             <td><TeamIdentityBlock compact showRecord={false} team={away} division={divisionById.get(away.divisionId)} leagueRank={rowRanks.get(away.id) ?? away.overallRank} record={{ overall: "0-0" }} showCity={schedule.setup.display.cityNames} href={`/season/${schedule.id}/team/${away.id}`} /></td>
-            <td>{played ? <span className="matchup-table-result" aria-label={`Final score: ${away.name} ${game.awayScore}, ${home.name} ${game.homeScore}`}><span><strong className={awayWon ? "winner" : homeWon ? "loser" : ""}>{game.awayScore}</strong><b aria-label="at">@</b><strong className={homeWon ? "winner" : awayWon ? "loser" : ""}>{game.homeScore}</strong></span><small>FINAL</small></span> : <span className="matchup-table-result pending">—<small>NOT PLAYED</small></span>}</td>
+            <td>{played ? <span className="matchup-table-result" aria-label={`Final score: ${away.name} ${game.awayScore}, ${home.name} ${game.homeScore}`}><span><strong className={awayWon ? "winner" : homeWon ? "loser" : ""}>{formatPoints(game.awayScore!)}</strong><b aria-label="at">@</b><strong className={homeWon ? "winner" : awayWon ? "loser" : ""}>{formatPoints(game.homeScore!)}</strong></span><small>FINAL</small></span> : <span className="matchup-table-result pending">—<small>NOT PLAYED</small></span>}</td>
             <td><TeamIdentityBlock mirrored compact showRecord={false} team={home} division={divisionById.get(home.divisionId)} leagueRank={rowRanks.get(home.id) ?? home.overallRank} record={{ overall: "0-0" }} showCity={schedule.setup.display.cityNames} href={`/season/${schedule.id}/team/${home.id}`} /></td>
             <td><MatchupSeriesChip game={game} division={divisionById.get(home.divisionId)} /></td>
             <td><span className="table-rating-cell"><span className={`table-signal signal-${signal.label.toLowerCase()}`} aria-label={`${signal.label} matchup, rating ${signal.rating.toFixed(1)}`}>{[1, 2, 3].map((bar) => <i className={bar <= signal.bars ? "active" : ""} key={bar} />)}<strong>{signal.rating.toFixed(1)}</strong></span><small className="table-rating-ranks">W{game.week} ranks · #{rowRanks.get(away.id) ?? away.overallRank} vs #{rowRanks.get(home.id) ?? home.overallRank}</small></span></td>
@@ -863,7 +865,7 @@ function PlayoffsView({
       <b>#{seedByTeam.get(teamId) ?? team.overallRank}</b>
       <EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={34} />
       <span><small className="team-city">{team.city}</small><strong>{team.name}</strong></span>
-      <em>{score ?? "—"}</em>
+      <em>{score != null ? formatPoints(score) : "—"}</em>
     </span>;
   };
   const playoffGameById = new Map(simulatedMainGames.map((game) => [game.id, game]));
@@ -971,6 +973,7 @@ function PlatformSyncCard({
   onRefreshScores,
   onSaveConnection,
   onDisconnect,
+  onConnect,
 }: {
   schedule: GeneratedSchedule;
   canAccessPlatformSync: boolean;
@@ -978,6 +981,7 @@ function PlatformSyncCard({
   onRefreshScores: () => void;
   onSaveConnection: (syncMode: PlatformSyncMode, swid?: string, espnS2?: string) => void;
   onDisconnect: () => void;
+  onConnect: () => void;
 }) {
   const connection = schedule.setup.platformConnection;
   const [syncMode, setSyncMode] = useState<PlatformSyncMode>(connection?.syncMode ?? "manual");
@@ -985,7 +989,7 @@ function PlatformSyncCard({
   const [espnS2, setEspnS2] = useState("");
   useEffect(() => setSyncMode(connection?.syncMode ?? "manual"), [connection?.syncMode]);
   if (!connection) {
-    return <div className="platform-sync-card"><div><Cloud /><span><strong>Platform Sync</strong><small>Connect ESPN or Sleeper during import to refresh scores after your platform schedule is updated.</small></span></div><Link href="/build" className="button-secondary"><RefreshCw />Import league</Link></div>;
+    return <div className="platform-sync-card"><div><Cloud /><span><strong>Platform Sync</strong><small>Connect a public ESPN or Sleeper league to auto-fill weekly scores. Manual entry always stays available.</small></span></div><div className="platform-sync-actions"><button type="button" className="button-primary" onClick={onConnect}><Cloud />Connect for scores</button><Link href="/build" className="button-secondary">Import a league</Link></div></div>;
   }
   const providerLabel = connection.provider === "espn" ? "ESPN" : "Sleeper";
   const lastSync = connection.lastSyncAt ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(connection.lastSyncAt)) : "Not synced yet";
@@ -1037,7 +1041,7 @@ function ImportHistoryPanel({ events, loading, error, onRefresh, scheduleId }: {
   </section>;
 }
 
-function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, canAccessPlatformSync, platformSyncLoading, onRefreshPlatformScores, onSavePlatformConnection, onDisconnectPlatform, importHistory, importHistoryLoading, importHistoryError, onRefreshImportHistory }: {
+function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, canAccessPlatformSync, platformSyncLoading, onRefreshPlatformScores, onSavePlatformConnection, onDisconnectPlatform, onConnectPlatform, importHistory, importHistoryLoading, importHistoryError, onRefreshImportHistory }: {
   schedule: GeneratedSchedule;
   onOpenDraftRanking: () => void;
   onRegenerate: () => void;
@@ -1046,6 +1050,7 @@ function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, canAccessPla
   onRefreshPlatformScores: () => void;
   onSavePlatformConnection: (syncMode: PlatformSyncMode, swid?: string, espnS2?: string) => void;
   onDisconnectPlatform: () => void;
+  onConnectPlatform: () => void;
   importHistory: ImportHistoryEvent[];
   importHistoryLoading: boolean;
   importHistoryError: string | null;
@@ -1055,7 +1060,7 @@ function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, canAccessPla
   const draftRankingPending = schedule.setup.weekOne.rankingSource === "draft-day" && getTeamsMissingDraftPlaces(schedule.setup).length > 0;
   return <div className="workspace-stack">
     <div className="settings-band"><div><Pencil /><span><strong>Schedule setup</strong><small>Changing league structure regenerates the complete matchup slate as a new revision.</small></span></div><button type="button" className="button-secondary" onClick={onRegenerate}><Pencil />Edit and regenerate</button></div>
-    <PlatformSyncCard schedule={schedule} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshScores={onRefreshPlatformScores} onSaveConnection={onSavePlatformConnection} onDisconnect={onDisconnectPlatform} />
+    <PlatformSyncCard schedule={schedule} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshScores={onRefreshPlatformScores} onSaveConnection={onSavePlatformConnection} onDisconnect={onDisconnectPlatform} onConnect={onConnectPlatform} />
     <ImportHistoryPanel events={importHistory} loading={importHistoryLoading} error={importHistoryError} onRefresh={onRefreshImportHistory} scheduleId={schedule.id} />
     <div className="settings-list">
       <div><span>League</span><strong>{schedule.setup.name}</strong></div>
@@ -1445,6 +1450,33 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     }
     return probabilities;
   }, [simulation]);
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [connectAutoOpened, setConnectAutoOpened] = useState(false);
+  const [saveConnectionSetup, setSaveConnectionSetup] = useState<LeagueSetupInput | null>(null);
+  const pendingSyncRef = useRef(false);
+  const connectParamRef = useRef(false);
+  // Fresh manual leagues arrive from the builder with ?connect=scores — open the
+  // connect flow once so scores are one step away right after generating. It's
+  // optional: dismissing it (labelled "Skip for now") strips the param below.
+  useEffect(() => {
+    if (connectParamRef.current) return;
+    if (searchParams.get("connect") === "scores" && schedule && !schedule.setup.platformConnection && !simulation) {
+      connectParamRef.current = true;
+      setConnectOpen(true);
+      setConnectAutoOpened(true);
+    }
+  }, [searchParams, schedule, simulation]);
+  // Close the connect flow and drop ?connect from the URL so a refresh (or the
+  // effect above) never re-opens what the commissioner just skipped.
+  const closeConnect = () => {
+    setConnectOpen(false);
+    setConnectAutoOpened(false);
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("connect")) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("connect");
+      window.history.replaceState(null, "", url.pathname + url.search);
+    }
+  };
   useEffect(() => {
     const connection = schedule?.setup.platformConnection;
     if (!connection || connection.syncMode === "manual" || !canAccessPlatformSync || platformSyncLoading || simulation) return;
@@ -1453,6 +1485,15 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     platformAutoRefreshKey.current = key;
     void refreshPlatformScores();
   }, [schedule?.id, schedule?.setup.platformConnection, selectedWeek, canAccessPlatformSync, platformSyncLoading, simulation]);
+  // Manual syncMode skips the auto-refresh above, so pull scores once right after
+  // a fresh connection lands (the connection is applied via setSchedule, so we
+  // wait for it to be present rather than reading a stale closure).
+  useEffect(() => {
+    if (!pendingSyncRef.current || !schedule?.setup.platformConnection || platformSyncLoading) return;
+    pendingSyncRef.current = false;
+    void refreshPlatformScores();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schedule?.setup.platformConnection, platformSyncLoading]);
   if (!schedule || !activeSchedule) {
     if (seasonLoadState === "loading") return <div className="empty-season" role="status"><BrandLockup /><LoaderCircle className="spin" /><h1>Loading season…</h1><p>Opening the latest saved schedule and checking your access.</p></div>;
     if (seasonLoadState === "error") return <div className="empty-season" role="alert"><BrandLockup /><Cloud /><h1>Season could not open.</h1><p>{seasonLoadError || "The saved season was not available. Your local work is still safe on this device if it was created here."}</p><Link href="/account" className="button-primary">Open account</Link><Link href="/build" className="button-secondary">Open schedule builder</Link></div>;
@@ -1567,6 +1608,38 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     setNotice("Platform connection disconnected. Your generated schedule and scores stayed in place.");
     window.setTimeout(() => setNotice(null), 5200);
   };
+  // Manual league → public platform: write the mapped provider ids onto the
+  // teams and attach the connection. Score sync joins on Team.providerId, so this
+  // is all the pull needs. The first refresh fires from the pending-sync effect.
+  const applyPlatformConnection = (assignments: Record<string, string>, connection: PlatformConnection) => {
+    const updatedSetup: LeagueSetupInput = {
+      ...schedule.setup,
+      teams: schedule.setup.teams.map((team) => assignments[team.id] ? { ...team, providerId: assignments[team.id] } : team),
+      platformConnection: connection,
+    };
+    setSchedule((current) => current ? {
+      ...current,
+      setup: {
+        ...current.setup,
+        teams: current.setup.teams.map((team) => assignments[team.id] ? { ...team, providerId: assignments[team.id] } : team),
+        platformConnection: connection,
+      },
+    } : current);
+    closeConnect();
+    pendingSyncRef.current = true;
+    if (entitlements.signedIn && CLOUD_SCHEDULE_ID.test(schedule.id)) {
+      void fetch("/api/platform/connections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduleId: schedule.id, provider: connection.provider, providerLeagueId: connection.providerLeagueId, seasonYear: connection.seasonYear, syncMode: connection.syncMode }),
+      }).catch(() => undefined);
+    }
+    setNotice(`Connected to ${connection.provider === "espn" ? "ESPN" : "Sleeper"}. Pulling scores…`);
+    window.setTimeout(() => setNotice(null), 4200);
+    // Offer to remember this connection on the saved league so next season's
+    // build starts pre-connected (signed-in only — saved leagues are account-scoped).
+    if (entitlements.signedIn) setSaveConnectionSetup(updatedSetup);
+  };
   const onUpdatePlayoffs = (patch: Partial<LeagueSetupInput["playoffs"]>) => setSchedule((current) => current ? { ...current, setup: { ...current.setup, playoffs: { ...current.setup.playoffs, ...patch } } } : current);
   const onUpdatePlayoffGame = (game: PlayoffGame) => setSchedule((current) => {
     if (!current) return current;
@@ -1585,9 +1658,19 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     return { ...current, playoffGames };
   });
   const onUpdateTiebreakers = (tiebreakers: TiebreakerSettings) => setSchedule((current) => current ? normalizeSeason({ ...current, rankHistory: undefined, setup: { ...current.setup, tiebreakers } }) : current);
+  const countScoredGames = (target: GeneratedSchedule) =>
+    target.weeks.reduce((sum, week) => sum + week.games.filter((game) => game.homeScore != null && game.awayScore != null).length, 0);
   const commitSimulation = () => {
     if (!simulation) return;
     const committed = freezeCompletedRankHistory(materializeSimulationSchedule(simulation));
+    // H11 safety net: never let a commit carry fewer real scores than the season
+    // already has. Restart re-seeds the recorded set, so a healthy sandbox always
+    // clears this; a sandbox that somehow dropped it is refused, not saved blank.
+    if (countScoredGames(committed) < countScoredGames(schedule)) {
+      setNotice("Save blocked to protect your recorded scores — the simulation is missing real results. Discard it and try again.");
+      window.setTimeout(() => setNotice(null), 6000);
+      return;
+    }
     setSchedule(committed);
     setSimulation(null);
     setSavedSimulation(null);
@@ -1873,7 +1956,9 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
             onDiscard={discardSimulation}
             onOpenSchedule={openLeagueScheduleWeek}
           />}
-          {view === "settings" && <SettingsView schedule={activeSchedule} onOpenDraftRanking={() => setDraftRankingRequest((current) => current + 1)} onRegenerate={() => setConfirmAction("regenerate")} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshPlatformScores={refreshPlatformScores} onSavePlatformConnection={savePlatformConnection} onDisconnectPlatform={disconnectPlatform} importHistory={importHistory} importHistoryLoading={importHistoryLoading} importHistoryError={importHistoryError} onRefreshImportHistory={loadImportHistory} />}
+          {view === "settings" && <SettingsView schedule={activeSchedule} onOpenDraftRanking={() => setDraftRankingRequest((current) => current + 1)} onRegenerate={() => setConfirmAction("regenerate")} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshPlatformScores={refreshPlatformScores} onSavePlatformConnection={savePlatformConnection} onDisconnectPlatform={disconnectPlatform} onConnectPlatform={() => setConnectOpen(true)} importHistory={importHistory} importHistoryLoading={importHistoryLoading} importHistoryError={importHistoryError} onRefreshImportHistory={loadImportHistory} />}
+          {connectOpen && <ConnectScoresModal schedule={schedule} onClose={closeConnect} onConnect={applyPlatformConnection} dismissLabel={connectAutoOpened ? "Skip for now" : "Cancel"} />}
+          {saveConnectionSetup && <SaveConnectionPrompt setup={saveConnectionSetup} onClose={() => setSaveConnectionSetup(null)} />}
         </div>
         {entitlements.plan !== "pro" && <AdUnit placement="workspace" />}
       </section>

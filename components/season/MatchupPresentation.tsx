@@ -4,7 +4,7 @@ import { DivisionIdentity, DivisionMark } from "@/components/ui/DivisionIdentity
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
 import { formatGameDateTimeOverride, getWeeklyMatchupSignal, matchupSeriesLabel, type MatchupSignal } from "@/lib/matchups";
-import type { GameBadge } from "@/lib/statistics";
+import { formatPoints, type GameBadge } from "@/lib/statistics";
 import { teamInitials } from "@/lib/teamIdentity";
 import type { Division, ScheduledGame, Team } from "@/lib/types";
 
@@ -168,9 +168,9 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, away
     <div className="matchup-card-main">
       <TeamIdentityBlock team={away} division={awayDivision} leagueRank={awayRank} record={awayRecord} showCity={showCity} result={awayResult} href={teamHrefBase ? `${teamHrefBase}/${away.id}` : undefined} />
       <div className="matchup-score" aria-label={played ? `${away.name} ${game.awayScore}, ${home.name} ${game.homeScore}, final` : `${away.name} at ${home.name}, score not entered`}>
-        <strong className={awayResult === "loser" ? "loser" : ""}>{game.awayScore ?? "—"}</strong>
+        <strong className={awayResult === "loser" ? "loser" : ""}>{game.awayScore != null ? formatPoints(game.awayScore) : "—"}</strong>
         <span aria-label="at">@</span>
-        <strong className={homeResult === "loser" ? "loser" : ""}>{game.homeScore ?? "—"}</strong>
+        <strong className={homeResult === "loser" ? "loser" : ""}>{game.homeScore != null ? formatPoints(game.homeScore) : "—"}</strong>
         <small>{played ? "FINAL" : "SCHEDULED"}</small>
       </div>
       <TeamIdentityBlock mirrored team={home} division={homeDivision} leagueRank={homeRank} record={homeRecord} showCity={showCity} result={homeResult} href={teamHrefBase ? `${teamHrefBase}/${home.id}` : undefined} />
