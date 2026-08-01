@@ -1625,7 +1625,30 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .playoff-week-heading-copy { border-left: 1px solid color-mix(in srgb, var(--playoff-week-ink, var(--ink)) 28%, transparent); padding-left: 18px; }
 .playoff-week-heading-copy > strong { font-family: var(--font-archivo), sans-serif !important; font-size: var(--text-sm) !important; }
 .playoff-week-heading-copy > small { font-size: var(--text-xs) !important; font-weight: var(--w-medium) !important; line-height: 1.45; }
-.playoff-week-games { overflow-x: auto; border: 1px solid var(--line); background: white; }
+/* Playoff week (league schedule): a vertical stack of game blocks, each a banner
+   (game name + logo) sitting on the shared matchup card, so playoffs read like
+   every other week. */
+.playoff-week-games { display: grid; gap: 12px; }
+.playoff-game-block { display: grid; gap: 0; }
+.playoff-game-banner { display: flex; align-items: center; gap: 10px; min-height: 40px; border-radius: var(--radius) var(--radius) 0 0; background: var(--ink); color: white; padding: 7px 13px; }
+.playoff-game-banner > img { flex: 0 0 auto; width: 26px; height: 26px; object-fit: contain; border-radius: var(--radius-sm); background: rgba(255,255,255,.08); }
+.playoff-game-banner-mark { flex: 0 0 auto; display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--radius-sm); background: rgba(255,255,255,.08); color: var(--gold); }
+.playoff-game-banner-mark svg { width: 15px; height: 15px; }
+.playoff-game-banner > strong { min-width: 0; flex: 1; overflow: hidden; font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-md); text-overflow: ellipsis; white-space: nowrap; }
+.playoff-game-banner > em { flex: 0 0 auto; font-style: normal; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .06em; color: #b8c7c0; }
+.playoff-game-banner > em.is-projected { color: #6fd39b; }
+.playoff-game-block > .matchup-card { border-top-left-radius: 0; border-top-right-radius: 0; }
+.playoff-tbd-block .team-identity-rank { background: var(--field-soft); color: var(--field-dark); }
+.playoff-tbd-mark { width: 100%; height: 100%; display: grid; place-items: center; border: 1px dashed var(--line-strong); border-radius: var(--radius); background: var(--canvas); color: var(--muted); font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-2xl); font-weight: var(--w-black); }
+.matchup-card-main .playoff-tbd-block .team-identity-name strong { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.12; font-size: var(--text-sm); color: var(--ink); }
+.playoff-tbd-block .team-identity-name small { color: var(--muted); }
+.playoff-week-consolation { display: grid; gap: 12px; }
+.playoff-week-divider { display: flex; align-items: center; gap: 10px; margin-top: 4px; padding-bottom: 6px; border-bottom: 2px solid var(--line-strong); }
+.playoff-week-divider > svg { flex: 0 0 auto; width: 28px; height: 28px; border-radius: var(--radius-sm); background: var(--canvas); color: var(--muted); padding: 6px; }
+.playoff-week-divider > span { display: flex; flex-direction: column; gap: 1px; }
+.playoff-week-divider strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-lg); color: var(--ink); text-transform: uppercase; }
+.playoff-week-divider small { color: var(--muted); font-size: var(--text-2xs); }
+.playoff-week-eliminated > header > svg { background: color-mix(in srgb, var(--danger) 12%, white); color: var(--danger); }
 .playoff-week-row { min-width: 980px; min-height: 92px; display: grid; grid-template-columns: 116px minmax(250px, 1fr) 86px minmax(250px, 1fr) 190px; align-items: center; gap: 13px; border-bottom: 1px solid var(--line); padding: 12px 14px; }
 .playoff-week-row:last-child { border-bottom: 0; }
 .playoff-week-row.played { background: color-mix(in srgb, var(--playoff-week-color, var(--gold)) 4%, white); }
@@ -1868,6 +1891,14 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
    score. Field-green tint, never gold — gold stays GOTW-only. */
 .matchup-score.is-projected { display: flex; align-items: center; justify-content: center; }
 .matchup-score.is-projected em { font-style: normal; font-family: var(--font-archivo), sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: .08em; color: var(--field-dark); background: var(--field-soft); border-radius: var(--radius-chip); padding: 5px 12px; white-space: nowrap; }
+/* Projected playoff matchup whose teams aren't known yet (later rounds / pending
+   consolation results) — a lightweight card that mirrors the projected look. */
+.playoff-tbd-card { justify-content: center; }
+.playoff-tbd-body { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 16px 12px; }
+.playoff-tbd-body > b { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); color: var(--muted); }
+.playoff-tbd-body > strong { flex: 1; min-width: 0; font-size: var(--text-sm); color: var(--ink); text-align: center; }
+.playoff-tbd-body > em { flex: 0 0 auto; font-style: normal; font-family: var(--font-archivo), sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: .08em; color: var(--field-dark); background: var(--field-soft); border-radius: var(--radius-chip); padding: 5px 12px; }
+.playoff-tbd-note { display: block; padding: 0 14px 12px; color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-bold); text-align: center; }
 .game-details-desktop { margin-top: 9px; border-top: 1px solid var(--line); padding-top: 8px; }
 .game-detail-items { min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
 .game-detail-items > span { min-width: 0; display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }

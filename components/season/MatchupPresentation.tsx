@@ -136,7 +136,7 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, away
   homeRank: number;
   awayRecord: TeamRecordDisplay;
   homeRecord: TeamRecordDisplay;
-  signal: MatchupSignal;
+  signal?: MatchupSignal;
   featured: boolean;
   featuredLabel?: string;
   gameLabel?: string;
@@ -153,7 +153,9 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, away
   winProbability?: { away: number; home: number };
   projected?: boolean;
 }) {
-  const played = game.awayScore != null && game.homeScore != null;
+  // A 0-0 "score" is never a real fantasy result — treat it as not-yet-played so an
+  // unstarted season reads as scheduled/projected instead of a fake FINAL 0-0.
+  const played = game.awayScore != null && game.homeScore != null && !(game.awayScore === 0 && game.homeScore === 0);
   // A projected (not-yet-started) playoff matchup: the pairing is known but no
   // score exists, so the score slot reads "Projected" instead of a "—" blank.
   const showProjected = projected && !played;
@@ -177,7 +179,7 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, away
           <small>AWAY {Math.round(winProbability.away * 100)}%</small>
           <small>HOME {Math.round(winProbability.home * 100)}%</small>
         </span>}
-        <SignalBars signal={signal} awayRank={awayRank} homeRank={homeRank} />
+        {signal && <SignalBars signal={signal} awayRank={awayRank} homeRank={homeRank} />}
       </div>
     </div>
     <div className="matchup-card-main">

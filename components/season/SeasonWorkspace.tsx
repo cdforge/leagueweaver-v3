@@ -211,28 +211,6 @@ function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores }: { schedule
   const actualGames = (schedule.playoffGames ?? [])
     .filter((game) => game.bracket === "main" && game.roundIndex === roundIndex)
     .sort((left, right) => (left.gameNumber ?? 0) - (right.gameNumber ?? 0) || left.id.localeCompare(right.id));
-  const matchups: PlayoffWeekMatchupView[] = actualGames.length
-    ? actualGames.map((game, index) => ({
-      key: game.id,
-      homeTeamId: game.homeTeamId,
-      awayTeamId: game.awayTeamId,
-      homeSeed: seedByTeam.get(game.homeTeamId)?.seed ?? teamById.get(game.homeTeamId)?.overallRank ?? 0,
-      awaySeed: seedByTeam.get(game.awayTeamId)?.seed ?? teamById.get(game.awayTeamId)?.overallRank ?? 0,
-      homeScore: game.homeScore,
-      awayScore: game.awayScore,
-      stadium: game.stadium,
-      logoUrl: game.logoUrl || settings.gameLogoUrls?.[`main-r${roundIndex + 1}-g${index + 1}`],
-      recorded: true,
-    }))
-    : round.matchups.map((matchup, index) => ({
-      key: `main-r${roundIndex + 1}-g${index + 1}`,
-      homeTeamId: seedByNumber.get(matchup.homeSeed)?.teamId ?? "",
-      awayTeamId: seedByNumber.get(matchup.awaySeed)?.teamId ?? "",
-      homeSeed: matchup.homeSeed,
-      awaySeed: matchup.awaySeed,
-      logoUrl: settings.gameLogoUrls?.[`main-r${roundIndex + 1}-g${index + 1}`],
-      recorded: false,
-    }));
   const showCity = schedule.setup.display?.cityNames !== false;
   const roundDate = getWeekDateLabel(schedule.setup.seasonYear, round.weekNumber);
   const roundComplete = actualGames.length > 0 && actualGames.every((game) => game.homeScore != null && game.awayScore != null);
@@ -265,6 +243,116 @@ function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores }: { schedule
     />;
   };
 
+  const recordFor = (teamId: string) => {
+    const seedEntry = seedByTeam.get(teamId);
+    const standing = standingsByTeam.get(teamId);
+    return { overall: seedEntry?.record ?? (standing ? formatRecord(standing) : "0-0"), division: standing ? `${standing.divisionWins}-${standing.divisionLosses}` : undefined };
+  };
+  // Playoff games render with the SAME MatchupCard as the rest of the app; an
+  // unresolved (not-yet-recorded) matchup shows the card's "Projected" state.
+  const PlayoffMatchupCard = ({ id, gameNumber, homeTeamId, awayTeamId, homeSeed, awaySeed, homeScore, awayScore, stadium, gameLabel, projected }: {
+    id: string; gameNumber: number; homeTeamId: string; awayTeamId: string; homeSeed: number; awaySeed: number; homeScore?: number; awayScore?: number; stadium?: string; gameLabel?: string; projected: boolean;
+  }) => {
+    const home = teamById.get(homeTeamId);
+    const away = teamById.get(awayTeamId);
+    if (!home || !away) return <article className="matchup-card is-projected matchup-card-standard playoff-tbd-card" role="listitem">
+      {gameLabel && <div className="matchup-card-badges"><div className="matchup-card-chips"><span className="game-order-chip">{gameLabel}</span></div></div>}
+      <div className="playoff-tbd-body"><b>#{awaySeed}</b><em>Projected</em><b>#{homeSeed}</b></div>
+      <small className="playoff-tbd-note">Teams are set once the prior round is decided.</small>
+    </article>;
+    const venue = stadium || (championshipNeutral ? "Neutral championship site" : home.stadium) || "Venue to be determined";
+    const game: ScheduledGame = {
+      id, week: round.weekNumber, gameNumber, homeTeamId, awayTeamId,
+      matchupType: home.divisionId === away.divisionId ? "division" : "cross-division",
+      seriesGame: 1, seriesLength: 1, dateLabel: roundDate, stadium: venue, homeScore, awayScore,
+    };
+    return <MatchupCard
+      game={game} away={away} home={home}
+      awayDivision={divisionById.get(away.divisionId)} homeDivision={divisionById.get(home.divisionId)}
+      awayRank={awaySeed} homeRank={homeSeed}
+      awayRecord={recordFor(awayTeamId)} homeRecord={recordFor(homeTeamId)}
+      featured={false} gameLabel={gameLabel} showCity={showCity} showVenue projected={projected}
+      teamHrefBase={`/season/${schedule.id}/team`}
+    />;
+  };
+
+  // --- Placeholder-aware playoff games (same rule as the championship bracket): a
+  // slot is a real team only when it enters this round (bye / wild-card seed) or its
+  // feeding game is decided; otherwise "Winner of <game>". Never project ahead.
+  const roundNameAt = (index: number) => projectedRounds[index]?.name ?? `Round ${index + 1}`;
+  const nameForGame = (id: string, fallback: string) => settings.gameNames?.[id]?.trim() || fallback;
+  const defaultGameNameAt = (index: number, gameIndex: number, count: number) => count > 1 ? `${roundNameAt(index)} game ${gameIndex + 1}` : roundNameAt(index);
+  const recordedMainGame = (id: string) => (schedule.playoffGames ?? []).find((g) => g.bracket === "main" && g.id === id);
+  const decidedWinnerSeedAt = (index: number, gameIndex: number, homeSeed: number, awaySeed: number) => {
+    const rec = recordedMainGame(`main-r${index + 1}-g${gameIndex + 1}`);
+    if (rec && rec.homeScore != null && rec.awayScore != null && rec.homeScore !== rec.awayScore) return seedByTeam.get(rec.homeScore > rec.awayScore ? rec.homeTeamId : rec.awayTeamId)?.seed ?? Math.min(homeSeed, awaySeed);
+    return null;
+  };
+  const entryRoundOf = (seedNum: number) => (seedByNumber.get(seedNum)?.bye ? 1 : 0);
+  const feedingGameFor = (index: number, slotSeed: number) => {
+    const prev = projectedRounds[index - 1];
+    if (!prev) return undefined;
+    const gi = prev.matchups.findIndex((m, mi) => (decidedWinnerSeedAt(index - 1, mi, m.homeSeed, m.awaySeed) ?? Math.min(m.homeSeed, m.awaySeed)) === slotSeed);
+    if (gi < 0) return undefined;
+    const id = `main-r${index}-g${gi + 1}`;
+    return { id, name: nameForGame(id, defaultGameNameAt(index - 1, gi, prev.matchups.length)), decided: decidedWinnerSeedAt(index - 1, gi, prev.matchups[gi].homeSeed, prev.matchups[gi].awaySeed) != null };
+  };
+  type SlotV = { kind: "team"; teamId: string; seed: number } | { kind: "tbd"; label: string; sub: string; seed: number };
+  const resolveMainSlot = (slotSeed: number): SlotV => {
+    const teamId = seedByNumber.get(slotSeed)?.teamId;
+    if (teamId && entryRoundOf(slotSeed) === roundIndex) return { kind: "team", teamId, seed: slotSeed };
+    const feed = feedingGameFor(roundIndex, slotSeed);
+    if (teamId && feed?.decided) return { kind: "team", teamId, seed: slotSeed };
+    const fixed = settings.reseedMode === "fixed" && feed;
+    return { kind: "tbd", label: fixed ? `Winner of ${feed!.name}` : "To be determined", sub: fixed ? "Updates after the prior result" : `Projected seed #${slotSeed}`, seed: slotSeed };
+  };
+  // The placeholder reuses the exact TeamIdentityBlock grid so it lines up with a
+  // real team row — the card reads as a normal matchup with the unknown side swapped.
+  const TbdRow = ({ slot, mirrored = false }: { slot: Extract<SlotV, { kind: "tbd" }>; mirrored?: boolean }) => (
+    <div className="matchup-team-row">
+      <div className={`team-identity-block${mirrored ? " mirrored" : ""} without-record result-open playoff-tbd-block`}>
+        <b className="team-identity-rank">{settings.reseedMode === "fixed" ? "W" : `#${slot.seed}`}</b>
+        <span className="team-identity-mark"><span className="playoff-tbd-mark" aria-hidden="true">?</span></span>
+        <span className="team-identity-name"><strong>{slot.label}</strong><small>{slot.sub}</small></span>
+      </div>
+    </div>
+  );
+  const RealRow = ({ teamId, seedNumber, mirrored = false }: { teamId: string; seedNumber: number; mirrored?: boolean }) => {
+    const team = teamById.get(teamId);
+    if (!team) return null;
+    const s = seedByTeam.get(teamId);
+    const shown = settings.seedDisplayMode === "standings-finish" ? s?.standingsPosition ?? seedNumber : s?.seed ?? seedNumber;
+    return <div className="matchup-team-row"><TeamIdentityBlock mirrored={mirrored} team={team} division={divisionById.get(team.divisionId)} leagueRank={shown} record={recordFor(teamId)} showCity={showCity} href={`/season/${schedule.id}/team/${team.id}`} /></div>;
+  };
+  const GameBanner = ({ id, name }: { id: string; name: string }) => {
+    const logo = settings.gameLogoUrls?.[id] || settings.roundLogoUrls?.[roundIndex];
+    return <div className="playoff-game-banner">{logo ? <img src={logo} alt="" /> : <span className="playoff-game-banner-mark"><Trophy /></span>}<strong>{name}</strong></div>;
+  };
+  const PlayoffGameBlock = ({ id, name, index, count, home, away, homeScore, awayScore, stadium }: { id: string; name: string; index: number; count: number; home: SlotV; away: SlotV; homeScore?: number; awayScore?: number; stadium?: string }) => {
+    const played = homeScore != null && awayScore != null && !(homeScore === 0 && awayScore === 0);
+    const homeReal = home.kind === "team" ? home : null;
+    const awayReal = away.kind === "team" ? away : null;
+    return <div className="playoff-game-block" role="listitem">
+      <GameBanner id={id} name={name} />
+      {homeReal && awayReal
+        ? <PlayoffMatchupCard id={id} gameNumber={index + 1} homeTeamId={homeReal.teamId} awayTeamId={awayReal.teamId} homeSeed={homeReal.seed} awaySeed={awayReal.seed} homeScore={homeScore} awayScore={awayScore} stadium={stadium} projected={!played} />
+        : <article className="matchup-card is-projected matchup-card-standard" role="listitem"><div className="matchup-card-main">
+            {awayReal ? <RealRow teamId={awayReal.teamId} seedNumber={awayReal.seed} /> : <TbdRow slot={away as Extract<SlotV, { kind: "tbd" }>} />}
+            <div className="matchup-score is-projected"><em>Projected</em></div>
+            {homeReal ? <RealRow teamId={homeReal.teamId} seedNumber={homeReal.seed} mirrored /> : <TbdRow slot={home as Extract<SlotV, { kind: "tbd" }>} mirrored />}
+          </div></article>}
+    </div>;
+  };
+  const mainViews = actualGames.length
+    ? actualGames.map((game, index) => ({ id: game.id, name: nameForGame(game.id, defaultGameNameAt(roundIndex, index, actualGames.length)), index, count: actualGames.length, home: { kind: "team", teamId: game.homeTeamId, seed: seedByTeam.get(game.homeTeamId)?.seed ?? 0 } as SlotV, away: { kind: "team", teamId: game.awayTeamId, seed: seedByTeam.get(game.awayTeamId)?.seed ?? 0 } as SlotV, homeScore: game.homeScore as number | undefined, awayScore: game.awayScore as number | undefined, stadium: game.stadium as string | undefined }))
+    : round.matchups.map((m, index) => ({ id: `main-r${roundIndex + 1}-g${index + 1}`, name: nameForGame(`main-r${roundIndex + 1}-g${index + 1}`, defaultGameNameAt(roundIndex, index, round.matchups.length)), index, count: round.matchups.length, home: resolveMainSlot(m.homeSeed), away: resolveMainSlot(m.awaySeed), homeScore: undefined as number | undefined, awayScore: undefined as number | undefined, stadium: undefined as string | undefined }));
+  const consolationBracket = projectConsolationBracket(schedule);
+  const consolationRound = consolationBracket?.rounds.find((r) => r.roundIndex === roundIndex);
+  const consolationSlot = (entrant: NonNullable<typeof consolationRound>["games"][number]["entrants"][number]): SlotV =>
+    entrant.kind === "team" ? { kind: "team", teamId: entrant.teamId, seed: entrant.projectedSeed } : { kind: "tbd", label: entrant.label, sub: "Updates after the prior result", seed: entrant.projectedSeed };
+  const consolationTeamIds = new Set(consolationBracket?.rounds.flatMap((r) => r.games.flatMap((g) => g.entrants.filter((e): e is Extract<typeof e, { kind: "team" }> => e.kind === "team").map((e) => e.teamId))) ?? []);
+  const eliminatedTeams = roundIndex === 0 ? schedule.setup.teams.filter((team) => !seedByTeam.has(team.id) && !consolationTeamIds.has(team.id)) : [];
+
   return <div className="workspace-stack playoff-week-schedule" style={{ "--playoff-week-color": settings.color, "--playoff-week-ink": readableTextColor(settings.color) } as CSSProperties}>
     <div className="section-bar schedule-week-header is-playoff">
       <div className="week-lead">
@@ -276,43 +364,38 @@ function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores }: { schedule
       </div>
       <div className="week-status">
         <span className={`week-phase-pill ${playoffPillClass}`}>{playoffPhaseLabel}</span>
-        <span className="playoff-week-context">{matchups.length} game{matchups.length === 1 ? "" : "s"}{round.byeSeeds.length > 0 ? ` · ${round.byeSeeds.length} bye${round.byeSeeds.length === 1 ? "" : "s"}` : ""}</span>
+        <span className="playoff-week-context">{mainViews.length} game{mainViews.length === 1 ? "" : "s"}{round.byeSeeds.length > 0 ? ` · ${round.byeSeeds.length} bye${round.byeSeeds.length === 1 ? "" : "s"}` : ""}</span>
       </div>
       <div className="section-bar-actions">
         <button type="button" className="score-entry-trigger" onClick={onEnterScores}>
           <LayoutList />
           <span>{playoffScored > 0 ? "Edit scores" : "Add scores"}</span>
-          {matchups.length > 0 && <small className="score-progress" aria-label={`${playoffScored} of ${matchups.length} scored`}>{playoffScored}/{matchups.length}</small>}
+          {mainViews.length > 0 && <small className="score-progress" aria-label={`${playoffScored} of ${mainViews.length} scored`}>{playoffScored}/{mainViews.length}</small>}
         </button>
       </div>
     </div>
-    <div className="playoff-week-games" role="list" aria-label={`${round.name} matchups`}>
-      {matchups.map((matchup, index) => {
-        const played = matchup.homeScore != null && matchup.awayScore != null;
-        const homeResult = !played ? "open" : matchup.homeScore! > matchup.awayScore! ? "winner" : "loser";
-        const awayResult = !played ? "open" : matchup.awayScore! > matchup.homeScore! ? "winner" : "loser";
-        const home = teamById.get(matchup.homeTeamId);
-        const venue = matchup.stadium || (championshipNeutral ? "Neutral championship site" : home?.stadium);
-        return <article className={`playoff-week-row ${played ? "played" : ""}`} key={matchup.key} role="listitem">
-          <span className="playoff-week-game-label">{matchup.logoUrl && <EntityLogo color={settings.color} logoUrl={matchup.logoUrl} monogram={`G${index + 1}`} size={34} />}<span><small>GAME {index + 1}</small><strong>{played ? "Final" : matchup.recorded ? "Scheduled" : "Projected"}</strong></span></span>
-          <TeamSlot teamId={matchup.awayTeamId} seedNumber={matchup.awaySeed} result={awayResult} />
-          <span className="playoff-week-score" aria-label={played ? `Away ${matchup.awayScore}, home ${matchup.homeScore}, final` : "Projected matchup"}>
-            <strong className={awayResult === "loser" ? "loser" : ""}>{matchup.awayScore != null ? formatPoints(matchup.awayScore) : "—"}</strong>
-            <b aria-label="at">@</b>
-            <strong className={homeResult === "loser" ? "loser" : ""}>{matchup.homeScore != null ? formatPoints(matchup.homeScore) : "—"}</strong>
-            <small>{played ? "FINAL" : "PROJECTED"}</small>
-          </span>
-          <TeamSlot mirrored teamId={matchup.homeTeamId} seedNumber={matchup.homeSeed} result={homeResult} />
-          <span className="playoff-week-venue"><MapPin />{home?.logoUrl && <img src={home.logoUrl} alt="" />}<span><small>{championshipNeutral ? "CHAMPIONSHIP SITE" : "HIGHER SEED HOSTS"}</small><strong>{venue || "Venue to be determined"}</strong></span></span>
-        </article>;
-      })}
-    </div>
     {round.byeSeeds.length > 0 && <section className="playoff-week-byes">
-      <header><ShieldCheck /><span><strong>Projected byes</strong><small>These teams advance directly to NFL Week {round.weekNumber + 1}.</small></span></header>
+      <header><ShieldCheck /><span><strong>Projected byes</strong><small>These teams advance directly to their respective {projectedRounds[roundIndex + 1]?.name ?? "next round"}.</small></span></header>
       <div>{round.byeSeeds.map((seedNumber) => {
         const item = seedByNumber.get(seedNumber);
-        return <div key={seedNumber}><TeamSlot teamId={item?.teamId ?? ""} seedNumber={seedNumber} /><span><strong>BYE</strong><small>Advances to {projectedRounds[roundIndex + 1]?.name ?? "the next round"}</small></span></div>;
+        return <div key={seedNumber}><TeamSlot teamId={item?.teamId ?? ""} seedNumber={seedNumber} /><span className="playoff-bye-tag"><strong>BYE</strong></span></div>;
       })}</div>
+    </section>}
+    <div className="playoff-week-games" role="list" aria-label={`${round.name} matchups`}>
+      {mainViews.map((view) => <PlayoffGameBlock key={view.id} {...view} />)}
+    </div>
+    {consolationRound && consolationRound.games.length > 0 && <section className="playoff-week-consolation">
+      <div className="playoff-week-divider"><Medal /><span><strong>Consolation games</strong><small>Placement matchups · projected until played</small></span></div>
+      <div className="playoff-week-games" role="list" aria-label="Consolation matchups">
+        {consolationRound.games.map((cg, index) => {
+          const rec = (schedule.playoffGames ?? []).find((g) => g.bracket === "consolation" && g.id === cg.id);
+          return <PlayoffGameBlock key={cg.id} id={cg.id} name={cg.label} index={index} count={consolationRound.games.length} home={consolationSlot(cg.entrants[0])} away={consolationSlot(cg.entrants[1])} homeScore={rec?.homeScore} awayScore={rec?.awayScore} />;
+        })}
+      </div>
+    </section>}
+    {eliminatedTeams.length > 0 && <section className="playoff-week-byes playoff-week-eliminated">
+      <header><X /><span><strong>Eliminated</strong><small>Did not qualify for the postseason.</small></span></header>
+      <div>{eliminatedTeams.map((team) => <div key={team.id}><TeamSlot teamId={team.id} seedNumber={team.overallRank} /><span><strong>OUT</strong><small>No playoff or consolation path</small></span></div>)}</div>
     </section>}
   </div>;
 }
@@ -929,6 +1012,41 @@ function PlayoffsView({
     </div>;
   };
   const playoffGameById = new Map(simulatedMainGames.map((game) => [game.id, game]));
+  // A championship slot shows a real team only when that team actually occupies it
+  // right now — a Wild Card seed (round 0), a bye entering the Divisional round
+  // (round 1), or the decided winner of the feeding game. Otherwise the slot is a
+  // "Winner of <game>" placeholder, never a projected advancer. (Byes enter at the
+  // Divisional round per the league's single bye round.)
+  const mainGameDecidedWinnerSeed = (roundIdx: number, gameIndex: number, homeSeed: number, awaySeed: number) => {
+    const rec = playoffGameById.get(`main-r${roundIdx + 1}-g${gameIndex + 1}`);
+    if (rec && rec.homeScore != null && rec.awayScore != null && rec.homeScore !== rec.awayScore) {
+      return seedByTeam.get(rec.homeScore > rec.awayScore ? rec.homeTeamId : rec.awayTeamId) ?? Math.min(homeSeed, awaySeed);
+    }
+    return null;
+  };
+  const slotEntryRound = (seedNumber: number) => (seed(seedNumber)?.bye ? 1 : 0);
+  // The prior-round game whose winner would fill a slot holding projected seed S.
+  const mainFeedingGame = (roundIdx: number, slotSeed: number) => {
+    const prev = projectedMainRounds[roundIdx - 1];
+    if (!prev) return undefined;
+    const gi = prev.matchups.findIndex((m, mi) => (mainGameDecidedWinnerSeed(roundIdx - 1, mi, m.homeSeed, m.awaySeed) ?? Math.min(m.homeSeed, m.awaySeed)) === slotSeed);
+    if (gi < 0) return undefined;
+    const id = `main-r${roundIdx}-g${gi + 1}`;
+    const defaultName = prev.matchups.length > 1 ? `${rounds[roundIdx - 1] || `Round ${roundIdx}`} game ${gi + 1}` : (rounds[roundIdx - 1] || `Round ${roundIdx}`);
+    return { id, name: gameDisplayName(id, defaultName), decided: mainGameDecidedWinnerSeed(roundIdx - 1, gi, prev.matchups[gi].homeSeed, prev.matchups[gi].awaySeed) != null };
+  };
+  const slotResolved = (roundIdx: number, slotSeed: number) => slotEntryRound(slotSeed) === roundIdx || Boolean(mainFeedingGame(roundIdx, slotSeed)?.decided);
+  // Real team when the slot is genuinely occupied; otherwise a "Winner of <game>"
+  // placeholder (fixed bracket) or a projected-seed placeholder (reseed).
+  const ResolvedSlot = ({ roundIdx, number, host = false }: { roundIdx: number; number: number; host?: boolean }) => {
+    if (slotResolved(roundIdx, number)) return <Slot number={number} host={host} />;
+    const feed = mainFeedingGame(roundIdx, number);
+    const fixedPath = settings.reseedMode === "fixed" && feed;
+    return <div className={`bracket-slot placeholder result-placeholder${host ? " host" : ""}`}>
+      <b>{fixedPath ? "W" : number}</b>
+      <span><strong>{fixedPath ? `Winner of ${feed!.name}` : "To be determined"}</strong><small>{fixedPath ? "Updates after the prior result" : `Projected seed #${number}`}</small></span>
+    </div>;
+  };
   const orderedRoundMatchups = (round: typeof projectedMainRounds[number]) => round.matchups
     .map((matchup, gameIndex) => ({ matchup, gameIndex }))
     .sort((left, right) => {
@@ -985,8 +1103,8 @@ function PlayoffsView({
     };
     return <article className={`main-playoff-game ${played ? "is-final" : "is-projected"}`} data-bracket-game-id={gameId} style={{ "--game-half-color": halfDivision?.color, "--game-half-accent": halfDivision ? accessibleAccentColor(halfDivision.color, "#171d1a") : undefined } as React.CSSProperties}>
       <header><PlayoffGameBrand roundIndex={roundIndex} gameIndex={gameIndex} /><span><strong>{gameName}</strong><small>{sideCopy || (played ? "Final result" : settings.reseedMode === "fixed" ? "Fixed bracket path" : "Projected path")}</small></span>{played && <em>FINAL</em>}</header>
-      <div className="main-playoff-game-teams">{recorded ? <><SimulatedPlayoffTeam teamId={recorded.awayTeamId} score={recorded.awayScore} winner={awayWon} /><SimulatedPlayoffTeam teamId={recorded.homeTeamId} score={recorded.homeScore} winner={homeWon} /></> : <><Slot number={homeSeed} host /><Slot number={awaySeed} /></>}</div>
-      {!simulationMode && playoffsLive && homeTeam && awayTeam && <InlinePlayoffScoreEditor awayName={teamDisplayName(awayTeam, showCity)} homeName={teamDisplayName(homeTeam, showCity)} awayScore={recorded?.awayScore} homeScore={recorded?.homeScore} onSave={(awayScore, homeScore) => saveScore(awayScore, homeScore)} onClear={() => saveScore(undefined, undefined)} />}
+      <div className="main-playoff-game-teams">{recorded ? <><SimulatedPlayoffTeam teamId={recorded.awayTeamId} score={recorded.awayScore} winner={awayWon} /><SimulatedPlayoffTeam teamId={recorded.homeTeamId} score={recorded.homeScore} winner={homeWon} /></> : <><ResolvedSlot roundIdx={roundIndex} number={homeSeed} host /><ResolvedSlot roundIdx={roundIndex} number={awaySeed} /></>}</div>
+      {!simulationMode && playoffsLive && homeTeam && awayTeam && (recorded != null || (slotResolved(roundIndex, homeSeed) && slotResolved(roundIndex, awaySeed))) && <InlinePlayoffScoreEditor awayName={teamDisplayName(awayTeam, showCity)} homeName={teamDisplayName(homeTeam, showCity)} awayScore={recorded?.awayScore} homeScore={recorded?.homeScore} onSave={(awayScore, homeScore) => saveScore(awayScore, homeScore)} onClear={() => saveScore(undefined, undefined)} />}
       {homeTeam && <footer><span className="playoff-venue">{homeTeam.logoUrl ? <EntityLogo imagePresentation="bare" color={homeTeam.color} logoUrl={homeTeam.logoUrl} monogram={teamInitials(homeTeam)} size={18} /> : <MapPin />}{homeTeam.stadium}</span></footer>}
     </article>;
   };
