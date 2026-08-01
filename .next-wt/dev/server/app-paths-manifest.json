@@ -1,0 +1,6 @@
+{
+  "/api/entitlements/route": "app/api/entitlements/route.js",
+  "/api/saved-leagues/route": "app/api/saved-leagues/route.js",
+  "/page": "app/page.js",
+  "/welcome/page": "app/welcome/page.js"
+}

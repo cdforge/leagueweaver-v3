@@ -4192,3 +4192,11 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .sb-picture-txt { display: flex; flex-direction: column; line-height: 1.05; text-align: left; }
 .sb-picture-txt b { font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 14px; letter-spacing: .02em; text-transform: uppercase; color: var(--ink); }
 .sb-picture-txt small { font-size: 11px; color: var(--field-dark); font-variant-numeric: tabular-nums; }
+
+/* Wizard — playoff setup step */
+.playoff-setup-grid { align-items: start; }
+.playoff-theme-row button { position: relative; }
+.playoff-theme-swatch { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.18); margin-bottom: 4px; }
+.playoff-branding-row { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.playoff-name-field { flex: 1; min-width: 220px; }
+.playoff-name-field input { width: 100%; }
