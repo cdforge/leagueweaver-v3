@@ -126,7 +126,7 @@ function GameDetails({ game }: { game: ScheduledGame }) {
   </div>;
 }
 
-export function MatchupCard({ game, away, home, awayDivision, homeDivision, awayRank, homeRank, awayRecord, homeRecord, signal, featured, featuredLabel = "GOTW", gameLabel, showCity, showVenue, variant = "standard", teamHrefBase, badges = [], medalRank, medalLabel, highlighted = false, simulationSource, simulationLocked = false, winProbability, projected = false }: {
+export function MatchupCard({ game, away, home, awayDivision, homeDivision, awayRank, homeRank, awayRecord, homeRecord, signal, featured, featuredLabel = "GOTW", gameLabel, dateLabel, showCity, showVenue, variant = "standard", teamHrefBase, badges = [], medalRank, medalLabel, highlighted = false, simulationSource, simulationLocked = false, winProbability, projected = false }: {
   game: ScheduledGame;
   away: Team;
   home: Team;
@@ -140,6 +140,7 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, away
   featured: boolean;
   featuredLabel?: string;
   gameLabel?: string;
+  dateLabel?: string;
   showCity: boolean;
   showVenue: boolean;
   variant?: "standard" | "gotw";
@@ -190,9 +191,10 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, away
         {!showProjected && <span className="matchup-row-score"><strong className={awayResult === "loser" ? "loser" : ""}>{game.awayScore != null ? formatPoints(game.awayScore) : "—"}</strong></span>}
       </div>
       {showProjected ? (
-        <div className="matchup-score is-projected" aria-label={`${away.name} at ${home.name}, projected — not yet played`}><em>Projected</em></div>
+        <div className="matchup-score is-projected" aria-label={`${away.name} at ${home.name}, projected — not yet played`}>{dateLabel && <small className="matchup-score-date">{dateLabel}</small>}<em>Projected</em></div>
       ) : (
         <div className="matchup-score" aria-label={played ? `${away.name} ${game.awayScore}, ${home.name} ${game.homeScore}, final` : `${away.name} at ${home.name}, score not entered`}>
+          {dateLabel && <small className="matchup-score-date">{dateLabel}</small>}
           <strong className={awayResult === "loser" ? "loser" : ""}>{game.awayScore != null ? formatPoints(game.awayScore) : "—"}</strong>
           <span aria-label="at">@</span>
           <strong className={homeResult === "loser" ? "loser" : ""}>{game.homeScore != null ? formatPoints(game.homeScore) : "—"}</strong>

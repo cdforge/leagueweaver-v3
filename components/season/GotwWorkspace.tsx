@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import { CircleAlert, ShieldCheck, Sparkles } from "lucide-react";
 import { MatchupCard } from "@/components/season/MatchupPresentation";
 import { getMatchupRatingRange, getMatchupSignal } from "@/lib/matchups";
-import { getNflWeekWindow } from "@/lib/schedule";
 import { formatRecord, getEnteringWeekRankSnapshot } from "@/lib/standings";
 import { gameOfWeekStatusLabel, getScheduleGameSignals } from "@/lib/statistics";
 import type { GeneratedSchedule } from "@/lib/types";
@@ -50,18 +49,12 @@ export function GotwWorkspace({ schedule, simulationResults = {}, simulationProb
           const row = standingsByTeam.get(teamId);
           return { overall: row ? formatRecord(row) : "0-0", division: row ? `${row.divisionWins}-${row.divisionLosses}` : "0-0" };
         };
-        const holidays = getNflWeekWindow(schedule.setup.seasonYear, entry.weekNumber).holidays;
         const ratingRange = getMatchupRatingRange(schedule.weeks.flatMap((week) => week.games), entry.ranks);
         const statusLabel = gameOfWeekStatusLabel(entry.status);
         const simulationResult = simulationResults[entry.game.id];
         return <section className={`gotw-timeline-item status-${entry.status}`} key={entry.weekNumber}>
-          <header>
-            <span className="gotw-week-copy"><strong>Week {entry.weekNumber}</strong><small>{entry.dateLabel}</small></span>
-            <span className="gotw-rating"><small>{entry.lens === "live" ? "LIVE RATING" : "PRESEASON RATING"}</small><strong>{entry.rating.toFixed(1)}</strong></span>
-            {(entry.playoffImplication || holidays.length > 0) && <span className="week-markers">{entry.playoffImplication && <em className="playoff-impact-marker">PLAYOFF IMPACT</em>}{holidays.map((holiday) => <em className="holiday-marker" key={holiday}>{holiday}</em>)}</span>}
-          </header>
-          <p className="gotw-why">Featured because it earned the week's highest matchup rating ({entry.rating.toFixed(1)}){entry.playoffImplication ? " and swings the playoff race" : ""}{holidays.length > 0 ? ` — a ${holidays[0]} spotlight` : ""}.</p>
           <MatchupCard
+            dateLabel={`Week ${entry.weekNumber} · ${entry.dateLabel}`}
             game={entry.game}
             away={away}
             home={home}
