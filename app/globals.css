@@ -1037,6 +1037,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .welcome-capability-grid { grid-template-columns: 1fr; }
   .wp-rating b { display: none; }
   .wp-center > small { display: none; }
+  /* The 3-up match (team · venue · team) can't fit a phone — stack it: home, venue, away,
+     with both teams normalized to seed → logo → name so the row reads left-to-right. */
+  .wp-match { grid-template-columns: 1fr; gap: 8px; }
+  .wp-team, .wp-team.wp-right { justify-content: flex-start; }
+  .wp-team.wp-right { flex-direction: row-reverse; justify-content: flex-end; }
+  .wp-team.wp-right .wp-name { align-items: flex-start; text-align: left; }
+  .wp-center { align-items: flex-start; padding-left: 40px; }
 }
 
 /* Season workspace */
