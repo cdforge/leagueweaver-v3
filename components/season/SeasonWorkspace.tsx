@@ -862,11 +862,19 @@ function PlayoffsView({
   };
   const simulatedMainGames = (schedule.playoffGames ?? []).filter((game) => game.bracket === "main");
   const seedByTeam = new Map(seeds.map((item) => [item.teamId, item.seed]));
-  const titleGame = [...simulatedMainGames].sort((left, right) => right.roundIndex - left.roundIndex)[0];
-  const championId = titleGame && titleGame.homeScore != null && titleGame.awayScore != null
+  // The champion is only crowned when the actual final-round game is decided — not
+  // whenever the highest *recorded* round happens to have a result (which would
+  // wrongly crown a round-1 winner before later rounds are even played).
+  const titleGame = simulatedMainGames.find((game) => game.roundIndex === projectedMainRounds.length - 1);
+  const championId = titleGame && titleGame.homeScore != null && titleGame.awayScore != null && titleGame.homeScore !== titleGame.awayScore
     ? titleGame.homeScore > titleGame.awayScore ? titleGame.homeTeamId : titleGame.awayTeamId
     : undefined;
   const champion = championId ? teamById.get(championId) : undefined;
+  const regularSeasonPlayedOut = schedule.weeks.length > 0 && schedule.weeks.every((week) => week.games.every((game) => game.homeScore != null && game.awayScore != null));
+  const playoffsLive = settings.fieldStatus === "locked" || regularSeasonPlayedOut || simulatedMainGames.some((game) => game.homeScore != null && game.awayScore != null);
+  const bracketMode: "projected" | "live" | "complete" = champion ? "complete" : playoffsLive ? "live" : "projected";
+  const bracketModeNote = bracketMode === "complete" ? "Champion decided" : bracketMode === "live" ? "Playoffs are live — enter each result to advance the bracket" : "Projected — if the regular season ended today. Seeds firm up as the season finishes.";
+  const bracketModeChip = bracketMode === "complete" ? "Final" : bracketMode === "live" ? "Live" : "Projected";
   const SimulatedPlayoffTeam = ({ teamId, score, winner }: { teamId: string; score?: number; winner: boolean }) => {
     const team = teamById.get(teamId);
     if (!team) return <span className="sim-bracket-team placeholder"><strong>To be determined</strong></span>;
@@ -936,7 +944,7 @@ function PlayoffsView({
     return <article className={`main-playoff-game ${played ? "is-final" : "is-projected"}`} data-bracket-game-id={gameId} style={{ "--game-half-color": halfDivision?.color, "--game-half-accent": halfDivision ? accessibleAccentColor(halfDivision.color, "#171d1a") : undefined } as React.CSSProperties}>
       <header><PlayoffGameBrand roundIndex={roundIndex} gameIndex={gameIndex} /><span><strong>{gameName}</strong><small>{sideCopy || (played ? "Final result" : settings.reseedMode === "fixed" ? "Fixed bracket path" : "Projected path")}</small></span><em>{played ? "FINAL" : "PROJECTED"}</em></header>
       <div className="main-playoff-game-teams">{recorded ? <><SimulatedPlayoffTeam teamId={recorded.awayTeamId} score={recorded.awayScore} winner={awayWon} /><SimulatedPlayoffTeam teamId={recorded.homeTeamId} score={recorded.homeScore} winner={homeWon} /></> : <><Slot number={homeSeed} host /><Slot number={awaySeed} /></>}</div>
-      {!simulationMode && homeTeam && awayTeam && <InlinePlayoffScoreEditor awayName={teamDisplayName(awayTeam, showCity)} homeName={teamDisplayName(homeTeam, showCity)} awayScore={recorded?.awayScore} homeScore={recorded?.homeScore} onSave={(awayScore, homeScore) => saveScore(awayScore, homeScore)} onClear={() => saveScore(undefined, undefined)} />}
+      {!simulationMode && playoffsLive && homeTeam && awayTeam && <InlinePlayoffScoreEditor awayName={teamDisplayName(awayTeam, showCity)} homeName={teamDisplayName(homeTeam, showCity)} awayScore={recorded?.awayScore} homeScore={recorded?.homeScore} onSave={(awayScore, homeScore) => saveScore(awayScore, homeScore)} onClear={() => saveScore(undefined, undefined)} />}
       <footer><span className="advance-route"><b>W</b>Advances toward championship</span>{route && <span className="placement-route"><b>L</b>Moves to placement</span>}</footer>
     </article>;
   };
@@ -990,7 +998,7 @@ function PlayoffsView({
     {boardSection === "championship" && <div className="pp-champ-section"><div className="postseason-map-scroll" aria-label="Championship bracket">
       <BracketConnectorLayer connections={mainConnections} className={`postseason-map-canvas rounds-${rounds.length}`}>
         <section className="championship-picture" aria-labelledby="championship-picture-title">
-          <header><span><Trophy /><span><small>TITLE BRACKET</small><strong id="championship-picture-title">Road to the championship</strong></span></span><em>{settings.fieldStatus === "locked" ? "Locked field" : "Live projection"}</em></header>
+          <header className={`bracket-mode-${bracketMode}`}><span><Trophy /><span><small>TITLE BRACKET</small><strong id="championship-picture-title">Road to the championship</strong><small className="bracket-mode-note">{bracketModeNote}</small></span></span><em className={`bracket-mode-chip is-${bracketMode}`}>{bracketModeChip}</em></header>
           <div className="championship-bracket-grid" style={{ gridTemplateColumns: `repeat(${rounds.length}, minmax(270px, 1fr))` }}>
             {projectedMainRounds.map((round) => <section key={round.roundIndex}><RoundHeading index={round.roundIndex} /><div className="main-playoff-round-games">{orderedRoundMatchups(round).map(({ matchup, gameIndex }) => <MainPlayoffGame key={`${round.roundIndex}-${gameIndex}`} roundIndex={round.roundIndex} gameIndex={gameIndex} homeSeed={matchup.homeSeed} awaySeed={matchup.awaySeed} bracketSide={matchup.bracketSide} />)}{round.roundIndex === 0 && round.byeSeeds.length > 0 && <div className="playoff-bye-strip"><strong>{round.byeSeeds.length} BYE{round.byeSeeds.length === 1 ? "" : "S"}</strong><span>{round.byeSeeds.map((byeSeed) => <Slot key={byeSeed} number={byeSeed} />)}</span></div>}</div></section>)}
           </div>
