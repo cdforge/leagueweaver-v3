@@ -6,7 +6,6 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   BarChart3,
   ArrowDownRight,
-  Bell,
   CalendarDays,
   Check,
   Cloud,
@@ -1201,6 +1200,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const [scoreDiscardConfirmOpen, setScoreDiscardConfirmOpen] = useState(false);
   const [platformSyncLoading, setPlatformSyncLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState<"share" | "notify" | null>(null);
+  const [scorebarCollapsed, setScorebarCollapsed] = useState(false);
   // H1: irreversible actions (publish, save-run-back, regenerate) open this
   // confirm gate before running, so a reflexive click can't publish private data,
   // overwrite real scores, or wipe the slate.
@@ -1735,20 +1735,6 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       setActionBusy(null);
     }
   };
-  const sendNotification = async () => {
-    if (actionBusy) return;
-    if (!CLOUD_SCHEDULE_ID.test(schedule.id)) return setNotice("This season needs to finish cloud syncing before sending an update.");
-    if (typeof window !== "undefined" && !window.confirm("Send a schedule update email to everyone subscribed to this league?")) return;
-    setActionBusy("notify");
-    try {
-      const response = await fetch("/api/notifications/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: schedule.id }) });
-      const payload = await response.json().catch(() => ({})) as { sent?: number; message?: string; error?: string };
-      setNotice(response.ok ? payload.message || `Update sent to ${payload.sent ?? 0} subscriber${payload.sent === 1 ? "" : "s"}.` : apiErrorMessage(response.status, payload.error, "The update could not be sent."));
-      window.setTimeout(() => setNotice(null), 5200);
-    } finally {
-      setActionBusy(null);
-    }
-  };
   const selectView = (item: typeof VIEW_ITEMS[number]) => {
     setScoreModalOpen(false);
     setView(item.key);
@@ -1789,7 +1775,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const scoreBarRankByTeam = new Map((getEnteringWeekRankSnapshot(activeSchedule, selectedWeek)?.rows ?? []).map((row) => [row.teamId, row.rank]));
   const scoreBarDivisionById = new Map(activeSchedule.setup.divisions.map((division) => [division.id, division]));
   const scoreBarWeek = activeSchedule.weeks.find((item) => item.weekNumber === selectedWeek) ?? activeSchedule.weeks[0];
-  return <main className={`workspace-page ${simulation ? "simulation-mode" : ""} ${scoreBarWeek ? "has-scorebar" : ""}`} style={{ "--brand": schedule.setup.color, "--brand-on": readableTextColor(schedule.setup.color) } as CSSProperties}>
+  return <main className={`workspace-page ${simulation ? "simulation-mode" : ""} ${scoreBarWeek ? "has-scorebar" : ""} ${scoreBarWeek && scorebarCollapsed ? "scorebar-collapsed" : ""}`} style={{ "--brand": schedule.setup.color, "--brand-on": readableTextColor(schedule.setup.color) } as CSSProperties}>
     {scoreModalOpen && canAccessScorekeeping && <Modal
       className="score-entry-modal"
       backdropClassName="score-entry-modal-backdrop"
@@ -1806,7 +1792,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
         <footer><span><ShieldCheck /><small>Scores save automatically as you enter them.</small></span><button type="button" className="button-primary" onClick={() => closeScoreModal(true)}>Done</button></footer>
     </Modal>}
     {showRecap && <GenerationReveal schedule={schedule} mode="replay" onComplete={() => setShowRecap(false)} />}
-    <header className="workspace-topbar"><BrandLockup /><div className="workspace-top-actions"><Tooltip label="Send schedule update"><button type="button" aria-label="Send schedule update" disabled={actionBusy !== null} onClick={sendNotification}>{actionBusy === "notify" ? <LoaderCircle className="spin" /> : <Bell />}</button></Tooltip><AccountIdentity identity={entitlements} plan={entitlements.plan} /></div></header>
+    <header className="workspace-topbar"><BrandLockup /><div className="workspace-top-actions"><AccountIdentity identity={entitlements} plan={entitlements.plan} /></div></header>
     {scoreBarWeek && <WeekScoreBar
       week={scoreBarWeek}
       weekCount={activeSchedule.weeks.length}
@@ -1817,6 +1803,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       displayCityNames={activeSchedule.setup.display?.cityNames !== false}
       onSelectWeek={setSelectedWeek}
       onSelectGame={(gameId) => { openLeagueScheduleWeek(scoreBarWeek.weekNumber); setHighlightedGame({ id: gameId }); }}
+      onCollapsedChange={setScorebarCollapsed}
     />}
     <div className="workspace-shell">
       <aside className="workspace-rail"><nav aria-label="Season workspace">{VIEW_ITEMS.map((item) => { const Icon = item.icon; return <button type="button" key={item.key} aria-label={item.label} title={item.label} className={view === item.key ? "active" : ""} onClick={() => selectView(item)}><Icon /><span>{item.label}</span></button>; })}</nav><div className="rail-bottom"><WorkspaceSwitcher current={{ id: schedule.id, name: schedule.setup.name, seasonYear: schedule.setup.seasonYear, color: schedule.setup.color, logoUrl: schedule.setup.logoUrl, initials: schedule.setup.initials }} signedIn={Boolean(entitlements.signedIn)} /></div></aside>

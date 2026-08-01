@@ -129,8 +129,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .topnav { display: flex; align-items: center; gap: 24px; font-size: var(--text-sm); font-weight: var(--w-bold); }
 .topnav a { min-height: 44px; display: inline-flex; align-items: center; color: var(--muted); transition: color var(--transition); }
 .topnav a:hover { color: var(--ink); }
-.account-link { gap: 8px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: var(--radius); color: var(--ink) !important; transition: border-color var(--transition), background var(--transition); }
-.account-link:hover { border-color: var(--field) !important; background: var(--field-soft); }
+.account-link { gap: 8px; padding: 0 10px; border: 0; border-radius: var(--radius); color: var(--ink) !important; transition: background var(--transition); }
+.account-link:hover { background: var(--field-soft); }
 .account-identity { min-width: 0; justify-content: flex-start; }
 .account-identity.loading { color: var(--muted) !important; }
 .account-avatar { width: 32px; height: 32px; flex: 0 0 32px; overflow: hidden; border-radius: var(--radius-chip); background: var(--field); color: white; display: grid; place-items: center; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: 0; }
@@ -391,7 +391,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .save-league-row > div { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
 .save-league-row a { color: var(--field); font-size: var(--text-2xs); font-weight: var(--w-black); }
 
-.builder-actions { min-height: 74px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; padding: 14px 40px; background: var(--canvas); }
+/* Desktop: the footer sticks to the viewport bottom so Back/Continue stay reachable while
+   scrolling long steps. Below 980px this footer is hidden (see media query) and the fixed
+   blueprint bar takes over, so the sticky behavior is desktop-only in practice. */
+.builder-actions { min-height: 74px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; padding: 14px 40px; background: var(--canvas); position: sticky; bottom: 0; z-index: 3; border-radius: 0 0 calc(var(--radius) - 1px) calc(var(--radius) - 1px); box-shadow: 0 -8px 20px -14px rgba(21, 35, 28, 0.32); }
 .button-primary, .button-secondary { min-height: 44px; border-radius: var(--radius); padding: 0 18px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; font-size: var(--text-sm); font-weight: var(--w-black); cursor: pointer; transition: background var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform 80ms ease; }
 .button-primary { border: 1px solid var(--brand, var(--field)); background: var(--brand, var(--field)); color: var(--brand-on, white); }
 .button-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--brand, var(--field)) 84%, #000); border-color: color-mix(in srgb, var(--brand, var(--field)) 84%, #000); box-shadow: 0 2px 8px rgba(17, 122, 69, 0.28); }
@@ -1053,8 +1056,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
    shell; pin it under the top bar and drop the rail below it so the rail — and the
    switcher pinned to its bottom — always fit the viewport instead of overflowing. */
 .workspace-page.has-scorebar { --sb-strip-h: 91px; }
+/* Collapsed, the strip is a single 40px line — reclaim the rest so the rail rises to meet it. */
+.workspace-page.has-scorebar.scorebar-collapsed { --sb-strip-h: 40px; }
 .workspace-page.has-scorebar > .sb { position: sticky; top: 66px; z-index: 20; }
-.workspace-page.has-scorebar .workspace-rail { top: calc(66px + var(--sb-strip-h)); height: calc(100vh - 66px - var(--sb-strip-h)); }
+.workspace-page.has-scorebar .workspace-rail { top: calc(66px + var(--sb-strip-h)); height: calc(100vh - 66px - var(--sb-strip-h)); transition: top var(--transition), height var(--transition); }
 .workspace-rail nav { display: grid; gap: 2px; }
 .workspace-rail nav button { position: relative; min-height: 42px; border: 0; border-radius: var(--radius); background: transparent; color: rgba(255,255,255,0.58); display: flex; align-items: center; gap: 10px; padding: 0 11px; font-size: var(--text-2xs); font-weight: var(--w-bold); cursor: pointer; text-align: left; transition: background var(--transition), color var(--transition); }
 .workspace-rail nav button:hover { background: rgba(255,255,255,.09); color: rgba(255,255,255,0.88); }

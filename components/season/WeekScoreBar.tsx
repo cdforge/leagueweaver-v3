@@ -50,6 +50,8 @@ export interface WeekScoreBarProps {
   onSelectWeek: (week: number) => void;
   /** Open a matchup when its card is clicked. */
   onSelectGame?: (gameId: string) => void;
+  /** Notified when the collapsed state changes, so the layout can reclaim the strip height. */
+  onCollapsedChange?: (collapsed: boolean) => void;
   className?: string;
 }
 
@@ -212,6 +214,7 @@ export function WeekScoreBar({
   thanksgiving,
   onSelectWeek,
   onSelectGame,
+  onCollapsedChange,
   className = "",
 }: WeekScoreBarProps) {
   // Clock is read client-side to avoid a hydration mismatch: the first render
@@ -261,6 +264,8 @@ export function WeekScoreBar({
       try { window.localStorage.setItem("lw:scorebar:collapsed", next ? "1" : "0"); } catch { /* ignore */ }
       return next;
     });
+  // Let the surrounding layout know the strip's height changed so the sidebar can move up.
+  useEffect(() => { onCollapsedChange?.(collapsed); }, [collapsed, onCollapsedChange]);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const scRef = useRef<HTMLDivElement>(null);
