@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthenticatedClient, getEntitlements } from "@/lib/supabase/auth";
-import { isSeasonCopyTitle, nextSeasonCopyTitle, readSavedSeasonTimeFrame, readSavedSeasonTimeFrameFromSchedule, savedSeasonIdentity } from "@/lib/savedSeasons";
+import { isSeasonCopyTitle, nextSeasonCopyTitle, readSavedSeasonBrandingFromSchedule, readSavedSeasonTimeFrame, readSavedSeasonTimeFrameFromSchedule, savedSeasonIdentity } from "@/lib/savedSeasons";
 import type { GeneratedSchedule } from "@/lib/types";
 
 const saveSchema = z.object({
@@ -44,6 +44,11 @@ export async function GET() {
     const revisionFrame = readSavedSeasonTimeFrameFromSchedule(revision?.schedule_json);
     return revisionFrame.seasonYear && revisionFrame.weeks ? revisionFrame : season.time_frame;
   };
+  const resolvedBranding = (season: typeof activeSeasons[number]) => {
+    const currentRevision = season.current_revision_id ? revisionById.get(season.current_revision_id) : undefined;
+    const revision = currentRevision ?? latestRevisionBySchedule.get(season.id);
+    return readSavedSeasonBrandingFromSchedule(revision?.schedule_json);
+  };
 
   const grouped = new Map<string, typeof activeSeasons>();
   for (const season of activeSeasons) {
@@ -55,9 +60,13 @@ export async function GET() {
 
   const seasons = [...grouped.values()].map((group) => {
     const season = group[0];
+    const branding = resolvedBranding(season);
     return {
       ...season,
       time_frame: resolvedTimeFrame(season),
+      logo_url: branding.logoUrl ?? null,
+      color: branding.color ?? null,
+      initials: branding.initials ?? null,
       editable: true,
       revision_count: group.reduce((total, item) => total + (revisionsBySchedule.get(item.id) ?? 0), 0),
     };

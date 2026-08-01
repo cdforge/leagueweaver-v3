@@ -17,15 +17,15 @@ export type WorkspaceSwitcherCurrent = {
   initials?: string;
 };
 
-type SwitcherEntry = { id: string; name: string; year?: number };
+type SwitcherEntry = { id: string; name: string; year?: number; color?: string; logoUrl?: string; initials?: string };
 
-type CloudSeason = { id: string; title: string; time_frame?: { seasonYear?: number } };
+type CloudSeason = { id: string; title: string; time_frame?: { seasonYear?: number }; color?: string | null; logo_url?: string | null; initials?: string | null };
 
 /**
  * CRM-style workspace switcher pinned to the bottom of the season rail: shows the
  * schedule you're in, your most recent others, and a jump to the full account list.
- * Cloud and device-local summaries are branding-free, so only the current schedule
- * carries its real logo/colour — the rest fall back to a name monogram.
+ * Each schedule wears its own league logo/colour, falling back to a name monogram
+ * when a saved season predates logo branding.
  */
 export function WorkspaceSwitcher({ current, signedIn }: { current: WorkspaceSwitcherCurrent; signedIn: boolean }) {
   const [others, setOthers] = useState<SwitcherEntry[]>([]);
@@ -39,13 +39,13 @@ export function WorkspaceSwitcher({ current, signedIn }: { current: WorkspaceSwi
           const response = await fetch("/api/seasons");
           if (response.ok) {
             const payload = (await response.json()) as { seasons?: CloudSeason[] };
-            cloud = (payload.seasons ?? []).map((season) => ({ id: season.id, name: season.title, year: season.time_frame?.seasonYear }));
+            cloud = (payload.seasons ?? []).map((season) => ({ id: season.id, name: season.title, year: season.time_frame?.seasonYear, color: season.color ?? undefined, logoUrl: season.logo_url ?? undefined, initials: season.initials ?? undefined }));
           }
         } catch {
           // Ignore network failures; device-local schedules below still populate the list.
         }
       }
-      const local: SwitcherEntry[] = listLocalSeasons().map((season) => ({ id: season.id, name: season.name, year: season.seasonYear }));
+      const local: SwitcherEntry[] = listLocalSeasons().map((season) => ({ id: season.id, name: season.name, year: season.seasonYear, color: season.color, logoUrl: season.logoUrl, initials: season.initials }));
       const seen = new Set<string>([current.id]);
       const merged = [...cloud, ...local].filter((entry) => {
         if (seen.has(entry.id)) return false;
@@ -85,7 +85,7 @@ export function WorkspaceSwitcher({ current, signedIn }: { current: WorkspaceSwi
         <div className="workspace-switcher-list">
           {recent.map((entry) => (
             <Link key={entry.id} href={`/season/${entry.id}`} className="workspace-switcher-item">
-              <span className="mini-league-mark switcher-mark-plain" aria-hidden="true">{leagueAcronym(entry.name)}</span>
+              <EntityLogo className="mini-league-mark" color={entry.color || "#117A45"} logoUrl={entry.logoUrl} monogram={resolveInitials(entry.initials, leagueAcronym(entry.name))} size={32} />
               <span className="workspace-switcher-copy"><strong>{entry.name}</strong><small>{entry.year ? `${entry.year} season` : "Saved schedule"}</small></span>
             </Link>
           ))}
