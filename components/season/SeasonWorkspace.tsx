@@ -1004,8 +1004,9 @@ function PlatformSyncCard({
     <div className="platform-sync-mode">
       <CustomSelect label="Sync mode" value={syncMode} onChange={(value) => setSyncMode(value as PlatformSyncMode)} options={[
         { value: "manual", label: "Manual", description: "Only refresh when you click" },
+        { value: "auto", label: "Automatic", description: "Refresh on open and in the background" },
       ]} />
-      <button type="button" className="button-secondary visible" onClick={() => onSaveConnection("manual", swid, espnS2)}><Save />Save sync mode</button>
+      <button type="button" className="button-secondary visible" onClick={() => onSaveConnection(syncMode, swid, espnS2)}><Save />Save sync mode</button>
     </div>
     <div className="platform-sync-note"><ShieldCheck /><span>LeagueWeaver cannot update ESPN/Sleeper schedules for you. Refresh scores after your fantasy platform has matching results.</span><button type="button" onClick={onDisconnect}>Disconnect</button></div>
   </div>;
