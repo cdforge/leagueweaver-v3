@@ -544,30 +544,6 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   const themes: Array<LeagueSetupInput["playoffs"]["theme"]> = ["gold", "silver", "bronze", "custom"];
 
   // Presets set several fields at once; the form remains the "customize" fallback.
-  const presetDefs: Array<{ id: string; label: string; desc: string; icon: string; size: number; bracketType: LeagueSetupInput["playoffs"]["bracketType"]; qual: "halves" | "overall"; consolationMode: LeagueSetupInput["playoffs"]["consolationMode"]; recommended?: boolean }> = [
-    { id: "nfl", label: "NFL-style", desc: "6 teams · division halves · 2 byes", icon: "🏆", size: 6, bracketType: "single-elimination", qual: "halves", consolationMode: "off", recommended: true },
-    { id: "madness", label: "Bracket madness", desc: "8 teams · overall seeds · no byes", icon: "🎯", size: 8, bracketType: "single-elimination", qual: "overall", consolationMode: "off" },
-    { id: "everyone", label: "Everyone plays on", desc: "6 teams · full consolation bracket", icon: "🎖️", size: 6, bracketType: "single-elimination", qual: "halves", consolationMode: "standard" },
-  ];
-  const applyPreset = (def: typeof presetDefs[number]) => {
-    const size = Math.min(def.size, getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, def.bracketType));
-    const canHalves = isPlayoffPlacementUsable("division-halves", divisionCount, size);
-    patch({
-      fieldSize: size,
-      bracketType: def.bracketType,
-      placementMode: def.qual === "halves" ? (canHalves ? "division-halves" : "overall") : "overall",
-      consolationMode: def.consolationMode === "division-halves" && !canHalves ? "standard" : def.consolationMode,
-      thirdPlaceGame: def.consolationMode !== "off" && size >= 4,
-      fieldStatus: "live",
-      lockedTeamIds: [],
-    });
-  };
-  const activePresetId = presetDefs.find((def) =>
-    p.fieldSize === Math.min(def.size, getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, def.bracketType))
-    && p.bracketType === def.bracketType
-    && (def.qual === "overall" ? p.placementMode === "overall" : p.placementMode === "division-halves" || (p.placementMode === "overall" && !halvesUsable))
-    && p.consolationMode === def.consolationMode,
-  )?.id;
 
   // Round & game branding — the slots derive from the format choices, so they exist before generation.
   const normalized = normalizePlayoffSettings(p, setup.teams.length, setup.color, setup.weeks);
@@ -793,11 +769,6 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
     <div className="playoff-wizard-layout">
       <div className="playoff-wizard-form">
         {subPage === "format" && <>
-          <div className="ppw-group"><FieldLabel hint="optional — tweak anything after">Start from a preset</FieldLabel>
-            <div className="ppw-presets">{presetDefs.map((def) => <button key={def.id} type="button" className={activePresetId === def.id ? "active" : ""} onClick={() => applyPreset(def)}><span className="ppw-preset-ic">{def.icon}</span><span><strong>{def.label}{def.recommended && <em className="ppw-rec">Recommended</em>}</strong><small>{def.desc}</small></span></button>)}
-              <button type="button" className={activePresetId ? "" : "active"} onClick={() => undefined}><span className="ppw-preset-ic">⚙️</span><span><strong>Custom</strong><small>Set every option yourself</small></span></button>
-            </div>
-          </div>
           <div className="ppw-group"><FieldLabel hint={byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"} for the top seed${byeCount === 1 ? "" : "s"}` : "every qualifier opens play"}>Playoff teams</FieldLabel>
             <CustomSelect label="Playoff field size" value={String(p.fieldSize)} onChange={(value) => setFieldSize(Number(value))} options={fieldSizeOptions.map((n) => ({ value: String(n), label: `${n} teams`, description: getPlayoffByeCount(n) ? `${getPlayoffByeCount(n)} bye${getPlayoffByeCount(n) === 1 ? "" : "s"}` : "No byes" }))} />
           </div>
