@@ -31,6 +31,28 @@ export function readSavedSeasonTimeFrameFromSchedule(value: unknown): SavedSeaso
   };
 }
 
+export type SavedSeasonBranding = {
+  color?: string;
+  logoUrl?: string;
+  initials?: string;
+};
+
+/** Pulls the league's headline branding out of a stored schedule so a saved
+ *  season can wear its own logo/colour in list views. Legacy revisions without
+ *  a `setup` (or without branding) return an empty object and fall back to a
+ *  name monogram at render time. */
+export function readSavedSeasonBrandingFromSchedule(value: unknown): SavedSeasonBranding {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const setup = (value as Record<string, unknown>).setup;
+  if (!setup || typeof setup !== "object" || Array.isArray(setup)) return {};
+  const branding = setup as Record<string, unknown>;
+  return {
+    color: typeof branding.color === "string" ? branding.color : undefined,
+    logoUrl: typeof branding.logoUrl === "string" ? branding.logoUrl : undefined,
+    initials: typeof branding.initials === "string" ? branding.initials : undefined,
+  };
+}
+
 export function savedSeasonIdentity(title: string, timeFrame: unknown) {
   const frame = readSavedSeasonTimeFrame(timeFrame);
   return [

@@ -52,6 +52,9 @@ export type LocalSeasonSummary = {
   seasonYear: number;
   teamCount: number;
   savedAt: number;
+  color?: string;
+  logoUrl?: string;
+  initials?: string;
 };
 
 /**
@@ -160,6 +163,9 @@ export function listLocalSeasons(): LocalSeasonSummary[] {
       seasonYear: schedule.setup?.seasonYear ?? 0,
       teamCount: schedule.setup?.teams?.length ?? 0,
       savedAt,
+      color: schedule.setup?.color,
+      logoUrl: schedule.setup?.logoUrl,
+      initials: schedule.setup?.initials,
     }))
     .sort((a, b) => b.savedAt - a.savedAt);
 }

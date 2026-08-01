@@ -29,6 +29,9 @@ type SeasonSummary = {
     weeks?: number;
   };
   revision_count?: number;
+  logo_url?: string | null;
+  color?: string | null;
+  initials?: string | null;
 };
 
 type SeasonRevision = {
@@ -372,7 +375,8 @@ export function AccountPanel() {
         return <article className={`account-season-row${isExpanded ? " expanded" : ""}`} key={season.id}>
           <div className="account-season-summary">
             <Link className="account-season-main" href={`/season/${season.id}`} aria-label={`Open ${season.title}. ${timeframe}`}>
-              <span className="account-season-mark" aria-hidden="true"><CalendarDays /></span>
+              <EntityLogo className="account-season-mark" size={40} color={season.color || "#117A45"} logoUrl={season.logo_url ?? undefined} monogram={resolveInitials(season.initials ?? undefined, leagueAcronym(season.title))} />
+
               <span className="account-season-copy">
                 <strong>{season.title}</strong>
                 <small className="account-season-timeframe">{timeframe}</small>
