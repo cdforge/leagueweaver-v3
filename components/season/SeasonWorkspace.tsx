@@ -305,7 +305,7 @@ function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores }: { schedule
     const feed = feedingGameFor(roundIndex, slotSeed);
     if (teamId && feed?.decided) return { kind: "team", teamId, seed: slotSeed };
     const fixed = settings.reseedMode === "fixed" && feed;
-    return { kind: "tbd", label: fixed ? `Winner of ${feed!.name}` : "To be determined", sub: fixed ? "Updates after the prior result" : `Projected seed #${slotSeed}`, seed: slotSeed };
+    return { kind: "tbd", label: fixed ? "Winner of" : "To be determined", sub: fixed ? feed!.name : `Projected seed #${slotSeed}`, seed: slotSeed };
   };
   // The placeholder reuses the exact TeamIdentityBlock grid so it lines up with a
   // real team row — the card reads as a normal matchup with the unknown side swapped.
@@ -314,7 +314,7 @@ function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores }: { schedule
       <div className={`team-identity-block${mirrored ? " mirrored" : ""} without-record result-open playoff-tbd-block`}>
         <b className="team-identity-rank">{settings.reseedMode === "fixed" ? "W" : `#${slot.seed}`}</b>
         <span className="team-identity-mark"><span className="playoff-tbd-mark" aria-hidden="true">?</span></span>
-        <span className="team-identity-name"><strong>{slot.label}</strong><small>{slot.sub}</small></span>
+        <span className="team-identity-name"><strong>{slot.label}</strong>{slot.sub && <small>{slot.sub}</small>}</span>
       </div>
     </div>
   );
@@ -325,22 +325,24 @@ function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores }: { schedule
     const shown = settings.seedDisplayMode === "standings-finish" ? s?.standingsPosition ?? seedNumber : s?.seed ?? seedNumber;
     return <div className="matchup-team-row"><TeamIdentityBlock mirrored={mirrored} team={team} division={divisionById.get(team.divisionId)} leagueRank={shown} record={recordFor(teamId)} showCity={showCity} href={`/season/${schedule.id}/team/${team.id}`} /></div>;
   };
-  const GameBanner = ({ id, name }: { id: string; name: string }) => {
+  const GameBanner = ({ id, name, projected }: { id: string; name: string; projected: boolean }) => {
     const logo = settings.gameLogoUrls?.[id] || settings.roundLogoUrls?.[roundIndex];
-    return <div className="playoff-game-banner">{logo ? <img src={logo} alt="" /> : <span className="playoff-game-banner-mark"><Trophy /></span>}<strong>{name}</strong></div>;
+    return <div className="playoff-game-banner">{logo ? <img src={logo} alt="" /> : <span className="playoff-game-banner-mark"><Trophy /></span>}<strong>{name}</strong>{projected && <em>Projected</em>}</div>;
   };
   const PlayoffGameBlock = ({ id, name, index, count, home, away, homeScore, awayScore, stadium }: { id: string; name: string; index: number; count: number; home: SlotV; away: SlotV; homeScore?: number; awayScore?: number; stadium?: string }) => {
     const homeReal = home.kind === "team" ? home : null;
     const awayReal = away.kind === "team" ? away : null;
-    // A resolved playoff matchup is just a normal match card — the round banner
-    // above carries the playoff context. No separate "Projected" score state.
+    const played = homeScore != null && awayScore != null && !(homeScore === 0 && awayScore === 0);
+    // A playoff game is just a normal match card. The banner carries the round
+    // name plus a "Projected" tag until the game is played; a still-unknown side
+    // shows a "?" placeholder row in that same card.
     return <div className="playoff-game-block" role="listitem">
-      <GameBanner id={id} name={name} />
+      <GameBanner id={id} name={name} projected={!played} />
       {homeReal && awayReal
         ? <PlayoffMatchupCard id={id} gameNumber={index + 1} homeTeamId={homeReal.teamId} awayTeamId={awayReal.teamId} homeSeed={homeReal.seed} awaySeed={awayReal.seed} homeScore={homeScore} awayScore={awayScore} stadium={stadium} projected={false} />
-        : <article className="matchup-card is-projected matchup-card-standard" role="listitem"><div className="matchup-card-main">
+        : <article className="matchup-card matchup-card-standard" role="listitem"><div className="matchup-card-main">
             {awayReal ? <RealRow teamId={awayReal.teamId} seedNumber={awayReal.seed} /> : <TbdRow slot={away as Extract<SlotV, { kind: "tbd" }>} />}
-            <div className="matchup-score is-projected"><em>Projected</em></div>
+            <div className="matchup-score"><strong>—</strong><span aria-label="at">@</span><strong>—</strong></div>
             {homeReal ? <RealRow teamId={homeReal.teamId} seedNumber={homeReal.seed} mirrored /> : <TbdRow slot={home as Extract<SlotV, { kind: "tbd" }>} mirrored />}
           </div></article>}
     </div>;
@@ -351,7 +353,7 @@ function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores }: { schedule
   const consolationBracket = projectConsolationBracket(schedule);
   const consolationRound = consolationBracket?.rounds.find((r) => r.roundIndex === roundIndex);
   const consolationSlot = (entrant: NonNullable<typeof consolationRound>["games"][number]["entrants"][number]): SlotV =>
-    entrant.kind === "team" ? { kind: "team", teamId: entrant.teamId, seed: entrant.projectedSeed } : { kind: "tbd", label: entrant.label, sub: "Updates after the prior result", seed: entrant.projectedSeed };
+    entrant.kind === "team" ? { kind: "team", teamId: entrant.teamId, seed: entrant.projectedSeed } : { kind: "tbd", label: entrant.label, sub: "", seed: entrant.projectedSeed };
   const consolationTeamIds = new Set(consolationBracket?.rounds.flatMap((r) => r.games.flatMap((g) => g.entrants.filter((e): e is Extract<typeof e, { kind: "team" }> => e.kind === "team").map((e) => e.teamId))) ?? []);
   const eliminatedTeams = roundIndex === 0 ? schedule.setup.teams.filter((team) => !seedByTeam.has(team.id) && !consolationTeamIds.has(team.id)) : [];
 
