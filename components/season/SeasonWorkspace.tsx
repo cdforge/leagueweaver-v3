@@ -5,8 +5,6 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   BarChart3,
-  ArrowDownRight,
-  Bell,
   CalendarDays,
   Check,
   Cloud,
@@ -51,6 +49,9 @@ import { SimulatorWorkspace, type SimulatorResultView } from "@/components/seaso
 import { StatsWorkspace } from "@/components/season/StatsWorkspace";
 import { TeamScheduleView } from "@/components/season/TeamSchedulePage";
 import { WeekScoreBar } from "@/components/season/WeekScoreBar";
+import { PlayoffPicturePanel } from "@/components/season/PlayoffPictureModal";
+import { StakesButton } from "@/components/season/StakesPanel";
+import { getLiveWeek } from "@/lib/scenarios";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { Modal, ConfirmDialog } from "@/components/ui/Modal";
 import { EntityLogo } from "@/components/ui/EntityLogo";
@@ -61,7 +62,8 @@ import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { apiErrorMessage } from "@/lib/apiErrors";
 import { downloadCsv } from "@/lib/csv";
-import { readableTextColor } from "@/lib/colorContrast";
+import { accessibleAccentColor, readableTextColor } from "@/lib/colorContrast";
+import { DivisionMark } from "@/components/ui/DivisionIdentity";
 import { isDivisionHalvesConsolationUsable, projectConsolationBracket } from "@/lib/consolation";
 import { downloadSchedulePdf } from "@/lib/pdf";
 import { getMatchupRatingRange, getMatchupSignal, matchupRating, sortGamesForDisplay } from "@/lib/matchups";
@@ -167,6 +169,7 @@ const VIEW_ITEMS: Array<{ key: ViewKey; label: string; icon: typeof CalendarDays
   { key: "gotw", label: "Game of the Week", icon: Star },
   { key: "matchup-ratings", label: "Matchup Ratings", icon: SlidersHorizontal },
   { key: "standings", label: "Standings", icon: BarChart3 },
+  { key: "playoffs", label: "Playoffs", icon: Trophy },
   { key: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -314,6 +317,8 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
   const scheduleSignals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
   const playoffRounds = useMemo(() => projectPlayoffRounds(schedule), [schedule]);
   const selectedPlayoffIndex = canAccessPlayoffs ? playoffRounds.findIndex((round) => round.weekNumber === selectedWeek) : -1;
+  const liveWeekNumber = useMemo(() => getLiveWeek(schedule), [schedule]);
+  const goToGame = (gameId: string) => window.setTimeout(() => document.getElementById(gameId)?.scrollIntoView({ behavior: "smooth", block: "center" }), 60);
   useEffect(() => {
     const gameId = highlightedGame?.id || window.location.hash.slice(1);
     if (!gameId) return;
@@ -421,7 +426,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
     <div className="workspace-stack">
       {weekSelector}
       <div className="schedule-week-panel">
-        <div className={`section-bar schedule-week-header${isThanksgivingWeek ? " is-thanksgiving" : ""}`}><div><span className="bar-number">{String(week.weekNumber).padStart(2, "0")}</span><span><span className="schedule-week-title"><strong>Week {week.weekNumber}</strong>{isThanksgivingWeek && <em className="thanksgiving-week-label">Thanksgiving Week</em>}</span><small>{week.dateLabel}</small></span></div><div className="section-bar-actions"><WeekMatchupRank rank={week.matchupRank} total={schedule.weeks.length} /><button type="button" className={`score-entry-trigger${scoreEntryDue ? " needs-attention" : ""}`} onClick={() => onOpenScores(week.weekNumber)}><LayoutList /><span>{hasEnteredScores ? "Edit scores" : "Add scores"}</span></button><span className="week-markers">{secondaryHolidays.map((holiday) => <em className="holiday-marker" key={holiday}>{holiday}</em>)}{byeTeams.length > 0 && <em className="bye-marker">{byeTeams.length} BYE</em>}</span><span className="rating-tier-filter"><CustomSelect label="Filter matchup rating" value={ratingTier} onChange={setRatingTier} options={ratingOptions} showSelectedDescription={false} /></span></div></div>
+        <div className={`section-bar schedule-week-header${isThanksgivingWeek ? " is-thanksgiving" : ""}`}><div><span className="bar-number">{String(week.weekNumber).padStart(2, "0")}</span><span><span className="schedule-week-title"><strong>Week {week.weekNumber}</strong>{isThanksgivingWeek && <em className="thanksgiving-week-label">Thanksgiving Week</em>}</span><small>{week.dateLabel}</small></span></div><div className="section-bar-actions"><WeekMatchupRank rank={week.matchupRank} total={schedule.weeks.length} />{week.weekNumber === liveWeekNumber && <StakesButton schedule={schedule} weekNumber={week.weekNumber} onGoToGame={goToGame} />}<button type="button" className={`score-entry-trigger${scoreEntryDue ? " needs-attention" : ""}`} onClick={() => onOpenScores(week.weekNumber)}><LayoutList /><span>{hasEnteredScores ? "Edit scores" : "Add scores"}</span></button><span className="week-markers">{secondaryHolidays.map((holiday) => <em className="holiday-marker" key={holiday}>{holiday}</em>)}{byeTeams.length > 0 && <em className="bye-marker">{byeTeams.length} BYE</em>}</span><span className="rating-tier-filter"><CustomSelect label="Filter matchup rating" value={ratingTier} onChange={setRatingTier} options={ratingOptions} showSelectedDescription={false} /></span></div></div>
         {gotwOverrideDetails && gotwEntry && visibleGames.some((game) => game.id === gameOfWeekId) && <section className="gotw-selection-reason" aria-label="Why this matchup is Game of the Week">
           <span><Star fill="currentColor" /></span>
           <div><small>LATE-SEASON PLAYOFF IMPACT</small><strong>Why this won the rating tie</strong><p>This {gotwOverrideDetails.featuredRanks} matchup shares the week&apos;s best {gotwEntry.rating.toFixed(1)} rating and crosses the {schedule.setup.playoffs.fieldSize}-team playoff cutline. Playoff impact moved it ahead of <span>{gotwOverrideDetails.pureMatchup}</span> after the rating tie. Lower ratings always remain first.</p></div>
@@ -724,14 +729,22 @@ function PlayoffsView({
   onUpdatePlayoffGame,
   highlightedGame,
   simulationMode = false,
+  mode = "board",
+  playoffTab = "board",
+  onChangePlayoffTab,
 }: {
   schedule: GeneratedSchedule;
   onUpdatePlayoffs: (patch: Partial<LeagueSetupInput["playoffs"]>) => void;
   onUpdatePlayoffGame: (game: PlayoffGame) => void;
   highlightedGame?: HighlightedGame;
   simulationMode?: boolean;
+  /** "board" renders the Bracket/Picture tabs; "settings" renders only the config block (for the Settings page). */
+  mode?: "board" | "settings";
+  playoffTab?: "board" | "picture";
+  onChangePlayoffTab?: (tab: "board" | "picture") => void;
 }) {
   const [roundBrandingOpen, setRoundBrandingOpen] = useState(false);
+  const [boardSection, setBoardSection] = useState<"championship" | "consolation" | "placement">("championship");
   const settings = normalizePlayoffSettings(schedule.setup.playoffs, schedule.setup.teams.length, schedule.setup.color, schedule.setup.weeks);
   const normalizedSchedule = settings === schedule.setup.playoffs ? schedule : { ...schedule, setup: { ...schedule.setup, playoffs: settings } };
   const fieldSize = settings.fieldSize;
@@ -752,18 +765,21 @@ function PlayoffsView({
   const byeCount = getPlayoffByeCount(fieldSize);
   const roundDate = (index: number) => getWeekDateLabel(schedule.setup.seasonYear, schedule.setup.weeks + index + 1).replace(`, ${schedule.setup.seasonYear}`, "");
   const displayedSeed = (item: NonNullable<ReturnType<typeof seed>>) => settings.seedDisplayMode === "standings-finish" ? item.standingsPosition : item.seed;
-  const hostCopy = (team: Team) => `Hosts · ${team.stadium}`;
   const championshipVenueCopy = settings.championshipVenueMode === "neutral-site" ? "Neutral-site championship" : "Higher seed hosts the championship";
   const Slot = ({ number, host = false }: { number: number; host?: boolean }) => {
     const item = seed(number);
     const team = item ? teamById.get(item.teamId) : undefined;
     const standing = item ? playoffStandingsByTeam.get(item.teamId) : undefined;
-    return <div className={`bracket-slot ${host ? "host" : ""}`}>{team && item ? <><TeamIdentityBlock compact team={team} division={divisionById.get(team.divisionId)} leagueRank={displayedSeed(item)} record={{ overall: item.record, division: standing ? `${standing.divisionWins}-${standing.divisionLosses}` : undefined }} showCity={showCity} href={`/season/${schedule.id}/team/${team.id}`} /><span className="playoff-slot-meta">{item.divisionLeader && <small>DIV WINNER</small>}{item.bye && <small>BYE</small>}{host && <em><MapPin />{hostCopy(team)}</em>}</span></> : <><b>{number}</b><span><strong>To be determined</strong><small>Projected seed</small></span></>}</div>;
+    return <div className={`bracket-slot ${host ? "host" : ""}${team ? "" : " placeholder"}`} style={team ? { "--slot-spine": team.color } as React.CSSProperties : undefined}>{team && item ? <TeamIdentityBlock variant="stacked" compact team={team} division={divisionById.get(team.divisionId)} leagueRank={displayedSeed(item)} record={{ overall: item.record, division: standing ? `${standing.divisionWins}-${standing.divisionLosses}` : undefined }} showCity={showCity} href={`/season/${schedule.id}/team/${team.id}`} /> : <><b>{number}</b><span><strong>To be determined</strong><small>Projected seed</small></span></>}</div>;
   };
   const RoundHeading = ({ index }: { index: number }) => <h3 className="playoff-round-heading">{settings.roundLogoUrls?.[index] && <img src={settings.roundLogoUrls[index]} alt="" />}<span className="playoff-round-heading-copy"><span>{rounds[index] || `Round ${index + 1}`}</span><small>NFL Week {schedule.setup.weeks + index + 1} · {roundDate(index)}</small></span></h3>;
   const sideName = (side: "A" | "B") => {
     const divisionNames = [...new Set(seeds.filter((item) => item.bracketSide === side).map((item) => divisionById.get(item.divisionId)?.name).filter(Boolean))];
     return divisionNames.length ? divisionNames.join(" + ") : `Half ${side}`;
+  };
+  const sideDivision = (side: "A" | "B") => {
+    const entry = seeds.find((item) => item.bracketSide === side);
+    return entry ? divisionById.get(entry.divisionId) : undefined;
   };
   const mainGameBrandingLabel = (slot: typeof mainGameBrandingSlots[number]) => {
     const sameRound = mainGameBrandingSlots.filter((item) => item.roundIndex === slot.roundIndex);
@@ -813,17 +829,26 @@ function PlayoffsView({
   const mainConnections: BracketConnection[] = projectedMainRounds.slice(0, -1).flatMap((round) => {
     const nextRound = projectedMainRounds[round.roundIndex + 1];
     if (!nextRound) return [];
-    return round.matchups.map((matchup, gameIndex) => {
-      const projectedWinner = Math.min(matchup.homeSeed, matchup.awaySeed);
-      const targetIndex = Math.max(0, nextRound.matchups.findIndex((next) => next.homeSeed === projectedWinner || next.awaySeed === projectedWinner));
-      return {
+    return round.matchups.flatMap((matchup, gameIndex) => {
+      const sourceId = `main-r${round.roundIndex + 1}-g${gameIndex + 1}`;
+      const recorded = (schedule.playoffGames ?? []).find((game) => game.bracket === "main" && game.id === sourceId);
+      const decided = recorded != null && recorded.homeScore != null && recorded.awayScore != null && recorded.homeScore !== recorded.awayScore;
+      const winnerTeam = decided ? teamById.get(recorded!.homeScore! > recorded!.awayScore! ? recorded!.homeTeamId : recorded!.awayTeamId) : undefined;
+      // Follow the actual advancer — a fixed-bracket upset keeps a lower seed in its slot —
+      // falling back to the projected better seed while the game is unplayed.
+      const advancerSeed = winnerTeam ? seeds.find((item) => item.teamId === winnerTeam.id)?.seed ?? Math.min(matchup.homeSeed, matchup.awaySeed) : Math.min(matchup.homeSeed, matchup.awaySeed);
+      const targetIndex = nextRound.matchups.findIndex((next) => next.homeSeed === advancerSeed || next.awaySeed === advancerSeed);
+      // No matching next-round slot: draw nothing rather than a confidently-wrong line to game 1.
+      if (targetIndex < 0) return [];
+      return [{
         id: `main-winner-r${round.roundIndex + 1}-g${gameIndex + 1}`,
-        sourceGameId: `main-r${round.roundIndex + 1}-g${gameIndex + 1}`,
+        sourceGameId: sourceId,
         targetGameId: `main-r${round.roundIndex + 2}-g${targetIndex + 1}`,
         outcome: "winner" as const,
-        pending: settings.reseedMode !== "fixed",
-        label: settings.reseedMode === "fixed" ? "Winner advances" : "Projected reseed path",
-      };
+        pending: decided ? false : settings.reseedMode !== "fixed",
+        color: winnerTeam ? accessibleAccentColor(winnerTeam.color, "#171d1a") : undefined,
+        label: winnerTeam ? `${teamDisplayName(winnerTeam, showCity)} advances` : settings.reseedMode === "fixed" ? "Winner advances" : "Projected reseed path",
+      }];
     });
   });
   const consolationConnections: BracketConnection[] = consolationProjection?.rounds.flatMap((round) => round.games.flatMap((game) =>
@@ -834,19 +859,8 @@ function PlayoffsView({
       outcome: entrant.outcome,
       label: entrant.label,
     })))) ?? [];
-  const transferRoutes = consolationConnections.filter((connection) => connection.sourceGameId.startsWith("main-"));
-  const connectedTransferRoutes: BracketConnection[] = transferRoutes.flatMap((connection, index) => {
-    const transferId = `placement-transfer-${index + 1}`;
-    return [
-      { ...connection, id: `${connection.id}-exit`, targetGameId: transferId },
-      { ...connection, id: `${connection.id}-entry`, sourceGameId: transferId },
-    ];
-  });
-  const bracketConnections = [
-    ...mainConnections,
-    ...connectedTransferRoutes,
-    ...consolationConnections.filter((connection) => !connection.sourceGameId.startsWith("main-")),
-  ];
+  const consolationInternalConnections = consolationConnections.filter((connection) => !connection.sourceGameId.startsWith("main-"));
+  const hasConsolation = Boolean(consolationProjection);
   const PlayoffGameBrand = ({ roundIndex, gameIndex }: { roundIndex: number; gameIndex: number }) => {
     const gameId = `main-r${roundIndex + 1}-g${gameIndex + 1}`;
     const logoUrl = settings.gameLogoUrls?.[gameId] || settings.roundLogoUrls?.[roundIndex] || settings.logoUrl;
@@ -855,20 +869,28 @@ function PlayoffsView({
   };
   const simulatedMainGames = (schedule.playoffGames ?? []).filter((game) => game.bracket === "main");
   const seedByTeam = new Map(seeds.map((item) => [item.teamId, item.seed]));
-  const titleGame = [...simulatedMainGames].sort((left, right) => right.roundIndex - left.roundIndex)[0];
-  const championId = titleGame && titleGame.homeScore != null && titleGame.awayScore != null
+  // The champion is only crowned when the actual final-round game is decided — not
+  // whenever the highest *recorded* round happens to have a result (which would
+  // wrongly crown a round-1 winner before later rounds are even played).
+  const titleGame = simulatedMainGames.find((game) => game.roundIndex === projectedMainRounds.length - 1);
+  const championId = titleGame && titleGame.homeScore != null && titleGame.awayScore != null && titleGame.homeScore !== titleGame.awayScore
     ? titleGame.homeScore > titleGame.awayScore ? titleGame.homeTeamId : titleGame.awayTeamId
     : undefined;
   const champion = championId ? teamById.get(championId) : undefined;
+  const regularSeasonPlayedOut = schedule.weeks.length > 0 && schedule.weeks.every((week) => week.games.every((game) => game.homeScore != null && game.awayScore != null));
+  const playoffsLive = settings.fieldStatus === "locked" || regularSeasonPlayedOut || simulatedMainGames.some((game) => game.homeScore != null && game.awayScore != null);
+  const bracketMode: "projected" | "live" | "complete" = champion ? "complete" : playoffsLive ? "live" : "projected";
+  const bracketModeNote = bracketMode === "complete" ? "Champion decided" : bracketMode === "live" ? "Playoffs are live — enter each result to advance the bracket" : "Projected — if the regular season ended today. Seeds firm up as the season finishes.";
+  const bracketModeChip = bracketMode === "complete" ? "Final" : bracketMode === "live" ? "Live" : "Projected";
   const SimulatedPlayoffTeam = ({ teamId, score, winner }: { teamId: string; score?: number; winner: boolean }) => {
     const team = teamById.get(teamId);
-    if (!team) return <span className="sim-bracket-team placeholder"><strong>To be determined</strong></span>;
-    return <span className={`sim-bracket-team ${winner ? "winner" : ""}`}>
-      <b>#{seedByTeam.get(teamId) ?? team.overallRank}</b>
-      <EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={34} />
-      <span><small className="team-city">{team.city}</small><strong>{team.name}</strong></span>
-      <em>{score != null ? formatPoints(score) : "—"}</em>
-    </span>;
+    if (!team) return <div className="bracket-slot placeholder"><b>—</b><span><strong>To be determined</strong><small>Awaiting result</small></span></div>;
+    const standing = playoffStandingsByTeam.get(teamId);
+    const seedEntry = seeds.find((item) => item.teamId === teamId);
+    return <div className={`bracket-slot result-slot ${winner ? "is-winner" : "is-loser"}`} style={{ "--slot-spine": team.color } as React.CSSProperties}>
+      <TeamIdentityBlock variant="stacked" compact result={winner ? "winner" : "loser"} team={team} division={divisionById.get(team.divisionId)} leagueRank={seedByTeam.get(teamId) ?? team.overallRank} record={{ overall: seedEntry?.record ?? (standing ? formatRecord(standing) : "0-0"), division: standing ? `${standing.divisionWins}-${standing.divisionLosses}` : undefined }} showCity={showCity} href={`/season/${schedule.id}/team/${team.id}`} />
+      <span className="bracket-score">{score ?? "—"}</span>
+    </div>;
   };
   const playoffGameById = new Map(simulatedMainGames.map((game) => [game.id, game]));
   const orderedRoundMatchups = (round: typeof projectedMainRounds[number]) => round.matchups
@@ -892,9 +914,11 @@ function PlayoffsView({
     const played = recorded?.homeScore != null && recorded.awayScore != null;
     const homeWon = Boolean(played && recorded!.homeScore! > recorded!.awayScore!);
     const awayWon = Boolean(played && recorded!.awayScore! > recorded!.homeScore!);
-    const route = transferRoutes.find((connection) => connection.sourceGameId === gameId);
     const side = bracketSide || seed(homeSeed)?.bracketSide;
-    const sideCopy = placement === "division-halves" && side && roundIndex < projectedMainRounds.length - 1 ? `${sideName(side)} tournament` : undefined;
+    const halfDivision = placement === "division-halves" && side && roundIndex < projectedMainRounds.length - 1 ? sideDivision(side) : undefined;
+    const sideCopy = placement === "division-halves" && side && roundIndex < projectedMainRounds.length - 1
+      ? <>{halfDivision && <DivisionMark division={halfDivision} size={13} />}{sideName(side)} bracket</>
+      : undefined;
     const defaultName = projectedMainRounds[roundIndex]?.matchups.length > 1
       ? `${rounds[roundIndex] || `Round ${roundIndex + 1}`} · Game ${gameIndex + 1}`
       : rounds[roundIndex] || `Round ${roundIndex + 1}`;
@@ -923,25 +947,28 @@ function PlayoffsView({
         bracket: "main",
       });
     };
-    return <article className={`main-playoff-game ${played ? "is-final" : "is-projected"}`} data-bracket-game-id={gameId}>
-      <header><PlayoffGameBrand roundIndex={roundIndex} gameIndex={gameIndex} /><span><strong>{gameName}</strong><small>{sideCopy || (played ? "Final result" : settings.reseedMode === "fixed" ? "Fixed bracket path" : "Projected path")}</small></span><em>{played ? "FINAL" : "PROJECTED"}</em></header>
+    return <article className={`main-playoff-game ${played ? "is-final" : "is-projected"}`} data-bracket-game-id={gameId} style={{ "--game-half-color": halfDivision?.color, "--game-half-accent": halfDivision ? accessibleAccentColor(halfDivision.color, "#171d1a") : undefined } as React.CSSProperties}>
+      <header><PlayoffGameBrand roundIndex={roundIndex} gameIndex={gameIndex} /><span><strong>{gameName}</strong><small>{sideCopy || (played ? "Final result" : settings.reseedMode === "fixed" ? "Fixed bracket path" : "Projected path")}</small></span>{played && <em>FINAL</em>}</header>
       <div className="main-playoff-game-teams">{recorded ? <><SimulatedPlayoffTeam teamId={recorded.awayTeamId} score={recorded.awayScore} winner={awayWon} /><SimulatedPlayoffTeam teamId={recorded.homeTeamId} score={recorded.homeScore} winner={homeWon} /></> : <><Slot number={homeSeed} host /><Slot number={awaySeed} /></>}</div>
-      {!simulationMode && homeTeam && awayTeam && <InlinePlayoffScoreEditor awayName={teamDisplayName(awayTeam, showCity)} homeName={teamDisplayName(homeTeam, showCity)} awayScore={recorded?.awayScore} homeScore={recorded?.homeScore} onSave={(awayScore, homeScore) => saveScore(awayScore, homeScore)} onClear={() => saveScore(undefined, undefined)} />}
-      <footer><span className="advance-route"><b>W</b>Advances toward championship</span>{route && <span className="placement-route"><b>L</b>Moves to placement</span>}</footer>
+      {!simulationMode && playoffsLive && homeTeam && awayTeam && <InlinePlayoffScoreEditor awayName={teamDisplayName(awayTeam, showCity)} homeName={teamDisplayName(homeTeam, showCity)} awayScore={recorded?.awayScore} homeScore={recorded?.homeScore} onSave={(awayScore, homeScore) => saveScore(awayScore, homeScore)} onClear={() => saveScore(undefined, undefined)} />}
+      {homeTeam && <footer><span className="playoff-venue">{homeTeam.logoUrl ? <EntityLogo imagePresentation="bare" color={homeTeam.color} logoUrl={homeTeam.logoUrl} monogram={teamInitials(homeTeam)} size={18} /> : <MapPin />}{homeTeam.stadium}</span></footer>}
     </article>;
   };
-  const EliminationTransferRail = () => {
-    if (!transferRoutes.length) return null;
-    const consolationById = new Map(consolationGameBrandingSlots.map((game) => [game.id, game]));
-    return <section className="elimination-transfer-rail" aria-labelledby="placement-transfer-title">
-      <header><span><ArrowDownRight /><strong id="placement-transfer-title">Moves to placement</strong></span><small>Championship losses continue below without re-entering title contention.</small></header>
-      <div>{transferRoutes.map((route, index) => {
-        const destination = consolationById.get(route.targetGameId);
-        return <div key={route.id} data-bracket-game-id={`placement-transfer-${index + 1}`}><b>L</b><span><strong>{route.label}</strong><small>{destination ? `Continues in ${destination.label}` : "Destination updates after the result"}</small></span><ArrowDownRight /></div>;
-      })}</div>
-    </section>;
-  };
+  const championCapstone = (
+    <div className={`champion-capstone${champion ? " is-crowned" : ""} playoff-theme-${settings.theme}`}>
+      <span className="champion-capstone-glow" aria-hidden="true" />
+      {champion ? <>
+        <span className="champion-crest"><EntityLogo color={champion.color} logoUrl={champion.logoUrl} monogram={teamInitials(champion)} size={72} /></span>
+        <span className="champion-copy"><span className="champion-eyebrow"><Trophy />League Champion</span><strong>{teamDisplayName(champion, showCity)}</strong><small>Wins the {settings.name}</small></span>
+        <span className="champion-trophy"><Trophy /></span>
+      </> : <>
+        <span className="champion-trophy ghost"><Trophy /></span>
+        <span className="champion-copy"><span className="champion-eyebrow">Projected champion</span><strong>Awaiting the title game</strong><small>{championshipCopy}</small></span>
+      </>}
+    </div>
+  );
   return <div className="workspace-stack playoff-workspace" style={{ "--playoff-color": settings.color } as React.CSSProperties}>
+    {mode === "settings" ? (<>
     <div className={`playoff-topline playoff-theme-${settings.theme}`}><div>{settings.logoUrl && <EntityLogo color={settings.color} logoUrl={settings.logoUrl} monogram="PO" imagePresentation="bare" />}<span><strong>{settings.name}</strong><small>{fieldSize} teams · {formatLabel} · Higher seed hosts before title · {championshipVenueCopy}</small></span></div><div className="playoff-field-actions">{simulationMode ? <span className="projected-pill simulation"><Gamepad2 />SIMULATED BRACKET</span> : <><span className={`projected-pill ${settings.fieldStatus === "locked" ? "locked" : ""}`}>{settings.fieldStatus === "locked" ? "FIELD LOCKED" : "LIVE PROJECTION"}</span><button type="button" onClick={lockField}><LockKeyhole />{settings.fieldStatus === "locked" ? "Unlock field" : "Lock field"}</button></>}</div></div>
     <div className="playoff-policy"><span><strong>{playoffPlacementLabel(placement)}</strong><small>{placement === "division-halves" ? `${sideName("A")} and ${sideName("B")} run separate tournaments; their champions meet in the final` : placement === "division-leaders" ? "Division winners protected at the top" : "Top teams qualify regardless of division"}</small></span><span><strong>{byeCount || "No"} {byeCount === 1 ? "bye" : "byes"}</strong><small>{byeCount ? "Awarded to the top seeds" : "Every qualifier opens play"}</small></span><span><strong>{settings.reseedMode === "fixed" ? "Fixed bracket" : settings.reseedMode === "protected" ? "Protected reseed" : "Reseed each round"}</strong><small>{placement === "division-halves" && settings.reseedMode !== "fixed" ? "Reseeding stays inside each half until the final" : settings.seedDisplayMode === "reranked" ? "Showing bracket seeds" : "Showing standings finish"}</small></span></div>
     {!simulationMode && <><div className="playoff-customization-bar"><span><strong>Postseason presentation</strong><small>Choose placement format and personalize round names, game names, and logos.</small></span><CustomSelect label="Consolation format" value={settings.consolationMode} onChange={(value) => onUpdatePlayoffs({ consolationMode: value as LeagueSetupInput["playoffs"]["consolationMode"], thirdPlaceGame: value !== "off" })} options={consolationOptions} /><button type="button" aria-expanded={roundBrandingOpen} onClick={() => setRoundBrandingOpen((current) => !current)}><Pencil />Names & logos</button></div>{roundBrandingOpen && <div className="playoff-branding-panels">
@@ -952,19 +979,35 @@ function PlayoffsView({
         return <section key={`${roundIndex}-branding`}><header><strong>{round || `Round ${roundIndex + 1}`}</strong><small>NFL Week {schedule.setup.weeks + roundIndex + 1}</small></header><div>{mainSlots.map((slot) => { const fallback = mainGameBrandingLabel(slot); const label = gameDisplayName(slot.id, fallback); return <div key={slot.id}><label><span>Championship bracket</span><input aria-label={`${fallback} name`} defaultValue={label} maxLength={60} onBlur={(event) => updateGameName(slot.id, event.target.value)} /></label><IdentityColorPicker compact showColorControl={false} showAbbreviation={false} imagePresentation="bare" name={label} abbreviation={`G${slot.gameIndex + 1}`} color={settings.color} logoUrl={settings.gameLogoUrls?.[slot.id]} onChange={(next) => updateGameLogo(slot.id, next.logoUrl)} /></div>; })}{placementSlots.map((game) => { const label = gameDisplayName(game.id, game.label); return <div key={game.id}><label><span>Placement bracket</span><input aria-label={`${game.label} name`} defaultValue={label} maxLength={60} onBlur={(event) => updateGameName(game.id, event.target.value)} /></label><IdentityColorPicker compact showColorControl={false} showAbbreviation={false} imagePresentation="bare" name={label} abbreviation="CG" color={settings.color} logoUrl={settings.gameLogoUrls?.[game.id]} onChange={(next) => updateGameLogo(game.id, next.logoUrl)} /></div>; })}</div></section>;
       })}</div></section>
     </div>}</>}
-    <div className="postseason-map-scroll" aria-label="Connected postseason bracket">
-      <BracketConnectorLayer connections={bracketConnections} className={`postseason-map-canvas rounds-${rounds.length}`}>
+    </>) : (<>
+    <div className="playoff-view-tabs" role="tablist" aria-label="Playoffs view">
+      <button type="button" role="tab" aria-selected={playoffTab !== "picture"} className={playoffTab !== "picture" ? "active" : ""} onClick={() => onChangePlayoffTab?.("board")}><Trophy />Bracket</button>
+      <button type="button" role="tab" aria-selected={playoffTab === "picture"} className={playoffTab === "picture" ? "active" : ""} onClick={() => onChangePlayoffTab?.("picture")}><LayoutList />Playoff Picture</button>
+    </div>
+    {playoffTab === "picture" ? <PlayoffPicturePanel schedule={normalizedSchedule} /> : (<div className="pp-board">
+    <div className="pp-subtabs" role="tablist" aria-label="Bracket sections">
+      <button type="button" role="tab" aria-selected={boardSection === "championship"} className={boardSection === "championship" ? "active" : ""} onClick={() => setBoardSection("championship")}><Trophy />Championship</button>
+      {hasConsolation && <button type="button" role="tab" aria-selected={boardSection === "consolation"} className={boardSection === "consolation" ? "active" : ""} onClick={() => setBoardSection("consolation")}>Consolation</button>}
+      <button type="button" role="tab" aria-selected={boardSection === "placement"} className={boardSection === "placement" ? "active" : ""} onClick={() => setBoardSection("placement")}>Final placement</button>
+    </div>
+    {boardSection === "championship" && <div className="pp-champ-section"><div className="postseason-map-scroll" aria-label="Championship bracket">
+      <BracketConnectorLayer connections={mainConnections} className={`postseason-map-canvas rounds-${rounds.length}`}>
         <section className="championship-picture" aria-labelledby="championship-picture-title">
-          <header><span><Trophy /><span><small>TITLE BRACKET</small><strong id="championship-picture-title">Road to the championship</strong></span></span><em>{settings.fieldStatus === "locked" ? "Locked field" : "Live projection"}</em></header>
+          <header className={`bracket-mode-${bracketMode}`}><span><Trophy /><span><small>TITLE BRACKET</small><strong id="championship-picture-title">Road to the championship</strong><small className="bracket-mode-note">{bracketModeNote}</small></span></span><em className={`bracket-mode-chip is-${bracketMode}`}>{bracketModeChip}</em></header>
           <div className="championship-bracket-grid" style={{ gridTemplateColumns: `repeat(${rounds.length}, minmax(270px, 1fr))` }}>
-            {projectedMainRounds.map((round) => <section key={round.roundIndex}><RoundHeading index={round.roundIndex} /><div className="main-playoff-round-games">{orderedRoundMatchups(round).map(({ matchup, gameIndex }) => <MainPlayoffGame key={`${round.roundIndex}-${gameIndex}`} roundIndex={round.roundIndex} gameIndex={gameIndex} homeSeed={matchup.homeSeed} awaySeed={matchup.awaySeed} bracketSide={matchup.bracketSide} />)}{round.roundIndex === 0 && round.byeSeeds.length > 0 && <div className="playoff-bye-strip"><strong>{round.byeSeeds.length} BYE{round.byeSeeds.length === 1 ? "" : "S"}</strong><span>{round.byeSeeds.map((byeSeed) => <Slot key={byeSeed} number={byeSeed} />)}</span></div>}{round.roundIndex === projectedMainRounds.length - 1 && <div className={`championship-outcome playoff-theme-${settings.theme}`}><Trophy />{champion ? <><EntityLogo color={champion.color} logoUrl={champion.logoUrl} monogram={teamInitials(champion)} size={52} /><strong>{teamDisplayName(champion, showCity)}</strong><small>League Champion</small></> : <><strong>League Champion</strong><small>{championshipCopy}</small></>}</div>}</div></section>)}
+            {projectedMainRounds.map((round) => <section key={round.roundIndex}><RoundHeading index={round.roundIndex} /><div className="main-playoff-round-games">{orderedRoundMatchups(round).map(({ matchup, gameIndex }) => <MainPlayoffGame key={`${round.roundIndex}-${gameIndex}`} roundIndex={round.roundIndex} gameIndex={gameIndex} homeSeed={matchup.homeSeed} awaySeed={matchup.awaySeed} bracketSide={matchup.bracketSide} />)}{round.roundIndex === 0 && round.byeSeeds.length > 0 && <div className="playoff-bye-strip"><strong>{round.byeSeeds.length} BYE{round.byeSeeds.length === 1 ? "" : "S"}</strong><span>{round.byeSeeds.map((byeSeed) => <Slot key={byeSeed} number={byeSeed} />)}</span></div>}</div></section>)}
           </div>
         </section>
-        <EliminationTransferRail />
+      </BracketConnectorLayer>
+    </div>{championCapstone}</div>}
+    {boardSection === "consolation" && hasConsolation && <div className="postseason-map-scroll" aria-label="Consolation and placement bracket">
+      <BracketConnectorLayer connections={consolationInternalConnections} className="postseason-map-canvas">
         <ConsolationBracket schedule={normalizedSchedule} onUpdateGame={simulationMode ? undefined : onUpdatePlayoffGame} />
       </BracketConnectorLayer>
-    </div>
-    <FinalPlacementTable schedule={normalizedSchedule} />
+    </div>}
+    {boardSection === "placement" && <FinalPlacementTable schedule={normalizedSchedule} />}
+    </div>)}
+    </>)}
   </div>;
 }
 
@@ -1044,10 +1087,11 @@ function ImportHistoryPanel({ events, loading, error, onRefresh, scheduleId }: {
   </section>;
 }
 
-function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, canAccessPlatformSync, platformSyncLoading, onRefreshPlatformScores, onSavePlatformConnection, onDisconnectPlatform, onConnectPlatform, importHistory, importHistoryLoading, importHistoryError, onRefreshImportHistory }: {
+function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, onUpdatePlayoffs, canAccessPlatformSync, platformSyncLoading, onRefreshPlatformScores, onSavePlatformConnection, onDisconnectPlatform, onConnectPlatform, importHistory, importHistoryLoading, importHistoryError, onRefreshImportHistory }: {
   schedule: GeneratedSchedule;
   onOpenDraftRanking: () => void;
   onRegenerate: () => void;
+  onUpdatePlayoffs: (patch: Partial<LeagueSetupInput["playoffs"]>) => void;
   canAccessPlatformSync: boolean;
   platformSyncLoading: boolean;
   onRefreshPlatformScores: () => void;
@@ -1073,6 +1117,8 @@ function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, canAccessPla
       <div><span>Revision</span><strong>Version {schedule.revision}</strong></div>
       <div><span>Generation seed</span><code>{schedule.seed}</code></div>
     </div>
+    <div className="settings-band"><div><Trophy /><span><strong>Playoffs</strong><small>Field size, bracket format, and postseason presentation for this league.</small></span></div></div>
+    <PlayoffsView schedule={schedule} onUpdatePlayoffs={onUpdatePlayoffs} onUpdatePlayoffGame={() => undefined} mode="settings" />
   </div>;
 }
 
@@ -1208,11 +1254,13 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const [scoreDiscardConfirmOpen, setScoreDiscardConfirmOpen] = useState(false);
   const [platformSyncLoading, setPlatformSyncLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState<"share" | "notify" | null>(null);
+  const [scorebarCollapsed, setScorebarCollapsed] = useState(false);
   // H1: irreversible actions (publish, save-run-back, regenerate) open this
   // confirm gate before running, so a reflexive click can't publish private data,
   // overwrite real scores, or wipe the slate.
   const [confirmAction, setConfirmAction] = useState<null | "share" | "commit" | "regenerate">(null);
   const [showRecap, setShowRecap] = useState(false);
+  const [playoffTab, setPlayoffTab] = useState<"board" | "picture">("board");
   // Deep link from the account page (?recap=1) opens the recap straight away.
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("recap") !== "1") return;
@@ -1654,9 +1702,12 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       if (game.bracket === "consolation" && item.bracket === "consolation" && item.roundIndex > game.roundIndex) return false;
       return true;
     });
-    const playoffGames = existing.some((item) => item.id === game.id)
-      ? existing.map((item) => item.id === game.id ? game : item)
-      : [...existing, game];
+    const cleared = game.homeScore == null && game.awayScore == null;
+    const playoffGames = cleared
+      ? existing.filter((item) => item.id !== game.id)
+      : existing.some((item) => item.id === game.id)
+        ? existing.map((item) => item.id === game.id ? game : item)
+        : [...existing, game];
     return { ...current, playoffGames };
   });
   const onUpdateTiebreakers = (tiebreakers: TiebreakerSettings) => setSchedule((current) => current ? normalizeSeason({ ...current, rankHistory: undefined, setup: { ...current.setup, tiebreakers } }) : current);
@@ -1820,20 +1871,6 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       setActionBusy(null);
     }
   };
-  const sendNotification = async () => {
-    if (actionBusy) return;
-    if (!CLOUD_SCHEDULE_ID.test(schedule.id)) return setNotice("This season needs to finish cloud syncing before sending an update.");
-    if (typeof window !== "undefined" && !window.confirm("Send a schedule update email to everyone subscribed to this league?")) return;
-    setActionBusy("notify");
-    try {
-      const response = await fetch("/api/notifications/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: schedule.id }) });
-      const payload = await response.json().catch(() => ({})) as { sent?: number; message?: string; error?: string };
-      setNotice(response.ok ? payload.message || `Update sent to ${payload.sent ?? 0} subscriber${payload.sent === 1 ? "" : "s"}.` : apiErrorMessage(response.status, payload.error, "The update could not be sent."));
-      window.setTimeout(() => setNotice(null), 5200);
-    } finally {
-      setActionBusy(null);
-    }
-  };
   const selectView = (item: typeof VIEW_ITEMS[number]) => {
     setScoreModalOpen(false);
     setView(item.key);
@@ -1849,7 +1886,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     router.push(teamId ? `/season/${schedule.id}/team/${teamId}` : `/season/${schedule.id}?view=team-schedule`);
   };
   const currentTitle = VIEW_ITEMS.find((item) => item.key === view)?.label ?? "League Schedule";
-  const canAccessPlayoffs = false;
+  const canAccessPlayoffs = true;
   const openScoreEntry = (weekNumber: number) => {
     setSelectedWeek(Math.min(weekNumber, schedule.setup.weeks));
     setScoreModalOpen(true);
@@ -1874,7 +1911,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const scoreBarRankByTeam = new Map((getEnteringWeekRankSnapshot(activeSchedule, selectedWeek)?.rows ?? []).map((row) => [row.teamId, row.rank]));
   const scoreBarDivisionById = new Map(activeSchedule.setup.divisions.map((division) => [division.id, division]));
   const scoreBarWeek = activeSchedule.weeks.find((item) => item.weekNumber === selectedWeek) ?? activeSchedule.weeks[0];
-  return <main className={`workspace-page ${simulation ? "simulation-mode" : ""} ${scoreBarWeek ? "has-scorebar" : ""}`} style={{ "--brand": schedule.setup.color, "--brand-on": readableTextColor(schedule.setup.color) } as CSSProperties}>
+  return <main className={`workspace-page ${simulation ? "simulation-mode" : ""} ${scoreBarWeek ? "has-scorebar" : ""} ${scoreBarWeek && scorebarCollapsed ? "scorebar-collapsed" : ""}`} style={{ "--brand": schedule.setup.color, "--brand-on": readableTextColor(schedule.setup.color) } as CSSProperties}>
     {scoreModalOpen && canAccessScorekeeping && <Modal
       className="score-entry-modal"
       backdropClassName="score-entry-modal-backdrop"
@@ -1891,7 +1928,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
         <footer><span><ShieldCheck /><small>Scores save automatically as you enter them.</small></span><button type="button" className="button-primary" onClick={() => closeScoreModal(true)}>Done</button></footer>
     </Modal>}
     {showRecap && <GenerationReveal schedule={schedule} mode="replay" onComplete={() => setShowRecap(false)} />}
-    <header className="workspace-topbar"><BrandLockup /><div className="workspace-top-actions"><Tooltip label="Send schedule update"><button type="button" aria-label="Send schedule update" disabled={actionBusy !== null} onClick={sendNotification}>{actionBusy === "notify" ? <LoaderCircle className="spin" /> : <Bell />}</button></Tooltip><AccountIdentity identity={entitlements} plan={entitlements.plan} /></div></header>
+    <header className="workspace-topbar"><BrandLockup /><div className="workspace-top-actions"><AccountIdentity identity={entitlements} plan={entitlements.plan} /></div></header>
     {scoreBarWeek && <WeekScoreBar
       week={scoreBarWeek}
       weekCount={activeSchedule.weeks.length}
@@ -1902,6 +1939,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       displayCityNames={activeSchedule.setup.display?.cityNames !== false}
       onSelectWeek={setSelectedWeek}
       onSelectGame={(gameId) => { openLeagueScheduleWeek(scoreBarWeek.weekNumber); setHighlightedGame({ id: gameId }); }}
+      onCollapsedChange={setScorebarCollapsed}
     />}
     <div className="workspace-shell">
       <aside className="workspace-rail"><nav aria-label="Season workspace">{VIEW_ITEMS.map((item) => { const Icon = item.icon; return <button type="button" key={item.key} aria-label={item.label} title={item.label} className={view === item.key ? "active" : ""} onClick={() => selectView(item)}><Icon /><span>{item.label}</span></button>; })}</nav><div className="rail-bottom"><WorkspaceSwitcher current={{ id: schedule.id, name: schedule.setup.name, seasonYear: schedule.setup.seasonYear, color: schedule.setup.color, logoUrl: schedule.setup.logoUrl, initials: schedule.setup.initials }} signedIn={Boolean(entitlements.signedIn)} /></div></aside>
@@ -1947,7 +1985,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
           {view === "gotw" && <GotwWorkspace schedule={activeSchedule} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
           {view === "matchup-ratings" && <MatchupRatingsView schedule={activeSchedule} />}
           {view === "standings" && <StandingsView schedule={activeSchedule} onUpdateTiebreakers={simulation ? undefined : onUpdateTiebreakers} readOnly={Boolean(simulation)} />}
-          {view === "playoffs" && <PlayoffsView schedule={activeSchedule} onUpdatePlayoffs={simulation ? () => undefined : onUpdatePlayoffs} onUpdatePlayoffGame={simulation ? () => undefined : onUpdatePlayoffGame} highlightedGame={highlightedGame} simulationMode={Boolean(simulation)} />}
+          {view === "playoffs" && <PlayoffsView schedule={activeSchedule} onUpdatePlayoffs={simulation ? () => undefined : onUpdatePlayoffs} onUpdatePlayoffGame={simulation ? () => undefined : onUpdatePlayoffGame} highlightedGame={highlightedGame} simulationMode={Boolean(simulation)} playoffTab={playoffTab} onChangePlayoffTab={setPlayoffTab} />}
           {view === "simulator" && !simulation && simulationLoaded && <SimulatorLaunch hasSavedRun={Boolean(savedSimulation)} onPlay={playSimulation} onStartFromReal={startSimulationFromReal} />}
           {view === "simulator" && simulation && <SimulatorWorkspace
             schedule={activeSchedule}
@@ -1971,7 +2009,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
             onDiscard={discardSimulation}
             onOpenSchedule={openLeagueScheduleWeek}
           />}
-          {view === "settings" && <SettingsView schedule={activeSchedule} onOpenDraftRanking={() => setDraftRankingRequest((current) => current + 1)} onRegenerate={() => setConfirmAction("regenerate")} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshPlatformScores={refreshPlatformScores} onSavePlatformConnection={savePlatformConnection} onDisconnectPlatform={disconnectPlatform} onConnectPlatform={() => setConnectOpen(true)} importHistory={importHistory} importHistoryLoading={importHistoryLoading} importHistoryError={importHistoryError} onRefreshImportHistory={loadImportHistory} />}
+          {view === "settings" && <SettingsView schedule={activeSchedule} onOpenDraftRanking={() => setDraftRankingRequest((current) => current + 1)} onRegenerate={() => setConfirmAction("regenerate")} onUpdatePlayoffs={onUpdatePlayoffs} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshPlatformScores={refreshPlatformScores} onSavePlatformConnection={savePlatformConnection} onDisconnectPlatform={disconnectPlatform} onConnectPlatform={() => setConnectOpen(true)} importHistory={importHistory} importHistoryLoading={importHistoryLoading} importHistoryError={importHistoryError} onRefreshImportHistory={loadImportHistory} />}
           {connectOpen && <ConnectScoresModal schedule={schedule} onClose={closeConnect} onConnect={applyPlatformConnection} dismissLabel={connectAutoOpened ? "Skip for now" : "Cancel"} />}
           {saveConnectionSetup && <SaveConnectionPrompt setup={saveConnectionSetup} onClose={() => setSaveConnectionSetup(null)} />}
         </div>

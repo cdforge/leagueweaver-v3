@@ -16,7 +16,7 @@ import { projectConsolationBracket, projectFinalPlacements } from "../lib/consol
 import { formatDraftPlace, getTeamsMissingDraftPlaces, getWeekOneTeamOrder, hasCompleteDraftRanking } from "../lib/rankings";
 import { getNflWeekWindow } from "../lib/schedule";
 import { calculateStandings } from "../lib/standings";
-import type { GeneratedSchedule, LeagueSetupInput } from "../lib/types";
+import type { GeneratedSchedule, LeagueSetupInput, PlayoffGame } from "../lib/types";
 
 let checks = 0;
 function check(test: () => void) {
@@ -152,6 +152,30 @@ check(() => {
   setup.playoffs = { ...setup.playoffs, fieldStatus: "locked", lockedTeamIds: seeds.map((seed) => seed.teamId) };
   const lockedSeeds = projectPlayoffSeeds(blankSchedule(setup));
   assert.deepEqual(lockedSeeds.map((seed) => seed.bracketSide), seeds.map((seed) => seed.bracketSide));
+});
+
+check(() => {
+  // reseedMode divergence after an upset (overall placement, where reseeding is global — under
+  // division-halves a same-half upset holds its slot either way): a Wild Card upset (seed 6 over
+  // seed 3) keeps its bracket slot under "fixed" (the default) but is re-sorted under "each-round".
+  const setup = createDefaultSetup();
+  setup.playoffs = { ...setup.playoffs, placementMode: "overall" };
+  const seeds = projectPlayoffSeeds(blankSchedule(setup));
+  const seedTeam = (n: number) => seeds.find((seed) => seed.seed === n)!.teamId;
+  const upset = {
+    id: "main-r1-g1", week: 15, gameNumber: 1, roundIndex: 0, round: "Wild Card", bracket: "main",
+    homeTeamId: seedTeam(3), awayTeamId: seedTeam(6), homeScore: 20, awayScore: 28,
+    matchupType: "cross-division", seriesGame: 1, seriesLength: 1, dateLabel: "Dec 15–22, 2026", stadium: "Neutral",
+  } as PlayoffGame;
+  const withUpset: GeneratedSchedule = { ...blankSchedule(setup), playoffGames: [upset] };
+
+  // no upset: fixed === each-round === projection
+  assert.deepEqual(projectPlayoffRounds(blankSchedule(setup))[1].matchups.map((m) => [m.homeSeed, m.awaySeed]), [[1, 4], [2, 3]]);
+  // fixed (default): seed 6 advances in seed 3's slot -> [1 vs 4], [2 vs 6]
+  assert.deepEqual(projectPlayoffRounds(withUpset)[1].matchups.map((m) => [m.homeSeed, m.awaySeed]), [[1, 4], [2, 6]]);
+  // each-round: reseed survivors [1,2,4,6] -> [1 vs 6], [2 vs 4]
+  const reseeded = projectPlayoffRounds({ ...withUpset, setup: { ...setup, playoffs: { ...setup.playoffs, reseedMode: "each-round" } } });
+  assert.deepEqual(reseeded[1].matchups.map((m) => [m.homeSeed, m.awaySeed]), [[1, 6], [2, 4]]);
 });
 
 check(() => {

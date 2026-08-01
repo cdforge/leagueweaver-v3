@@ -43,7 +43,9 @@
     ".next-connect/types/**/*.ts",
     ".next-connect/dev/types/**/*.ts",
     ".next-workercheck/types/**/*.ts",
-    ".next-workercheck/dev/types/**/*.ts"
+    ".next-workercheck/dev/types/**/*.ts",
+    ".next-wt/types/**/*.ts",
+    ".next-wt/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

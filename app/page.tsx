@@ -50,8 +50,8 @@ export default function HomePage() {
             seeded off last year&rsquo;s finish, with rivalry weeks and marquee games that actually mean something.
           </p>
           <div className="welcome-actions">
-            <StartBuildingButton />
-            <small>Takes about five minutes &middot; No account needed to start.</small>
+            <StartBuildingButton label="Start building" />
+            <small>Free to start &middot; No account needed &middot; about 5 minutes.</small>
           </div>
           </div>
         </div>
