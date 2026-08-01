@@ -463,3 +463,56 @@ Team Schedule ▾
 4. Remaining High → Medium → V/R design work.
 
 *(Playoffs — H12 and the bracket-specific parts of #38 — parked.)*
+
+---
+
+## Conference & large-league playoffs — leftover work
+Added 2026-08-01. The conference engine (grouping/seeding/clinch), placement chart + wizard preview, 13-week playoff-length setting, conference assignment UI, and conference names on bracket side headers all **shipped** (PR #7). The bracket panel-fit/cutoff fix also **shipped** (PR #8) — *excluded here*. The below is what remains.
+
+### CP1 — Promote conference assignment to its own wizard step
+- **Problem:** conference setup (name/color/logo per conference + balanced division assignment) currently lives *inside* the Divisions step. The commissioner asked for it to be its **own** step that only appears when conferences apply (even division counts 4/6/8).
+- **Where:** `components/builder/LeagueBuilder.tsx` — the conference block inside `DivisionsStep` (after the division strip); `STEPS` (~L66); the `{step === N && <Component/>}` dispatch (~L1508–1517); validation (~L1205), stepper (~L1500), progress/`Step N of 10` kickers (each step component).
+- **Current:** 10 fixed steps, index-based dispatch/validation, hardcoded "Step N of 10" kickers.
+- **Target:** a conditional `Conferences` step after `Divisions`, shown only when `conferencesApply(divisions.length)`. Convert dispatch/validation/stepper to **key-based** (so indices don't need renumbering), compute the step list dynamically, and make the "Step N of M" numbers dynamic (M and each N reflect whether the conference step is present).
+- **Acceptance:** even division counts show a Conferences step in the stepper and it's navigable/validated; odd/2-division counts never show it; step numbers are correct in both cases; existing 10-step flows unaffected.
+
+### CP2 — `ConferenceMark` + conference identity across the schedule view
+- **Problem:** conferences only surface as a *name* on the bracket side header. Per the "division mark always accompanies the name" rule, a conference needs a mark, and conferences should be referenced wherever divisions are, throughout the post-generation schedule view.
+- **Where:** new sibling in `components/ui/DivisionIdentity.tsx` (mirror `DivisionMark`); consumers in `SeasonWorkspace.tsx` (bracket side headers — `sideDivision`/`sideName` ~L812), Standings (division groupings), week views, team-schedule.
+- **Target:** a `ConferenceMark` (logo+color, same pattern as `DivisionMark`); bracket side headers show the conference mark + name; standings/week/team-schedule show the conference alongside the division when conferences exist.
+- **Acceptance:** every place a conference is named across the schedule view carries its mark; 2-division/non-conference leagues unchanged.
+
+### CP3 — Consolation game labels: group name + home location
+- **Problem:** in grouped (division-halves / conference) consolation, a game reads e.g. "7th–10th Placement" with no division/conference context, and no home-field/location — unlike the championship which shows the group ("Prodigy bracket") and venue.
+- **Where:** `lib/consolation.ts` (game `label` construction), `components/season/ConsolationBracket.tsx` (game header render).
+- **Target:** grouped consolation games carry the division/conference name (e.g. "Esteemed — 7th–10th Placement") and the home location, mirroring the championship card.
+- **Acceptance:** grouped consolation games show group name + home location; standard (ungrouped) consolation unchanged.
+
+### CP4 — Distinct consolation game numbering
+- **Problem:** consolation games can read "Game N" and collide with championship "Game N".
+- **Where:** `lib/consolation.ts` / wizard preview game numbering / `ConsolationBracket.tsx`.
+- **Target:** consolation games labeled "Consolation Game N" (compact, no card blow-out) wherever a game number is shown.
+- **Acceptance:** no ambiguity between a championship and consolation "Game N".
+
+### CP5 — Division-leader consolation byes go to division runners-up
+- **Problem:** when placement is division-leaders and the consolation bracket has byes, those byes should be reserved for each division's best non-qualifier (the division runner-up), mirroring how the championship protects division leaders — not handed out by raw overall seed.
+- **Where:** consolation seeding (`lib/consolation.ts`) and the wizard preview consolation bracket (`buildPool("consolation")` in `LeagueBuilder.tsx`).
+- **Target:** consolation byes assigned to division runners-up in overall-record order, one per division, until byes run out; fewer byes than divisions → top-record runners-up get them; a division whose runner-up already qualified passes to its next-best non-qualifier; extras fall through to overall seed. Division-leaders mode only.
+- **Acceptance:** for an 8-division / 8-field / division-leaders league, consolation byes land on the eight second-place division teams (by record) up to the bye count.
+
+### CP6 — Consolation column evenness (card width)
+- **Problem:** the consolation board now fits the panel and scrolls internally (shipped), but the first-round **team card** is ~510px while later placeholder rounds are ~270px — columns are uneven and the board needs a horizontal scroll to reach the last round. (Distinct from the merged cutoff fix.)
+- **Where:** `.postseason-map-canvas .consolation-game` / the stacked `TeamIdentityBlock` inside consolation slots; the round-header `h3` also sets a wide min-content.
+- **Target:** consolation game cards shrink to an even column width (~210–230px) so all rounds fit the panel without a scroll for typical (≤3-round) consolations; the round header wraps/truncates instead of setting a wide min-content. (Earlier `min-width:0` attempts hit the wrong selector — trace the actual team-card and h3 min-content.)
+- **Acceptance:** a 3-round consolation shows all rounds at even width within the panel; wide ranges/long headers wrap or ellipsize.
+
+### CP7 — Persist conferences in saved leagues
+- **Problem:** `SavedLeagueIdentity` was extended with `conferences?`, but the save/load round-trip and the import path aren't confirmed to carry `conferences[]` + `Division.conferenceId`.
+- **Where:** saved-league serialize/deserialize; the builder import path (`createDivisions` in the import branch of `LeagueBuilder.tsx`).
+- **Target:** conferences + division→conference assignment survive save/load and are initialized for even-division imports.
+- **Acceptance:** save a conference league, reload it, and the conference names/colors/logos + assignment are intact.
+
+### CP8 — Grouped-by-conference consolation
+- **Problem:** `consolationMode: "division-halves"` consolation is gated to exactly 2 divisions / 4 non-playoff teams (`isDivisionHalvesConsolationUsable`, `lib/consolation.ts`).
+- **Target:** when conferences exist and the user picks the grouped consolation format, partition non-qualifiers by `conferenceId` and run each side's placement, then cross-side games; dynamic "Conference/Division halves" label; fall back to standard placement where a group is too small.
+- **Acceptance:** a conference league with grouped consolation shows per-conference placement; 2-division unchanged.
