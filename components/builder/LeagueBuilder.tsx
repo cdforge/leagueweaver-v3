@@ -45,7 +45,7 @@ import { identityFromSetup, normalizeSavedLeague } from "@/lib/savedLeagues";
 import { generateLeagueSchedule, getNflWeeks, getNflWeekWindow, getWeekDateLabel } from "@/lib/schedule";
 import { createLocalSeasonId, listLocalSeasons, loadSetup, saveSeason, saveSetup } from "@/lib/storage";
 import { divisionAcronym, entityMonogram, leagueAcronym, resolveInitials } from "@/lib/monograms";
-import { accessibleAccentColor } from "@/lib/colorContrast";
+import { accessibleAccentColor, readableTextColor } from "@/lib/colorContrast";
 import { formatDraftPlace, getTeamsMissingDraftPlaces, getWeekOneTeamOrder, hasCompleteDraftRanking } from "@/lib/rankings";
 import {
   getMaximumPlayoffFieldSize,
@@ -56,6 +56,7 @@ import {
   normalizePlayoffSettings,
   PLAYOFF_THEME_COLORS,
 } from "@/lib/playoffs";
+import { projectConsolationBracket } from "@/lib/consolation";
 import { teamDisplayName, teamInitials, teamMonogram } from "@/lib/teamIdentity";
 import type { Division, GeneratedSchedule, ImportPreview, LeagueSetupInput, SavedLeagueIdentity, SavedLeaguePreset, Team } from "@/lib/types";
 import { GenerationReveal } from "@/components/builder/GenerationReveal";
@@ -486,7 +487,8 @@ function FairnessStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
 
 function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: React.Dispatch<React.SetStateAction<LeagueSetupInput>> }) {
   const p = setup.playoffs;
-  const [subPage, setSubPage] = useState<"format" | "rules" | "brand">("format");
+  const [subPage, setSubPage] = useState<"format" | "rules" | "brand" | "logos">("format");
+  const [expandedRounds, setExpandedRounds] = useState<number[]>([]);
   const divisionCount = setup.divisions.length;
   const maxFieldSize = getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, p.bracketType);
   const patch = (next: Partial<LeagueSetupInput["playoffs"]>) =>
@@ -573,6 +575,15 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   const normalized = normalizePlayoffSettings(p, setup.teams.length, setup.color, setup.weeks);
   const roundNames = getPlayoffRoundNames(normalized, divisionCount);
   const gameSlots = getPlayoffGameBrandingSlots(normalized, divisionCount);
+  // Consolation slots derive from a stubbed schedule (structure is deterministic from settings).
+  const consolationSlots: Array<{ id: string; label: string; roundName: string; roundIndex: number }> = (() => {
+    if (p.consolationMode === "off") return [];
+    try {
+      const stub = { id: "wizard-preview", seed: "0", createdAt: "", setup: { ...setup, playoffs: normalized }, weeks: [], playoffGames: [], revision: 0, fairness: {} } as unknown as GeneratedSchedule;
+      const bracket = projectConsolationBracket(stub);
+      return bracket?.rounds.flatMap((round) => round.games.map((game) => ({ id: game.id, label: game.label, roundName: round.name, roundIndex: round.roundIndex }))) ?? [];
+    } catch { return []; }
+  })();
   const updateRoundName = (roundIndex: number, name: string) => {
     const next = [...(p.roundNames ?? roundNames)];
     next[roundIndex] = name.slice(0, 40);
@@ -594,53 +605,64 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
     patch({ gameLogoUrls: next });
   };
 
-  // Representative live preview — seeds carry real team names/colors ordered by prior-season rank.
+  // Live preview shows STRUCTURAL slots (seed + division), not specific teams — so it reads as
+  // "which spots are locked to which division", especially for division halves and leader byes.
+  const divisions = setup.divisions;
+  const divById = new Map(divisions.map((d) => [d.id, d]));
   const seeded = [...setup.teams].sort((a, b) => (a.overallRank ?? 99) - (b.overallRank ?? 99));
-  const teamAt = (seed: number) => seeded[seed - 1];
-  const teamLabel = (seed: number) => teamAt(seed)?.name ?? `Seed ${seed}`;
-  const seedChip = (seed: number) => <span className="ppw-team"><b className="ppw-seed">{seed}</b><span className="ppw-name">{teamLabel(seed)}</span></span>;
-  const matchCard = (a: number, c: number, extra = "") => <div className={`ppw-match ${extra}`} style={{ "--ppw-accent": teamAt(a)?.color ?? "#3fbf7f" } as React.CSSProperties}>{seedChip(a)}{seedChip(c)}</div>;
-  const byeCard = (seed: number) => <div className="ppw-match ppw-bye" style={{ "--ppw-accent": teamAt(seed)?.color ?? "#3fbf7f" } as React.CSSProperties}>{seedChip(seed)}<span className="ppw-tag">Bye → round 2</span></div>;
-  const previewHalves = p.placementMode === "division-halves" && halvesUsable;
+  const divOfSeed = (seed: number) => { const t = seeded[seed - 1]; return t ? divById.get(t.divisionId) : undefined; };
+  const divInitials = (d?: Division) => (d?.initials?.trim() || d?.name || "D").slice(0, 3).toUpperCase();
+  const divChip = (d?: Division) => <b className="ppw-dchip" style={{ background: d?.color ?? "#3a4740", color: d ? readableTextColor(d.color) : "#fff" } as React.CSSProperties}>{divInitials(d)}</b>;
+  const numChip = (n: number) => <b className="ppw-seed">{n}</b>;
+  const divSlot = (d: Division | undefined, label: string) => <span className="ppw-team">{divChip(d)}<span className="ppw-name">{label}</span></span>;
+  const seedSlot = (seed: number, label: string) => <span className="ppw-team">{numChip(seed)}<span className="ppw-name">{label}</span></span>;
+  const previewHalves = p.placementMode === "division-halves" && halvesUsable && divisions.length >= 2;
   const previewColumns = () => {
     const n = p.fieldSize;
     if (p.bracketType === "ladder") {
       return <div className="ppw-col"><span className="ppw-rh">The climb</span>{Array.from({ length: n }, (_, i) => n - i).map((seed) =>
-        <div key={seed} className="ppw-match" style={{ "--ppw-accent": teamAt(seed)?.color ?? "#3fbf7f" } as React.CSSProperties}>{seedChip(seed)}<span className="ppw-tag ppw-plain">enters week {Math.max(1, n - seed)}</span></div>)}</div>;
+        <div key={seed} className="ppw-match" style={{ "--ppw-accent": divOfSeed(seed)?.color ?? "#3fbf7f" } as React.CSSProperties}>{seedSlot(seed, `#${seed} seed`)}<span className="ppw-tag ppw-plain">enters week {Math.max(1, n - seed)}</span></div>)}</div>;
     }
+    if (previewHalves) {
+      const per = Math.ceil(n / 2);
+      const halfByes = Math.max(0, Math.floor(byeCount / 2));
+      return <>{[0, 1].map((hi) => {
+        const d = divisions[hi] ?? divisions[0];
+        const localPlaying: number[] = [];
+        for (let s = halfByes + 1; s <= per; s++) localPlaying.push(s);
+        return <div key={hi} className="ppw-col">
+          <span className="ppw-half" style={{ color: d?.color } as React.CSSProperties}>{divChip(d)}{d?.name ?? `Half ${hi + 1}`}</span>
+          <span className="ppw-rh">Wild card</span>
+          {Array.from({ length: halfByes }, (_, i) => i + 1).map((s) => <div key={s} className="ppw-match ppw-bye" style={{ "--ppw-accent": d?.color ?? "var(--gold)" } as React.CSSProperties}>{divSlot(d, `#${s} seed`)}<span className="ppw-tag">Bye · division leader</span></div>)}
+          {localPlaying.slice(0, Math.floor(localPlaying.length / 2)).map((s, j) => <div key={s} className="ppw-match" style={{ "--ppw-accent": d?.color ?? "#3fbf7f" } as React.CSSProperties}>{divSlot(d, `#${s} seed`)}{divSlot(d, `#${localPlaying[localPlaying.length - 1 - j]} seed`)}</div>)}
+          <span className="ppw-rh ppw-rh-sub">Division final</span>
+          <div className="ppw-match" style={{ "--ppw-accent": d?.color ?? "#3fbf7f" } as React.CSSProperties}>{divSlot(d, halfByes ? "#1 seed" : "Wild card winner")}{divSlot(d, "Wild card winner")}</div>
+        </div>;
+      })}<div className="ppw-col ppw-final"><span className="ppw-rh">Championship</span>
+        <div className="ppw-match" style={{ "--ppw-accent": "var(--gold)" } as React.CSSProperties}>{divSlot(divisions[0], `${divisions[0]?.name ?? "Half 1"} champ`)}{divSlot(divisions[1], `${divisions[1]?.name ?? "Half 2"} champ`)}</div>
+      </div></>;
+    }
+    // overall / leaders — global seeds, tinted by the division each seed lands in
     const playing: number[] = [];
     for (let s = byeCount + 1; s <= n; s++) playing.push(s);
-    if (previewHalves && n % 2 === 0 && n >= 4) {
-      const per = n / 2, hb = Math.floor(byeCount / 2);
-      return <>{[0, 1].map((hi) => {
-        const base = hi * per;
-        const halfPlaying: number[] = [];
-        for (let s = base + hb + 1; s <= base + per; s++) halfPlaying.push(s);
-        return <div key={hi} className="ppw-col">
-          <span className={`ppw-half ppw-half-${hi}`}>{["Top", "Bottom"][hi]} half</span>
-          <span className="ppw-rh">Round 1</span>
-          {Array.from({ length: hb }, (_, i) => base + i + 1).map((s) => <span key={s}>{byeCard(s)}</span>)}
-          {halfPlaying.slice(0, Math.floor(halfPlaying.length / 2)).map((s, j) => <span key={s}>{matchCard(s, halfPlaying[halfPlaying.length - 1 - j])}</span>)}
-          <span className="ppw-rh ppw-rh-sub">Half final</span>
-          {matchCard(base + 1, base + 2)}
-        </div>;
-      })}<div className="ppw-col ppw-final"><span className="ppw-rh">Championship</span>{matchCard(1, 2)}</div></>;
-    }
     const afterR1 = byeCount + Math.floor(playing.length / 2);
+    const seedMatch = (a: number, c: number) => <div className="ppw-match" style={{ "--ppw-accent": divOfSeed(a)?.color ?? "#3fbf7f" } as React.CSSProperties}>{seedSlot(a, `#${a} seed`)}{seedSlot(c, `#${c} seed`)}</div>;
+    const seedBye = (s: number) => <div className="ppw-match ppw-bye" style={{ "--ppw-accent": "var(--gold)" } as React.CSSProperties}>{seedSlot(s, `#${s} seed`)}<span className="ppw-tag">Bye → round 2</span></div>;
     return <>
       <div className="ppw-col"><span className="ppw-rh">Round 1</span>
-        {Array.from({ length: byeCount }, (_, i) => i + 1).map((s) => <span key={s}>{byeCard(s)}</span>)}
-        {playing.slice(0, Math.floor(playing.length / 2)).map((s, j) => <span key={s}>{matchCard(s, playing[playing.length - 1 - j])}</span>)}
+        {Array.from({ length: byeCount }, (_, i) => i + 1).map((s) => <span key={s}>{seedBye(s)}</span>)}
+        {playing.slice(0, Math.floor(playing.length / 2)).map((s, j) => <span key={s}>{seedMatch(s, playing[playing.length - 1 - j])}</span>)}
       </div>
-      {afterR1 >= 4 && <div className="ppw-col"><span className="ppw-rh">Semifinals</span>{matchCard(1, 4)}{matchCard(2, 3)}</div>}
-      <div className="ppw-col ppw-final"><span className="ppw-rh">Championship</span>{matchCard(1, 2)}</div>
+      {afterR1 >= 4 && <div className="ppw-col"><span className="ppw-rh">Semifinals</span>{seedMatch(1, 4)}{seedMatch(2, 3)}</div>}
+      <div className="ppw-col ppw-final"><span className="ppw-rh">Championship</span>{seedMatch(1, 2)}</div>
     </>;
   };
 
   const subPages: Array<{ key: typeof subPage; label: string; sub: string }> = [
     { key: "format", label: "Format", sub: "Field & bracket" },
     { key: "rules", label: "Rules", sub: "Seeding & venue" },
-    { key: "brand", label: "Branding", sub: "Names & logos" },
+    { key: "brand", label: "Branding", sub: "Name & trophy" },
+    { key: "logos", label: "Logos", sub: "Optional" },
   ];
 
   return <div className="step-stack playoff-wizard">
@@ -709,16 +731,23 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
               {themes.map((t) => <button key={t} type="button" className={p.theme === t ? "active" : ""} onClick={() => setTheme(t)}><span className="playoff-theme-swatch" style={{ background: t === "custom" ? p.color : PLAYOFF_THEME_COLORS[t] }} /><strong>{t.charAt(0).toUpperCase() + t.slice(1)}</strong></button>)}
             </div>
           </div>
-          <div className="ppw-group"><FieldLabel hint="new">Rounds &amp; games</FieldLabel>
-            <p className="ppw-rgnote">Name and badge each round, or logo its individual games. These slots come from your Format choices, so they're ready before the bracket is generated.</p>
+        </>}
+
+        {subPage === "logos" && <>
+          <div className="ppw-optional"><span className="ppw-optional-tag">Optional</span><span>Add custom art — divisional logos, bowl-game badges, whatever your league runs. Skip it and every round falls back to your playoff logo.</span></div>
+          <div className="ppw-group"><FieldLabel>Championship bracket</FieldLabel>
+            <p className="ppw-rgnote">Name and badge each round. Multi-game rounds — like division halves — expand to logo each game.</p>
             <div className="ppw-rounds">{roundNames.map((round, roundIndex) => {
               const slots = gameSlots.filter((slot) => slot.roundIndex === roundIndex);
+              const expanded = expandedRounds.includes(roundIndex);
+              const brandedGames = slots.filter((slot) => p.gameLogoUrls?.[slot.id] || p.gameNames?.[slot.id]).length;
               return <div className="ppw-round" key={roundIndex}>
                 <div className="ppw-round-head">
                   <IdentityColorPicker compact showColorControl={false} showAbbreviation={false} imagePresentation="bare" name={`${round} round`} abbreviation={(round || "R").slice(0, 3).toUpperCase()} color={p.color} logoUrl={p.roundLogoUrls?.[roundIndex]} onChange={(next) => updateRoundLogo(roundIndex, next.logoUrl)} />
-                  <label className="ppw-round-name"><input aria-label={`Round ${roundIndex + 1} name`} defaultValue={round} maxLength={40} onBlur={(event) => updateRoundName(roundIndex, event.target.value)} /><small>{slots.length} game{slots.length === 1 ? "" : "s"}</small></label>
+                  <label className="ppw-round-name"><input aria-label={`Round ${roundIndex + 1} name`} defaultValue={round} maxLength={40} onBlur={(event) => updateRoundName(roundIndex, event.target.value)} /><small>{slots.length} game{slots.length === 1 ? "" : "s"}{brandedGames ? ` · ${brandedGames} branded` : ""}</small></label>
+                  {slots.length > 1 && <button type="button" className="ppw-expand" aria-expanded={expanded} onClick={() => setExpandedRounds((cur) => cur.includes(roundIndex) ? cur.filter((x) => x !== roundIndex) : [...cur, roundIndex])}>{expanded ? "Hide games" : "Logo each game"}</button>}
                 </div>
-                {slots.length > 1 && <div className="ppw-games">{slots.map((slot) => {
+                {slots.length > 1 && expanded && <div className="ppw-games">{slots.map((slot) => {
                   const fallback = `${round} · Game ${slot.gameIndex + 1}`;
                   return <div className="ppw-game" key={slot.id}>
                     <IdentityColorPicker compact showColorControl={false} showAbbreviation={false} imagePresentation="bare" name={fallback} abbreviation={`G${slot.gameIndex + 1}`} color={p.color} logoUrl={p.gameLogoUrls?.[slot.id]} onChange={(next) => updateGameLogo(slot.id, next.logoUrl)} />
@@ -728,6 +757,19 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
               </div>;
             })}</div>
           </div>
+          {consolationSlots.length > 0 && <div className="ppw-group"><FieldLabel>Consolation bracket</FieldLabel>
+            <p className="ppw-rgnote">Placement and bowl games for the teams outside the title hunt — each gets its own logo.</p>
+            <div className="ppw-rounds">{[...new Map(consolationSlots.map((s) => [s.roundIndex, s.roundName])).entries()].map(([roundIndex, roundName]) => {
+              const slots = consolationSlots.filter((s) => s.roundIndex === roundIndex);
+              return <div className="ppw-round" key={`cons-${roundIndex}`}>
+                <div className="ppw-round-head ppw-round-head-plain"><span className="ppw-cons-round">{roundName}</span><small>{slots.length} game{slots.length === 1 ? "" : "s"}</small></div>
+                <div className="ppw-games ppw-games-flush">{slots.map((slot) => <div className="ppw-game" key={slot.id}>
+                  <IdentityColorPicker compact showColorControl={false} showAbbreviation={false} imagePresentation="bare" name={slot.label} abbreviation="CG" color={p.color} logoUrl={p.gameLogoUrls?.[slot.id]} onChange={(next) => updateGameLogo(slot.id, next.logoUrl)} />
+                  <input aria-label={`${slot.label} name`} defaultValue={p.gameNames?.[slot.id] ?? slot.label} maxLength={60} onBlur={(event) => updateGameName(slot.id, event.target.value)} />
+                </div>)}</div>
+              </div>;
+            })}</div>
+          </div>}
         </>}
       </div>
 
@@ -736,7 +778,7 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
         <strong className="ppw-preview-title">{p.bracketType === "ladder" ? "The playoff ladder" : "Road to the title"}</strong>
         <small className="ppw-preview-sub">{p.fieldSize} teams · {previewHalves ? "division halves" : p.placementMode === "overall" ? "overall seeds" : "auto seeding"} · {byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"}` : "no byes"}</small>
         <div className="ppw-bracket">{previewColumns()}</div>
-        {p.consolationMode !== "off" && <div className="ppw-cons"><span className="ppw-cons-h">Consolation placement</span><div className="ppw-cons-row">{Array.from({ length: Math.min(4, Math.max(0, setup.teams.length - p.fieldSize)) }, (_, i) => p.fieldSize + 1 + i).map((s) => <span key={s} className="ppw-pill">#{s} {teamLabel(s).split(" ")[0]}</span>)}</div></div>}
+        {p.consolationMode !== "off" && <div className="ppw-cons"><span className="ppw-cons-h">Consolation placement</span><div className="ppw-cons-row">{Array.from({ length: Math.min(4, Math.max(0, setup.teams.length - p.fieldSize)) }, (_, i) => p.fieldSize + 1 + i).map((s) => <span key={s} className="ppw-pill">#{s} · {divInitials(divOfSeed(s))}</span>)}</div></div>}
         <div className="ppw-facts">
           <span className="ppw-fact">🏟 <b>{p.championshipVenueMode === "neutral-site" ? "Neutral site" : "Higher seed hosts"}</b></span>
           <span className="ppw-fact">🔀 <b>{p.reseedMode === "each-round" ? "Reseed each round" : p.reseedMode === "protected" ? "Protected" : "Fixed bracket"}</b></span>

@@ -4516,3 +4516,21 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .playoff-wizard-preview { position: static; }
   .ppw-presets { grid-template-columns: 1fr; }
 }
+
+/* per-game logos live behind a per-round expander (progressive disclosure) */
+.ppw-round-head .ppw-expand { margin-left: auto; flex: 0 0 auto; border: 0; background: var(--field-soft); color: var(--field); border-radius: var(--radius-pill); padding: 5px 12px; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .01em; cursor: pointer; font-family: inherit; transition: background var(--transition); }
+.ppw-round-head .ppw-expand:hover { background: color-mix(in srgb, var(--field) 16%, white); }
+.ppw-round-head .ppw-expand:focus-visible { outline: 2px solid var(--field); outline-offset: 2px; }
+
+/* preview: division-mark pill (structural slots show the division, not a team) */
+.ppw-dchip { flex: 0 0 auto; height: 16px; min-width: 16px; padding: 0 4px; border-radius: 4px; display: inline-grid; place-items: center; font-size: 8.5px; font-weight: var(--w-black); letter-spacing: .02em; font-family: var(--font-barlow-condensed), sans-serif; }
+.ppw-half .ppw-dchip { height: 15px; }
+.ppw-half::before { display: none; }
+
+/* Logos sub-page (optional) — champ + consolation art */
+.ppw-optional { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px dashed var(--line-strong); border-radius: var(--radius); padding: 11px 13px; font-size: var(--text-xs); color: var(--muted); line-height: 1.45; }
+.ppw-optional-tag { flex: 0 0 auto; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .06em; text-transform: uppercase; color: var(--field); background: var(--field-soft); border-radius: var(--radius-pill); padding: 3px 9px; }
+.ppw-round-head-plain { justify-content: space-between; }
+.ppw-cons-round { font-size: var(--text-sm); font-weight: var(--w-black); color: var(--ink); }
+.ppw-round-head-plain small { color: var(--muted); font-size: var(--text-2xs); }
+.ppw-games-flush { border-top: 1px solid var(--line); }
