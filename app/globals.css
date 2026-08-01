@@ -17,6 +17,9 @@
   --danger: #b42318;
   --live: #d64027;
   --live-soft: #fbe9e4;
+  /* Dark "broadcast graphic" panel — shared by the Playoff Picture (and the
+     planned Stakes panel). Deliberately distinct from the light app chrome. */
+  --pk: #171d1a; --pk-2: #1e2622; --pk-line: #33403a; --pk-ink: #f3f7f5; --pk-mut: #94a49c;
   /* One monotone strength scale: interpolate --field (strong) → these weak ends
      by a per-instance --sig-t (1 = strongest, 0 = regular). Never red — a low
      rank is "regular", not "bad". Gold stays reserved for GOTW. */
@@ -3105,7 +3108,7 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .consolation-entrant.is-result small { color: var(--muted); font-size: var(--text-2xs); }
 
 .postseason-map-scroll { overflow-x: auto; border: 1px solid var(--line); background: #f7f9f8; scrollbar-width: thin; overscroll-behavior-inline: contain; }
-.postseason-map-canvas { position: relative; min-width: max(100%, 920px); display: grid; gap: 18px; padding: 18px; }
+.postseason-map-canvas { position: relative; width: max-content; min-width: max(100%, 920px); display: grid; gap: 18px; padding: 18px; }
 .postseason-map-canvas.rounds-4 { min-width: max(100%, 1210px); }
 .bracket-connection { color: var(--playoff-color); }
 .bracket-connection-loser { color: #68766f; }
@@ -3359,6 +3362,10 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .workspace-top-actions .account-identity-copy { display: none; }
   .workspace-shell { display: block; }
   .workspace-rail { position: fixed; z-index: 25; top: auto; bottom: 0; left: 0; right: 0; width: auto; height: calc(62px + env(safe-area-inset-bottom)); border-right: 0; border-top: 1px solid #23362c; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); }
+  /* The score-bar sticky-sidebar override (`.has-scorebar .workspace-rail`, top/height for
+     the desktop rail) also wins here and would blow the mobile bottom bar back to full height,
+     covering the content — pin it back to the bottom bar. */
+  .workspace-page.has-scorebar .workspace-rail { top: auto; height: calc(62px + env(safe-area-inset-bottom)); }
   .workspace-rail nav { width: 100%; display: flex; gap: 1px; overflow-x: auto; }
   .workspace-rail nav button { min-width: 44px; min-height: 48px; flex: 0 0 44px; flex-direction: column; gap: 2px; }
   .workspace-rail nav button.active { flex-basis: 88px; }
@@ -4133,6 +4140,454 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .sb-game { flex-basis: 172px; }
   .sb-collapsed-hint { display: none; }
 }
+
+/* ============ PLAYOFF PICTURE — dark broadcast panel ============ */
+.pp-panel { width: min(680px, 94vw); max-height: 88vh; overflow: auto; border-radius: var(--radius-lg); border: 1px solid #0d100e;
+  background: radial-gradient(120% 80% at 50% -10%, #232c27 0%, transparent 60%),
+    repeating-linear-gradient(135deg, rgba(255,255,255,.014) 0 2px, transparent 2px 6px), var(--pk);
+  box-shadow: 0 18px 44px rgba(0,0,0,.4); color: var(--pk-ink); }
+.pp-head { display: flex; align-items: flex-start; gap: 14px; padding: 18px 20px 14px; border-bottom: 1px solid var(--pk-line); position: sticky; top: 0;
+  background: linear-gradient(180deg, #1c2420, #171d1a); z-index: 1; }
+.pp-head .pp-eyebrow { font-family: var(--font-barlow-condensed), sans-serif; font-weight: var(--w-black, 800); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--field-mid); margin: 0 0 3px; }
+.pp-head h2 { margin: 0; font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-style: italic; font-size: 28px; line-height: .9; letter-spacing: .01em; text-transform: uppercase; color: #fff; text-shadow: 0 1px 0 #000; }
+.pp-thru { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--pk-mut); text-align: right; }
+.pp-thru b { color: #fff; font-size: 16px; }
+.pp-close { flex: 0 0 30px; width: 30px; height: 30px; border: 1px solid var(--pk-line); border-radius: var(--radius); background: transparent; color: var(--pk-mut); cursor: pointer; display: grid; place-items: center; }
+.pp-close:hover { color: #fff; border-color: var(--pk-mut); }
+.pp-close svg { width: 15px; height: 15px; }
+
+.pp-sec { display: flex; align-items: center; gap: 10px; padding: 15px 20px 8px; }
+.pp-sec span { font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: var(--pk-mut); }
+.pp-sec i { flex: 1; height: 1px; background: var(--pk-line); }
+.pp-sec em { font-style: normal; color: var(--pk-mut); font-size: 11px; }
+
+.pp-srow { display: flex; align-items: stretch; gap: 10px; padding: 4px 20px; }
+.pp-seed { position: relative; width: 40px; flex: 0 0 40px; border-radius: 8px; display: grid; place-items: center; font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-style: italic; font-size: 22px; color: #fff; background: rgba(255,255,255,.05); box-shadow: inset 0 0 0 2px var(--tc, #555); }
+.pp-srow.is-top .pp-seed { box-shadow: inset 0 0 0 2px var(--gold); color: var(--gold); }
+.pp-crest { flex: 0 0 auto; align-self: center; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+.pp-bar { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-radius: 8px;
+  /* --bar is accessibleTeamColor(team.color): guaranteed >=4.5:1 with white, so the
+     white bar text always clears AA. Gloss comes from the inset highlight, not a
+     white color-mix that would lift a light team above the contrast floor. */
+  background: linear-gradient(180deg, var(--bar, var(--tc, #555)), color-mix(in srgb, var(--bar, var(--tc, #555)) 86%, #000 14%));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.20), inset 0 -2px 6px rgba(0,0,0,.20); }
+.pp-tm { display: flex; flex-direction: column; line-height: 1.04; min-width: 0; }
+.pp-name { font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-style: italic; font-size: 19px; letter-spacing: .01em; text-transform: uppercase; color: #fff; text-shadow: 0 1px 1px rgba(0,0,0,.32); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pp-div { display: inline-flex; align-items: center; gap: 5px; margin-top: 2px; font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: rgba(255,255,255,.94); white-space: nowrap; }
+.pp-sp { flex: 1; }
+.pp-recs { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.05; flex: 0 0 auto; }
+.pp-rec { font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 18px; color: #fff; font-variant-numeric: tabular-nums; text-shadow: 0 1px 1px rgba(0,0,0,.3); }
+.pp-drec { font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 10.5px; letter-spacing: .03em; text-transform: uppercase; color: rgba(255,255,255,.94); font-variant-numeric: tabular-nums; }
+.pp-tag { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border-radius: var(--radius-pill); background: rgba(0,0,0,.32); font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: #fff; white-space: nowrap; }
+.pp-tag svg { width: 11px; height: 11px; }
+.pp-tag.is-top { color: var(--gold); }
+.pp-tag.is-clinched { color: #7fe3ac; }
+.pp-when { padding: 2px 20px 6px 72px; color: var(--pk-mut); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+.pp-cut { display: flex; align-items: center; gap: 10px; padding: 9px 20px; }
+.pp-cut i { flex: 1; height: 0; border-top: 1px dashed var(--field-mid); opacity: .6; }
+.pp-cut span { font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; text-transform: uppercase; letter-spacing: .15em; font-size: 10px; color: var(--field-mid); }
+
+.pp-mrow { display: flex; align-items: center; gap: 11px; padding: 7px 20px; border-top: 1px solid rgba(255,255,255,.04); }
+.pp-msd { width: 22px; text-align: center; font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 16px; color: var(--pk-mut); font-variant-numeric: tabular-nums; }
+.pp-mlogo { flex: 0 0 auto; border-radius: 6px; }
+.pp-tm2 { display: flex; flex-direction: column; line-height: 1.05; min-width: 0; }
+.pp-mnm { font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 15px; color: var(--pk-ink); text-transform: uppercase; letter-spacing: .01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pp-mdv { display: inline-flex; align-items: center; gap: 5px; color: var(--pk-mut); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; }
+.pp-mrecs { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.05; flex: 0 0 auto; }
+.pp-mrecs b { font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 15px; color: var(--pk-ink); font-variant-numeric: tabular-nums; }
+.pp-mrecs small { font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 10px; letter-spacing: .03em; text-transform: uppercase; color: var(--pk-mut); font-variant-numeric: tabular-nums; }
+.pp-gb { font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 13px; color: var(--gold); letter-spacing: .03em; min-width: 52px; text-align: right; }
+.pp-mrow.is-out { background: linear-gradient(90deg, rgba(214,64,39,.10), transparent 60%); }
+.pp-mrow.is-out .pp-mnm { color: var(--pk-mut); }
+.pp-out { display: inline-flex; align-items: center; gap: 4px; height: 19px; padding: 0 8px; border-radius: var(--radius-pill); background: rgba(214,64,39,.16); color: #e88a72; font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; }
+.pp-out svg { width: 10px; height: 10px; }
+
+/* division mark + league logo badges reuse the shared components; these just size/space them */
+.pp-dmark { flex: 0 0 auto; }
+.pp-league { position: absolute; top: -7px; right: -7px; border-radius: 50%; box-shadow: 0 0 0 2px var(--pk), 0 1px 2px rgba(0,0,0,.4); }
+.pp-tag .pp-league { position: static; box-shadow: 0 0 0 1px rgba(0,0,0,.3); margin-right: 3px; }
+
+.pp-foot { padding: 12px 20px 15px; border-top: 1px solid var(--pk-line); display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; color: var(--pk-mut); font-size: 11px; }
+.pp-foot .pp-lg { display: inline-flex; align-items: center; gap: 6px; }
+.pp-foot .pp-sw { width: 10px; height: 10px; border-radius: 3px; }
+.pp-empty { padding: 30px 20px; text-align: center; color: var(--pk-mut); font-size: 13px; }
+
+@media (max-width: 560px) {
+  .pp-div, .pp-mdv { gap: 3px; }
+  .pp-name { font-size: 16px; }
+  .pp-head h2 { font-size: 23px; }
+}
+
+/* Playoff Picture chip on the live week bar */
+.sb-picture-row { padding: 0 12px 10px; }
+.sb-picture { display: inline-flex; align-items: center; gap: 9px; height: 34px; padding: 0 12px 0 10px; border: 1px solid rgba(17,122,69,.5); border-radius: var(--radius); background: linear-gradient(180deg, #eef7f1, #e2f0e8); color: var(--field-dark); cursor: pointer; box-shadow: 0 1px 2px rgba(21,35,28,.08); }
+.sb-picture:hover { background: #dff0e7; }
+.sb-picture > svg { width: 18px; height: 18px; color: var(--field); flex: 0 0 auto; }
+.sb-picture-txt { display: flex; flex-direction: column; line-height: 1.05; text-align: left; }
+.sb-picture-txt b { font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 14px; letter-spacing: .02em; text-transform: uppercase; color: var(--ink); }
+.sb-picture-txt small { font-size: 11px; color: var(--field-dark); font-variant-numeric: tabular-nums; }
+
+/* Wizard — playoff setup step */
+.playoff-setup-grid { align-items: start; }
+.playoff-theme-row button { position: relative; }
+.playoff-theme-swatch { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.18); margin-bottom: 4px; }
+.playoff-branding-row { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.playoff-name-field { flex: 1; min-width: 220px; }
+.playoff-name-field input { width: 100%; }
+
+/* Playoff Picture rendered inline as a tab on the Playoffs page (not a modal) */
+.pp-panel-inline { width: auto; max-height: none; overflow: visible; box-shadow: var(--shadow-sm); }
+.pp-panel-inline .pp-head { position: static; }
+.playoff-view-tabs { min-height: 48px; display: flex; align-items: stretch; overflow-x: auto; border: 1px solid var(--line); background: white; scrollbar-width: thin; box-shadow: var(--shadow-sm); margin-bottom: 14px; }
+.playoff-view-tabs button { min-width: 150px; min-height: 46px; border: 0; border-right: 1px solid var(--line); background: white; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 18px; font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-lg); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: .02em; cursor: pointer; transition: background var(--transition), color var(--transition); }
+.playoff-view-tabs button:hover:not(.active) { background: var(--canvas); color: var(--ink); }
+.playoff-view-tabs button:last-child { border-right: 0; }
+.playoff-view-tabs button.active { box-shadow: inset 0 -3px var(--field); color: var(--field-dark); background: var(--field-soft); }
+.playoff-view-tabs button svg { width: 17px; height: 17px; }
+.playoff-view-tabs button:focus-visible { position: relative; z-index: 1; outline: 3px solid color-mix(in srgb, var(--field), white 58%); outline-offset: -3px; }
+
+/* ============ Bracket board in the dark broadcast skin (matches the Playoff Picture) ============ */
+.pp-board { display: flex; flex-direction: column; gap: 14px; }
+.pp-board .postseason-map-scroll { border: 1px solid #0d100e; border-radius: var(--radius-lg);
+  background: radial-gradient(120% 60% at 50% -6%, #232c27 0%, transparent 55%),
+    repeating-linear-gradient(135deg, rgba(255,255,255,.014) 0 2px, transparent 2px 6px), var(--pk); }
+.pp-board .postseason-map-canvas { background: transparent; }
+
+/* section panels + headers */
+.pp-board .championship-picture,
+.pp-board .elimination-transfer-rail,
+.pp-board .final-placement-surface,
+.pp-board .postseason-map-canvas .consolation-surface { border-color: var(--pk-line); background: rgba(255,255,255,.02); box-shadow: none; }
+.pp-board .championship-picture > header,
+.pp-board .elimination-transfer-rail > header,
+.pp-board .postseason-map-canvas .consolation-surface > header,
+.pp-board .final-placement-surface > header { border-bottom-color: var(--pk-line); background: linear-gradient(180deg, #1c2420, #171d1a); }
+.pp-board .championship-picture > header strong,
+.pp-board .final-placement-surface > header strong,
+.pp-board .postseason-map-canvas .consolation-surface > header strong { color: #fff; font-style: italic; text-transform: uppercase; text-shadow: 0 1px 0 #000; }
+.pp-board .championship-picture > header small { color: var(--field-mid); }
+.pp-board .championship-picture > header > em,
+.pp-board .elimination-transfer-rail > header small,
+.pp-board .final-placement-surface > header small { color: var(--pk-mut); background: transparent; }
+.pp-board .elimination-transfer-rail > header strong { color: #fff; }
+
+/* round headings */
+.pp-board .playoff-round-heading-copy > span { color: var(--pk-ink); }
+.pp-board .playoff-round-heading-copy > small { color: var(--pk-mut); }
+
+/* game cards */
+.pp-board .main-playoff-game { background: var(--pk-2); border-color: var(--pk-line); box-shadow: 0 6px 16px rgba(0,0,0,.3); }
+.pp-board .main-playoff-game > header { background: rgba(0,0,0,.22); border-bottom-color: var(--pk-line); }
+.pp-board .main-playoff-game > header strong { color: #fff; }
+.pp-board .main-playoff-game > header small { color: var(--pk-mut); }
+.pp-board .main-playoff-game > header > em { background: rgba(255,255,255,.06); color: var(--pk-mut); }
+.pp-board .main-playoff-game.is-final > header > em { background: rgba(63,191,127,.16); color: #7fe3ac; }
+.pp-board .main-playoff-game > footer { background: rgba(0,0,0,.22); border-top-color: var(--pk-line); }
+.pp-board .main-playoff-game > footer span { color: var(--pk-mut); }
+.pp-board .main-playoff-game-teams > .bracket-slot,
+.pp-board .main-playoff-game-teams > .sim-bracket-team { border-top-color: var(--pk-line); }
+
+/* team slots + identity text (TeamIdentityBlock reads --team-text / --division-text) */
+.pp-board .bracket-slot { background: rgba(255,255,255,.02); border-color: var(--pk-line); }
+.pp-board .bracket-slot.placeholder { background: rgba(255,255,255,.03); color: var(--pk-mut); }
+.pp-board .bracket-slot > b { color: #fff; }
+.pp-board .bracket-slot small { color: var(--pk-mut); }
+.pp-board .bracket-slot strong { color: #fff; }
+.pp-board .bracket-slot em { color: var(--field-mid); }
+.pp-board .playoff-slot-meta > small { background: rgba(63,191,127,.16); color: #7fe3ac; }
+.pp-board .team-identity-block { --team-text: #eef3f2; --division-text: #94a49c; }
+.pp-board .team-identity-block.result-winner .team-identity-name strong,
+.pp-board .team-identity-block.result-winner .team-identity-record strong { color: #fff; }
+
+/* simulated (recorded) team rows */
+.pp-board .sim-bracket-team { border-bottom-color: var(--pk-line); color: var(--pk-ink); }
+.pp-board .sim-bracket-team:last-child { border-top-color: var(--pk-line); }
+.pp-board .sim-bracket-team > b { background: rgba(255,255,255,.06); color: var(--pk-ink); }
+.pp-board .sim-bracket-team small { color: var(--pk-mut); }
+.pp-board .sim-bracket-team strong, .pp-board .sim-bracket-team > em { color: #fff; }
+.pp-board .sim-bracket-team.winner { background: rgba(63,191,127,.16); }
+.pp-board .sim-bracket-team.winner > em, .pp-board .sim-bracket-team.winner strong { color: #7fe3ac; }
+
+/* bye strip + champion outcome + transfer rail cells */
+.pp-board .playoff-bye-strip { background: rgba(227,185,64,.10); border-color: rgba(227,185,64,.35); }
+.pp-board .playoff-bye-strip > strong { color: var(--gold); }
+.pp-board .championship-outcome { border-color: rgba(227,185,64,.4); background: rgba(227,185,64,.08); }
+.pp-board .championship-outcome > svg { color: var(--gold); }
+.pp-board .championship-outcome > strong { color: #fff; }
+.pp-board .championship-outcome > small { color: var(--pk-mut); }
+.pp-board .elimination-transfer-rail > div > div { border-right-color: var(--pk-line); }
+.pp-board .elimination-transfer-rail > div > div strong { color: var(--pk-ink); }
+.pp-board .elimination-transfer-rail > div > div small,
+.pp-board .elimination-transfer-rail > div > div > svg { color: var(--pk-mut); }
+
+/* consolation interior + connectors + final placement */
+.pp-board .postseason-map-canvas .consolation-board { background: transparent; }
+.pp-board .postseason-map-canvas .consolation-game { box-shadow: inset 0 0 0 1px var(--pk-line); background: var(--pk-2); }
+.pp-board .bracket-connector-layer { color: rgba(255,255,255,.5); }
+.pp-board .final-placement-surface { color: var(--pk-ink); }
+
+/* Dark board: --team-text is set inline on TeamIdentityBlock, so override with !important */
+.pp-board .team-identity-block { --team-text: #eef3f2 !important; --division-text: #94a49c !important; }
+/* Dark board: inline score editor */
+.pp-board .inline-playoff-score { border-top-color: var(--pk-line); background: rgba(0,0,0,.22); }
+.pp-board .inline-playoff-score-trigger { color: #7fe3ac; }
+.pp-board .inline-playoff-score-trigger:hover { background: rgba(63,191,127,.14); }
+.pp-board .inline-playoff-score-form { border-top-color: var(--pk-line); }
+.pp-board .inline-playoff-score-form label span { color: var(--pk-mut); }
+.pp-board .inline-playoff-score-form input { background: rgba(255,255,255,.06); border-color: var(--pk-line); color: #fff; }
+.pp-board .inline-playoff-score-form > b { color: var(--pk-mut); }
+.pp-board .inline-playoff-score-actions button { background: rgba(255,255,255,.06); border-color: var(--pk-line); color: var(--pk-ink); }
+.pp-board .inline-playoff-score-actions .button-primary { background: var(--field); border-color: var(--field); color: #fff; }
+
+/* Bracket board sub-sections (Championship / Consolation / Final placement) — dark segmented control */
+.pp-subtabs { display: inline-flex; align-self: flex-start; gap: 2px; padding: 3px; border-radius: var(--radius); border: 1px solid var(--pk-line); background: var(--pk); flex-wrap: wrap; }
+.pp-subtabs button { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 15px; border: 0; border-radius: var(--radius-sm); background: transparent; color: #b4c0b9; font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-md); font-weight: 800; letter-spacing: .04em; text-transform: uppercase; cursor: pointer; transition: background var(--transition), color var(--transition); }
+.pp-subtabs button:not(.active):hover { background: rgba(255,255,255,.06); }
+.pp-subtabs button svg { width: 15px; height: 15px; }
+.pp-subtabs button:hover:not(.active) { color: var(--pk-ink); }
+.pp-subtabs button.active { background: var(--field); color: #fff; }
+.pp-subtabs button:focus-visible { outline: 2px solid var(--field-mid); outline-offset: 2px; }
+
+/* Champion capstone — the crescendo at the end of the road to the championship */
+.pp-champ-section { display: flex; flex-direction: column; gap: 14px; }
+.champion-capstone { position: relative; overflow: hidden; display: flex; align-items: center; gap: 18px; min-height: 100px; padding: 16px 22px; border-radius: var(--radius-lg); border: 1px solid rgba(227,185,64,.38);
+  background: linear-gradient(120deg, rgba(227,185,64,.12), rgba(227,185,64,.03) 60%, transparent), var(--pk-2); }
+.champion-capstone.is-crowned { border-color: rgba(227,185,64,.72);
+  background: linear-gradient(120deg, rgba(227,185,64,.30), rgba(227,185,64,.10) 55%, rgba(227,185,64,.04)), var(--pk-2);
+  box-shadow: inset 0 0 0 1px rgba(227,185,64,.25), 0 16px 44px -16px rgba(227,185,64,.55); }
+.champion-crest { flex: 0 0 auto; }
+.champion-crest .entity-logo { width: 72px !important; height: 72px !important; border-radius: 14px; box-shadow: 0 0 0 3px rgba(227,185,64,.6), 0 8px 20px rgba(0,0,0,.45); }
+.champion-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.champion-eyebrow { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--gold); }
+.champion-eyebrow svg { width: 15px; height: 15px; }
+.champion-copy strong { font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-style: italic; font-size: clamp(24px, 2vw + 14px, 32px); line-height: .95; letter-spacing: .01em; text-transform: uppercase; color: #fff; text-shadow: 0 1px 0 #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.champion-copy small { color: var(--pk-mut); font-size: 12px; }
+.champion-trophy { margin-left: auto; flex: 0 0 auto; display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: radial-gradient(circle at 40% 34%, #f2dd86, var(--gold) 72%); color: #3a2c06; box-shadow: 0 6px 18px rgba(227,185,64,.5); }
+.champion-trophy svg { width: 30px; height: 30px; }
+.champion-trophy.ghost { margin-left: auto; background: rgba(255,255,255,.05); color: var(--gold); box-shadow: inset 0 0 0 1px var(--pk-line); }
+.champion-capstone-glow { position: absolute; inset: 0; pointer-events: none; opacity: 0; }
+.champion-capstone.is-crowned .champion-capstone-glow { opacity: 1; background: linear-gradient(105deg, transparent 30%, rgba(255,255,255,.35) 48%, transparent 66%); transform: translateX(-120%); animation: champion-sweep 1.7s ease-out .25s 1 forwards; }
+@keyframes champion-sweep { to { transform: translateX(120%); } }
+@media (prefers-reduced-motion: reduce) { .champion-capstone.is-crowned .champion-capstone-glow { animation: none; opacity: 0; } }
+@media (max-width: 560px) { .champion-copy strong { white-space: normal; } .champion-trophy { display: none; } }
+
+
+/* Keep the horizontally-scrolling bracket contained in its own scroller (flex min-width:auto
+   gotcha) so it swipes sideways instead of pushing the whole page wide on narrow screens */
+.pp-board, .pp-champ-section { min-width: 0; }
+.pp-board .postseason-map-scroll { max-width: 100%; }
+
+/* #5: division-halves lanes — each game's left accent + half label carry the division color */
+.pp-board .main-playoff-game:not(.is-final) { border-left-color: var(--game-half-color, var(--playoff-color)); }
+.pp-board .main-playoff-game > header small { color: var(--game-half-accent, var(--pk-mut)); }
+.pp-board .main-playoff-game > header small .division-mark { display: inline-grid; place-items: center; vertical-align: -2px; margin-right: 4px; color: var(--game-half-accent); }
+
+/* the dark reskin sets `border-color: var(--pk-line)` (shorthand) — force the half accent on the left edge */
+.pp-board .main-playoff-game:not(.is-final) { border-left-color: var(--game-half-color, var(--playoff-color)) !important; }
+
+/* #3: projection vs live mode — championship header chip + note */
+.pp-board .championship-picture > header .bracket-mode-note { display: block; margin-top: 3px; color: var(--pk-mut); font-size: 11.5px; font-weight: 700; letter-spacing: 0; text-transform: none; }
+.pp-board .championship-picture > header .bracket-mode-chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 12px; border-radius: var(--radius-pill); font-family: var(--font-barlow-condensed), sans-serif; font-weight: 800; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; background: rgba(255,255,255,.06); color: var(--pk-mut); }
+.pp-board .championship-picture > header .bracket-mode-chip.is-live { color: #7fe3ac; background: rgba(63,191,127,.16); box-shadow: inset 0 0 0 1px rgba(63,191,127,.3); }
+.pp-board .championship-picture > header .bracket-mode-chip.is-live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #3fbf7f; animation: bracket-live-pulse 1.8s ease-out infinite; }
+.pp-board .championship-picture > header .bracket-mode-chip.is-complete { color: var(--gold); background: rgba(227,185,64,.16); box-shadow: inset 0 0 0 1px rgba(227,185,64,.35); }
+@keyframes bracket-live-pulse { 0% { box-shadow: 0 0 0 0 rgba(63,191,127,.55); } 70% { box-shadow: 0 0 0 6px rgba(63,191,127,0); } 100% { box-shadow: 0 0 0 0 rgba(63,191,127,0); } }
+@media (prefers-reduced-motion: reduce) { .pp-board .championship-picture > header .bracket-mode-chip.is-live::before { animation: none; } }
+
+/* ============================================================================
+   Bracket matchup-card rebuild (design-brainstorm)
+   Measured problem: the team name was crushed to 32px (needed 87px → "Hu…")
+   because 5 zones fought over a 270px row, and the record rendered LARGER than
+   the name. Fix: a stacked identity that hands the name the full card width,
+   promotes name over record, colors identity by team (seed chip + left spine),
+   and evicts the DIV WINNER badge + venue out of the name row. Scoped to
+   .pp-board + .variant-stacked so the shared matchup/GOTW/table views (which
+   use variant "row") are completely untouched.
+   ========================================================================== */
+
+/* two-line identity: [seed][logo] | name (row 1) / record (row 2); name spans a full 1fr */
+.pp-board .team-identity-block.variant-stacked { grid-template-columns: 26px 40px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 9px; row-gap: 2px; align-items: center; }
+.pp-board .team-identity-block.variant-stacked .team-identity-rank { grid-column: 1; grid-row: 1 / span 2; width: 26px; height: 26px; align-self: center; font-size: var(--text-xs); box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); }
+.pp-board .team-identity-block.variant-stacked .team-identity-mark { grid-column: 2; grid-row: 1 / span 2; width: 40px; height: 40px; }
+.pp-board .team-identity-block.variant-stacked .team-identity-name { grid-column: 3; grid-row: 1; min-width: 0; }
+.pp-board .team-identity-block.variant-stacked .team-identity-name small { font-size: var(--text-2xs); line-height: 1.15; }
+/* promote the name — was 11px, now the 14px team-name base at black weight, full width so it no longer clips */
+.pp-board .team-identity-block.variant-stacked .team-identity-name strong { display: block; overflow: hidden; font-size: var(--text-md); font-weight: var(--w-black); line-height: 1.14; white-space: nowrap; text-overflow: ellipsis; }
+/* demote the record — was 14px (larger than the name); now 12px muted, on its own row */
+.pp-board .team-identity-block.variant-stacked .team-identity-record { grid-column: 3; grid-row: 2; min-width: 0; flex-direction: row; align-items: center; justify-content: flex-start; gap: 7px; }
+.pp-board .team-identity-block.variant-stacked .team-identity-record > strong { font-size: var(--text-xs); font-weight: var(--w-bold); opacity: .72; }
+.pp-board .team-identity-block.variant-stacked .team-identity-division-record { min-height: 0; }
+.pp-board .team-identity-block.variant-stacked .team-identity-division-record > b { font-size: var(--text-2xs); }
+
+/* team-color left spine per slot — read identity by color before text (replaces the gold host bar; the footer now names the host) */
+.pp-board .bracket-slot { position: relative; border-left-width: 3px; border-left-style: solid; border-left-color: var(--slot-spine, var(--pk-line)); }
+
+/* DIV WINNER / BYE ribbon — pulled out of the name row, parked bottom-right over the short record row */
+.bracket-slot-badge { position: absolute; right: 8px; bottom: 8px; z-index: 2; border-radius: var(--radius-chip); background: rgba(63,191,127,.16); color: #7fe3ac; padding: 2px 7px; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .01em; white-space: nowrap; pointer-events: none; }
+.bracket-slot-badge.is-bye { background: rgba(227,185,64,.16); color: var(--gold); }
+
+/* venue moved from the slot into a single card-footer line, led by the host mark (bare logo where available, else a neutral pin — no team-color background) */
+.main-playoff-game .playoff-venue { min-width: 0; display: inline-flex; align-items: center; gap: 5px; overflow: hidden; color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-medium); white-space: nowrap; text-overflow: ellipsis; }
+.main-playoff-game .playoff-venue svg { width: 11px; flex: 0 0 auto; }
+.main-playoff-game .playoff-venue .entity-logo { flex: 0 0 auto; width: 18px !important; height: 18px !important; min-width: 18px; min-height: 18px; }
+.pp-board .playoff-venue { color: var(--pk-mut); }
+
+/* consolation entrants reuse the championship .bracket-slot + stacked identity: team-color spine + top separators, no side/bottom borders */
+.pp-board .consolation-game .bracket-slot { border-width: 1px 0 0 3px; border-top-color: var(--pk-line); box-shadow: none; }
+
+/* dark-board: the consolation game header was still light (var(--canvas)) with near-invisible text — darken it to match the championship card header */
+.pp-board .consolation-game > header { background: rgba(0,0,0,.22); }
+.pp-board .consolation-game > header strong { color: #fff; }
+.pp-board .consolation-game > header small { color: var(--pk-mut); }
+.pp-board .consolation-game > header > em { color: #fff; }
+
+/* played state reuses the same .bracket-slot + stacked identity as the projection, adding a right-aligned score (so entering a result no longer swaps the card to a different design) */
+.bracket-score { flex: 0 0 auto; align-self: center; padding-left: 4px; font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); font-variant-numeric: tabular-nums; letter-spacing: .01em; color: var(--pk-mut); }
+.result-slot.is-winner .bracket-score { color: #fff; }
+.pp-board .result-slot.is-winner { background: rgba(63,191,127,.07); }
+
+/* consolation bracket mirrors the championship round structure: same 56px column gap + generous vertical spacing between games */
+.pp-board .consolation-board { gap: 56px; grid-auto-columns: minmax(270px, 1fr); padding: 20px 22px 24px; }
+.pp-board .consolation-board > section { min-width: 270px; border-right: 0; padding: 0; }
+.pp-board .consolation-round-games { display: flex; flex-direction: column; justify-content: space-around; gap: 18px; min-height: 500px; }
+
+/* filled division badge on the playoff surfaces (bracket + picture): paint the division color behind the
+   abbreviation (vars set by DivisionMark) and let the fixed-width wrappers grow to fit. Shared table/clinch marks stay plain colored text. */
+.pp-board .division-mark-filled, .pp-panel .division-mark-filled { width: auto !important; padding: 0 5px; border-radius: var(--radius-chip); overflow: visible; background: var(--dm-bg); color: var(--dm-ink) !important; }
+.pp-board .division-identity-icon, .pp-panel .division-identity-icon { width: auto; }
+.pp-board .team-identity-division-record .division-identity-icon { flex: 0 0 auto; }
+
+/* ============================================================================
+   Playoff wizard step redesign — one step, three sub-pages (Format / Rules /
+   Branding) + a live bracket preview + per-round/per-game logos.
+   ========================================================================== */
+.playoff-wizard { max-width: none; }
+.playoff-wizard-subnav { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.playoff-wizard-subnav button { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; cursor: pointer; padding: 10px 15px 13px; border-radius: var(--radius-sm) var(--radius-sm) 0 0; color: var(--muted); font-family: inherit; position: relative; }
+.playoff-wizard-subnav button:hover:not(.active) { color: var(--ink); }
+.playoff-wizard-subnav .ppw-n { flex: 0 0 auto; width: 23px; height: 23px; border-radius: 50%; display: grid; place-items: center; font-size: var(--text-2xs); font-weight: var(--w-black); background: var(--canvas); border: 1.5px solid var(--line-strong); color: var(--muted); }
+.playoff-wizard-subnav button.active { color: var(--ink); }
+.playoff-wizard-subnav button.active .ppw-n { background: var(--field); border-color: var(--field); color: #fff; }
+.playoff-wizard-subnav button.active::after { content: ""; position: absolute; left: 13px; right: 13px; bottom: -1px; height: 3px; border-radius: 3px; background: var(--field); }
+.playoff-wizard-subnav .ppw-lab { text-align: left; line-height: 1.18; }
+.playoff-wizard-subnav .ppw-lab strong { display: block; font-size: var(--text-sm); font-weight: var(--w-bold); }
+.playoff-wizard-subnav .ppw-lab small { color: var(--muted); font-size: var(--text-2xs); }
+.playoff-wizard-subnav button:focus-visible { outline: 2px solid var(--field); outline-offset: 2px; }
+
+.playoff-wizard-layout { display: grid; gap: 18px; }
+.playoff-wizard-form { display: grid; gap: 20px; min-width: 0; }
+.ppw-group { display: grid; gap: 9px; min-width: 0; }
+
+/* presets */
+.ppw-presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ppw-presets button { display: flex; gap: 11px; align-items: flex-start; text-align: left; border: 1px solid var(--line-strong); border-radius: var(--radius); background: white; padding: 12px 13px; cursor: pointer; font-family: inherit; color: var(--ink); transition: border-color var(--transition), background var(--transition); }
+.ppw-presets button:hover:not(.active) { border-color: color-mix(in srgb, var(--field) 40%, var(--line-strong)); background: #f9fdfb; }
+.ppw-presets button.active { border-color: var(--field); box-shadow: inset 0 0 0 1px var(--field); background: var(--field-soft); }
+.ppw-preset-ic { flex: 0 0 auto; width: 30px; height: 30px; border-radius: var(--radius-sm); display: grid; place-items: center; font-size: 16px; background: var(--canvas); }
+.ppw-presets button.active .ppw-preset-ic { background: color-mix(in srgb, var(--field) 12%, white); }
+.ppw-presets strong { display: block; font-size: var(--text-sm); }
+.ppw-presets small { display: block; color: var(--muted); font-size: var(--text-2xs); margin-top: 2px; line-height: 1.35; }
+
+/* rounds & games branding */
+.ppw-rgnote { margin: -2px 0 2px; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
+.ppw-rounds { display: grid; gap: 9px; }
+.ppw-round { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: white; }
+.ppw-round-head { display: flex; align-items: center; gap: 11px; padding: 9px 11px; background: var(--surface); }
+.ppw-round-head .identity-picker, .ppw-game .identity-picker { flex: 0 0 auto; }
+.ppw-round-name { flex: 1; min-width: 0; }
+.ppw-round-name input { width: 100%; border: 0; background: transparent; font-family: inherit; font-size: var(--text-sm); font-weight: var(--w-bold); color: var(--ink); padding: 2px 0; }
+.ppw-round-name input:focus-visible { outline: 0; border-bottom: 2px solid var(--field); }
+.ppw-round-name small { display: block; color: var(--muted); font-size: var(--text-2xs); }
+.ppw-games { display: grid; border-top: 1px solid var(--line); padding: 3px 11px 8px; }
+.ppw-game { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); }
+.ppw-game:first-child { border-top: 0; }
+.ppw-game input { flex: 1; min-width: 0; border: 0; background: transparent; font-family: inherit; font-size: var(--text-xs); color: var(--ink); padding: 2px 0; }
+.ppw-game input:focus-visible { outline: 0; border-bottom: 1.5px solid var(--field); }
+
+/* live preview (dark broadcast island — sits full-width below the form) */
+.playoff-wizard-preview { background: var(--pk); border-radius: var(--radius); padding: 16px 18px 18px; color: #eaf1ee; min-width: 0; }
+.ppw-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 3px; }
+.ppw-preview-eyebrow { font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .12em; text-transform: uppercase; color: #7fe3ac; }
+.ppw-preview-live { font-size: 10px; font-weight: var(--w-black); letter-spacing: .07em; text-transform: uppercase; color: #7fe3ac; background: rgba(63,191,127,.16); padding: 3px 9px; border-radius: var(--radius-pill); display: inline-flex; align-items: center; gap: 6px; }
+.ppw-preview-live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #3fbf7f; animation: bracket-live-pulse 1.8s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) { .ppw-preview-live::before { animation: none; } }
+.ppw-preview-title { display: block; font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); font-style: italic; text-transform: uppercase; color: #fff; line-height: 1.05; margin-top: 2px; }
+.ppw-preview-sub { display: block; color: var(--pk-mut); font-size: var(--text-2xs); margin-bottom: 13px; }
+.ppw-bracket { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; }
+.ppw-col { display: flex; flex-direction: column; justify-content: center; gap: 9px; min-width: 108px; }
+.ppw-rh { font-size: 9.5px; font-weight: var(--w-black); letter-spacing: .06em; text-transform: uppercase; color: var(--pk-mut); }
+.ppw-rh-sub { margin-top: 5px; }
+.ppw-half { font-size: 9.5px; font-weight: var(--w-black); letter-spacing: .05em; text-transform: uppercase; display: flex; align-items: center; gap: 5px; }
+.ppw-half-0 { color: #3fbf7f; } .ppw-half-1 { color: #6ea2ff; }
+.ppw-half::before { content: ""; width: 7px; height: 7px; border-radius: 2px; background: currentColor; }
+.ppw-match { border: 1px solid var(--pk-line); border-left: 3px solid var(--ppw-accent, #3fbf7f); border-radius: var(--radius-sm); background: rgba(255,255,255,.03); overflow: hidden; }
+.ppw-team { display: flex; align-items: center; gap: 6px; padding: 5px 7px; font-size: var(--text-2xs); min-width: 0; }
+.ppw-match .ppw-team + .ppw-team { border-top: 1px solid var(--pk-line); }
+.ppw-seed { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 4px; background: var(--pk-line); display: grid; place-items: center; font-size: 9px; font-weight: var(--w-black); color: #fff; font-variant-numeric: tabular-nums; }
+.ppw-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #dfe8e4; font-weight: var(--w-bold); }
+.ppw-bye { border-left-color: var(--gold); }
+.ppw-tag { display: block; padding: 5px 7px; font-size: 9px; font-weight: var(--w-black); letter-spacing: .04em; text-transform: uppercase; color: var(--gold); }
+.ppw-tag.ppw-plain { color: var(--pk-mut); font-weight: var(--w-bold); text-transform: none; letter-spacing: 0; }
+.ppw-final .ppw-match { border-left-color: var(--gold); }
+.ppw-final .ppw-rh { color: var(--gold); }
+.ppw-cons { margin-top: 13px; padding-top: 11px; border-top: 1px dashed var(--pk-line); }
+.ppw-cons-h { font-size: 9.5px; font-weight: var(--w-black); letter-spacing: .06em; text-transform: uppercase; color: var(--pk-mut); display: block; margin-bottom: 6px; }
+.ppw-cons-row { display: flex; flex-wrap: wrap; gap: 5px; }
+.ppw-pill { font-size: var(--text-2xs); font-weight: var(--w-bold); color: #cdd8d3; background: rgba(255,255,255,.05); border: 1px solid var(--pk-line); border-radius: var(--radius-pill); padding: 3px 9px; }
+.ppw-facts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 13px; }
+.ppw-fact { font-size: var(--text-2xs); font-weight: var(--w-bold); color: #cdd8d3; background: rgba(255,255,255,.05); border: 1px solid var(--pk-line); border-radius: var(--radius-sm); padding: 5px 8px; display: flex; align-items: center; gap: 5px; }
+.ppw-fact b { color: #fff; }
+
+@media (max-width: 880px) {
+  .playoff-wizard-layout { grid-template-columns: 1fr; }
+  .playoff-wizard-preview { position: static; }
+  .ppw-presets { grid-template-columns: 1fr; }
+}
+
+/* per-game logos live behind a per-round expander (progressive disclosure) */
+.ppw-round-head .ppw-expand { margin-left: auto; flex: 0 0 auto; border: 0; background: var(--field-soft); color: var(--field); border-radius: var(--radius-pill); padding: 5px 12px; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .01em; cursor: pointer; font-family: inherit; transition: background var(--transition); }
+.ppw-round-head .ppw-expand:hover { background: color-mix(in srgb, var(--field) 16%, white); }
+.ppw-round-head .ppw-expand:focus-visible { outline: 2px solid var(--field); outline-offset: 2px; }
+
+/* preview: division-mark pill (structural slots show the division, not a team) */
+.ppw-dchip { flex: 0 0 auto; height: 16px; min-width: 16px; padding: 0 4px; border-radius: 4px; display: inline-grid; place-items: center; font-size: 8.5px; font-weight: var(--w-black); letter-spacing: .02em; font-family: var(--font-barlow-condensed), sans-serif; }
+.ppw-half .ppw-dchip { height: 15px; }
+.ppw-half::before { display: none; }
+
+/* Logos sub-page (optional) — champ + consolation art */
+.ppw-optional { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px dashed var(--line-strong); border-radius: var(--radius); padding: 11px 13px; font-size: var(--text-xs); color: var(--muted); line-height: 1.45; }
+.ppw-optional-tag { flex: 0 0 auto; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .06em; text-transform: uppercase; color: var(--field); background: var(--field-soft); border-radius: var(--radius-pill); padding: 3px 9px; }
+.ppw-round-head-plain { justify-content: space-between; }
+.ppw-cons-round { font-size: var(--text-sm); font-weight: var(--w-black); color: var(--ink); }
+.ppw-round-head-plain small { color: var(--muted); font-size: var(--text-2xs); }
+.ppw-games-flush { border-top: 1px solid var(--line); }
+
+/* preview bracket v2 — left-to-right rounds + connector lines + division-tinted slots + logos */
+.ppw-bracket { display: flex; gap: 34px; overflow-x: auto; padding: 4px 2px 10px; color: rgba(255,255,255,.4); }
+.ppw-col { justify-content: space-around; gap: 12px; min-width: 122px; position: relative; }
+.ppw-match, .ppw-col .ppw-rh { position: relative; z-index: 1; }
+.ppw-match { overflow: hidden; }
+.ppw-slot { display: flex; align-items: center; gap: 7px; padding: 6px 8px; min-width: 0; font-size: var(--text-2xs); background: color-mix(in srgb, var(--slot-c, #586761) 28%, transparent); }
+.ppw-match .ppw-slot + .ppw-slot { border-top: 1px solid var(--pk-line); }
+.ppw-slot .ppw-name { color: inherit; font-weight: var(--w-bold); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ppw-slogo { flex: 0 0 auto; width: 17px; height: 17px; border-radius: 4px; object-fit: contain; background: rgba(255,255,255,.92); padding: 1px; }
+.ppw-match.ppw-gold { border-left-color: var(--gold); }
+.ppw-preview-toggle { display: inline-flex; gap: 2px; padding: 2px; margin: 9px 0 3px; border-radius: var(--radius-sm); background: rgba(255,255,255,.06); }
+.ppw-preview-toggle button { border: 0; background: transparent; color: var(--pk-mut); font-family: inherit; font-weight: var(--w-bold); font-size: var(--text-2xs); padding: 5px 13px; border-radius: var(--radius-chip); cursor: pointer; }
+.ppw-preview-toggle button.active { background: var(--field); color: #fff; }
+.ppw-preview-toggle button:focus-visible { outline: 2px solid var(--field-mid); outline-offset: 1px; }
+
+/* preview: per-match game number title */
+.ppw-gameno { display: block; padding: 3px 8px 1px; font-size: 8.5px; font-weight: var(--w-black); letter-spacing: .08em; text-transform: uppercase; color: var(--pk-mut); }
+
+/* "Recommended" chip on a preset */
+.ppw-rec { display: inline-block; margin-left: 6px; font-size: 9px; font-weight: var(--w-black); letter-spacing: .04em; text-transform: uppercase; font-style: normal; color: var(--field); background: var(--field-soft); padding: 1px 6px; border-radius: var(--radius-pill); vertical-align: 1px; }
+
+/* preview columns: round header pinned to the top (aligned across columns), games centered below */
+.ppw-col { justify-content: flex-start; }
+.ppw-col .ppw-rh { flex: 0 0 auto; margin-bottom: 8px; }
+.ppw-col-games { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: space-around; gap: 12px; min-height: 0; }
 
 /* ===================================================================
    "Stakes" — current-week clinch/elimination scenario panel.

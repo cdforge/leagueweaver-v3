@@ -50,6 +50,10 @@ export interface WeekScoreBarProps {
   onSelectWeek: (week: number) => void;
   /** Open a matchup when its card is clicked. */
   onSelectGame?: (gameId: string) => void;
+  /** Summary line for the Playoff Picture chip (e.g. "8 in · 3 chasing"). Chip hides when null. */
+  playoffPictureSummary?: string | null;
+  /** Opens the Playoff Picture modal. Chip renders only when both this and the summary are set. */
+  onOpenPlayoffPicture?: () => void;
   /** Notified when the collapsed state changes, so the layout can reclaim the strip height. */
   onCollapsedChange?: (collapsed: boolean) => void;
   className?: string;
@@ -214,9 +218,17 @@ export function WeekScoreBar({
   thanksgiving,
   onSelectWeek,
   onSelectGame,
+  playoffPictureSummary,
+  onOpenPlayoffPicture,
   onCollapsedChange,
   className = "",
 }: WeekScoreBarProps) {
+  const pictureChip = onOpenPlayoffPicture && playoffPictureSummary ? (
+    <button type="button" className="sb-picture" onClick={onOpenPlayoffPicture} title="Playoff picture">
+      <TrophyGlyph />
+      <span className="sb-picture-txt"><b>Playoff Picture</b><small>{playoffPictureSummary}</small></span>
+    </button>
+  ) : null;
   // Clock is read client-side to avoid a hydration mismatch: the first render
   // (server + client) uses a deterministic, score-based fallback, then `now`
   // fills in and re-derives on a cheap minute interval.
@@ -413,6 +425,7 @@ export function WeekScoreBar({
           {badge}
           {week.matchupRank != null && <span className="sb-collapsed-rank">Slate <b>#{week.matchupRank}</b></span>}
           <span className="sb-collapsed-hint">{games.length} {games.length === 1 ? "matchup" : "matchups"}</span>
+          {pictureChip}
         </div>
         <button type="button" className="sb-toggle" aria-expanded={false} onClick={toggleCollapsed} title="Show matchups">
           <Caret dir="down" />
@@ -449,6 +462,8 @@ export function WeekScoreBar({
           </button>
         </div>
       </div>
+
+      {pictureChip && <div className="sb-picture-row">{pictureChip}</div>}
 
       <div className="sb-games-wrap" id="sb-strip" ref={wrapRef}>
         <div
@@ -508,6 +523,14 @@ function Caret({ dir }: { dir: "up" | "down" }) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+function TrophyGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6 9a6 6 0 0 0 12 0V4H6zM4 4h2v3a2 2 0 0 1-4 0zM18 4h2v3a2 2 0 0 1-4 0zM9 20h6M12 15v5" />
     </svg>
   );
 }

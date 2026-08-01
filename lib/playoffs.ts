@@ -3,6 +3,7 @@ import type {
   GeneratedSchedule,
   LeagueSetupInput,
   PlayoffFieldSize,
+  PlayoffGame,
   PlayoffSeed,
   PlayoffPlacementMode,
   ResolvedPlayoffPlacementMode,
@@ -369,33 +370,69 @@ export function projectPlayoffRounds(schedule: GeneratedSchedule): ProjectedPlay
 
   const placement = resolvePlayoffPlacementMode({ divisions: schedule.setup.divisions, playoffs: settings });
   const openingPairs = getFirstRoundSeedPairs(settings.fieldSize);
-  const openingMatchups = openingPairs.map(([homeSeed, awaySeed]) => ({
+  const openingMatchups: ProjectedPlayoffMatchup[] = openingPairs.map(([homeSeed, awaySeed]) => ({
     homeSeed,
     awaySeed,
     bracketSide: sideBySeed.get(homeSeed),
   }));
-  let advancingSeeds = seeds.filter((item) => item.bye).map((item) => item.seed);
+  const byeSeedsList = seeds.filter((item) => item.bye).map((item) => item.seed);
+  const weekOf = (roundIndex: number) => schedule.setup.weeks + roundIndex + 1;
+  const winnerSeedFromRecord = (recorded: PlayoffGame | undefined, fallbackSeed: number) => {
+    if (!recorded || recorded.homeScore == null || recorded.awayScore == null || recorded.homeScore === recorded.awayScore) return fallbackSeed;
+    return seedByTeamId.get(recorded.homeScore > recorded.awayScore ? recorded.homeTeamId : recorded.awayTeamId) ?? fallbackSeed;
+  };
 
-  return roundNames.map((name, roundIndex) => {
-    const matchups = roundIndex === 0
-      ? openingMatchups
-      : pairProjectedSeeds(advancingSeeds, sideBySeed, placement === "division-halves" && roundIndex < roundNames.length - 1);
-    const byeSeeds = roundIndex === 0 ? seeds.filter((item) => item.bye).map((item) => item.seed) : [];
-    const winners = matchups.map((matchup, gameIndex) => {
-      const recorded = recordedGames.get(`main-r${roundIndex + 1}-g${gameIndex + 1}`);
-      if (recorded?.homeScore == null || recorded.awayScore == null || recorded.homeScore === recorded.awayScore) {
-        return matchup.homeSeed;
-      }
-      const winnerTeamId = recorded.homeScore > recorded.awayScore ? recorded.homeTeamId : recorded.awayTeamId;
-      return seedByTeamId.get(winnerTeamId) ?? matchup.homeSeed;
+  // "Reseed each round": re-sort the advancing seeds and pair top-vs-bottom every round.
+  // Passing `records = undefined` yields the pure no-upset projection (winners = better seed),
+  // which also defines the fixed-bracket tree below.
+  const reseedRounds = (records: Map<string, PlayoffGame> | undefined): ProjectedPlayoffRound[] => {
+    let advancingSeeds = [...byeSeedsList];
+    return roundNames.map((name, roundIndex) => {
+      const matchups = roundIndex === 0
+        ? openingMatchups
+        : pairProjectedSeeds(advancingSeeds, sideBySeed, placement === "division-halves" && roundIndex < roundNames.length - 1);
+      const byeSeeds = roundIndex === 0 ? byeSeedsList : [];
+      const winners = matchups.map((matchup, gameIndex) =>
+        winnerSeedFromRecord(records?.get(`main-r${roundIndex + 1}-g${gameIndex + 1}`), matchup.homeSeed));
+      advancingSeeds = [...byeSeeds, ...winners].sort((left, right) => left - right);
+      return { roundIndex, name, weekNumber: weekOf(roundIndex), matchups, byeSeeds };
     });
-    advancingSeeds = [...byeSeeds, ...winners].sort((left, right) => left - right);
-    return {
-      roundIndex,
-      name,
-      weekNumber: schedule.setup.weeks + roundIndex + 1,
-      matchups,
-      byeSeeds,
+  };
+
+  if (settings.reseedMode !== "fixed") {
+    return reseedRounds(recordedGames);
+  }
+
+  // Fixed bracket: winners stay in their slot instead of reseeding. The tree wiring is the
+  // no-upset projection (so with no upsets fixed === reseed); after an upset the lower seed
+  // advances in place. Each projected slot seed is the home (better) seed of the previous-round
+  // game that feeds it, so we map it back to that game and substitute the actual advancer.
+  const projected = reseedRounds(undefined);
+  const byeCount = getPlayoffByeCount(settings.fieldSize);
+  const fixed: ProjectedPlayoffRound[] = [];
+  for (let roundIndex = 0; roundIndex < roundNames.length; roundIndex += 1) {
+    if (roundIndex === 0) {
+      fixed.push({ roundIndex, name: roundNames[0], weekNumber: weekOf(0), matchups: openingMatchups, byeSeeds: byeSeedsList });
+      continue;
+    }
+    const prevProjected = projected[roundIndex - 1].matchups;
+    const prevActual = fixed[roundIndex - 1].matchups;
+    const advancerFromPrev = (gameIndex: number) => {
+      const actual = prevActual[gameIndex];
+      const betterActualSeed = Math.min(actual.homeSeed, actual.awaySeed);
+      return winnerSeedFromRecord(recordedGames.get(`main-r${roundIndex}-g${gameIndex + 1}`), betterActualSeed);
     };
-  });
+    const resolveSlot = (projectedSeed: number) => {
+      if (roundIndex === 1 && projectedSeed <= byeCount) return projectedSeed; // byes enter unchanged
+      const sourceGame = prevProjected.findIndex((matchup) => matchup.homeSeed === projectedSeed);
+      return sourceGame < 0 ? projectedSeed : advancerFromPrev(sourceGame);
+    };
+    const matchups = projected[roundIndex].matchups.map((matchup) => ({
+      homeSeed: resolveSlot(matchup.homeSeed),
+      awaySeed: resolveSlot(matchup.awaySeed),
+      bracketSide: matchup.bracketSide,
+    }));
+    fixed.push({ roundIndex, name: roundNames[roundIndex], weekNumber: weekOf(roundIndex), matchups, byeSeeds: [] });
+  }
+  return fixed;
 }
