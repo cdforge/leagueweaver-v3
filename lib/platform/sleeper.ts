@@ -1,4 +1,5 @@
 import "server-only";
+import { mapSleeperPlayerWeekStats, type PlayerWeekStat } from "@/lib/playerData";
 import type { GeneratedSchedule, ImportDataFound, PlatformSyncResult, PlatformSyncScoreRow } from "@/lib/types";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
@@ -6,7 +7,7 @@ const SLEEPER_API = "https://api.sleeper.app/v1";
 export interface SleeperLeague { league_id: string; name?: string; season?: string; avatar?: string | null; draft_id?: string | null; previous_league_id?: string | null }
 export interface SleeperUser { user_id: string; display_name?: string; avatar?: string | null; metadata?: { team_name?: string } }
 export interface SleeperRoster { roster_id: number; owner_id?: string | null; settings?: { division?: number } }
-interface SleeperMatchup { roster_id: number; matchup_id?: number; points?: number }
+interface SleeperMatchup { roster_id: number; matchup_id?: number; points?: number; players?: string[]; starters?: string[]; players_points?: Record<string, number> }
 
 export async function sleeperFetch<T>(path: string): Promise<T> {
   const response = await fetch(`${SLEEPER_API}${path}`, { headers: { Accept: "application/json" }, cache: "no-store" });
@@ -43,7 +44,25 @@ export async function scanSleeperHistory(leagueId: string): Promise<ImportDataFo
       current = null;
     }
   }
-  return { availableHistoryYears: years, blockedHistoryYears: [], hasDraftData: true, hasRosterData: false, hasPlayerData: false, hasScoreSync: true };
+  return { availableHistoryYears: years, blockedHistoryYears: [], hasDraftData: true, hasRosterData: false, hasPlayerData: true, hasScoreSync: true };
+}
+
+export async function mapSleeperPlayers(schedule: GeneratedSchedule, week: number): Promise<PlayerWeekStat[]> {
+  const connection = schedule.setup.platformConnection;
+  if (!connection?.providerLeagueId) throw new Error("This season is not connected to Sleeper.");
+  const [league, matchups] = await Promise.all([
+    sleeperFetch<SleeperLeague & { roster_positions?: string[] }>(`/league/${encodeURIComponent(connection.providerLeagueId)}`),
+    sleeperFetch<SleeperMatchup[]>(`/league/${encodeURIComponent(connection.providerLeagueId)}/matchups/${week}`),
+  ]);
+  return mapSleeperPlayerWeekStats({
+    scheduleId: schedule.id,
+    providerLeagueId: connection.providerLeagueId,
+    season: Number(league.season || connection.seasonYear),
+    week,
+    teams: schedule.setup.teams,
+    rosterPositions: league.roster_positions ?? [],
+    matchups,
+  });
 }
 
 export async function mapSleeperScores(schedule: GeneratedSchedule, week: number): Promise<PlatformSyncResult> {

@@ -1,4 +1,4 @@
-import type { PlatformProvider } from "./types";
+import type { PlatformProvider, Team } from "./types";
 
 export const SLOT_KEYS = [
   "QB",
@@ -105,6 +105,33 @@ export interface SeasonPlayerDataset {
   weeks: PlayerWeekStat[];
 }
 
+export interface SleeperMatchupPlayerPayload {
+  roster_id: number;
+  players?: string[];
+  starters?: string[];
+  players_points?: Record<string, number>;
+}
+
+export interface EspnPlayerEntryPayload {
+  lineupSlotId?: number;
+  playerId?: number | string;
+  playerPoolEntry?: {
+    appliedStatTotal?: number;
+    player?: {
+      id?: number | string;
+      fullName?: string;
+      defaultPositionId?: number;
+      proTeamId?: number;
+    };
+  };
+}
+
+export interface EspnMatchupPayload {
+  matchupPeriodId: number;
+  home?: { teamId?: number; rosterForCurrentScoringPeriod?: { entries?: EspnPlayerEntryPayload[] } };
+  away?: { teamId?: number; rosterForCurrentScoringPeriod?: { entries?: EspnPlayerEntryPayload[] } };
+}
+
 export const ESPN_LINEUP_SLOT_ID_TO_SLOT_KEY: Readonly<Record<number, SlotKey>> = {
   0: "QB",
   1: "TQB",
@@ -161,4 +188,150 @@ export function sleeperSlotKey(rosterPosition: string): SlotKey {
 
 export function playerWeekStatKey(stat: Pick<PlayerWeekStat, "scheduleId" | "season" | "week" | "teamId" | "providerPlayerId">) {
   return `${stat.scheduleId}:${stat.season}:${stat.week}:${stat.teamId}:${stat.providerPlayerId}`;
+}
+
+export function canonicalProviderPlayerId(provider: PlatformProvider, providerPlayerId: string) {
+  return `${provider}:${providerPlayerId}`;
+}
+
+export function normalizePlayerName(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+export function stablePayloadHash(value: unknown) {
+  const input = stableStringify(value);
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `fnv1a:${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+function stableStringify(value: unknown): string {
+  if (value == null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(",")}}`;
+}
+
+function providerTeamId(provider: PlatformProvider, providerLeagueId: string, providerRosterId: string | number) {
+  return `${provider}-${providerLeagueId}-${providerRosterId}`;
+}
+
+function teamIdByProviderRoster(teams: Team[], provider: PlatformProvider, providerLeagueId: string, providerRosterId: string | number) {
+  const providerId = providerTeamId(provider, providerLeagueId, providerRosterId);
+  return teams.find((team) => team.providerId === providerId || team.providerId === String(providerRosterId))?.id;
+}
+
+export function mapSleeperPlayerWeekStats(args: {
+  scheduleId: string;
+  providerLeagueId: string;
+  season: number;
+  week: number;
+  teams: Team[];
+  rosterPositions: string[];
+  matchups: SleeperMatchupPlayerPayload[];
+  syncedAt?: string;
+}): PlayerWeekStat[] {
+  const syncedAt = args.syncedAt ?? new Date().toISOString();
+  const rows: PlayerWeekStat[] = [];
+  for (const matchup of args.matchups) {
+    const teamId = teamIdByProviderRoster(args.teams, "sleeper", args.providerLeagueId, matchup.roster_id);
+    if (!teamId) continue;
+    const starters = matchup.starters ?? [];
+    const starterIndexByPlayer = new Map(starters.map((playerId, index) => [playerId, index]));
+    const playerIds = new Set([...(matchup.players ?? []), ...starters, ...Object.keys(matchup.players_points ?? {})]);
+    for (const providerPlayerId of [...playerIds].sort((a, b) => starterSort(a, b, starterIndexByPlayer))) {
+      const starterIndex = starterIndexByPlayer.get(providerPlayerId);
+      const isStarter = starterIndex !== undefined;
+      const rawSlot = isStarter ? args.rosterPositions[starterIndex] : "BN";
+      rows.push({
+        scheduleId: args.scheduleId,
+        provider: "sleeper",
+        providerLeagueId: args.providerLeagueId,
+        season: args.season,
+        week: args.week,
+        teamId,
+        providerRosterId: String(matchup.roster_id),
+        providerPlayerId,
+        canonicalPlayerId: canonicalProviderPlayerId("sleeper", providerPlayerId),
+        points: matchup.players_points?.[providerPlayerId] ?? 0,
+        lineupStatus: isStarter ? "starter" : "bench",
+        starterIndex,
+        inferredSlot: isStarter ? sleeperSlotKey(String(rawSlot)) : "BENCH",
+        rawSlot,
+        slotConfidence: isStarter ? "inferred" : "bench",
+        isProvisional: true,
+        syncedAt,
+        sourcePayloadHash: stablePayloadHash({ roster_id: matchup.roster_id, providerPlayerId, rawSlot, points: matchup.players_points?.[providerPlayerId] ?? 0 }),
+      });
+    }
+  }
+  return rows;
+}
+
+function starterSort(a: string, b: string, starterIndexByPlayer: Map<string, number>) {
+  const aIndex = starterIndexByPlayer.get(a) ?? Number.POSITIVE_INFINITY;
+  const bIndex = starterIndexByPlayer.get(b) ?? Number.POSITIVE_INFINITY;
+  return aIndex - bIndex || a.localeCompare(b, undefined, { numeric: true });
+}
+
+export function mapEspnPlayerWeekStats(args: {
+  scheduleId: string;
+  providerLeagueId: string;
+  season: number;
+  teams: Team[];
+  schedule: EspnMatchupPayload[];
+  weeks?: number[];
+  syncedAt?: string;
+}): PlayerWeekStat[] {
+  const syncedAt = args.syncedAt ?? new Date().toISOString();
+  const targetWeeks = new Set(args.weeks);
+  const rows: PlayerWeekStat[] = [];
+  for (const matchup of args.schedule) {
+    if (targetWeeks.size && !targetWeeks.has(matchup.matchupPeriodId)) continue;
+    for (const side of [matchup.home, matchup.away]) {
+      if (side?.teamId == null) continue;
+      const teamId = teamIdByProviderRoster(args.teams, "espn", args.providerLeagueId, side.teamId);
+      if (!teamId) continue;
+      for (const [entryIndex, entry] of (side.rosterForCurrentScoringPeriod?.entries ?? []).entries()) {
+        const providerPlayerId = String(entry.playerId ?? entry.playerPoolEntry?.player?.id ?? "");
+        if (!providerPlayerId) continue;
+        const rawSlot = entry.lineupSlotId ?? -1;
+        const inferredSlot = espnSlotKey(rawSlot);
+        const lineupStatus = espnLineupStatus(inferredSlot);
+        rows.push({
+          scheduleId: args.scheduleId,
+          provider: "espn",
+          providerLeagueId: args.providerLeagueId,
+          season: args.season,
+          week: matchup.matchupPeriodId,
+          teamId,
+          providerRosterId: String(side.teamId),
+          providerPlayerId,
+          canonicalPlayerId: canonicalProviderPlayerId("espn", providerPlayerId),
+          points: entry.playerPoolEntry?.appliedStatTotal ?? 0,
+          lineupStatus,
+          starterIndex: lineupStatus === "starter" ? entryIndex : undefined,
+          inferredSlot,
+          rawSlot,
+          slotConfidence: "confirmed",
+          isProvisional: true,
+          syncedAt,
+          sourcePayloadHash: stablePayloadHash({ teamId: side.teamId, week: matchup.matchupPeriodId, providerPlayerId, rawSlot, points: entry.playerPoolEntry?.appliedStatTotal ?? 0 }),
+        });
+      }
+    }
+  }
+  return rows;
+}
+
+function espnLineupStatus(slot: SlotKey): LineupStatus {
+  if (slot === "BENCH") return "bench";
+  if (slot === "IR") return "ir";
+  if (slot === "RESERVE") return "reserve";
+  if (slot === "TAXI") return "taxi";
+  if (slot === "UNKNOWN") return "unknown";
+  return "starter";
 }

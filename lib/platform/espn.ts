@@ -1,4 +1,5 @@
 import "server-only";
+import { mapEspnPlayerWeekStats, type EspnMatchupPayload, type EspnPlayerEntryPayload, type PlayerWeekStat } from "@/lib/playerData";
 import type { GeneratedSchedule, ImportDataFound, PlatformSyncResult, PlatformSyncScoreRow } from "@/lib/types";
 
 const ESPN_BASE = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl";
@@ -21,7 +22,8 @@ export interface EspnLeague {
 }
 
 interface EspnMatchupTeam { teamId?: number; totalPoints?: number }
-interface EspnMatchup { id: number; matchupPeriodId: number; home?: EspnMatchupTeam; away?: EspnMatchupTeam }
+interface EspnMatchupSide extends EspnMatchupTeam { rosterForCurrentScoringPeriod?: { entries?: EspnPlayerEntryPayload[] } }
+interface EspnMatchup { id: number; matchupPeriodId: number; home?: EspnMatchupSide; away?: EspnMatchupSide }
 
 export function parseEspnLeagueId(identifier: string) {
   if (/^\d{4,}$/.test(identifier)) return identifier;
@@ -39,9 +41,11 @@ function espnHeaders(auth?: EspnAuthInput) {
   return headers;
 }
 
-export async function fetchEspnLeague(leagueId: string, seasonYear: number, views: string[], auth?: EspnAuthInput) {
-  const viewQuery = views.map((view) => `view=${encodeURIComponent(view)}`).join("&");
-  const response = await fetch(`${ESPN_BASE}/seasons/${seasonYear}/segments/0/leagues/${leagueId}?${viewQuery}`, {
+export async function fetchEspnLeague(leagueId: string, seasonYear: number, views: string[], auth?: EspnAuthInput, params?: Record<string, string | number>) {
+  const searchParams = new URLSearchParams();
+  for (const view of views) searchParams.append("view", view);
+  for (const [key, value] of Object.entries(params ?? {})) searchParams.set(key, String(value));
+  const response = await fetch(`${ESPN_BASE}/seasons/${seasonYear}/segments/0/leagues/${leagueId}?${searchParams}`, {
     headers: espnHeaders(auth),
     cache: "no-store",
   });
@@ -77,7 +81,7 @@ export async function scanEspnHistory(leagueId: string, seasonYear: number, auth
     blockedHistoryYears,
     hasDraftData,
     hasRosterData: false,
-    hasPlayerData: false,
+    hasPlayerData: true,
     hasScoreSync: true,
   };
 }
@@ -118,4 +122,17 @@ export function mapEspnScores(schedule: GeneratedSchedule, league: EspnLeague): 
     }
   }
   return { rows, unmatched, warnings: unmatched.length ? ["Some weeks had no ESPN scores yet — refresh once those fantasy weeks are final."] : [], syncedAt: new Date().toISOString() };
+}
+
+export function mapEspnPlayers(schedule: GeneratedSchedule, league: EspnLeague, opts?: { weeks?: number[] }): PlayerWeekStat[] {
+  const connection = schedule.setup.platformConnection;
+  const leagueId = connection?.providerLeagueId || String(league.id);
+  return mapEspnPlayerWeekStats({
+    scheduleId: schedule.id,
+    providerLeagueId: leagueId,
+    season: league.seasonId ?? connection?.seasonYear ?? new Date().getFullYear(),
+    teams: schedule.setup.teams,
+    schedule: (league.schedule ?? []) as EspnMatchupPayload[],
+    weeks: opts?.weeks,
+  });
 }
