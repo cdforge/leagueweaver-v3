@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { hasConferences } from "@/lib/conferences";
 import type { GeneratedSchedule } from "@/lib/types";
 
 // Server-rendered season card (1200×630) for a published schedule. Used both as the
@@ -31,8 +32,10 @@ export async function GET(request: Request) {
   const divisions = schedule?.setup?.divisions?.length ?? 0;
   const weeks = schedule?.setup?.weeks ?? schedule?.weeks?.length ?? 0;
   const matchups = schedule?.weeks?.reduce((sum, week) => sum + (week.games?.length ?? 0), 0) ?? 0;
+  const conferences = schedule?.setup && hasConferences(schedule.setup) ? 2 : 0;
   const stats: { value: number; label: string }[] = [
     { value: teams, label: "TEAMS" },
+    ...(conferences ? [{ value: conferences, label: "CONFERENCES" }] : []),
     { value: divisions, label: "DIVISIONS" },
     { value: weeks, label: "WEEKS" },
     { value: matchups, label: "MATCHUPS" },

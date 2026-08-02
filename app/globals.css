@@ -882,9 +882,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .reveal-bug { position: relative; display: flex; flex-direction: column; align-items: stretch; text-align: center; }
 .reveal-bug-tab { align-self: center; margin-top: 14px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 14px; border-radius: var(--radius-pill); background: var(--gold); color: var(--field-dark); font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .14em; text-transform: uppercase; }
 .reveal-bug-tab svg { width: 12px; height: 12px; }
-.reveal-bug-hero { position: relative; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; padding: 16px 14px 14px; }
-.reveal-bug-hero::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .2; background: linear-gradient(100deg, var(--away, transparent) 0 38%, transparent 55%), linear-gradient(280deg, var(--home, transparent) 0 38%, transparent 55%); }
-.reveal-bug-hero::after { content: ""; position: absolute; top: 14%; bottom: 14%; left: 50%; width: 1px; background: linear-gradient(180deg, transparent, rgba(230, 182, 76, .5), transparent); }
+.reveal-bug-hero, .reveal-conf-vs { position: relative; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; padding: 16px 14px 14px; }
+.reveal-bug-hero::before, .reveal-conf-vs::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .2; background: linear-gradient(100deg, var(--away, transparent) 0 38%, transparent 55%), linear-gradient(280deg, var(--home, transparent) 0 38%, transparent 55%); }
+.reveal-bug-hero::after, .reveal-conf-vs::after { content: ""; position: absolute; top: 14%; bottom: 14%; left: 50%; width: 1px; background: linear-gradient(180deg, transparent, rgba(230, 182, 76, .5), transparent); }
+/* The two-conferences beat reuses the marquee's VS framing, just wider (no card
+   border) since it isn't a "game" — a season-level statement, not a broadcast bug. */
+.reveal-conf-vs { width: min(480px, 92vw); margin: 0 auto; }
+.reveal-conf-vs .reveal-bug-vs { animation: bugVsPop 420ms cubic-bezier(.34, 1.56, .64, 1) both; animation-delay: 260ms; }
+.reveal-conf-vs > .reveal-bug-side:first-child { animation: bugCrashLeft 640ms cubic-bezier(.2, .85, .25, 1) both; }
+.reveal-conf-vs > .reveal-bug-side:last-child { animation: bugCrashRight 640ms cubic-bezier(.2, .85, .25, 1) both; }
 .reveal-bug-side { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
 .reveal-bug-side b { font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-weight: var(--w-bold); font-size: clamp(17px, 4.2vw, 23px); line-height: 1.02; text-wrap: balance; overflow-wrap: anywhere; }
 .reveal-bug-vs { position: relative; z-index: 1; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--field-dark); border: 1px solid rgba(255, 255, 255, .25); box-shadow: 0 0 0 4px rgba(6, 25, 20, .6); }
@@ -933,9 +939,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .reveal-share-crest .reveal-mark { border-radius: 13px; box-shadow: 0 0 0 3px rgba(255, 255, 255, .1), 0 8px 22px rgba(0, 0, 0, .45); }
 .reveal-share-league { display: block; font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-weight: var(--w-bold); font-size: clamp(24px, 6vw, 38px); line-height: 1.06; color: #fff; text-wrap: balance; }
 .reveal-share-year { margin-top: 10px; font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .18em; text-transform: uppercase; color: var(--gold); }
-.reveal-share-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 14px 10px; }
-.reveal-share-stats > span { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+/* Flex-wrap (not a fixed grid) so a 5th stat (conference leagues) simply wraps onto a
+   second row at its own natural width, instead of five equal-width columns squeezing
+   "conferences"/"matchups" narrower than the word itself. */
+.reveal-share-stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 6px; padding: 14px 10px; }
+.reveal-share-stats > span { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 0 0 auto; min-width: 56px; }
 .reveal-share-stats b { font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-weight: var(--w-bold); font-size: var(--text-2xl); color: var(--gold); line-height: 1; }
+/* Defensive fallback only — the flex-wrap above means labels no longer need to shrink
+   past their own word, but keep this so nothing overflows even under an unusually
+   narrow viewport. */
+.reveal-share-stats small { max-width: 100%; overflow-wrap: anywhere; text-wrap: balance; }
 .reveal-share-stats small { font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-bold); letter-spacing: .1em; text-transform: uppercase; color: rgba(255, 255, 255, .55); }
 .reveal-share-marquee { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 16px; border-top: 1px solid rgba(255, 255, 255, .08); }
 .reveal-share-tag { font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
@@ -972,6 +985,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .reveal-mark-mono { display: inline-grid; place-items: center; overflow: hidden; text-align: center; letter-spacing: -.01em; font-family: var(--font-archivo), system-ui, sans-serif; font-weight: var(--w-black); line-height: 1; }
 .reveal-seed-sm { font-style: normal; font-weight: var(--w-black); font-size: var(--text-2xs); color: var(--gold); }
 .reveal-slate-team { display: inline-flex; align-items: center; gap: 6px; }
+/* A team's division/conference affiliation, named in its color even in a truncated row. */
+.reveal-affiliation-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 0 1px rgba(255, 255, 255, .25); }
 /* Season window: emphasised Kickoff / Thanksgiving / Final-week milestones. */
 .reveal-window { display: flex; flex-direction: column; align-items: center; gap: 16px; }
 .reveal-window-weeks { font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-weight: var(--w-bold); font-size: clamp(30px, 6.4vw, 52px); line-height: 1; }
@@ -1003,8 +1018,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
    late final-week node (they can be only a week or two apart). */
 .reveal-tl-flame .reveal-timeline-label { top: auto; bottom: 18px; }
 @keyframes revealPop { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: none; } }
-/* The field: team crests grouped by division. */
-.reveal-field { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+/* The field: team crests grouped by division (and, with conferences, by conference first). */
+.reveal-field { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
 .reveal-field-count { font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-weight: var(--w-bold); font-size: clamp(26px, 5.4vw, 44px); line-height: 1; }
 .reveal-field-divs { display: flex; flex-direction: column; gap: 14px; }
 .reveal-field-div { display: flex; flex-direction: column; align-items: center; gap: 8px; }
@@ -1013,6 +1028,22 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .reveal-field-div-teams .reveal-crest { box-shadow: none; animation: none; font-size: var(--text-xs); }
 /* The field assembles: crests pop into their divisions in staggered order. */
 .reveal-field-crest { display: inline-flex; animation: revealPop 460ms cubic-bezier(.34, 1.56, .64, 1) both; animation-delay: calc(var(--i, 0) * 45ms); }
+/* Two conference bands, side by side where width allows so the field roughly halves in
+   height versus one long division stack; each band tinted faintly in its own colour. */
+.reveal-field-confs { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 16px 22px; width: 100%; }
+.reveal-field-conf { flex: 1 1 200px; min-width: 168px; max-width: 260px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px 10px 12px; border-radius: 14px; background: color-mix(in srgb, var(--conf-color, transparent) 12%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--conf-color, transparent) 32%, transparent); }
+.reveal-field-conf .reveal-field-divs { gap: 10px; }
+.reveal-field-conf-name { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .12em; text-transform: uppercase; }
+.reveal-field-conf-mark { width: 18px; height: 18px; border-radius: 5px; object-fit: contain; }
+/* Overflow-prone beat content (the field roster, the season weave) lives in its own
+   capped viewport so a long roster never grows/scrolls the whole story frame — only
+   this inner pane does. JS drives a one-time soft pan when content overflows; the
+   viewport stays scrollable underneath as a manual and reduced-motion fallback. */
+.reveal-pan-viewport { position: relative; width: 100%; max-height: var(--pan-max-h, min(300px, 42vh)); overflow-y: auto; overflow-x: hidden; scrollbar-width: none; -ms-overflow-style: none; }
+.reveal-pan-viewport::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.reveal-pan-content { display: block; }
+.reveal-pan-content.is-panning { animation-name: revealPan; animation-timing-function: cubic-bezier(.45, 0, .2, 1); animation-duration: var(--pan-duration, 2000ms); animation-delay: 900ms; animation-fill-mode: both; }
+@keyframes revealPan { from { transform: translateY(0); } to { transform: translateY(var(--pan-distance, 0)); } }
 /* The woven-season grid: columns are weeks, each cell a matchup filled with the two
    teams' logos (stacked away-over-home), drawing in on a diagonal sweep. */
 .reveal-weave { display: flex; align-items: flex-start; justify-content: center; gap: 6px; width: min(540px, 94vw); margin: 6px auto 0; }
@@ -1088,6 +1119,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .reveal-vcol-crests { display: inline-flex; align-items: center; gap: 8px; }
 .reveal-vcol-crests .reveal-mark { box-shadow: 0 2px 9px rgba(0, 0, 0, .42); }
 .reveal-vcol-pair { font-size: var(--text-2xs); font-weight: var(--w-bold); color: rgba(255, 255, 255, .72); line-height: 1.25; text-wrap: balance; }
+.reveal-vcol-relationship { font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .08em; text-transform: uppercase; color: var(--gold); line-height: 1.2; }
 .reveal-vcol-gap { font-size: var(--text-2xs); font-weight: var(--w-bold); letter-spacing: .05em; text-transform: uppercase; color: rgba(255, 255, 255, .5); line-height: 1; }
 .reveal-vcol-gap b { display: block; font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-size: var(--text-3xl); font-weight: var(--w-bold); color: var(--gold); line-height: 1; margin-bottom: 2px; }
 .reveal-vtrack { position: relative; width: 8px; height: 100%; border-radius: var(--radius-pill); background: rgba(255, 255, 255, .14); }
@@ -1183,6 +1215,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   /* Marquee crests land in place — no crash, pop, or shockwave. */
   .reveal-bug-hero .reveal-crest, .reveal-bug-vs { animation: none; opacity: 1; transform: none; }
   .reveal-bug-vs::after { animation: none; opacity: 0; }
+  /* Same stillness for the two-conferences beat's VS marks. */
+  .reveal-conf-vs > .reveal-bug-side { animation: none; opacity: 1; transform: none; }
   /* Skip the weave sweep but keep the finished fabric fully drawn. */
   .reveal-weave-cell { animation: none; opacity: 1; transform: none; }
   /* The stat-show bars/rulers hold their finished shape without the grow animation. */
@@ -1191,6 +1225,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .reveal-timeline-line, .reveal-timeline-dot { animation: none; opacity: 1; }
   /* Field crests and the marquee power meter hold their finished state. */
   .reveal-field-crest, .reveal-power-fill { animation: none; opacity: 1; transform: none; }
+  /* No soft pan — overflowing beat content stays reachable via the viewport's own
+     (invisible) scroll instead of an automatic drift. */
+  .reveal-pan-content { animation: none !important; transform: none !important; }
   /* Transitions are motion too: snap the wash/halo instead of cross-fading. */
   .reveal-wash, .reveal-stage::before { transition: none; }
   /* Cards and rematch pins arrive fully formed, no cascade or pop. */
@@ -1858,7 +1895,9 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .series-chip { color: var(--ink); }
 .cross-series-chip { background: #e9edeb; color: #46534d; box-shadow: none; }
 .division-series-chip { padding-left: 5px; background: color-mix(in srgb, var(--division-chip-color, var(--field)) 17%, white); color: var(--division-chip-ink, var(--field-dark)); box-shadow: none; }
-.division-series-chip .division-mark { margin-right: 1px; }
+.division-series-chip .division-mark, .conference-series-chip .division-mark { margin-right: 1px; }
+.division-series-chip .conference-mark { margin-right: -1px; }
+.conference-series-chip { padding-left: 5px; background: color-mix(in srgb, var(--conference-chip-color, var(--field)) 17%, white); color: var(--conference-chip-ink, var(--field-dark)); box-shadow: none; }
 .matchup-venue { min-width: 0; max-width: 260px; min-height: 28px; margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
 .matchup-venue > svg { width: 13px; flex: 0 0 auto; color: var(--field); }
 .matchup-venue > img { width: 22px; height: 22px; flex: 0 0 auto; object-fit: contain; background: transparent; }

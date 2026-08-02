@@ -24,10 +24,11 @@ import {
   Trophy,
   Users,
 } from "lucide-react";
-import type { GeneratedSchedule, ScheduleWeek, ScheduledGame, Team } from "@/lib/types";
+import type { Conference, Division, GeneratedSchedule, ScheduleWeek, ScheduledGame, Team } from "@/lib/types";
 import { getNflWeekWindow, getNflWeeks } from "@/lib/schedule";
 import { divisionSeriesGaps, strengthOfSchedule, toughestGauntlet, type Gauntlet, type StrengthPick } from "@/lib/revealStats";
 import { accessibleAccentColor, readableTextColor } from "@/lib/colorContrast";
+import { conferenceOfDivision, hasConferences, matchupRelationship } from "@/lib/conferences";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { teamInitials } from "@/lib/teamIdentity";
 
@@ -406,6 +407,14 @@ function buildScenes(schedule: GeneratedSchedule, mode: RevealMode): Scene[] {
     if (!home || !away) return null;
     const awayDivision = divisionOf(away);
     const homeDivision = divisionOf(home);
+    // Once the league has conferences, the tape leads with the relationship that
+    // actually explains the matchup: same division (and, incidentally, conference),
+    // same conference but different division, or truly cross-conference.
+    const relationship = leagueHasConferences && awayDivision && homeDivision
+      ? matchupRelationship(game.matchupType, awayDivision.id, homeDivision.id, setup)
+      : undefined;
+    const awayConference = leagueHasConferences && awayDivision ? conferenceOfDivision(setup, awayDivision.id) : undefined;
+    const homeConference = leagueHasConferences && homeDivision ? conferenceOfDivision(setup, homeDivision.id) : undefined;
     const series = game.seriesLength > 1 ? `Game ${game.seriesGame} of ${game.seriesLength}` : null;
     return (
       <span className={`reveal-bug${tape ? "" : " reveal-bug-mini"}`} style={{ "--away": away.color, "--home": home.color } as React.CSSProperties}>
@@ -427,10 +436,19 @@ function buildScenes(schedule: GeneratedSchedule, mode: RevealMode): Scene[] {
           <>
             <span className="reveal-bug-tape">
               <span className="reveal-tape-row"><b>#{away.overallRank}</b><span>Seed</span><b>#{home.overallRank}</b></span>
-              {awayDivision && homeDivision && (
+              {relationship === "conference" && awayConference && (
+                <span className="reveal-tape-row reveal-tape-single"><span>Conference</span><b>{awayConference.name}</b></span>
+              )}
+              {relationship === "cross-conference" && awayConference && homeConference && (
+                <span className="reveal-tape-row"><b>{awayConference.name}</b><span>Conference</span><b>{homeConference.name}</b></span>
+              )}
+              {awayDivision && homeDivision && (relationship === undefined || relationship === "division") && (
                 awayDivision.id === homeDivision.id
                   ? <span className="reveal-tape-row reveal-tape-single"><span>Division</span><b>{awayDivision.name}</b></span>
                   : <span className="reveal-tape-row"><b>{awayDivision.name}</b><span>Division</span><b>{homeDivision.name}</b></span>
+              )}
+              {relationship === "division" && awayConference && (
+                <span className="reveal-tape-row reveal-tape-single"><span>Conference</span><b>{awayConference.name}</b></span>
               )}
             </span>
             <span className="reveal-bug-power">
@@ -452,6 +470,16 @@ function buildScenes(schedule: GeneratedSchedule, mode: RevealMode): Scene[] {
       </span>
     );
   };
+  // A team's affiliation dot for a compact matchup row: its conference colour once the
+  // league has conferences (the more informative tier — a division alone doesn't say
+  // which side of the bracket it's on), otherwise its division colour.
+  const affiliationDot = (team: Team) => {
+    const division = divisionOf(team);
+    if (!division) return null;
+    const conference = leagueHasConferences ? conferenceOfDivision(setup, division.id) : undefined;
+    const label = conference ? `${conference.name} conference` : `${division.name} division`;
+    return <i className="reveal-affiliation-dot" style={{ background: (conference ?? division).color }} aria-hidden="true" title={label} />;
+  };
   // A compact "away @ home" row (with logos + ranks) for the truncated lineups.
   const gameRow = (game: ScheduledGame) => {
     const home = teamById(game.homeTeamId);
@@ -459,9 +487,9 @@ function buildScenes(schedule: GeneratedSchedule, mode: RevealMode): Scene[] {
     if (!home || !away) return null;
     return (
       <span className="reveal-slate-game" key={game.id}>
-        <span className="reveal-slate-team">{teamMark(away, 24)}<i className="reveal-seed-sm">#{away.overallRank}</i>{away.name}</span>
+        <span className="reveal-slate-team">{teamMark(away, 24)}<i className="reveal-seed-sm">#{away.overallRank}</i>{away.name}{affiliationDot(away)}</span>
         <em>@</em>
-        <span className="reveal-slate-team">{teamMark(home, 24)}<i className="reveal-seed-sm">#{home.overallRank}</i>{home.name}</span>
+        <span className="reveal-slate-team">{teamMark(home, 24)}<i className="reveal-seed-sm">#{home.overallRank}</i>{home.name}{affiliationDot(home)}</span>
       </span>
     );
   };
@@ -578,11 +606,17 @@ function buildScenes(schedule: GeneratedSchedule, mode: RevealMode): Scene[] {
   const rematchColumn = (tag: string, a: Team, b: Team, first: number, last: number, gap: number, variant: "long" | "quick"): [React.ReactNode, React.ReactNode] => {
     const ca = accessibleAccentColor(a.color, "#0d2018");
     const cb = accessibleAccentColor(b.color, "#0d2018");
+    // A rematch is always a division pair (only division opponents play twice) — say so
+    // outright, and name the shared conference too once the league has one, so the stat
+    // never reads as a cross-conference oddity it structurally can't be.
+    const division = divisionOf(a);
+    const conference = leagueHasConferences && division ? conferenceOfDivision(setup, division.id) : undefined;
     const head = (
       <span className={`reveal-vcol-head reveal-vcol-head-${variant}`} key={`${tag}-h`}>
         <span className="reveal-tag">{tag}</span>
         <span className="reveal-vcol-crests">{teamMark(a, 48)}{teamMark(b, 48)}</span>
         <span className="reveal-vcol-pair">#{a.overallRank} {a.name} · #{b.overallRank} {b.name}</span>
+        {division && <span className="reveal-vcol-relationship">Division · {division.name}{conference ? ` · ${conference.name}` : ""}</span>}
         <span className="reveal-vcol-gap"><b>{gap}</b> {gap === 1 ? "wk" : "wks"} apart</span>
       </span>
     );
@@ -615,6 +649,7 @@ function buildScenes(schedule: GeneratedSchedule, mode: RevealMode): Scene[] {
   // a weeks × games grid that draws itself in a diagonal sweep. Division games are
   // the rivalries — lit gold in the fabric. Honest replay of the solved season.
   const weaveColumns = weaveColumnsOf(schedule);
+  const weaveHoldMs = setup.teams.length > 12 ? 4200 : 2800;
 
   // The season laid out as a drawn timeline: kickoff at the left, the Thanksgiving
   // flame node where it falls, the final week at the right — the shape and length
@@ -642,6 +677,86 @@ function buildScenes(schedule: GeneratedSchedule, mode: RevealMode): Scene[] {
   };
   const leagueBgLogos: BgLogo[] | undefined = setup.logoUrl ? [{ url: setup.logoUrl, pos: "solo" }] : undefined;
 
+  // The field beat: teams grouped by division, and — once the league has conferences —
+  // divisions grouped into their two conference bands first, since a division only means
+  // something within its conference. Crests shrink a little once there's more to fit so a
+  // 6/8-division league still lands inside the phone frame (PannableScene handles the rest).
+  const leagueHasConferences = hasConferences(setup);
+  const fieldCrestSize = leagueHasConferences || setup.divisions.length > 4 ? 26 : 34;
+  const fieldDivisionRow = (division: Division) => (
+    <span className="reveal-field-div" key={division.id}>
+      <span className="reveal-field-div-name" style={{ color: accessibleAccentColor(division.color) }}>{division.name}</span>
+      <span className="reveal-field-div-teams">
+        {setup.teams.filter((team) => team.divisionId === division.id).map((team) => (
+          <span className="reveal-field-crest" key={team.id} style={{ "--i": setup.teams.indexOf(team) } as React.CSSProperties}>{crest(team, fieldCrestSize)}</span>
+        ))}
+      </span>
+    </span>
+  );
+  const fieldValue = (
+    <span className="reveal-card reveal-field-card">
+      <span className="reveal-field">
+        <span className="reveal-field-count">
+          <CountUp end={setup.teams.length} singular="team" plural="teams" />
+          {leagueHasConferences && <> · <CountUp end={2} singular="conference" plural="conferences" /></>}
+          {" "}· <CountUp end={setup.divisions.length} singular="division" plural="divisions" />
+        </span>
+        <PannableScene holdMs={3600} maxHeight="min(260px, 36vh)">
+          {leagueHasConferences ? (
+            <span className="reveal-field-confs">
+              {setup.conferences!.map((conference) => (
+                <span className="reveal-field-conf" key={conference.id} style={{ "--conf-color": conference.color } as React.CSSProperties}>
+                  <span className="reveal-field-conf-name" style={{ color: accessibleAccentColor(conference.color) }}>
+                    {conference.logoUrl && <img className="reveal-field-conf-mark" src={conference.logoUrl} alt="" draggable={false} />}
+                    {conference.name}
+                  </span>
+                  <span className="reveal-field-divs">
+                    {setup.divisions.filter((division) => division.conferenceId === conference.id).map(fieldDivisionRow)}
+                  </span>
+                </span>
+              ))}
+            </span>
+          ) : (
+            <span className="reveal-field-divs">{setup.divisions.map(fieldDivisionRow)}</span>
+          )}
+        </PannableScene>
+      </span>
+    </span>
+  );
+
+  // The two-conferences beat: the season framed as A-vs-B before the field even
+  // appears, using the same broadcast VS language as the marquee — but with the
+  // conference identities as the "teams". Only exists when the league actually
+  // has two conferences; otherwise this simply isn't part of the reel.
+  const conferencesScene: Scene | undefined = leagueHasConferences && setup.conferences?.length === 2 ? (() => {
+    const [confA, confB] = setup.conferences!;
+    const confInitials = (conference: Conference) => (conference.initials || conference.name).replace(/[^A-Za-z0-9]/g, "").slice(0, 3).toUpperCase() || "CO";
+    const confMark = (conference: Conference, size: number) => (
+      conference.logoUrl
+        ? <img className="reveal-mark" src={conference.logoUrl} alt="" width={size} height={size} style={{ width: size, height: size }} draggable={false} />
+        : <span className="reveal-mark reveal-mark-mono" style={{ width: size, height: size, background: conference.color, color: readableTextColor(conference.color), fontSize: monoFont(size, confInitials(conference).length) }}>{confInitials(conference)}</span>
+    );
+    const bgLogos = ([
+      confA.logoUrl ? { url: confA.logoUrl, pos: "a" as const } : undefined,
+      confB.logoUrl ? { url: confB.logoUrl, pos: "b" as const } : undefined,
+    ]).filter((mark): mark is { url: string; pos: "a" | "b" } => Boolean(mark));
+    return {
+      key: "conferences", order: 15, holdMs: 3000,
+      icon: <Swords aria-hidden="true" />,
+      kicker: "Two sides, one trophy",
+      value: (
+        <span className="reveal-conf-vs" style={{ "--away": confA.color, "--home": confB.color } as React.CSSProperties}>
+          <span className="reveal-bug-side">{confMark(confA, 76)}<b style={{ color: nameColor(confA.color) }}>{confA.name}</b></span>
+          <span className="reveal-bug-vs"><em>VS</em></span>
+          <span className="reveal-bug-side">{confMark(confB, 76)}<b style={{ color: nameColor(confB.color) }}>{confB.name}</b></span>
+        </span>
+      ),
+      caption: `${setup.teams.length} teams, one trophy, two roads to it`,
+      wash: [confA.color, confB.color],
+      bgLogos: bgLogos.length ? bgLogos : undefined,
+    };
+  })() : undefined;
+
   const core: Scene[] = [
     {
       key: "kickoff", order: 0, holdMs: 1900,
@@ -652,14 +767,19 @@ function buildScenes(schedule: GeneratedSchedule, mode: RevealMode): Scene[] {
       wash: leagueWash,
     },
     {
-      key: "weave", order: 5, holdMs: 2800,
+      // A bigger league (more games per week) makes the weave taller than the frame,
+      // which needs the soft pan to actually settle before the beat auto-advances —
+      // give it a beat longer to breathe.
+      key: "weave", order: 5, holdMs: weaveHoldMs,
       icon: <Sparkles aria-hidden="true" />,
       kicker: "Every thread at once",
       value: (
         <span className="reveal-weave-wrap">
-          <WeaveGrid columns={weaveColumns} />
+          <PannableScene holdMs={weaveHoldMs} maxHeight="min(320px, 44vh)">
+            <WeaveGrid columns={weaveColumns} />
+          </PannableScene>
           {setup.divisions.length > 1 && (
-            <span className="reveal-weave-legend"><i className="reveal-weave-legend-chip" aria-hidden="true" />Gold outline = division rivalry</span>
+            <span className="reveal-weave-legend"><i className="reveal-weave-legend-chip" aria-hidden="true" />Gold outline = division rivalry{leagueHasConferences ? " · always within a conference" : ""}</span>
           )}
         </span>
       ),
@@ -704,29 +824,12 @@ function buildScenes(schedule: GeneratedSchedule, mode: RevealMode): Scene[] {
       key: "field", order: 20, holdMs: 3600,
       icon: <Users aria-hidden="true" />,
       kicker: "The field",
-      value: (
-        <span className="reveal-card reveal-field-card">
-          <span className="reveal-field">
-          <span className="reveal-field-count"><CountUp end={setup.teams.length} singular="team" plural="teams" /> · <CountUp end={setup.divisions.length} singular="division" plural="divisions" /></span>
-          <span className="reveal-field-divs">
-            {setup.divisions.map((division) => (
-              <span className="reveal-field-div" key={division.id}>
-                <span className="reveal-field-div-name" style={{ color: accessibleAccentColor(division.color) }}>{division.name}</span>
-                <span className="reveal-field-div-teams">
-                  {setup.teams.filter((team) => team.divisionId === division.id).map((team) => (
-                    <span className="reveal-field-crest" key={team.id} style={{ "--i": setup.teams.indexOf(team) } as React.CSSProperties}>{crest(team, 34)}</span>
-                  ))}
-                </span>
-              </span>
-            ))}
-          </span>
-          </span>
-        </span>
-      ),
+      value: fieldValue,
       caption: "The whole field's in. Now the matchups.",
       wash: [setup.divisions[0]?.color ?? "#117A45", setup.divisions[setup.divisions.length > 1 ? 1 : 0]?.color ?? "#0a3a22"],
     },
   ];
+  if (conferencesScene) core.push(conferencesScene);
 
   const extras: Scene[] = [];
   const pushSlate = (key: string, order: number, priority: number, icon: React.ReactNode, kicker: string, week: ScheduleWeek | undefined, headliner: ScheduledGame | undefined, restLimit: number) => {
@@ -740,7 +843,10 @@ function buildScenes(schedule: GeneratedSchedule, mode: RevealMode): Scene[] {
     extras.push({
       key, order, priority, holdMs: 5200, icon, kicker, value,
       caption: `Week ${week.weekNumber} · ${headliner.dateLabel ?? week.dateLabel}`,
-      wash: [home.color, away.color], bgLogos: bgLogosFor([[home, "a"], [away, "b"]]),
+      // Away renders on the card's left (gotwBug's first side), home on the right —
+      // so the background wash/watermark must key off [away, home] in that order,
+      // not [home, away], or the colours land mirrored against the crests.
+      wash: [away.color, home.color], bgLogos: bgLogosFor([[away, "a"], [home, "b"]]),
     });
   };
 
@@ -779,7 +885,9 @@ function buildScenes(schedule: GeneratedSchedule, mode: RevealMode): Scene[] {
         kicker: "One to circle",
         value: gotwBug(marqueeGame),
         caption: `Week ${marqueeWeek.weekNumber} · ${marqueeGame.dateLabel ?? marqueeWeek.dateLabel}`,
-        wash: [home.color, away.color], bgLogos: bgLogosFor([[home, "a"], [away, "b"]]),
+        // Same fix as pushSlate above: away sits on the card's left, home on the
+        // right, so wash/watermark order must be [away, home].
+        wash: [away.color, home.color], bgLogos: bgLogosFor([[away, "a"], [home, "b"]]),
       });
     }
   }
@@ -875,6 +983,7 @@ function buildScenes(schedule: GeneratedSchedule, mode: RevealMode): Scene[] {
       </span>
       <span className="reveal-share-stats">
         <span><b>{setup.teams.length}</b><small>teams</small></span>
+        {leagueHasConferences && <span><b>2</b><small>conferences</small></span>}
         <span><b>{setup.divisions.length}</b><small>division{setup.divisions.length === 1 ? "" : "s"}</small></span>
         <span><b>{setup.weeks}</b><small>weeks</small></span>
         <span><b>{totalGames}</b><small>matchups</small></span>
@@ -987,6 +1096,50 @@ function LoomBackdrop({ columns }: { columns: WeaveColumn[] }) {
         </span>
       ))}
     </div>
+  );
+}
+
+/**
+ * Contains overflow-prone beat content (the field roster, the season weave) inside a
+ * capped-height viewport instead of letting it grow the whole overlay — a long roster on
+ * a phone used to force the entire story frame to scroll, dragging the progress bar and
+ * controls along with it. Content that already fits is simply shown, no motion. Content
+ * that overflows softly pans top-to-bottom once, timed to settle before the beat's own
+ * hold timer ends, so everything is seen without a scrollbar moving the frame itself.
+ * The viewport itself stays (invisibly) scrollable underneath as a manual/reduced-motion
+ * fallback — reduced-motion skips the pan animation and relies on that fallback.
+ */
+function PannableScene({ holdMs, maxHeight, children }: { holdMs: number; maxHeight: string; children: React.ReactNode }) {
+  const viewportRef = useRef<HTMLSpanElement>(null);
+  const contentRef = useRef<HTMLSpanElement>(null);
+  const [pan, setPan] = useState(0);
+  const prefersReduced = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    const content = contentRef.current;
+    if (!viewport || !content) return;
+    // Measure after the frame paints, so scrollHeight reflects final layout — and,
+    // as a side benefit, keeps the setState out of the effect body itself.
+    const raf = requestAnimationFrame(() => {
+      if (prefersReduced()) { setPan(0); return; }
+      const overflow = content.scrollHeight - viewport.clientHeight;
+      setPan(overflow > 8 ? overflow + 8 : 0);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [children]);
+  // Finish panning with time to spare before the beat auto-advances (a fixed settle
+  // buffer up front, floored so a short beat still gets a usable pan duration).
+  const panMs = Math.max(1200, holdMs - 1400);
+  return (
+    <span className="reveal-pan-viewport" ref={viewportRef} style={{ "--pan-max-h": maxHeight } as React.CSSProperties}>
+      <span
+        className={`reveal-pan-content${pan > 0 ? " is-panning" : ""}`}
+        ref={contentRef}
+        style={pan > 0 ? { "--pan-distance": `-${pan}px`, "--pan-duration": `${panMs}ms` } as React.CSSProperties : undefined}
+      >
+        {children}
+      </span>
+    </span>
   );
 }
 
