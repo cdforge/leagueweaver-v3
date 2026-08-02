@@ -1,4 +1,5 @@
-import type { ScheduleWeek, ScheduledGame } from "./types";
+import { hasConferences, matchupRelationship, type MatchupRelationship } from "./conferences";
+import type { ScheduleWeek, ScheduledGame, LeagueSetupInput } from "./types";
 
 export interface MatchupSignal {
   rating: number;
@@ -223,10 +224,27 @@ export function sortGamesForDisplay(games: ScheduledGame[], ranks?: Map<string, 
     .map((game, index) => ({ ...game, gameNumber: index + 1 }));
 }
 
-export function matchupSeriesLabel(game: ScheduledGame) {
+/**
+ * Text label for a matchup's series chip/aria-text. Without `context`, or in a league with no
+ * conferences, this is exactly the historical binary label ("Div" / "Cross-div") — unchanged. When
+ * `context` resolves a conference-aware relationship (see {@link matchupRelationship}), a
+ * cross-division game inside one conference reads "Conf" instead, and only a true
+ * cross-conference game reads "Cross-conf".
+ */
+export function matchupSeriesLabel(
+  game: ScheduledGame,
+  context?: { awayDivisionId: string; homeDivisionId: string; setup: Pick<LeagueSetupInput, "divisions" | "conferences"> },
+) {
+  if (context && hasConferences(context.setup)) {
+    const relationship = matchupRelationship(game.matchupType, context.awayDivisionId, context.homeDivisionId, context.setup);
+    const type = relationship === "division" ? "Div" : relationship === "conference" ? "Conf" : "Cross-conf";
+    return `${type} · ${game.seriesGame} of ${game.seriesLength}`;
+  }
   const type = game.matchupType === "division" ? "Div" : "Cross-div";
   return `${type} · ${game.seriesGame} of ${game.seriesLength}`;
 }
+
+export type { MatchupRelationship };
 
 export function normalizeSeriesGameNumbers(weeks: ScheduleWeek[]): ScheduleWeek[] {
   const orderedGames = [...weeks]

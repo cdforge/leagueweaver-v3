@@ -193,6 +193,7 @@ export function SimulatorWorkspace({
       home,
       awayDivision: divisionById.get(away.divisionId),
       homeDivision: divisionById.get(home.divisionId),
+      setup: schedule.setup,
       awayRank: ranks.get(away.id) ?? away.overallRank,
       homeRank: ranks.get(home.id) ?? home.overallRank,
       awayRecord: record(away.id),

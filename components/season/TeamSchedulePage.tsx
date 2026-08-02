@@ -477,7 +477,7 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
                     {played ? <><strong className={awayScoreClass}>{game.awayScore}</strong><i aria-hidden="true">@</i><strong className={homeScoreClass}>{game.homeScore}</strong></> : "—"}
                   </td>
                   {display.venues && <td className="col-venue"><span className="table-venue"><MapPin />{home.logoUrl && <img src={home.logoUrl} alt="" />}<strong>{game.stadium}</strong></span></td>}
-                  {display.matchup && <td className="col-matchup"><MatchupSeriesChip game={game} division={opponentDivision} /></td>}
+                  {display.matchup && <td className="col-matchup"><MatchupSeriesChip game={game} awayDivision={divisionById.get(away.divisionId)} homeDivision={divisionById.get(home.divisionId)} setup={schedule.setup} /></td>}
                   {display.rating && <td className="col-rating"><span className="table-rating-cell"><span className={`table-signal signal-${signal.label.toLowerCase()}`} aria-label={`${signal.label} matchup, rated ${signal.score10.toFixed(1)} out of 10; higher is better`} title={`${signal.label} · ${signal.score10.toFixed(1)}/10; higher is better`}>{Array.from({ length: 3 }, (_, index) => <i className={index < signal.bars ? "active" : ""} key={index} />)}<strong>{signal.score10.toFixed(1)}</strong></span><small className="table-rating-ranks" aria-label={`${team.name} entered Week ${week.weekNumber} ranked ${teamRank}; opponent ranked ${opponentRank}. Away rank ${awayRank} versus home rank ${homeRank}.`}>{!isHome ? <Tooltip label={`${team.name}'s Week ${week.weekNumber} rank`}><span className="is-schedule-team-rank">#{awayRank}</span></Tooltip> : <span>#{awayRank}</span>}<em aria-hidden="true">vs</em>{isHome ? <Tooltip label={`${team.name}'s Week ${week.weekNumber} rank`}><span className="is-schedule-team-rank">#{homeRank}</span></Tooltip> : <span>#{homeRank}</span>}</small></span></td>}
                   {display.badges && <td className="col-badges">{badges.length ? <span className="game-badge-row">{badges.map((badge) => <GameBadgeChip badge={badge} key={badge} />)}</span> : "—"}</td>}
                   {display.details && <td className="col-details"><span className="team-game-details">{game.dateTimeOverride && <strong>{formatGameDateTimeOverride(game.dateTimeOverride)}</strong>}{metadata && <small>{metadata}</small>}{!game.dateTimeOverride && !metadata && "—"}</span></td>}
@@ -537,6 +537,7 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
               home={home}
               awayDivision={divisionById.get(away.divisionId)}
               homeDivision={divisionById.get(home.divisionId)}
+              setup={schedule.setup}
               awayRank={rankFor(away.id, away.overallRank)}
               homeRank={rankFor(home.id, home.overallRank)}
               awayRecord={recordThroughWeek(away.id)}

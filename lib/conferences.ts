@@ -66,3 +66,31 @@ export function isConferenceAssignmentBalanced(setup: SetupLike): boolean {
   const countB = setup.divisions.filter((division) => division.conferenceId === b.id).length;
   return countA === countB && countA === setup.divisions.length / 2;
 }
+
+/**
+ * A matchup's relationship, presentation-layer only — never stored, always derived. Splits the
+ * engine's binary `matchupType` ("division" | "cross-division") a step further once conferences
+ * exist: a cross-division game *inside* the same conference reads as the conference game; only a
+ * game across conferences is truly "cross-conference". In a league without conferences every
+ * non-division game is trivially "cross-conference" too (no shared conference to find) — callers
+ * that need the legacy "Cross-div" wording for those leagues check `hasConferences(setup)`
+ * themselves (see `matchupSeriesLabel`), rather than this helper inventing a fourth value.
+ */
+export type MatchupRelationship = "division" | "conference" | "cross-conference";
+
+/**
+ * Derives the three-way relationship for a matchup from the two teams' division ids. Reuses the
+ * schedule's own `matchupType` for the division/not-division split (single source of truth — no
+ * re-deriving "same division" here), then checks whether the two divisions share a conference.
+ */
+export function matchupRelationship(
+  matchupType: "division" | "cross-division",
+  awayDivisionId: string,
+  homeDivisionId: string,
+  setup: SetupLike,
+): MatchupRelationship {
+  if (matchupType === "division") return "division";
+  const awayConference = conferenceOfDivision(setup, awayDivisionId);
+  const homeConference = conferenceOfDivision(setup, homeDivisionId);
+  return awayConference && homeConference && awayConference.id === homeConference.id ? "conference" : "cross-conference";
+}
