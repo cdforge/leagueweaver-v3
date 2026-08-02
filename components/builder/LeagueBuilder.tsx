@@ -229,7 +229,6 @@ function CreatePathStep({ setup, quickCreateReady, quickCreateReason, onCustomiz
             <strong>Customize everything</strong>
             <small>Walk each section yourself: league identity, teams, divisions, season rules, seeding, and playoffs.</small>
           </span>
-          <span className="start-option-go" aria-hidden="true"><ArrowRight /></span>
         </button>
         <section className="create-path-choice create-path-choice-quick" aria-labelledby="quick-create-heading">
           <div className="create-path-choice-head">
