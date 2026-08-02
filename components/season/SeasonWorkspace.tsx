@@ -46,6 +46,7 @@ import { GotwWorkspace } from "@/components/season/GotwWorkspace";
 import { BracketConnectorLayer, type BracketConnection } from "@/components/season/BracketConnectorLayer";
 import { ConsolationBracket, FinalPlacementTable } from "@/components/season/ConsolationBracket";
 import { GameBadgeChip, MatchupCard, MatchupRatingLegend, MatchupSeriesChip, TeamIdentityBlock, WeekMatchupRank } from "@/components/season/MatchupPresentation";
+import { GameDetailSheet } from "@/components/season/GameDetailSheet";
 import { WeekSelector } from "@/components/season/WeekSelector";
 import { SimulatorWorkspace, type SimulatorResultView } from "@/components/season/SimulatorWorkspace";
 import { StatsWorkspace, TiebreakerEditor } from "@/components/season/StatsWorkspace";
@@ -106,6 +107,7 @@ import { loadSeasonById, normalizeSeason, removeLocalSeason, saveSeason, saveSet
 import { getNflWeekWindow, getWeekDateLabel, updateGameScore } from "@/lib/schedule";
 import { getWeekPhase } from "@/lib/weekPhase";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
+import { GAME_DETAIL_CACHE_PREFIX, type GameDetailPlayerStat } from "@/lib/gameDetail";
 import type { GeneratedSchedule, ImportHistoryEvent, ImportPreview, LeagueSetupInput, PlatformConnection, PlatformSyncMode, PlayoffGame, ScheduledGame, Team, TiebreakerSettings } from "@/lib/types";
 
 type ViewKey = "league-schedule" | "team-schedule" | "gotw" | "matchup-ratings" | "standings" | "playoffs" | "simulator" | "settings";
@@ -406,13 +408,14 @@ function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores }: { schedule
   </div>;
 }
 
-function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayoffs, onOpenScores, onOpenPlayoffs, highlightedGame, simulationResults = {}, simulationProbabilities = {} }: {
+function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayoffs, onOpenScores, onOpenPlayoffs, onOpenGame, highlightedGame, simulationResults = {}, simulationProbabilities = {} }: {
   schedule: GeneratedSchedule;
   selectedWeek: number;
   setSelectedWeek: (week: number) => void;
   canAccessPlayoffs: boolean;
   onOpenScores: (week: number) => void;
   onOpenPlayoffs: () => void;
+  onOpenGame?: (gameId: string) => void;
   highlightedGame?: HighlightedGame;
   simulationResults?: Record<string, SimulatorResultView>;
   simulationProbabilities?: Record<string, { away: number; home: number }>;
@@ -569,7 +572,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
           const simulationResult = simulationResults[game.id];
           const isHighlighted = highlightedGame?.id === game.id;
           const highlightedMedalLabel = isHighlighted && highlightedGame?.medalRank ? ["Gold", "Silver", "Bronze"][highlightedGame.medalRank - 1] : undefined;
-          return <MatchupCard key={game.id} {...presentationFor(game, week.weekNumber)} featured={featured} featuredLabel={featured && gotwEntry ? gameOfWeekStatusLabel(gotwEntry.status) : undefined} gameLabel={featured ? undefined : `Game ${game.gameNumber}`} badges={analytics?.badges} medalRank={isHighlighted ? highlightedGame?.medalRank : analytics?.qualityRank} medalLabel={highlightedMedalLabel ? `${highlightedMedalLabel} · ${highlightedGame?.medalCategory || "League leader"}` : undefined} highlighted={isHighlighted} simulationSource={simulationResult?.source} simulationLocked={simulationResult?.locked} winProbability={simulationProbabilities[game.id]} teamHrefBase={`/season/${schedule.id}/team`} />;
+          return <MatchupCard key={game.id} {...presentationFor(game, week.weekNumber)} featured={featured} featuredLabel={featured && gotwEntry ? gameOfWeekStatusLabel(gotwEntry.status) : undefined} gameLabel={featured ? undefined : `Game ${game.gameNumber}`} badges={analytics?.badges} medalRank={isHighlighted ? highlightedGame?.medalRank : analytics?.qualityRank} medalLabel={highlightedMedalLabel ? `${highlightedMedalLabel} · ${highlightedGame?.medalCategory || "League leader"}` : undefined} highlighted={isHighlighted} simulationSource={simulationResult?.source} simulationLocked={simulationResult?.locked} winProbability={simulationProbabilities[game.id]} teamHrefBase={`/season/${schedule.id}/team`} onOpenGame={onOpenGame} />;
         })}{visibleGames.length === 0 && <div className="rating-filter-empty"><strong>No games scheduled this week.</strong>{byeTeams.length > 0 && <span>Every team is on a bye this week.</span>}</div>}</div>
       </div>
       <MatchupRatingLegend />
@@ -1444,6 +1447,8 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const [saveConflict, setSaveConflict] = useState<SeasonSaveConflict | null>(null);
   const [saveConflictLoading, setSaveConflictLoading] = useState(false);
   const [scoreModalOpen, setScoreModalOpen] = useState(false);
+  const [gameDetailId, setGameDetailId] = useState<string | null>(null);
+  const [gameDetailPlayerStats, setGameDetailPlayerStats] = useState<GameDetailPlayerStat[]>([]);
   const [scoreImportPending, setScoreImportPending] = useState(false);
   const [scoreDiscardConfirmOpen, setScoreDiscardConfirmOpen] = useState(false);
   const [platformSyncLoading, setPlatformSyncLoading] = useState(false);
@@ -1584,6 +1589,34 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       .catch(() => { if (!cancelled) setPublishStatus({ published: false, url: null, slug: null }); });
     return () => { cancelled = true; };
   }, [schedule?.id]);
+  useEffect(() => {
+    if (!schedule) {
+      queueMicrotask(() => setGameDetailPlayerStats([]));
+      return;
+    }
+    let cancelled = false;
+    const applyRows = (rows: GameDetailPlayerStat[]) => { if (!cancelled) setGameDetailPlayerStats(rows); };
+    try {
+      const cached = window.localStorage.getItem(`${GAME_DETAIL_CACHE_PREFIX}${schedule.id}`);
+      if (cached) {
+        const parsed = JSON.parse(cached) as { rows?: GameDetailPlayerStat[] } | GameDetailPlayerStat[];
+        applyRows(Array.isArray(parsed) ? parsed : parsed.rows ?? []);
+      } else {
+        applyRows([]);
+      }
+    } catch {
+      applyRows([]);
+    }
+    if (CLOUD_SCHEDULE_ID.test(schedule.id)) {
+      fetch(`/api/seasons/${encodeURIComponent(schedule.id)}/player-stats`)
+        .then((response) => response.ok ? response.json() : null)
+        .then((payload: { rows?: GameDetailPlayerStat[] } | null) => {
+          if (!cancelled && payload?.rows) setGameDetailPlayerStats(payload.rows);
+        })
+        .catch(() => undefined);
+    }
+    return () => { cancelled = true; };
+  }, [schedule?.id]);
   // Surface the "save to an account" nudge for device-only schedules unless this
   // one was already dismissed. Cloud schedules are safe, so they never nudge.
   useEffect(() => {
@@ -1716,6 +1749,13 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   const canAccessScorekeeping = true;
   const canAccessPlatformSync = entitlements.plan === "pro" || entitlements.features.includes("platform_sync");
   const activeSchedule = useMemo(() => schedule && simulation ? materializeSimulationSchedule(simulation) : schedule, [schedule, simulation]);
+  const openGameDetail = (gameId: string) => {
+    if (!activeSchedule) return;
+    const gameWeek = activeSchedule.weeks.find((item) => item.games.some((game) => game.id === gameId));
+    if (gameWeek) setSelectedWeek(gameWeek.weekNumber);
+    setHighlightedGame({ id: gameId });
+    setGameDetailId(gameId);
+  };
   const simulationResultByGame = useMemo((): Record<string, SimulatorResultView> => {
     if (!simulation) return {};
     return Object.fromEntries(Object.values(simulation.results)
@@ -2207,6 +2247,13 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
         <footer><span><ShieldCheck /><small>Scores save automatically as you enter them.</small></span><button type="button" className="button-primary" onClick={() => closeScoreModal(true)}>Done</button></footer>
     </Modal>}
     {showRecap && <GenerationReveal schedule={schedule} mode="replay" onComplete={() => setShowRecap(false)} onShare={shareForReveal} />}
+    {gameDetailId && <GameDetailSheet
+      schedule={activeSchedule}
+      gameId={gameDetailId}
+      playerStats={gameDetailPlayerStats}
+      winProbability={simulationProbabilityByGame[gameDetailId]}
+      onClose={() => setGameDetailId(null)}
+    />}
     <header className="workspace-topbar"><BrandLockup /><div className="workspace-top-actions"><AccountIdentity identity={entitlements} plan={entitlements.plan} /></div></header>
     {scoreBarWeek && <WeekScoreBar
       weeks={activeSchedule.weeks}
@@ -2215,7 +2262,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
       getDivision={(id) => scoreBarDivisionById.get(id)}
       getRank={(id) => scoreBarRankByTeam.get(id)}
       displayCityNames={activeSchedule.setup.display?.cityNames !== false}
-      onSelectGame={(gameId) => { const gameWeek = activeSchedule.weeks.find((item) => item.games.some((game) => game.id === gameId)); if (gameWeek) openLeagueScheduleWeek(gameWeek.weekNumber); setHighlightedGame({ id: gameId }); }}
+      onSelectGame={(gameId) => { openGameDetail(gameId); }}
       onCollapsedChange={setScorebarCollapsed}
       teamCount={activeSchedule.setup.teams.length}
     />}
@@ -2278,7 +2325,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
         </div>}
         <DraftRankingReminder schedule={schedule} onSave={onSaveDraftPlaces} openRequest={draftRankingRequest} onOpenSettings={openDraftRankingSettings} />
         <div className="workspace-content">
-          {view === "league-schedule" && <ScheduleView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} canAccessPlayoffs={canAccessPlayoffs} onOpenScores={openScoreEntry} onOpenPlayoffs={openPlayoffScores} highlightedGame={highlightedGame} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
+          {view === "league-schedule" && <ScheduleView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} canAccessPlayoffs={canAccessPlayoffs} onOpenScores={openScoreEntry} onOpenPlayoffs={openPlayoffScores} onOpenGame={openGameDetail} highlightedGame={highlightedGame} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
           {view === "team-schedule" && <TeamScheduleView schedule={activeSchedule} teamId={selectedTeamId} onSelectTeam={selectTeamSchedule} onSelectWeek={openLeagueScheduleWeek} simulationResults={simulationResultByGame} />}
           {view === "gotw" && <GotwWorkspace schedule={activeSchedule} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
           {view === "matchup-ratings" && <MatchupRatingsView schedule={activeSchedule} />}

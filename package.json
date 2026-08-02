@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "npm run test:engine && npm run test:playoffs && npm run test:stats && npm run test:mapping && npm run test:clinch && npm run test:scenarios && npm run test:conference && npm run test:player-data && npm run test:player-parser && npm run test:lineup-template && npm run test:player-sync && npm run test:transactions && npm run test:awards",
+    "test": "npm run test:engine && npm run test:playoffs && npm run test:stats && npm run test:mapping && npm run test:clinch && npm run test:scenarios && npm run test:conference && npm run test:player-data && npm run test:player-parser && npm run test:lineup-template && npm run test:player-sync && npm run test:transactions && npm run test:awards && npm run test:game-detail",
     "test:engine": "tsx scripts/engine-matrix.ts",
     "test:playoffs": "tsx scripts/playoff-matrix.ts",
     "test:stats": "tsx scripts/statistics-matrix.ts",
@@ -22,6 +22,7 @@
     "test:player-sync": "tsx scripts/player-sync-matrix.ts",
     "test:transactions": "tsx scripts/transactions-matrix.ts",
     "test:awards": "tsx scripts/awards-matrix.ts",
+    "test:game-detail": "tsx scripts/game-detail-matrix.ts",
     "test:ui": "tsx scripts/ui-smoke.ts"
   },
   "dependencies": {

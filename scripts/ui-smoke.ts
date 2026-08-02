@@ -6,7 +6,9 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { chromium, type Browser } from "playwright";
 import { defaultConferenceAssignment } from "../lib/conferences";
 import { createConferences, createDefaultSetup, createDivisions, createTeams } from "../lib/defaults";
-import type { LeagueSetupInput } from "../lib/types";
+import { GAME_DETAIL_CACHE_PREFIX, type GameDetailPlayerStat } from "../lib/gameDetail";
+import { generateLeagueSchedule } from "../lib/schedule";
+import type { GeneratedSchedule, LeagueSetupInput } from "../lib/types";
 
 const port = Number(process.env.UI_SMOKE_PORT ?? 3130);
 const baseUrl = `http://127.0.0.1:${port}`;
@@ -113,6 +115,89 @@ function conferenceSmokeSetup(): LeagueSetupInput {
   };
 }
 
+function gameDetailSmokeSchedule(id: string): GeneratedSchedule {
+  const divisions = createDivisions(2);
+  const schedule = generateLeagueSchedule({
+    ...createDefaultSetup(),
+    id,
+    name: id.includes("synced") ? "Synced Game Detail Smoke" : "Unsynced Game Detail Smoke",
+    weeks: 13,
+    divisions,
+    teams: createTeams(10, divisions),
+  }, `${id}-seed`);
+  const game = schedule.weeks[0].games[0];
+  game.awayScore = 129.24;
+  game.homeScore = 118.76;
+  return schedule;
+}
+
+function gameDetailSmokeRows(schedule: GeneratedSchedule): GameDetailPlayerStat[] {
+  const game = schedule.weeks[0].games[0];
+  const syncedAt = "2026-08-02T12:00:00.000Z";
+  const makeRow = (teamId: string, id: string, name: string, slot: "QB" | "RB" | "WR" | "TE", nflTeam: string, points: number, starterIndex?: number, bench = false): GameDetailPlayerStat => ({
+    scheduleId: schedule.id,
+    provider: "sleeper",
+    providerLeagueId: "gdm-ui-smoke",
+    season: schedule.setup.seasonYear,
+    week: game.week,
+    teamId,
+    providerRosterId: teamId,
+    providerPlayerId: id,
+    canonicalPlayerId: `sleeper:${id}`,
+    displayName: name,
+    position: slot,
+    nflTeam,
+    points,
+    lineupStatus: bench ? "bench" : "starter",
+    starterIndex,
+    inferredSlot: slot,
+    rawSlot: bench ? "BN" : slot,
+    slotConfidence: bench ? "bench" : "confirmed",
+    isProvisional: false,
+    finalLockAt: syncedAt,
+    syncedAt,
+    sourcePayloadHash: `ui-smoke-${id}`,
+  });
+  return [
+    makeRow(game.awayTeamId, "mahomes", "Patrick Mahomes", "QB", "KC", 28.44, 0),
+    makeRow(game.awayTeamId, "gibbs", "Jahmyr Gibbs", "RB", "DET", 22.6, 1),
+    makeRow(game.awayTeamId, "bench-away", "Bench Player", "WR", "BUF", 18.1, undefined, true),
+    makeRow(game.homeTeamId, "allen", "Josh Allen", "QB", "BUF", 31.12, 0),
+    makeRow(game.homeTeamId, "laporta", "Sam LaPorta", "TE", "DET", 16.8, 1),
+    makeRow(game.homeTeamId, "bench-home", "Reserve Player", "RB", "MIA", 12.7, undefined, true),
+  ];
+}
+
+async function screenshotGameDetail(browser: Browser, name: string, schedule: GeneratedSchedule, viewport: { width: number; height: number }, rows?: GameDetailPlayerStat[]) {
+  const page = await browser.newPage({ viewport });
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => {
+    pageErrors.push(error.message);
+  });
+
+  await page.addInitScript(({ seededSchedule, seededRows, cachePrefix }) => {
+    window.localStorage.setItem("leagueweaver:v3:welcomed", "1");
+    window.localStorage.setItem("leagueweaver:v3:seasons", JSON.stringify({ [seededSchedule.id]: { schedule: seededSchedule, savedAt: Date.now() } }));
+    if (seededRows) window.localStorage.setItem(`${cachePrefix}${seededSchedule.id}`, JSON.stringify({ rows: seededRows }));
+  }, { seededSchedule: schedule, seededRows: rows, cachePrefix: GAME_DETAIL_CACHE_PREFIX });
+
+  const response = await page.goto(`${baseUrl}/season/${schedule.id}`, { waitUntil: "networkidle" });
+  assert.ok(response, `${name}: season route returned a response`);
+  assert.ok(response.status() >= 200 && response.status() < 400, `${name}: season route is reachable`);
+  await page.locator("button.matchup-box-score-trigger").first().click();
+  await page.getByRole("dialog", { name: / at /i }).waitFor();
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: path.join(screenshotDir, `ui-smoke-${name}.png`) });
+  assert.deepEqual(pageErrors, [], `${name}: no page errors`);
+  assert.deepEqual(consoleErrors, [], `${name}: no console errors`);
+  await page.close();
+}
+
 async function stopServer(server: ChildProcessWithoutNullStreams) {
   if (server.killed) return;
   server.kill("SIGTERM");
@@ -145,6 +230,9 @@ async function main() {
     await screenshotPage(browser, "mobile", { width: 390, height: 844 });
     await screenshotBuilderSetup(browser, "conf-1-non-conference", createDefaultSetup());
     await screenshotBuilderSetup(browser, "conf-1-conference", conferenceSmokeSetup());
+    const synced = gameDetailSmokeSchedule("ui-smoke-gdm-synced");
+    await screenshotGameDetail(browser, "gdm-1-synced-desktop", synced, { width: 1440, height: 1000 }, gameDetailSmokeRows(synced));
+    await screenshotGameDetail(browser, "gdm-1-unsynced-mobile", gameDetailSmokeSchedule("ui-smoke-gdm-unsynced"), { width: 390, height: 844 });
     console.log(`UI smoke passed: screenshots written to ${path.relative(process.cwd(), screenshotDir)}`);
   } finally {
     await browser?.close();
