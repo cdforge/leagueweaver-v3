@@ -1658,6 +1658,16 @@ export function LeagueBuilder() {
     };
   }, [step]);
 
+  function openLeagueStepWithoutCreatePath() {
+    setError(null);
+    setShowFieldErrors(false);
+    setShowCreatePath(false);
+    setCreatePathVisited(false);
+    setStep(1);
+    setBlueprintOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   const startNewLeague = () => {
     const blankSetup = createBlankSetup();
     setSetup(blankSetup);
@@ -1668,13 +1678,12 @@ export function LeagueBuilder() {
     dismissedLogoFingerprint.current = null;
     savePromptResolved.current = false;
     setLeagueSaveState(null);
-    openCreatePath();
+    openLeagueStepWithoutCreatePath();
   };
   // Manual entry from Step 1 — a clean slate, no Quick-create fork (there's no
   // roster to fast-forward yet).
   const startManual = () => {
-    setQuickStartAvailable(false);
-    openCreatePath();
+    startNewLeague();
   };
 
   useEffect(() => {
@@ -1867,7 +1876,7 @@ export function LeagueBuilder() {
       advanceToStep(0);
       return;
     }
-    if (step === 1 && createPathVisited) {
+    if (step === 1 && createPathVisited && quickStartAvailable) {
       openCreatePath();
       return;
     }
@@ -1987,7 +1996,7 @@ export function LeagueBuilder() {
       };
     });
     setSetup((current) => {
-      const leagueName = preview.leagueName?.trim() || current.name;
+      const leagueName = preview.leagueName?.trim() || current.name.trim() || "Imported league";
       return {
         ...current,
         name: leagueName,
@@ -2106,7 +2115,7 @@ export function LeagueBuilder() {
   };
   const displayStep = showCreatePath ? 1 : step;
   const quickCreateReason = quickCreateBlocker(setup);
-  const quickCreateReady = quickStartAvailable || quickCreateReason == null;
+  const quickCreateReady = quickStartAvailable && quickCreateReason == null;
 
   return (
     <section className="builder-section" aria-label="League schedule builder" ref={builderSectionRef}>
