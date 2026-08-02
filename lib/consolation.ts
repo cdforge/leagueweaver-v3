@@ -223,17 +223,24 @@ export function projectConsolationBracket(schedule: GeneratedSchedule): Projecte
     fallbackReason = "Division-halves placement needs exactly two divisions and four non-playoff teams, split two per division. This projection uses standard placement instead.";
   }
 
-  if (nonPlayoffEntrants.length >= 2 && mode === "division-halves") {
+  // The consolation bracket runs in the championship's weeks, so it is at most `roundNames.length`
+  // rounds deep — a single-ranking bracket that deep seats at most 2^rounds teams. Any lower seeds
+  // beyond that cap are CUT: eliminated at the end of the regular season with no consolation game
+  // (previously the bracket tried to seat everyone and silently dropped the overflow games).
+  const consolationCap = 2 ** roundNames.length;
+  const seatedNonPlayoff = nonPlayoffEntrants.slice(0, consolationCap);
+
+  if (seatedNonPlayoff.length >= 2 && mode === "division-halves") {
     const divisionGames = schedule.setup.divisions.map((division) => {
-      const entrants = nonPlayoffEntrants
+      const entrants = seatedNonPlayoff
         .filter((entrant) => entrant.kind === "team" && entrant.divisionId === division.id)
         .sort((left, right) => left.projectedSeed - right.projectedSeed) as [ProjectedConsolationEntrant, ProjectedConsolationEntrant];
       return addGame(0, `${division.name} "Not Last Place" Bowl`, [settings.fieldSize + 1, schedule.setup.teams.length], entrants, division.id)!;
     });
     addGame(1, `Draft Pick Bowl (${ordinal(settings.fieldSize + 1)} Place)`, [settings.fieldSize + 1, settings.fieldSize + 2], [resultEntrant(divisionGames[0], "winner"), resultEntrant(divisionGames[1], "winner")]);
     addGame(1, `Toilet Bowl (${ordinal(settings.fieldSize + 3)} Place)`, [settings.fieldSize + 3, settings.fieldSize + 4], [resultEntrant(divisionGames[0], "loser"), resultEntrant(divisionGames[1], "loser")]);
-  } else if (nonPlayoffEntrants.length >= 2) {
-    classify(nonPlayoffEntrants, settings.fieldSize + 1, 0);
+  } else if (seatedNonPlayoff.length >= 2) {
+    classify(seatedNonPlayoff, settings.fieldSize + 1, 0);
   }
 
   return {

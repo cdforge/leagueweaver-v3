@@ -1330,6 +1330,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .build-fork-go svg { width: 16px; }
 .build-fork-secondary { display: flex; flex-direction: column; gap: 8px; padding: 18px 16px; background: var(--canvas); }
 .build-fork-secondary-head { display: inline-flex; align-items: center; gap: 6px; }
+.build-fork-weeks { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.build-fork-weeks > span { font-size: var(--text-2xs); font-weight: var(--w-bold); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .build-fork-secondary-head svg { width: 16px; color: var(--field); }
 .build-fork-secondary-head strong { font-size: var(--text-md); }
 .build-fork-secondary > small { color: var(--muted); font-size: var(--text-xs); }
@@ -5267,6 +5269,14 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .playoff-wizard-layout { display: grid; gap: 18px; }
 .playoff-wizard-form { display: grid; gap: 20px; min-width: 0; }
 .ppw-group { display: grid; gap: 9px; min-width: 0; }
+/* Recommended-playoffs callout on the Format sub-tab. */
+.ppw-reco { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 13px; border-radius: var(--radius); border: 1px solid color-mix(in srgb, var(--field) 40%, var(--line)); background: color-mix(in srgb, var(--field) 8%, var(--surface)); }
+.ppw-reco.is-set { border-color: var(--line); background: var(--surface); }
+.ppw-reco-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ppw-reco-copy strong { font-size: var(--text-sm); font-weight: var(--w-bold); }
+.ppw-reco-copy small { font-size: var(--text-2xs); color: var(--muted); }
+.ppw-reco-apply { flex: 0 0 auto; padding: 6px 12px; }
+.ppw-reco.is-set > svg { flex: 0 0 auto; color: var(--field); width: 18px; height: 18px; }
 
 /* presets */
 .ppw-presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -5370,6 +5380,8 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .ppw-slot { display: flex; align-items: center; gap: 7px; padding: 6px 8px; min-width: 0; font-size: var(--text-2xs); background: color-mix(in srgb, var(--slot-c, #586761) 28%, transparent); }
 .ppw-match .ppw-slot + .ppw-slot { border-top: 1px solid var(--pk-line); }
 .ppw-slot .ppw-name { color: inherit; font-weight: var(--w-bold); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* Reserved-for-division-leader marker (auto-bid, hosts) — inherits the slot/side accent color. */
+.ppw-slot-leader { flex: 0 0 auto; width: 12px; height: 12px; margin-left: auto; opacity: .95; }
 .ppw-slogo { flex: 0 0 auto; width: 17px; height: 17px; border-radius: 4px; object-fit: contain; background: rgba(255,255,255,.92); padding: 1px; }
 .ppw-match.ppw-gold { border-left-color: var(--gold); }
 .ppw-preview-toggle { display: inline-flex; gap: 2px; padding: 2px; margin: 9px 0 3px; border-radius: var(--radius-sm); background: rgba(255,255,255,.06); }
