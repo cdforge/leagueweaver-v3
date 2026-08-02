@@ -9,6 +9,7 @@ import {
   Check,
   CircleAlert,
   FileSpreadsheet,
+  Flag,
   GripVertical,
   ImagePlus,
   Info,
@@ -1504,11 +1505,13 @@ type BuilderActionProps = {
 
 function BuilderActionButtons({ step, createPath = false, createPathMode = "customize", quickCreateReady = true, generating, skipDraftRankForNow, back, next, generate }: BuilderActionProps) {
   const createPathLabel = createPathMode === "quick" ? "Quick create schedule" : "Customize everything";
+  const CreatePathIcon = createPathMode === "quick" ? Zap : SlidersHorizontal;
+  const showReviewFlag = !createPath && step === STEPS.length - 2;
   return (
     <>
       <button type="button" className="button-secondary" onClick={back} disabled={generating}><ArrowLeft />Back</button>
       {step < STEPS.length - 1
-        ? <button type="button" className="button-primary" onClick={next} disabled={generating || (createPath && createPathMode === "quick" && !quickCreateReady)}>{createPath ? createPathLabel : skipDraftRankForNow ? "Skip draft rank for now" : "Continue"}<ArrowRight /></button>
+        ? <button type="button" className="button-primary" onClick={next} disabled={generating || (createPath && createPathMode === "quick" && !quickCreateReady)}>{createPath ? <CreatePathIcon /> : showReviewFlag ? <Flag /> : null}{createPath ? createPathLabel : skipDraftRankForNow ? "Skip draft rank for now" : "Continue"}<ArrowRight /></button>
         : <button type="button" className="button-primary generate-button" onClick={generate} disabled={generating}>{generating ? <><span className="spinner" />Weaving schedule…</> : <><Sparkles />Generate my season</>}</button>}
     </>
   );
