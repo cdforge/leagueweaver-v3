@@ -34,6 +34,7 @@ export const SLOT_KEYS = [
 export type SlotKey = typeof SLOT_KEYS[number];
 export type SlotConfidence = "confirmed" | "inferred" | "ambiguous" | "bench";
 export type LineupStatus = "starter" | "bench" | "ir" | "taxi" | "reserve" | "unknown";
+export type TemplateSlotGroup = LineupStatus;
 
 export interface PlayerIdentity {
   /** Internal canonical id, also stored as player_catalog.id. */
@@ -54,8 +55,11 @@ export interface PlayerIdentity {
 export interface LineupSlotTemplate {
   slot: SlotKey;
   index: number;
+  rank?: number;
   rawSlot?: string | number;
   label?: string;
+  group?: TemplateSlotGroup;
+  confidence?: SlotConfidence;
 }
 
 export interface LineupTemplate {
@@ -130,6 +134,17 @@ export interface EspnMatchupPayload {
   matchupPeriodId: number;
   home?: { teamId?: number; rosterForCurrentScoringPeriod?: { entries?: EspnPlayerEntryPayload[] } };
   away?: { teamId?: number; rosterForCurrentScoringPeriod?: { entries?: EspnPlayerEntryPayload[] } };
+}
+
+export interface SleeperTemplateSource {
+  season: number;
+  rosterPositions: string[];
+  taxiSlots?: number;
+}
+
+export interface EspnTemplateSource {
+  season: number;
+  lineupSlotCounts: Record<string, number>;
 }
 
 export const ESPN_LINEUP_SLOT_ID_TO_SLOT_KEY: Readonly<Record<number, SlotKey>> = {
@@ -334,4 +349,87 @@ function espnLineupStatus(slot: SlotKey): LineupStatus {
   if (slot === "TAXI") return "taxi";
   if (slot === "UNKNOWN") return "unknown";
   return "starter";
+}
+
+export function deriveSleeperTemplates(source: SleeperTemplateSource): { lineupTemplate: LineupTemplate; rosterTemplate: RosterTemplate } {
+  const baseSlots = source.rosterPositions.map((rawSlot, index) => ({
+    slot: sleeperSlotKey(rawSlot),
+    index,
+    rawSlot,
+    group: sleeperTemplateGroup(rawSlot),
+    confidence: "inferred" as SlotConfidence,
+  }));
+  const taxiSlots = Array.from({ length: Math.max(0, source.taxiSlots ?? 0) }, (_, index) => ({
+    slot: "TAXI" as SlotKey,
+    index: baseSlots.length + index,
+    rawSlot: "taxi",
+    group: "taxi" as TemplateSlotGroup,
+    confidence: "inferred" as SlotConfidence,
+  }));
+  const rosterSlots = rankTemplateSlots([...baseSlots, ...taxiSlots]);
+  return {
+    lineupTemplate: {
+      provider: "sleeper",
+      season: source.season,
+      slots: rankTemplateSlots(baseSlots.filter((slot) => slot.group === "starter")).map((slot, index) => ({ ...slot, index })),
+    },
+    rosterTemplate: {
+      provider: "sleeper",
+      season: source.season,
+      slots: rosterSlots,
+    },
+  };
+}
+
+export function deriveEspnTemplates(source: EspnTemplateSource): { lineupTemplate: LineupTemplate; rosterTemplate: RosterTemplate } {
+  const rosterSlots: LineupSlotTemplate[] = [];
+  for (const [rawSlot, count] of Object.entries(source.lineupSlotCounts).sort(([a], [b]) => Number(a) - Number(b))) {
+    const slot = espnSlotKey(Number(rawSlot));
+    for (let index = 0; index < count; index += 1) {
+      rosterSlots.push({
+        slot,
+        index: rosterSlots.length,
+        rawSlot: Number(rawSlot),
+        group: espnLineupStatus(slot),
+        confidence: slot === "UNKNOWN" ? "ambiguous" : "confirmed",
+      });
+    }
+  }
+  return {
+    lineupTemplate: {
+      provider: "espn",
+      season: source.season,
+      slots: rankTemplateSlots(rosterSlots.filter((slot) => slot.group === "starter")).map((slot, index) => ({ ...slot, index })),
+    },
+    rosterTemplate: {
+      provider: "espn",
+      season: source.season,
+      slots: rankTemplateSlots(rosterSlots),
+    },
+  };
+}
+
+function sleeperTemplateGroup(rawSlot: string): TemplateSlotGroup {
+  const slot = sleeperSlotKey(rawSlot);
+  if (slot === "BENCH") return "bench";
+  if (slot === "IR") return "ir";
+  if (slot === "TAXI") return "taxi";
+  if (slot === "RESERVE") return "reserve";
+  if (slot === "UNKNOWN") return "unknown";
+  return "starter";
+}
+
+function rankTemplateSlots(slots: LineupSlotTemplate[]): LineupSlotTemplate[] {
+  const totals = slots.reduce((map, slot) => map.set(slot.slot, (map.get(slot.slot) ?? 0) + 1), new Map<SlotKey, number>());
+  const seen = new Map<SlotKey, number>();
+  return slots.map((slot, index) => {
+    const rank = (seen.get(slot.slot) ?? 0) + 1;
+    seen.set(slot.slot, rank);
+    return {
+      ...slot,
+      index,
+      rank,
+      label: (totals.get(slot.slot) ?? 0) > 1 ? `${slot.slot}${rank}` : slot.slot,
+    };
+  });
 }

@@ -1,10 +1,10 @@
 import "server-only";
-import { mapSleeperPlayerWeekStats, type PlayerWeekStat } from "@/lib/playerData";
+import { deriveSleeperTemplates, mapSleeperPlayerWeekStats, type LineupTemplate, type PlayerWeekStat, type RosterTemplate } from "@/lib/playerData";
 import type { GeneratedSchedule, ImportDataFound, PlatformSyncResult, PlatformSyncScoreRow } from "@/lib/types";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 
-export interface SleeperLeague { league_id: string; name?: string; season?: string; avatar?: string | null; draft_id?: string | null; previous_league_id?: string | null }
+export interface SleeperLeague { league_id: string; name?: string; season?: string; avatar?: string | null; draft_id?: string | null; previous_league_id?: string | null; roster_positions?: string[]; settings?: { taxi_slots?: number; best_ball?: number } }
 export interface SleeperUser { user_id: string; display_name?: string; avatar?: string | null; metadata?: { team_name?: string } }
 export interface SleeperRoster { roster_id: number; owner_id?: string | null; settings?: { division?: number } }
 interface SleeperMatchup { roster_id: number; matchup_id?: number; points?: number; players?: string[]; starters?: string[]; players_points?: Record<string, number> }
@@ -62,6 +62,14 @@ export async function mapSleeperPlayers(schedule: GeneratedSchedule, week: numbe
     teams: schedule.setup.teams,
     rosterPositions: league.roster_positions ?? [],
     matchups,
+  });
+}
+
+export function mapSleeperTemplates(league: SleeperLeague): { lineupTemplate: LineupTemplate; rosterTemplate: RosterTemplate } {
+  return deriveSleeperTemplates({
+    season: Number(league.season),
+    rosterPositions: league.roster_positions ?? [],
+    taxiSlots: league.settings?.taxi_slots,
   });
 }
 
