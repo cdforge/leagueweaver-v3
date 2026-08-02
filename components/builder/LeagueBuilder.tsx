@@ -239,22 +239,26 @@ function CreatePathStep({ setup, quickCreateReady, quickCreateReason, onCustomiz
               <small>Pick a season length first. League Weaver applies recommended playoff settings and generates now.</small>
             </span>
           </div>
-          <div className="build-fork-weeks">
-            <span>Regular season</span>
-            <div className="segmented">
-              <button type="button" className={weeks === 13 ? "active" : ""} onClick={() => setWeeks(13)}>13 weeks</button>
-              <button type="button" className={weeks === 14 ? "active" : ""} onClick={() => setWeeks(14)}>14 weeks</button>
+          <div className="create-path-quick-settings">
+            <div className="build-fork-weeks">
+              <span>Regular season</span>
+              <div className="segmented">
+                <button type="button" className={weeks === 13 ? "active" : ""} onClick={() => setWeeks(13)}>13 weeks</button>
+                <button type="button" className={weeks === 14 ? "active" : ""} onClick={() => setWeeks(14)}>14 weeks</button>
+              </div>
             </div>
+            <ul className="build-fork-summary">
+              <li>{grouping} · <b>{setup.teams.length} teams</b>{setup.divisions.length > 1 ? ` · ${setup.divisions.length} divisions` : ""}</li>
+              <li><b>{weeks}-week</b> season · <b>{rec.playoffWeeks}-week</b> playoff</li>
+              <li><b>{rec.fieldSize}-team</b> playoff · gold · single-elimination</li>
+              <li>Seeded by <b>last season</b></li>
+              <li>Balanced schedule rules &amp; standard tiebreakers</li>
+            </ul>
           </div>
-          <ul className="build-fork-summary">
-            <li>{grouping} · <b>{setup.teams.length} teams</b>{setup.divisions.length > 1 ? ` · ${setup.divisions.length} divisions` : ""}</li>
-            <li><b>{weeks}-week</b> season · <b>{rec.playoffWeeks}-week</b> playoff</li>
-            <li><b>{rec.fieldSize}-team</b> playoff · gold · single-elimination</li>
-            <li>Seeded by <b>last season</b></li>
-            <li>Balanced schedule rules &amp; standard tiebreakers</li>
-          </ul>
-          <p className="build-fork-note"><CircleAlert aria-hidden="true" />{quickCreateReady ? "These lock in when you generate. To change them later you’ll regenerate the schedule." : quickCreateReason}</p>
-          <button type="button" className="button-secondary build-fork-quick" disabled={!quickCreateReady} onClick={() => onQuickCreate(weeks)}><Zap aria-hidden="true" />Quick create schedule</button>
+          <div className="create-path-quick-action">
+            <p className="build-fork-note"><CircleAlert aria-hidden="true" />{quickCreateReady ? "These lock in when you generate. To change them later you’ll regenerate the schedule." : quickCreateReason}</p>
+            <button type="button" className="button-secondary build-fork-quick" disabled={!quickCreateReady} onClick={() => onQuickCreate(weeks)}><Zap aria-hidden="true" />Quick create schedule</button>
+          </div>
         </section>
       </div>
     </div>
