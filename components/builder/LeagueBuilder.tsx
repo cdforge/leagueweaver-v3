@@ -199,21 +199,23 @@ function SavedLeagueShortcut({ loadedPreset, onStartFresh }: { loadedPreset: Sav
   );
 }
 
+type CreatePathMode = "customize" | "quick";
+
 // The Quick create ⁄ Customize fork is an untracked decision screen between
 // Start and League. It is not part of the numbered wizard, but it participates
 // in Back/Continue so the setup flow still feels linear.
-function CreatePathStep({ setup, quickCreateReady, quickCreateReason, onCustomize, onQuickCreate }: {
+function CreatePathStep({ setup, mode, weeks, quickCreateReady, quickCreateReason, onModeChange, onWeeksChange }: {
   setup: LeagueSetupInput;
+  mode: CreatePathMode;
+  weeks: 13 | 14;
   quickCreateReady: boolean;
   quickCreateReason: string;
-  onCustomize: () => void;
-  onQuickCreate: (weeks: 13 | 14) => void;
+  onModeChange: (mode: CreatePathMode) => void;
+  onWeeksChange: (weeks: 13 | 14) => void;
 }) {
-  // Season length is the user's choice (never recommended); Quick Create needs it to derive the
-  // recommended playoff structure. Default to whatever the setup already carries, else 14.
-  const [weeks, setWeeks] = useState<13 | 14>(setup.weeks === 13 ? 13 : 14);
   const rec = recommendedPlayoffStructure(setup.teams.length, weeks);
   const grouping = rosterGroupingNoun(setup);
+  const quickSelected = mode === "quick";
   return (
     <div className="step-stack create-path-screen">
       <div className="section-heading create-path-heading">
@@ -221,8 +223,8 @@ function CreatePathStep({ setup, quickCreateReady, quickCreateReason, onCustomiz
         <h1>How do you want to build this season?</h1>
         <p>Customize every setting yourself, or pick a season length and let League Weaver create a ready-to-review schedule.</p>
       </div>
-      <div className="create-path-options" role="group" aria-label="Choose setup path">
-        <button type="button" className="start-option start-option--main create-path-recommended" onClick={onCustomize}>
+      <div className={`create-path-options is-${mode}`} role="group" aria-label="Choose setup path">
+        <button type="button" className={`start-option start-option--main create-path-recommended${mode === "customize" ? " is-selected" : " is-compact"}`} onClick={() => onModeChange("customize")} aria-pressed={mode === "customize"}>
           <span className="start-option-icon"><SlidersHorizontal aria-hidden="true" /></span>
           <span className="start-option-copy">
             <span className="build-fork-tag">Recommended</span>
@@ -230,20 +232,33 @@ function CreatePathStep({ setup, quickCreateReady, quickCreateReason, onCustomiz
             <small>Walk each section yourself: league identity, teams, divisions, season rules, seeding, and playoffs.</small>
           </span>
         </button>
-        <section className="create-path-choice create-path-choice-quick" aria-labelledby="quick-create-heading">
+        <section
+          className={`create-path-choice create-path-choice-quick${quickSelected ? " is-selected" : " is-compact"}`}
+          aria-labelledby="quick-create-heading"
+          aria-pressed={quickSelected}
+          role="button"
+          tabIndex={quickSelected ? -1 : 0}
+          onClick={() => onModeChange("quick")}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onModeChange("quick");
+            }
+          }}
+        >
           <div className="create-path-choice-head">
             <span className="create-path-choice-icon"><Zap aria-hidden="true" /></span>
             <span className="create-path-choice-copy">
               <strong id="quick-create-heading">Quick create</strong>
-              <small>Pick a season length first. League Weaver applies recommended playoff settings and generates now.</small>
+              <small>{quickSelected ? "Pick a season length. League Weaver applies recommended playoff settings and generates from here." : "Use recommended settings and generate from the footer CTA."}</small>
             </span>
           </div>
-          <div className="create-path-quick-settings">
+          {quickSelected && <div className="create-path-quick-settings">
             <div className="build-fork-weeks">
               <span>Regular season</span>
               <div className="segmented">
-                <button type="button" className={weeks === 13 ? "active" : ""} onClick={() => setWeeks(13)}>13 weeks</button>
-                <button type="button" className={weeks === 14 ? "active" : ""} onClick={() => setWeeks(14)}>14 weeks</button>
+                <button type="button" className={weeks === 13 ? "active" : ""} onClick={(event) => { event.stopPropagation(); onWeeksChange(13); }}>13 weeks</button>
+                <button type="button" className={weeks === 14 ? "active" : ""} onClick={(event) => { event.stopPropagation(); onWeeksChange(14); }}>14 weeks</button>
               </div>
             </div>
             <ul className="build-fork-summary">
@@ -253,11 +268,10 @@ function CreatePathStep({ setup, quickCreateReady, quickCreateReason, onCustomiz
               <li>Seeded by <b>last season</b></li>
               <li>Balanced schedule rules &amp; standard tiebreakers</li>
             </ul>
-          </div>
-          <div className="create-path-quick-action">
+          </div>}
+          {quickSelected && <div className="create-path-quick-action">
             <p className="build-fork-note"><CircleAlert aria-hidden="true" />{quickCreateReady ? "These lock in when you generate. To change them later you’ll regenerate the schedule." : quickCreateReason}</p>
-            <button type="button" className="button-secondary build-fork-quick" disabled={!quickCreateReady} onClick={() => onQuickCreate(weeks)}><Zap aria-hidden="true" />Quick create schedule</button>
-          </div>
+          </div>}
         </section>
       </div>
     </div>
@@ -1479,6 +1493,8 @@ function BlueprintRoster({ setup }: { setup: LeagueSetupInput }) {
 type BuilderActionProps = {
   step: number;
   createPath?: boolean;
+  createPathMode?: CreatePathMode;
+  quickCreateReady?: boolean;
   generating: boolean;
   skipDraftRankForNow: boolean;
   back: () => void;
@@ -1486,12 +1502,13 @@ type BuilderActionProps = {
   generate: () => void;
 };
 
-function BuilderActionButtons({ step, createPath = false, generating, skipDraftRankForNow, back, next, generate }: BuilderActionProps) {
+function BuilderActionButtons({ step, createPath = false, createPathMode = "customize", quickCreateReady = true, generating, skipDraftRankForNow, back, next, generate }: BuilderActionProps) {
+  const createPathLabel = createPathMode === "quick" ? "Quick create schedule" : "Customize everything";
   return (
     <>
       <button type="button" className="button-secondary" onClick={back} disabled={generating}><ArrowLeft />Back</button>
       {step < STEPS.length - 1
-        ? <button type="button" className="button-primary" onClick={next}>{createPath ? "Customize everything" : skipDraftRankForNow ? "Skip draft rank for now" : "Continue"}<ArrowRight /></button>
+        ? <button type="button" className="button-primary" onClick={next} disabled={generating || (createPath && createPathMode === "quick" && !quickCreateReady)}>{createPath ? createPathLabel : skipDraftRankForNow ? "Skip draft rank for now" : "Continue"}<ArrowRight /></button>
         : <button type="button" className="button-primary generate-button" onClick={generate} disabled={generating}>{generating ? <><span className="spinner" />Weaving schedule…</> : <><Sparkles />Generate my season</>}</button>}
     </>
   );
@@ -1599,6 +1616,8 @@ export function LeagueBuilder() {
   const [savedPickerOpen, setSavedPickerOpen] = useState(false);
   const [showCreatePath, setShowCreatePath] = useState(false);
   const [createPathVisited, setCreatePathVisited] = useState(false);
+  const [createPathMode, setCreatePathMode] = useState<CreatePathMode>("customize");
+  const [createPathWeeks, setCreatePathWeeks] = useState<13 | 14>(14);
   const [quickStartAvailable, setQuickStartAvailable] = useState(false);
   const [pendingQuickGenerate, setPendingQuickGenerate] = useState(false);
   const [connectedSavedLeaguePrompt, setConnectedSavedLeaguePrompt] = useState<SavedLeaguePreset | null>(null);
@@ -1791,6 +1810,8 @@ export function LeagueBuilder() {
     setError(null);
     setShowFieldErrors(false);
     setCreatePathVisited(true);
+    setCreatePathMode("customize");
+    setCreatePathWeeks(setup.weeks === 13 ? 13 : 14);
     setShowCreatePath(true);
     setStep(1);
     setBlueprintOpen(false);
@@ -1821,6 +1842,14 @@ export function LeagueBuilder() {
   }
   const next = () => {
     if (showCreatePath) {
+      if (createPathMode === "quick") {
+        if (!quickCreateReady) {
+          setError(quickCreateReason ?? "Quick Create is not ready for this league yet.");
+          return;
+        }
+        quickCreateSchedule(createPathWeeks);
+        return;
+      }
       customizeEverything();
       return;
     }
@@ -2136,7 +2165,7 @@ export function LeagueBuilder() {
         <div className="builder-tool">
           <p className="sr-only" aria-live="polite">{showCreatePath ? "Choose how to build this season. League is the next tracked step." : `Step ${displayStep + 1} of ${STEPS.length}: ${STEPS[displayStep].label}`}</p>
           <div className="builder-content" ref={builderContentRef} tabIndex={-1}>
-            {showCreatePath && <CreatePathStep setup={setup} quickCreateReady={quickCreateReady} quickCreateReason={quickCreateReason ?? "Quick Create is ready for this league."} onCustomize={customizeEverything} onQuickCreate={quickCreateSchedule} />}
+            {showCreatePath && <CreatePathStep setup={setup} mode={createPathMode} weeks={createPathWeeks} quickCreateReady={quickCreateReady} quickCreateReason={quickCreateReason ?? "Quick Create is ready for this league."} onModeChange={setCreatePathMode} onWeeksChange={setCreatePathWeeks} />}
             {!showCreatePath && step === 0 && <SourceStep presets={savedLeagues} onManual={startManual} onChooseSaved={() => setSavedPickerOpen(true)} onImport={(source) => setImportSource(source)} />}
             {!showCreatePath && step === 1 && <LeagueStep setup={setup} setSetup={setSetup} presets={savedLeagues} loadedPreset={loadedPreset} onStartFresh={startNewLeague} onLeagueLogoUploaded={suggestAvatarFromLogo} />}
             {step === 2 && <TeamsDivisionsStep setup={setup} setSetup={setSetup} showErrors={showFieldErrors} activeTab={teamsTab} onTab={setTeamsTab} />}
@@ -2146,12 +2175,12 @@ export function LeagueBuilder() {
           </div>
           {error && <div className="builder-error" role="alert"><CircleAlert />{error}</div>}
           {step > 0 && <div className="builder-actions">
-            <BuilderActionButtons step={displayStep} createPath={showCreatePath} generating={generating} skipDraftRankForNow={skipDraftRankForNow} back={back} next={next} generate={generate} />
+            <BuilderActionButtons step={displayStep} createPath={showCreatePath} createPathMode={createPathMode} quickCreateReady={quickCreateReady} generating={generating} skipDraftRankForNow={skipDraftRankForNow} back={back} next={next} generate={generate} />
           </div>}
         </div>
         <LivePreview setup={setup} step={displayStep} />
       </div>
-      <BuilderBlueprintBar setup={setup} step={displayStep} open={blueprintOpen} onToggle={() => setBlueprintOpen((current) => !current)} actions={{ step: displayStep, createPath: showCreatePath, generating, skipDraftRankForNow, back, next, generate }} />
+      <BuilderBlueprintBar setup={setup} step={displayStep} open={blueprintOpen} onToggle={() => setBlueprintOpen((current) => !current)} actions={{ step: displayStep, createPath: showCreatePath, createPathMode, quickCreateReady, generating, skipDraftRankForNow, back, next, generate }} />
       {importSource && <ImportLeagueModal source={importSource} setup={setup} onClose={() => setImportSource(null)} onConfirm={applyImport} />}
       {savedPickerOpen && (
         <SavedLeaguePicker
