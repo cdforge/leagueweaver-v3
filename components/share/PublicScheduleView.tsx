@@ -48,14 +48,24 @@ export function PublicScheduleView({ schedule, slug }: { schedule: GeneratedSche
 
   // Deep-link support: read/write the active tab from the URL without a full navigation.
   useEffect(() => {
-    const requested = new URLSearchParams(window.location.search).get("view") as ShareTab | null;
+    const params = new URLSearchParams(window.location.search);
+    const requested = params.get("view") as ShareTab | null;
+    const requestedWeek = Number(params.get("week"));
     if (requested && TABS.some((item) => item.key === requested)) setTab(requested);
+    if (Number.isInteger(requestedWeek) && schedule.weeks.some((item) => item.weekNumber === requestedWeek)) setWeekNumber(requestedWeek);
   }, []);
   const selectTab = (next: ShareTab) => {
     setTab(next);
     const url = new URL(window.location.href);
     if (next === "week") url.searchParams.delete("view");
     else url.searchParams.set("view", next);
+    window.history.replaceState(null, "", url);
+  };
+  const selectWeek = (nextWeek: number) => {
+    setWeekNumber(nextWeek);
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", "week");
+    url.searchParams.set("week", String(nextWeek));
     window.history.replaceState(null, "", url);
   };
 
@@ -100,7 +110,7 @@ export function PublicScheduleView({ schedule, slug }: { schedule: GeneratedSche
       </nav>
 
       {tab === "week" && <div className="public-shell">
-        <section className="public-schedule"><div className="public-section-head"><div><CalendarDays /><span><strong>Week {week.weekNumber}</strong><small>{week.dateLabel}</small></span></div><CustomSelect label="Public schedule week" value={String(weekNumber)} onChange={(value) => setWeekNumber(Number(value))} options={schedule.weeks.map((item) => ({ value: String(item.weekNumber), label: `Week ${item.weekNumber}`, description: item.dateLabel }))} /></div>
+        <section className="public-schedule"><div className="public-section-head"><div><CalendarDays /><span><strong>Week {week.weekNumber}</strong><small>{week.dateLabel}</small></span></div><CustomSelect label="Public schedule week" value={String(weekNumber)} onChange={(value) => selectWeek(Number(value))} options={schedule.weeks.map((item) => ({ value: String(item.weekNumber), label: `Week ${item.weekNumber}`, description: item.dateLabel }))} /></div>
           <div className="public-matchups">{week.games.map((game) => { const away = teamById.get(game.awayTeamId); const home = teamById.get(game.homeTeamId); if (!away || !home) return null; return <article key={game.id}><span className="public-team away"><span>{display.cityNames && away.city && <small className="team-city">{away.city}</small>}<strong>{away.name}</strong>{display.managers && <small>{away.manager || "Away"}</small>}</span><EntityLogo className="public-team-mark" size={40} color={away.color} logoUrl={away.logoUrl} monogram={teamInitials(away)} /></span><b>AT</b><span className="public-team"><EntityLogo className="public-team-mark" size={40} color={home.color} logoUrl={home.logoUrl} monogram={teamInitials(home)} /><span>{display.cityNames && home.city && <small className="team-city">{home.city}</small>}<strong>{home.name}</strong>{display.managers && <small>{home.manager || "Home"}</small>}</span></span>{display.venues && <span className="public-venue">{game.stadium}</span>}</article>; })}</div>
         </section>
         {subscribeCard}

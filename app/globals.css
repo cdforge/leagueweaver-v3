@@ -3707,12 +3707,17 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .public-tabs { width: min(1120px, calc(100% - 32px)); margin: 16px auto 0; border-radius: var(--radius) var(--radius) 0 0; }
 .public-panel { width: min(1120px, calc(100% - 32px)); margin: 14px auto 42px; }
 .public-panel-stack { display: flex; flex-direction: column; gap: 18px; }
+.public-team-nav { width: min(1120px, calc(100% - 32px)); display: flex; justify-content: flex-start; margin: 14px auto 0; }
+.public-team-nav a { min-height: 44px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: white; color: var(--field-dark); padding: 0 12px; font-size: var(--text-2xs); font-weight: var(--w-black); text-decoration: none; }
+.public-team-nav svg { width: 16px; height: 16px; }
+.public-team-panel { margin-top: 12px; }
 .public-soon { border: 1px dashed var(--line-strong); border-radius: var(--radius); background: white; padding: 52px 24px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; }
 .public-soon-mark { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); color: var(--field); }
 .public-soon-mark svg { width: 27px; }
 .public-soon strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); }
 .public-soon p { max-width: 470px; color: var(--muted); font-size: var(--text-sm); line-height: 1.55; }
 .public-soon-chip { margin-top: 4px; padding: 5px 12px; border-radius: 999px; background: var(--surface); color: var(--field-dark); font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .04em; text-transform: uppercase; }
+.team-player-soon { padding: 32px 20px; }
 .public-subscribe { padding: 22px; }
 .public-subscribe > svg { width: 30px; height: 30px; border-radius: var(--radius-sm); background: var(--gold-soft); color: #806000; padding: 6px; }
 .public-subscribe h2 { margin: 14px 0 5px; font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-2xl); }
