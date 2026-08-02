@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Bell, CalendarDays, Check, LoaderCircle, ShieldCheck } from "lucide-react";
 import { BrandLockup } from "@/components/AppHeader";
 import { AdUnit } from "@/components/ads/AdUnit";
@@ -40,7 +41,7 @@ export function PublicScheduleView({ schedule, slug }: { schedule: GeneratedSche
       <div className="public-shell">
         <section className="public-schedule"><div className="rating-filter-empty" style={{ borderRadius: "var(--radius)", minHeight: 200 }}><CalendarDays /><strong>This schedule hasn’t been built yet.</strong></div></section>
       </div>
-      <footer className="public-footer">Powered by <a href="/">League Weaver</a></footer>
+      <footer className="public-footer">Powered by <Link href="/">League Weaver</Link></footer>
     </main>;
   }
   return <main className="public-page">
@@ -53,6 +54,6 @@ export function PublicScheduleView({ schedule, slug }: { schedule: GeneratedSche
       <aside className="public-subscribe"><Bell /><h2>Follow schedule updates</h2><p>Get an email when the commissioner publishes a change.</p><form onSubmit={subscribe}><label><span>Email</span><input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label><label><span>Updates for</span><CustomSelect label="Notification team" value={teamId} onChange={setTeamId} options={[{ value: "__all__", label: "Entire league", description: "Every published update", swatch: schedule.setup.color, monogram: resolveInitials(schedule.setup.initials, leagueAcronym(schedule.setup.name)) }, ...schedule.setup.teams.map((team) => ({ value: team.id, label: teamDisplayName(team, display.cityNames), description: display.managers ? team.manager || "Team updates" : "Team updates", swatch: team.color, logoUrl: team.logoUrl, monogram: teamInitials(team) }))]} /></label><button className="button-primary" disabled={submitting}>{submitting ? <LoaderCircle className="spin" /> : <Bell />}Enable email updates</button><p className="public-subscribe-consent">You’ll only get emails when the commissioner publishes a schedule change. Unsubscribe anytime from the link in every email. See our <a href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a>.</p>{message && <span className="public-subscribe-message" role="status"><Check />{message}</span>}</form></aside>
     </div>
     <AdUnit placement="public" />
-    <footer className="public-footer">Powered by <a href="/">League Weaver</a></footer>
+    <footer className="public-footer">Powered by <Link href="/">League Weaver</Link></footer>
   </main>;
 }

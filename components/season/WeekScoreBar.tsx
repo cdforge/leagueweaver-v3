@@ -242,7 +242,7 @@ export function WeekScoreBar({
   const [now, setNow] = useState<Date | null>(nowProp ?? null);
   useEffect(() => {
     if (nowProp) return;
-    setNow(new Date());
+    queueMicrotask(() => setNow(new Date()));
     const id = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(id);
   }, [nowProp]);
@@ -287,7 +287,9 @@ export function WeekScoreBar({
   // Collapsed preference persists locally, matching how the app stores other UI state.
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
-    try { setCollapsed(window.localStorage.getItem("lw:scorebar:collapsed") === "1"); } catch { /* ignore */ }
+    queueMicrotask(() => {
+      try { setCollapsed(window.localStorage.getItem("lw:scorebar:collapsed") === "1"); } catch { /* ignore */ }
+    });
   }, []);
   const toggleCollapsed = () =>
     setCollapsed((current) => {

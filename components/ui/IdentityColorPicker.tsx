@@ -52,10 +52,13 @@ export function IdentityColorPicker({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const visibleLogo = logoUrl && failedLogo !== logoUrl ? logoUrl : undefined;
   useEffect(() => {
-    setSuggestions(colorSuggestions);
+    const handle = window.setTimeout(() => setSuggestions(colorSuggestions), 0);
+    return () => window.clearTimeout(handle);
   }, [colorSuggestions]);
   useEffect(() => {
-    if (open) setDraftColor(color);
+    if (!open) return;
+    const handle = window.setTimeout(() => setDraftColor(color), 0);
+    return () => window.clearTimeout(handle);
   }, [color, open]);
   useEffect(() => {
     const closeOtherMenu = (event: Event) => {

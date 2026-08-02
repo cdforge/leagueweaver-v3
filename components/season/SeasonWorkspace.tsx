@@ -477,10 +477,11 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
   const secondaryHolidays = holidays.filter((holiday) => holiday !== "Thanksgiving");
   const openScoreCount = week.games.filter((game) => game.homeScore == null || game.awayScore == null).length;
   const hasEnteredScores = week.games.some((game) => game.homeScore != null || game.awayScore != null);
-  const scoreEntryDue = openScoreCount > 0 && Date.now() >= new Date(nflWeekWindow.endsAt).getTime();
+  const renderNow = useMemo(() => new Date(), []);
+  const scoreEntryDue = openScoreCount > 0 && renderNow.getTime() >= new Date(nflWeekWindow.endsAt).getTime();
   const scoredCount = week.games.length - openScoreCount;
   // Clock-derived week phase (Upcoming / Live / Final) — same source the score bar uses, no feed.
-  const weekPhase = getWeekPhase(new Date(), nflWeekWindow);
+  const weekPhase = getWeekPhase(renderNow, nflWeekWindow);
   const playingTeamIds = new Set(week.games.flatMap((game) => [game.homeTeamId, game.awayTeamId]));
   const byeTeams = schedule.setup.teams.filter((team) => !playingTeamIds.has(team.id));
   const orderedGames = sortGamesForDisplay(week.games.filter((game) => teamById.has(game.homeTeamId) && teamById.has(game.awayTeamId)), displayedRanks);
@@ -709,10 +710,12 @@ function ScoreImageImport({ schedule, selectedWeek, onApply, onPendingChange }: 
   const week = schedule.weeks.find((item) => item.weekNumber === selectedWeek) ?? schedule.weeks[0];
   const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
   useEffect(() => {
-    setRows(null);
-    setWarnings([]);
-    setError(null);
-    setFileName("");
+    queueMicrotask(() => {
+      setRows(null);
+      setWarnings([]);
+      setError(null);
+      setFileName("");
+    });
   }, [selectedWeek]);
   useEffect(() => {
     onPendingChange(Boolean(rows?.length));
@@ -838,8 +841,10 @@ function InlinePlayoffScoreEditor({
   const valid = awayDraft !== "" && homeDraft !== "" && Number.isFinite(away) && Number.isFinite(home) && away >= 0 && home >= 0 && away !== home;
 
   useEffect(() => {
-    setAwayDraft(awayScore?.toString() ?? "");
-    setHomeDraft(homeScore?.toString() ?? "");
+    queueMicrotask(() => {
+      setAwayDraft(awayScore?.toString() ?? "");
+      setHomeDraft(homeScore?.toString() ?? "");
+    });
   }, [awayScore, homeScore]);
 
   return <div className={`inline-playoff-score${open ? " is-open" : ""}`}>
@@ -1206,7 +1211,9 @@ function PlatformSyncCard({
   const [syncMode, setSyncMode] = useState<PlatformSyncMode>(connection?.syncMode ?? "manual");
   const [swid, setSwid] = useState("");
   const [espnS2, setEspnS2] = useState("");
-  useEffect(() => setSyncMode(connection?.syncMode ?? "manual"), [connection?.syncMode]);
+  useEffect(() => {
+    queueMicrotask(() => setSyncMode(connection?.syncMode ?? "manual"));
+  }, [connection?.syncMode]);
   if (!canAccessPlatformSync) {
     return <div className="platform-sync-card is-locked"><div><LockKeyhole /><span><strong>Platform Sync</strong><small>Auto-filling weekly scores from a public ESPN or Sleeper league is a Pro feature. Manual score entry is always available.</small></span></div></div>;
   }
@@ -1327,19 +1334,23 @@ function DraftRankingReminder({ schedule, onSave, openRequest, onOpenSettings }:
   const [values, setValues] = useState<Record<string, number | undefined>>(() => draftPlaceValues(schedule));
   const tokenTimer = useRef<number | null>(null);
   useEffect(() => {
-    const update = () => setBeforeWeekTwo(Date.now() < Date.parse(cutoff));
+    const update = () => queueMicrotask(() => setBeforeWeekTwo(Date.now() < Date.parse(cutoff)));
     update();
     const interval = window.setInterval(update, 60 * 60 * 1000);
     return () => window.clearInterval(interval);
   }, [cutoff]);
   useEffect(() => {
-    setDismissed(window.localStorage.getItem(draftRankingReminderDismissalKey(schedule.id)) === "true");
+    queueMicrotask(() => setDismissed(window.localStorage.getItem(draftRankingReminderDismissalKey(schedule.id)) === "true"));
   }, [schedule.id]);
-  useEffect(() => setValues(draftPlaceValues(schedule)), [schedule]);
+  useEffect(() => {
+    queueMicrotask(() => setValues(draftPlaceValues(schedule)));
+  }, [schedule]);
   useEffect(() => {
     if (!openRequest) return;
-    setShowSettingsToken(false);
-    setOpen(true);
+    queueMicrotask(() => {
+      setShowSettingsToken(false);
+      setOpen(true);
+    });
   }, [openRequest]);
   useEffect(() => () => {
     if (tokenTimer.current) window.clearTimeout(tokenTimer.current);
@@ -1454,7 +1465,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   // Deep link from the account page (?recap=1) opens the recap straight away.
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("recap") !== "1") return;
-    setShowRecap(true);
+    queueMicrotask(() => setShowRecap(true));
     const url = new URL(window.location.href);
     url.searchParams.delete("recap");
     window.history.replaceState({}, "", url);
@@ -1514,40 +1525,58 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     setScoreModalOpen(false);
   };
   useEffect(() => {
+    let cancelled = false;
     const local = loadSeasonById(params.id);
     if (local) {
       latestSchedule.current = local;
       cloudScheduleSnapshot.current = CLOUD_SCHEDULE_ID.test(local.id) ? JSON.stringify(local) : null;
-      setSchedule(local);
-      setSeasonLoadState("ready");
-      setSeasonLoadError(null);
+      queueMicrotask(() => {
+        if (cancelled) return;
+        setSchedule(local);
+        setSeasonLoadState("ready");
+        setSeasonLoadError(null);
+      });
     } else if (params.id && CLOUD_SCHEDULE_ID.test(params.id)) {
-      setSeasonLoadState("loading");
-      setSeasonLoadError(null);
+      queueMicrotask(() => {
+        if (cancelled) return;
+        setSeasonLoadState("loading");
+        setSeasonLoadError(null);
+      });
       fetch(`/api/seasons/${params.id}`).then(async (response) => {
         const payload = await response.json().catch(() => null) as { schedule?: GeneratedSchedule; error?: string } | null;
         if (!response.ok || !payload?.schedule) throw new Error(apiErrorMessage(response.status, payload?.error, "That saved season could not be opened."));
         const loaded = freezeCompletedRankHistory(normalizeSeason(payload.schedule));
         latestSchedule.current = loaded;
         cloudScheduleSnapshot.current = JSON.stringify(loaded);
-        setSchedule(loaded);
-        setSeasonLoadState("ready");
+        if (!cancelled) {
+          setSchedule(loaded);
+          setSeasonLoadState("ready");
+        }
       }).catch((error) => {
-        setSchedule(null);
-        setSeasonLoadState("error");
-        setSeasonLoadError(error instanceof Error ? error.message : "That saved season could not be opened.");
+        if (!cancelled) {
+          setSchedule(null);
+          setSeasonLoadState("error");
+          setSeasonLoadError(error instanceof Error ? error.message : "That saved season could not be opened.");
+        }
       });
     } else {
-      setSeasonLoadState("ready");
-      setSeasonLoadError(null);
+      queueMicrotask(() => {
+        if (cancelled) return;
+        setSeasonLoadState("ready");
+        setSeasonLoadError(null);
+      });
     }
     fetch(`/api/entitlements${params.id ? `?scheduleId=${encodeURIComponent(params.id)}` : ""}`).then((response) => response.json()).then(setEntitlements).catch(() => undefined);
+    return () => { cancelled = true; };
   }, [params.id]);
   // H2: check whether this cloud schedule already has a live public page, so
   // the "Public page is live" panel survives a reload instead of only ever
   // showing right after a fresh Publish click.
   useEffect(() => {
-    if (!schedule || !CLOUD_SCHEDULE_ID.test(schedule.id)) { setPublishStatus(null); return; }
+    if (!schedule || !CLOUD_SCHEDULE_ID.test(schedule.id)) {
+      queueMicrotask(() => setPublishStatus(null));
+      return;
+    }
     let cancelled = false;
     fetch(`/api/publish?scheduleId=${encodeURIComponent(schedule.id)}`)
       .then((response) => response.json().catch(() => ({})) as Promise<{ published?: boolean; url?: string; slug?: string }>)
@@ -1558,12 +1587,14 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   // Surface the "save to an account" nudge for device-only schedules unless this
   // one was already dismissed. Cloud schedules are safe, so they never nudge.
   useEffect(() => {
-    if (!schedule || CLOUD_SCHEDULE_ID.test(schedule.id)) { setSaveNudgeDismissed(true); return; }
-    try {
-      setSaveNudgeDismissed(window.localStorage.getItem(`leagueweaver:v3:save-nudge:${schedule.id}`) === "dismissed");
-    } catch {
-      setSaveNudgeDismissed(false);
-    }
+    queueMicrotask(() => {
+      if (!schedule || CLOUD_SCHEDULE_ID.test(schedule.id)) { setSaveNudgeDismissed(true); return; }
+      try {
+        setSaveNudgeDismissed(window.localStorage.getItem(`leagueweaver:v3:save-nudge:${schedule.id}`) === "dismissed");
+      } catch {
+        setSaveNudgeDismissed(false);
+      }
+    });
   }, [schedule?.id]);
   const dismissSaveNudge = () => {
     setSaveNudgeDismissed(true);
@@ -1592,33 +1623,35 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   };
   useEffect(() => {
     if (!schedule || !CLOUD_SCHEDULE_ID.test(schedule.id)) {
-      setImportHistory([]);
+      queueMicrotask(() => setImportHistory([]));
       return;
     }
-    void loadImportHistory();
+    queueMicrotask(() => void loadImportHistory());
   }, [schedule?.id]);
   useEffect(() => {
     const week = Number(searchParams.get("week"));
-    if (Number.isInteger(week) && week >= 1 && week <= 17) setSelectedWeek(week);
+    if (Number.isInteger(week) && week >= 1 && week <= 17) queueMicrotask(() => setSelectedWeek(week));
     const requestedViewValue = searchParams.get("view");
     if (requestedViewValue === "scores") {
-      setView("league-schedule");
-      setScoreModalOpen(true);
+      queueMicrotask(() => {
+        setView("league-schedule");
+        setScoreModalOpen(true);
+      });
     }
-    if (requestedViewValue === "fairness") setView("league-schedule");
+    if (requestedViewValue === "fairness") queueMicrotask(() => setView("league-schedule"));
     const requestedView = (requestedViewValue === "schedule" || requestedViewValue === "scores" || requestedViewValue === "fairness" ? "league-schedule" : requestedViewValue) as ViewKey | null;
-    if (requestedView && VIEW_ITEMS.some((item) => item.key === requestedView)) setView(requestedView);
+    if (requestedView && VIEW_ITEMS.some((item) => item.key === requestedView)) queueMicrotask(() => setView(requestedView));
     const gameId = decodeURIComponent(window.location.hash.slice(1));
     const medalRank = Number(searchParams.get("medal"));
-    setHighlightedGame(gameId ? {
+    queueMicrotask(() => setHighlightedGame(gameId ? {
       id: gameId,
       medalRank: Number.isInteger(medalRank) && medalRank >= 1 && medalRank <= 3 ? medalRank : undefined,
       medalCategory: searchParams.get("medalCategory") || undefined,
-    } : null);
+    } : null));
   }, [searchParams]);
   useEffect(() => {
     if (!schedule || !selectedTeamId || schedule.setup.teams.some((team) => team.id === selectedTeamId)) return;
-    setSelectedTeamId(schedule.setup.teams[0]?.id ?? "");
+    queueMicrotask(() => setSelectedTeamId(schedule.setup.teams[0]?.id ?? ""));
   }, [schedule, selectedTeamId]);
   // Focus trap, scroll lock, focus restore, and Escape are handled by <Modal>.
   // Escape routing between the score sheet and its nested discard prompt lives in
@@ -1658,24 +1691,26 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
   }, [schedule, entitlements.signedIn]);
   useEffect(() => {
     if (!schedule) return;
-    setSimulationLoaded(false);
-    setSimulation(null);
-    try {
-      const stored = window.sessionStorage.getItem(`leagueweaver:v3:simulation:${schedule.id}`);
-      const parsed = stored ? JSON.parse(stored) as SimulationSandbox : null;
-      setSavedSimulation(parsed?.version === 1 && parsed.baseSchedule?.id === schedule.id ? parsed : null);
-    } catch {
-      setSavedSimulation(null);
-    } finally {
-      setSimulationLoaded(true);
-    }
+    queueMicrotask(() => {
+      setSimulationLoaded(false);
+      setSimulation(null);
+      try {
+        const stored = window.sessionStorage.getItem(`leagueweaver:v3:simulation:${schedule.id}`);
+        const parsed = stored ? JSON.parse(stored) as SimulationSandbox : null;
+        setSavedSimulation(parsed?.version === 1 && parsed.baseSchedule?.id === schedule.id ? parsed : null);
+      } catch {
+        setSavedSimulation(null);
+      } finally {
+        setSimulationLoaded(true);
+      }
+    });
   }, [schedule?.id]);
   useEffect(() => {
     if (!schedule || !simulationLoaded) return;
     const key = `leagueweaver:v3:simulation:${schedule.id}`;
     if (simulation) {
       window.sessionStorage.setItem(key, JSON.stringify(simulation));
-      setSavedSimulation(simulation);
+      queueMicrotask(() => setSavedSimulation(simulation));
     }
   }, [schedule?.id, simulation, simulationLoaded]);
   const canAccessScorekeeping = true;
@@ -1714,8 +1749,10 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
     if (connectParamRef.current) return;
     if (searchParams.get("connect") === "scores" && schedule && !schedule.setup.platformConnection && !simulation) {
       connectParamRef.current = true;
-      setConnectOpen(true);
-      setConnectAutoOpened(true);
+      queueMicrotask(() => {
+        setConnectOpen(true);
+        setConnectAutoOpened(true);
+      });
     }
   }, [searchParams, schedule, simulation]);
   // Close the connect flow and drop ?connect from the URL so a refresh (or the

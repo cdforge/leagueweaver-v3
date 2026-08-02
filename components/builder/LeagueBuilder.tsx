@@ -1422,15 +1422,23 @@ export function LeagueBuilder() {
   };
 
   useEffect(() => {
+    let cancelled = false;
     if (new URLSearchParams(window.location.search).get("start") === "new") {
-      startNewLeague();
+      queueMicrotask(() => {
+        if (!cancelled) startNewLeague();
+      });
       const url = new URL(window.location.href);
       url.searchParams.delete("start");
       window.history.replaceState({}, "", url);
-      return;
+      return () => { cancelled = true; };
     }
     const stored = loadSetup();
-    if (stored) setSetup(stored);
+    if (stored) {
+      queueMicrotask(() => {
+        if (!cancelled) setSetup(stored);
+      });
+    }
+    return () => { cancelled = true; };
   }, []);
   useEffect(() => saveSetup(setup), [setup]);
   useEffect(() => {
@@ -1440,7 +1448,7 @@ export function LeagueBuilder() {
     track.scrollTo({ left: activeStep.offsetLeft - (track.clientWidth - activeStep.offsetWidth) / 2, behavior: "smooth" });
   }, [step]);
   useEffect(() => {
-    setShowFieldErrors(false);
+    queueMicrotask(() => setShowFieldErrors(false));
     if (!stepMountedRef.current) { stepMountedRef.current = true; return; }
     builderContentRef.current?.focus({ preventScroll: true });
   }, [step]);
@@ -1466,7 +1474,7 @@ export function LeagueBuilder() {
   useEffect(() => {
     const importParam = new URLSearchParams(window.location.search).get("import");
     if (importParam !== "espn" && importParam !== "sleeper" && importParam !== "csv") return;
-    setImportSource(importParam);
+    queueMicrotask(() => setImportSource(importParam));
     const url = new URL(window.location.href);
     url.searchParams.delete("import");
     window.history.replaceState({}, "", url);
@@ -1755,8 +1763,10 @@ export function LeagueBuilder() {
   };
   useEffect(() => {
     if (!pendingQuickGenerate) return;
-    setPendingQuickGenerate(false);
-    generate();
+    queueMicrotask(() => {
+      setPendingQuickGenerate(false);
+      generate();
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingQuickGenerate]);
   const dismissSavePrompt = () => {

@@ -50,8 +50,10 @@ function ConsolationScoreEditor({
   const home = Number(homeDraft);
   const valid = awayDraft !== "" && homeDraft !== "" && Number.isFinite(away) && Number.isFinite(home) && away >= 0 && home >= 0 && away !== home;
   useEffect(() => {
-    setAwayDraft(game?.awayScore?.toString() ?? "");
-    setHomeDraft(game?.homeScore?.toString() ?? "");
+    queueMicrotask(() => {
+      setAwayDraft(game?.awayScore?.toString() ?? "");
+      setHomeDraft(game?.homeScore?.toString() ?? "");
+    });
   }, [game?.awayScore, game?.homeScore]);
   return <div className={`inline-playoff-score consolation-score${open ? " is-open" : ""}`}>
     <button type="button" className="inline-playoff-score-trigger" aria-expanded={open} onClick={() => setOpen((current) => !current)}><Pencil />{game?.awayScore != null && game.homeScore != null ? "Edit score" : "Enter score"}</button>

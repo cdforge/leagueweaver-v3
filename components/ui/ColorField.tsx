@@ -56,7 +56,10 @@ const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
 export function ColorField({ value, onChange }: { value: string; onChange: (hex: string) => void }) {
   const [text, setText] = useState(value.replace(/^#/, "").toUpperCase());
-  useEffect(() => { setText(value.replace(/^#/, "").toUpperCase()); }, [value]);
+  useEffect(() => {
+    const handle = window.setTimeout(() => setText(value.replace(/^#/, "").toUpperCase()), 0);
+    return () => window.clearTimeout(handle);
+  }, [value]);
 
   const { h, s, v } = rgbToHsv(hexToRgb(value));
   const hue = Math.round(h);

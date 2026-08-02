@@ -47,13 +47,15 @@ export function AccountIdentity({ identity, plan }: { identity?: AccountIdentity
 
   useEffect(() => {
     if (identity !== undefined) {
-      setResolved(identity);
-      setLoading(false);
+      queueMicrotask(() => {
+        setResolved(identity);
+        setLoading(false);
+      });
       return;
     }
     const supabase = createClient();
     if (!supabase) {
-      setLoading(false);
+      queueMicrotask(() => setLoading(false));
       return;
     }
     let active = true;
