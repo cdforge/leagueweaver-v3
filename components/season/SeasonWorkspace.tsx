@@ -14,6 +14,7 @@ import {
   ExternalLink,
   FileDown,
   FileSpreadsheet,
+  Flame,
   Gamepad2,
   History,
   ImagePlus,
@@ -51,6 +52,7 @@ import { WeekSelector } from "@/components/season/WeekSelector";
 import { SimulatorWorkspace, type SimulatorResultView } from "@/components/season/SimulatorWorkspace";
 import { StatsWorkspace, TiebreakerEditor } from "@/components/season/StatsWorkspace";
 import { TeamScheduleView } from "@/components/season/TeamSchedulePage";
+import { ThisWeekWorkspace } from "@/components/season/ThisWeekWorkspace";
 import { WeekScoreBar } from "@/components/season/WeekScoreBar";
 import { PlayoffPicturePanel } from "@/components/season/PlayoffPictureModal";
 import { StakesButton } from "@/components/season/StakesPanel";
@@ -110,7 +112,7 @@ import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
 import { GAME_DETAIL_CACHE_PREFIX, type GameDetailPlayerStat } from "@/lib/gameDetail";
 import type { GeneratedSchedule, ImportHistoryEvent, ImportPreview, LeagueSetupInput, PlatformConnection, PlatformSyncMode, PlayoffGame, ScheduledGame, Team, TiebreakerSettings } from "@/lib/types";
 
-type ViewKey = "league-schedule" | "team-schedule" | "gotw" | "matchup-ratings" | "standings" | "playoffs" | "simulator" | "settings";
+type ViewKey = "this-week" | "league-schedule" | "team-schedule" | "gotw" | "matchup-ratings" | "standings" | "playoffs" | "simulator" | "settings";
 const CLOUD_SCHEDULE_ID = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
 
 type ExistingSeasonConflict = {
@@ -171,6 +173,7 @@ function seasonTimeframeLabel(seasonYear: number, weeks: number) {
 }
 
 const VIEW_ITEMS: Array<{ key: ViewKey; label: string; icon: typeof CalendarDays; pro?: boolean }> = [
+  { key: "this-week", label: "This Week", icon: Flame },
   { key: "league-schedule", label: "League Schedule", icon: CalendarDays },
   { key: "team-schedule", label: "Team Schedule", icon: UsersRound },
   { key: "gotw", label: "Game of the Week", icon: Star },
@@ -1424,7 +1427,7 @@ function SimulatorLaunch({ hasSavedRun, onPlay, onStartFromReal }: { hasSavedRun
   </section>;
 }
 
-export function SeasonWorkspace({ initialView = "league-schedule" }: { initialView?: ViewKey }) {
+export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: ViewKey }) {
   const params = useParams<{ id: string; teamId?: string }>();
   const router = useRouter();
   const { openSignIn } = useAuthModal();
@@ -2325,6 +2328,7 @@ export function SeasonWorkspace({ initialView = "league-schedule" }: { initialVi
         </div>}
         <DraftRankingReminder schedule={schedule} onSave={onSaveDraftPlaces} openRequest={draftRankingRequest} onOpenSettings={openDraftRankingSettings} />
         <div className="workspace-content">
+          {view === "this-week" && <ThisWeekWorkspace schedule={activeSchedule} playerStats={gameDetailPlayerStats} simulationProbabilities={simulationProbabilityByGame} onOpenGame={openGameDetail} />}
           {view === "league-schedule" && <ScheduleView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} canAccessPlayoffs={canAccessPlayoffs} onOpenScores={openScoreEntry} onOpenPlayoffs={openPlayoffScores} onOpenGame={openGameDetail} highlightedGame={highlightedGame} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
           {view === "team-schedule" && <TeamScheduleView schedule={activeSchedule} teamId={selectedTeamId} onSelectTeam={selectTeamSchedule} onSelectWeek={openLeagueScheduleWeek} simulationResults={simulationResultByGame} />}
           {view === "gotw" && <GotwWorkspace schedule={activeSchedule} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
