@@ -13,21 +13,21 @@ import { formatPoints, gameOfWeekStatusLabel, getScheduleGameSignals } from "@/l
 import { formatRecord, getEnteringWeekRankSnapshot } from "@/lib/standings";
 import { teamInitials } from "@/lib/teamIdentity";
 import { getWeekPhase } from "@/lib/weekPhase";
-import type { Division, GeneratedSchedule, ScheduledGame, Team } from "@/lib/types";
+import type { GeneratedSchedule, ScheduledGame, Team } from "@/lib/types";
 
 type LayoutMode = "featured" | "grid";
 
 function useStoredMode(scheduleId: string): [LayoutMode, (mode: LayoutMode) => void] {
   const key = `leagueweaver:v3:this-week-mode:${scheduleId}`;
-  const [mode, setModeState] = React.useState<LayoutMode>("featured");
-  React.useEffect(() => {
+  const [mode, setModeState] = React.useState<LayoutMode>(() => {
     try {
+      if (typeof window === "undefined") return "featured";
       const stored = window.localStorage.getItem(key);
-      if (stored === "grid" || stored === "featured") setModeState(stored);
+      return stored === "grid" || stored === "featured" ? stored : "featured";
     } catch {
-      setModeState("featured");
+      return "featured";
     }
-  }, [key]);
+  });
   const setMode = (next: LayoutMode) => {
     setModeState(next);
     try { window.localStorage.setItem(key, next); } catch { /* ignore quota */ }
