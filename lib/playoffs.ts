@@ -144,8 +144,11 @@ export function isPlayoffPlacementUsable(mode: Exclude<PlayoffPlacementMode, "au
   // Grouped "halves" is structurally possible for any EVEN division count (2/4/6/8): two
   // divisions split by division, 4/6/8 split into two conferences. The conference *assignment*
   // itself is checked in resolvePlayoffPlacementMode (which sees the full setup).
-  if (mode === "division-halves") return divisionCount >= 2 && divisionCount % 2 === 0 && fieldSize % 2 === 0 && fieldSize >= divisionCount;
-  return divisionCount > 1 && fieldSize >= divisionCount;
+  // No `fieldSize >= divisionCount` floor: when the field is smaller than the division count
+  // (S < D), the seeding keeps the top division leaders by record and the lowest-record division
+  // winners miss the playoffs — the commissioner's intended "leader is the only way in" behavior.
+  if (mode === "division-halves") return divisionCount >= 2 && divisionCount % 2 === 0 && fieldSize % 2 === 0;
+  return divisionCount > 1;
 }
 
 export function resolvePlayoffPlacementMode(setup: Pick<LeagueSetupInput, "divisions" | "conferences" | "playoffs">): ResolvedPlayoffPlacementMode {
