@@ -1156,6 +1156,40 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
     { key: "logos", label: "Logos", sub: "Optional" },
   ];
 
+  // Preview legend (top-right of the live-preview head): decodes the bracket swatches by conference,
+  // division, and the neutral at-large / wild-card marker — adapting to the league's structure so it
+  // only shows the groupings that actually drive this bracket.
+  const hasWildcards = p.fieldSize > divisionCount;
+  const legendMode: "halves-conf" | "divisions" | "colorkey" | "hidden" =
+    divisionCount <= 1 ? "hidden"
+    : conferencesActive && previewHalves ? "halves-conf"
+    : previewHalves || p.placementMode === "division-leaders" ? "divisions"
+    : p.placementMode === "overall" ? "colorkey"
+    : "hidden";
+  const WILDCARD_COLOR = "#586761";
+  const legendMark = (color: string, logoUrl: string | undefined, initials: string) =>
+    logoUrl
+      ? <img className="ppw-slogo" src={logoUrl} alt="" />
+      : <b className="ppw-dchip" style={{ background: color, color: readableTextColor(color) } as React.CSSProperties}>{initials}</b>;
+  const legendDivision = (division: Division) => <span key={division.id} className="ppw-legend-item is-div">{legendMark(division.color, division.logoUrl, divInitials(division))}<span className="ppw-legend-name">{division.name}</span></span>;
+  const legendWildcard = <span className="ppw-legend-item is-wild"><b className="ppw-dchip" style={{ background: WILDCARD_COLOR, color: "#fff" }}>#</b><span className="ppw-legend-name">Wild card</span></span>;
+  // Marks a slot that is reserved for a division leader (auto-bid). Shown wherever leaders are protected.
+  const legendLeader = <span className="ppw-legend-item is-leader"><ShieldCheck className="ppw-legend-glyph" aria-hidden="true" /><span className="ppw-legend-name">Division leader</span></span>;
+  const showsLeaders = legendMode === "halves-conf" || legendMode === "divisions";
+  const previewLegend = legendMode === "hidden" ? null : (
+    <div className="ppw-legend" aria-label="Bracket legend">
+      {legendMode === "halves-conf" && setup.conferences!.map((conference, hi) => (
+        <div key={conference.id} className="ppw-legend-group">
+          <span className="ppw-legend-item is-conf">{legendMark(conference.color, conference.logoUrl, resolveInitials(conference.initials, conference.name.slice(0, 3).toUpperCase()))}<span className="ppw-legend-name" style={{ color: accessibleAccentColor(conference.color, "#171d1a") }}>{conference.name}</span></span>
+          {divisions.filter((division) => halfDivisionIds[hi].has(division.id)).map(legendDivision)}
+        </div>
+      ))}
+      {(legendMode === "divisions" || legendMode === "colorkey") && divisions.map(legendDivision)}
+      {showsLeaders && legendLeader}
+      {showsLeaders && hasWildcards && legendWildcard}
+    </div>
+  );
+
   return <div className="step-stack playoff-wizard">
     <div className="section-heading"><span className="step-kicker">Step 5 of 6</span><h1>Shape the playoffs.</h1><p>Set the field and format, fine-tune the rules, then brand every round. You can change any of this later on the Playoffs page.</p></div>
 
@@ -1260,7 +1294,7 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
       </div>
 
       <aside className="playoff-wizard-preview" aria-label="Live bracket preview">
-        <div className="ppw-preview-head"><span className="ppw-preview-eyebrow">Live preview</span></div>
+        <div className="ppw-preview-head"><span className="ppw-preview-eyebrow">Live preview</span>{previewLegend}</div>
         {(consolationAvailable || placementChart.length > 0) && <div className="ppw-preview-toggle" role="tablist" aria-label="Preview view">
           <button type="button" role="tab" aria-selected={previewView === "championship"} className={previewView === "championship" ? "active" : ""} onClick={() => setPreviewView("championship")}>Championship</button>
           {consolationAvailable && <button type="button" role="tab" aria-selected={previewView === "consolation"} className={previewView === "consolation" ? "active" : ""} onClick={() => setPreviewView("consolation")}>Consolation</button>}

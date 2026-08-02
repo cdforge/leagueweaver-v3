@@ -5296,8 +5296,18 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 
 /* live preview (dark broadcast island — sits full-width below the form) */
 .playoff-wizard-preview { background: var(--pk); border-radius: var(--radius); padding: 16px 18px 18px; color: #eaf1ee; min-width: 0; }
-.ppw-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 3px; }
+.ppw-preview-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px 16px; margin-bottom: 3px; flex-wrap: wrap; }
 .ppw-preview-eyebrow { font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .12em; text-transform: uppercase; color: #7fe3ac; }
+/* Bracket legend — decodes the preview swatches (conference / division / wild card), top-right of the head. */
+.ppw-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; justify-content: flex-end; max-width: 64%; }
+.ppw-legend-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding-left: 9px; border-left: 1px solid var(--pk-line); }
+.ppw-legend-item { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.ppw-legend-item .ppw-slogo, .ppw-legend-item .ppw-dchip { width: 15px; height: 15px; min-width: 15px; }
+.ppw-legend-item .ppw-legend-glyph { width: 14px; height: 14px; min-width: 14px; color: var(--pk-ink); }
+.ppw-legend-name { font-size: var(--text-2xs); font-weight: var(--w-bold); color: var(--pk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+.ppw-legend-item.is-conf .ppw-legend-name { font-weight: var(--w-black); letter-spacing: .01em; }
+.ppw-legend-item.is-wild .ppw-legend-name { color: var(--pk-mut); }
+@media (max-width: 880px) { .ppw-legend { max-width: 100%; justify-content: flex-start; } }
 .ppw-preview-live { font-size: 10px; font-weight: var(--w-black); letter-spacing: .07em; text-transform: uppercase; color: #7fe3ac; background: rgba(63,191,127,.16); padding: 3px 9px; border-radius: var(--radius-pill); display: inline-flex; align-items: center; gap: 6px; }
 .ppw-preview-live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #3fbf7f; animation: bracket-live-pulse 1.8s ease-out infinite; }
 @media (prefers-reduced-motion: reduce) { .ppw-preview-live::before { animation: none; } }
