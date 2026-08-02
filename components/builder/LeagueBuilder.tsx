@@ -217,6 +217,7 @@ function CreatePathStep({ setup, mode, weeks, quickCreateReady, quickCreateReaso
   const rec = recommendedPlayoffStructure(setup.teams.length, weeks);
   const grouping = rosterGroupingNoun(setup);
   const quickSelected = mode === "quick";
+  const quickSeedLabel = setup.priorSeason.hasData ? "Imported last-season history" : "Current team order";
   return (
     <div className="step-stack create-path-screen">
       <div className="section-heading create-path-heading">
@@ -251,7 +252,7 @@ function CreatePathStep({ setup, mode, weeks, quickCreateReady, quickCreateReaso
             <span className="create-path-choice-icon"><Zap aria-hidden="true" /></span>
             <span className="create-path-choice-copy">
               <strong id="quick-create-heading">Quick create</strong>
-              <small>{quickSelected ? "Pick a season length. League Weaver applies recommended playoff settings and generates from here." : "Use recommended settings and generate from the footer CTA."}</small>
+              <small>{quickSelected ? "Pick a season length. League Weaver applies recommended settings, then sends you to Review." : "Use recommended settings and review before generating."}</small>
             </span>
           </div>
           {quickSelected && <div className="create-path-quick-settings">
@@ -265,13 +266,13 @@ function CreatePathStep({ setup, mode, weeks, quickCreateReady, quickCreateReaso
             <ul className="build-fork-summary">
               <li>{grouping} · <b>{setup.teams.length} teams</b>{setup.divisions.length > 1 ? ` · ${setup.divisions.length} divisions` : ""}</li>
               <li><b>{weeks}-week</b> season · <b>{rec.playoffWeeks}-week</b> playoff</li>
-              <li><b>{rec.fieldSize}-team</b> playoff · gold · single-elimination</li>
-              <li>Seeded by <b>last season</b></li>
+              <li><b>{rec.fieldSize}-team</b> recommended playoff field</li>
+              <li>Seeding starts from <b>{quickSeedLabel}</b></li>
               <li>Balanced schedule rules &amp; standard tiebreakers</li>
             </ul>
           </div>}
           {quickSelected && <div className="create-path-quick-action">
-            <p className="build-fork-note"><CircleAlert aria-hidden="true" />{quickCreateReady ? "These lock in when you generate. To change them later you’ll regenerate the schedule." : quickCreateReason}</p>
+            <p className="build-fork-note build-fork-note-danger"><CircleAlert aria-hidden="true" />{quickCreateReady ? "These lock when you generate. To change them later, you'll regenerate the schedule." : quickCreateReason}</p>
           </div>}
         </section>
       </div>
@@ -293,7 +294,6 @@ const QUICK_CREATE_DEFAULTS = {
     consolationMode: "standard",
     thirdPlaceGame: true,
   },
-  priorSeason: { enabled: true, source: "regular-season", entryMode: "manual", hasData: false },
   weekOne: { rankingSource: "prior-season" },
   fairness: { maxHomeAwayStreak: 3, finalWeekDivisional: true, prioritizeOpeningWeek: true, prioritizeThanksgiving: true, preventImmediateRematches: true },
   display: { venues: true, managers: true, cityNames: true },
@@ -315,10 +315,13 @@ function applyQuickCreateDefaults(setup: LeagueSetupInput, weeks: 13 | 14): Leag
   const rec = recommendedPlayoffStructure(setup.teams.length, weeks);
   const fieldSize = rec.fieldSize;
   const placementMode = resolveQuickPlacement(setup.divisions.length, fieldSize);
+  const priorSeason = setup.priorSeason.hasData
+    ? { ...setup.priorSeason, enabled: true, entryMode: "history" as const, source: "regular-season" as const }
+    : { ...setup.priorSeason, enabled: true, entryMode: "manual" as const, hasData: false };
   return {
     ...setup,
     weeks,
-    priorSeason: { ...setup.priorSeason, ...d.priorSeason },
+    priorSeason,
     weekOne: { ...setup.weekOne, ...d.weekOne },
     fairness: { ...setup.fairness, ...d.fairness },
     display: { ...setup.display, ...d.display },
@@ -1453,10 +1456,16 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
 }
 
 function ReviewStep({ setup }: { setup: LeagueSetupInput }) {
+  const weekOneLabel = setup.weekOne.rankingSource === "draft-day"
+    ? hasCompleteDraftRanking(setup) ? "draft-day place" : "draft-day place (set after the draft)"
+    : setup.priorSeason.entryMode === "history" ? "last season's finish"
+      : setup.priorSeason.entryMode === "random" ? "sealed random order"
+        : setup.priorSeason.entryMode === "manual" ? "manual team order"
+          : "current team order";
   const checks = [
     `${setup.teams.length} teams balanced across ${setup.divisions.length} divisions`,
     `${setup.weeks}-week season with one matchup per team each week`,
-    `Week 1 ranked by ${setup.weekOne.rankingSource === "draft-day" ? hasCompleteDraftRanking(setup) ? "draft-day place" : "draft-day place (set after the draft)" : "last season’s finish"}`,
+    `Week 1 ranked by ${weekOneLabel}`,
     "Every divisional opponent scheduled twice",
     `Home and away streaks capped at ${setup.fairness.maxHomeAwayStreak}`,
   ];
@@ -1504,7 +1513,7 @@ type BuilderActionProps = {
 };
 
 function BuilderActionButtons({ step, createPath = false, createPathMode = "customize", quickCreateReady = true, generating, skipDraftRankForNow, back, next, generate }: BuilderActionProps) {
-  const createPathLabel = createPathMode === "quick" ? "Quick create schedule" : "Customize everything";
+  const createPathLabel = createPathMode === "quick" ? "Review quick create" : "Customize everything";
   const CreatePathIcon = createPathMode === "quick" ? Zap : SlidersHorizontal;
   const showReviewFlag = !createPath && step === STEPS.length - 2;
   return (
@@ -1622,7 +1631,6 @@ export function LeagueBuilder() {
   const [createPathMode, setCreatePathMode] = useState<CreatePathMode>("customize");
   const [createPathWeeks, setCreatePathWeeks] = useState<13 | 14>(14);
   const [quickStartAvailable, setQuickStartAvailable] = useState(false);
-  const [pendingQuickGenerate, setPendingQuickGenerate] = useState(false);
   const [connectedSavedLeaguePrompt, setConnectedSavedLeaguePrompt] = useState<SavedLeaguePreset | null>(null);
   const [logoSavePrompt, setLogoSavePrompt] = useState<LogoSavePrompt | null>(null);
   const [logoSaveBusy, setLogoSaveBusy] = useState(false);
@@ -1850,7 +1858,7 @@ export function LeagueBuilder() {
           setError(quickCreateReason ?? "Quick Create is not ready for this league yet.");
           return;
         }
-        quickCreateSchedule(createPathWeeks);
+        reviewQuickCreate(createPathWeeks);
         return;
       }
       customizeEverything();
@@ -2115,21 +2123,13 @@ export function LeagueBuilder() {
     }
     runGenerate();
   };
-  // Quick create (B2): apply the PVE house defaults to the current roster, then
-  // run the normal generate path (same validation, save-league prompt, and guest
-  // warning). setSetup is async, so we flip a flag and let the effect below fire
-  // generate() once the defaulted setup has committed.
-  const quickCreateSchedule = (weeks: 13 | 14) => {
+  // Quick create applies the recommended setup, then lands on Review so the
+  // commissioner can confirm everything before the schedule is generated.
+  const reviewQuickCreate = (weeks: 13 | 14) => {
     if (generating) return;
     setSetup((current) => applyQuickCreateDefaults(current, weeks));
-    setPendingQuickGenerate(true);
+    advanceToStep(STEPS.length - 1);
   };
-  useEffect(() => {
-    if (!pendingQuickGenerate) return;
-    setPendingQuickGenerate(false);
-    generate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingQuickGenerate]);
   const dismissSavePrompt = () => {
     savePromptResolved.current = true;
     setSaveLeaguePrompt(false);
