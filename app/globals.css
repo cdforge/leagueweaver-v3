@@ -1345,6 +1345,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .build-fork-go svg { width: 16px; }
 .build-fork-secondary { display: flex; flex-direction: column; gap: 8px; padding: 18px 16px; background: var(--canvas); }
 .build-fork-secondary-head { display: inline-flex; align-items: center; gap: 6px; }
+.build-fork-weeks { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.build-fork-weeks > span { font-size: var(--text-2xs); font-weight: var(--w-bold); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .build-fork-secondary-head svg { width: 16px; color: var(--field); }
 .build-fork-secondary-head strong { font-size: var(--text-md); }
 .build-fork-secondary > small { color: var(--muted); font-size: var(--text-xs); }
@@ -2876,6 +2878,11 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .team-directory-division-group { display: flex; flex-direction: column; gap: 10px; }
 .team-directory-division-head { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 2px solid color-mix(in srgb, var(--line-strong), transparent 30%); }
 .team-directory-division-head > strong { font-size: var(--text-md); font-weight: var(--w-black); }
+/* Conference wrapper (4/6/8-division leagues): the two conferences head their division sections,
+   each becoming one half of the playoff bracket. */
+.team-directory-conference-group { display: flex; flex-direction: column; gap: 16px; }
+.team-directory-conference-head { display: flex; align-items: center; gap: 8px; }
+.team-directory-conference-group > .team-directory-division-group { padding-left: 14px; border-left: 2px solid color-mix(in srgb, var(--line-strong), transparent 55%); }
 .team-directory-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .team-directory-card { position: relative; min-width: 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--team-brand) 28%, var(--line)); border-left: 5px solid var(--team-brand); border-radius: var(--radius); background: white; padding: 14px 15px 12px; color: var(--ink); text-align: left; cursor: pointer; }
 .team-directory-card::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; background: var(--team-brand); }
@@ -5288,21 +5295,38 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
    Branding) + a live bracket preview + per-round/per-game logos.
    ========================================================================== */
 .playoff-wizard { max-width: none; }
-.playoff-wizard-subnav { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
-.playoff-wizard-subnav button { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; cursor: pointer; padding: 10px 15px 13px; border-radius: var(--radius-sm) var(--radius-sm) 0 0; color: var(--muted); font-family: inherit; position: relative; }
-.playoff-wizard-subnav button:hover:not(.active) { color: var(--ink); }
-.playoff-wizard-subnav .ppw-n { flex: 0 0 auto; width: 23px; height: 23px; border-radius: 50%; display: grid; place-items: center; font-size: var(--text-2xs); font-weight: var(--w-black); background: var(--canvas); border: 1.5px solid var(--line-strong); color: var(--muted); }
-.playoff-wizard-subnav button.active { color: var(--ink); }
-.playoff-wizard-subnav button.active .ppw-n { background: var(--field); border-color: var(--field); color: #fff; }
-.playoff-wizard-subnav button.active::after { content: ""; position: absolute; left: 13px; right: 13px; bottom: -1px; height: 3px; border-radius: 3px; background: var(--field); }
-.playoff-wizard-subnav .ppw-lab { text-align: left; line-height: 1.18; }
-.playoff-wizard-subnav .ppw-lab strong { display: block; font-size: var(--text-sm); font-weight: var(--w-bold); }
-.playoff-wizard-subnav .ppw-lab small { color: var(--muted); font-size: var(--text-2xs); }
-.playoff-wizard-subnav button:focus-visible { outline: 2px solid var(--field); outline-offset: 2px; }
+.playoff-wizard-subnav, .wizard-subnav { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.playoff-wizard-subnav button, .wizard-subnav button { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; cursor: pointer; padding: 10px 15px 13px; border-radius: var(--radius-sm) var(--radius-sm) 0 0; color: var(--muted); font-family: inherit; position: relative; }
+.playoff-wizard-subnav button:hover:not(.active), .wizard-subnav button:hover:not(.active) { color: var(--ink); }
+.playoff-wizard-subnav .ppw-n, .wizard-subnav .ppw-n { flex: 0 0 auto; width: 23px; height: 23px; border-radius: 50%; display: grid; place-items: center; font-size: var(--text-2xs); font-weight: var(--w-black); background: var(--canvas); border: 1.5px solid var(--line-strong); color: var(--muted); }
+.playoff-wizard-subnav button.active, .wizard-subnav button.active { color: var(--ink); }
+.playoff-wizard-subnav button.active .ppw-n, .wizard-subnav button.active .ppw-n { background: var(--field); border-color: var(--field); color: #fff; }
+.playoff-wizard-subnav button.active::after, .wizard-subnav button.active::after { content: ""; position: absolute; left: 13px; right: 13px; bottom: -1px; height: 3px; border-radius: 3px; background: var(--field); }
+.playoff-wizard-subnav .ppw-lab, .wizard-subnav .ppw-lab { text-align: left; line-height: 1.18; }
+.playoff-wizard-subnav .ppw-lab strong, .wizard-subnav .ppw-lab strong { display: block; font-size: var(--text-sm); font-weight: var(--w-bold); }
+.playoff-wizard-subnav .ppw-lab small, .wizard-subnav .ppw-lab small { color: var(--muted); font-size: var(--text-2xs); }
+.playoff-wizard-subnav button:focus-visible, .wizard-subnav button:focus-visible { outline: 2px solid var(--field); outline-offset: 2px; }
+
+/* Grouped wizard step: sub-tab bar above the active sub-panel (Teams & Divisions, Season & Rules). */
+.wizard-group-step { display: flex; flex-direction: column; gap: 22px; }
+/* On narrow screens the 4-tab Season & Rules row scrolls sideways rather than wrapping into a tall stack. */
+@media (max-width: 560px) {
+  .wizard-subnav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .wizard-subnav::-webkit-scrollbar { display: none; }
+  .wizard-subnav button { flex: 0 0 auto; }
+}
 
 .playoff-wizard-layout { display: grid; gap: 18px; }
 .playoff-wizard-form { display: grid; gap: 20px; min-width: 0; }
 .ppw-group { display: grid; gap: 9px; min-width: 0; }
+/* Recommended-playoffs callout on the Format sub-tab. */
+.ppw-reco { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 13px; border-radius: var(--radius); border: 1px solid color-mix(in srgb, var(--field) 40%, var(--line)); background: color-mix(in srgb, var(--field) 8%, var(--surface)); }
+.ppw-reco.is-set { border-color: var(--line); background: var(--surface); }
+.ppw-reco-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ppw-reco-copy strong { font-size: var(--text-sm); font-weight: var(--w-bold); }
+.ppw-reco-copy small { font-size: var(--text-2xs); color: var(--muted); }
+.ppw-reco-apply { flex: 0 0 auto; padding: 6px 12px; }
+.ppw-reco.is-set > svg { flex: 0 0 auto; color: var(--field); width: 18px; height: 18px; }
 
 /* presets */
 .ppw-presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -5332,8 +5356,22 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 
 /* live preview (dark broadcast island — sits full-width below the form) */
 .playoff-wizard-preview { background: var(--pk); border-radius: var(--radius); padding: 16px 18px 18px; color: #eaf1ee; min-width: 0; }
-.ppw-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 3px; }
+.ppw-preview-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px 16px; margin-bottom: 3px; flex-wrap: wrap; }
 .ppw-preview-eyebrow { font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .12em; text-transform: uppercase; color: #7fe3ac; }
+/* Bracket legend — decodes the preview swatches (conference / division / wild card), top-right of the head. */
+.ppw-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; justify-content: flex-end; max-width: 64%; }
+.ppw-legend-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding-left: 9px; border-left: 1px solid var(--pk-line); }
+.ppw-legend-item { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.ppw-legend-item .ppw-slogo { width: 15px; height: 15px; min-width: 15px; }
+/* Let the color chip grow to fit 2–3 char initials so the lettering stays centered (a fixed
+   15px square cramped "NOR"/"SOU"); the base .ppw-dchip already centers via place-items. */
+.ppw-legend-item .ppw-dchip { height: 15px; min-width: 15px; padding: 0 4px; line-height: 1; }
+.ppw-legend-kind { font-style: normal; font-weight: var(--w-medium); color: var(--pk-mut); }
+.ppw-legend-item .ppw-legend-glyph { width: 14px; height: 14px; min-width: 14px; color: var(--pk-ink); }
+.ppw-legend-name { font-size: var(--text-2xs); font-weight: var(--w-bold); color: var(--pk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+.ppw-legend-item.is-conf .ppw-legend-name { font-weight: var(--w-black); letter-spacing: .01em; }
+.ppw-legend-item.is-wild .ppw-legend-name { color: var(--pk-mut); }
+@media (max-width: 880px) { .ppw-legend { max-width: 100%; justify-content: flex-start; } }
 .ppw-preview-live { font-size: 10px; font-weight: var(--w-black); letter-spacing: .07em; text-transform: uppercase; color: #7fe3ac; background: rgba(63,191,127,.16); padding: 3px 9px; border-radius: var(--radius-pill); display: inline-flex; align-items: center; gap: 6px; }
 .ppw-preview-live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #3fbf7f; animation: bracket-live-pulse 1.8s ease-out infinite; }
 @media (prefers-reduced-motion: reduce) { .ppw-preview-live::before { animation: none; } }
@@ -5396,6 +5434,8 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .ppw-slot { display: flex; align-items: center; gap: 7px; padding: 6px 8px; min-width: 0; font-size: var(--text-2xs); background: color-mix(in srgb, var(--slot-c, #586761) 28%, transparent); }
 .ppw-match .ppw-slot + .ppw-slot { border-top: 1px solid var(--pk-line); }
 .ppw-slot .ppw-name { color: inherit; font-weight: var(--w-bold); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* Reserved-for-division-leader marker (auto-bid, hosts) — inherits the slot/side accent color. */
+.ppw-slot-leader { flex: 0 0 auto; width: 12px; height: 12px; margin-left: auto; opacity: .95; }
 .ppw-slogo { flex: 0 0 auto; width: 17px; height: 17px; border-radius: 4px; object-fit: contain; background: rgba(255,255,255,.92); padding: 1px; }
 .ppw-match.ppw-gold { border-left-color: var(--gold); }
 .ppw-preview-toggle { display: inline-flex; gap: 2px; padding: 2px; margin: 9px 0 3px; border-radius: var(--radius-sm); background: rgba(255,255,255,.06); }
@@ -5530,6 +5570,10 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .ppw-chart-row.range .ppw-chart-place { color: var(--pk-mut, #94a49c); }
 .ppw-chart-teams { min-width: 0; color: var(--pk-mut, #94a49c); font-size: var(--text-xs); line-height: 1.4; overflow: hidden; text-overflow: ellipsis; }
 .ppw-chart-row.exact .ppw-chart-teams { color: #dfe7e3; }
+/* Tier separators in the placement chart: championship | consolation | eliminated. */
+.ppw-chart-sep { display: flex; align-items: center; gap: 8px; padding: 8px 2px 4px; }
+.ppw-chart-sep::before, .ppw-chart-sep::after { content: ""; flex: 1; height: 1px; background: var(--pk-line, #33403a); }
+.ppw-chart-sep span { flex: 0 0 auto; font-size: 9px; font-weight: var(--w-black); letter-spacing: .09em; text-transform: uppercase; color: var(--pk-mut, #94a49c); }
 
 /* conference assignment section in the Divisions step */
 .conference-stage { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; padding-top: 18px; border-top: 1px solid rgba(0,0,0,.08); }

@@ -12,6 +12,7 @@ import { FloatingPopover } from "@/components/ui/FloatingPopover";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
 import { getTeamClinchTimelines, type TeamClinchTimeline } from "@/lib/clinch";
+import { hasConferences } from "@/lib/conferences";
 import { isGamePlayed } from "@/lib/game";
 import { calculateMatchupRating, formatGameDateTimeOverride, getMatchupRatingRange, getMatchupSignal, toMatchupScore10 } from "@/lib/matchups";
 import { getWeekOneRankMap } from "@/lib/rankings";
@@ -187,11 +188,12 @@ function TeamScheduleDirectory({ schedule, summaries, clinches, onSelectTeam }: 
     );
   };
 
-  // Group by division. Conferences are not a first-class entity yet (Division has no
-  // conferenceId), so no conference dividers are shown — matching "if there are no
-  // conferences, don't divide by conference." When a `conferences` grouping is added
-  // to the setup, wrap these division sections under conference headers here.
+  // Group by division. For 4/6/8-division leagues that carry a conference assignment, the
+  // division sections nest under two conference headers (each conference is one half of the
+  // playoff bracket); otherwise divisions render flat. `hasConferences` is the same gate the
+  // playoff seeding and clinch engine use, so the grouping here can't diverge from the bracket.
   const showDivisionGroups = schedule.setup.divisions.length > 1;
+  const conferencesActive = hasConferences(schedule.setup);
   const divisionGroups = schedule.setup.divisions
     .map((division) => ({
       division,
@@ -204,18 +206,33 @@ function TeamScheduleDirectory({ schedule, summaries, clinches, onSelectTeam }: 
     .filter((summary) => !divisionById.has(summary.team.divisionId))
     .sort((left, right) => left.liveRank - right.liveRank);
 
+  const renderDivisionGroup = (group: (typeof divisionGroups)[number]) => (
+    <section className="team-directory-division-group" key={group.division.id}>
+      <header className="team-directory-division-head">
+        <DivisionIdentity division={group.division} detail={`${group.teams.length} team${group.teams.length === 1 ? "" : "s"}`} />
+      </header>
+      <div className="team-directory-grid">{group.teams.map(renderCard)}</div>
+    </section>
+  );
+
   return (
     <div className="team-schedule-directory">
       {showDivisionGroups ? (
         <>
-          {divisionGroups.map((group) => (
-            <section className="team-directory-division-group" key={group.division.id}>
-              <header className="team-directory-division-head">
-                <DivisionIdentity division={group.division} detail={`${group.teams.length} team${group.teams.length === 1 ? "" : "s"}`} />
-              </header>
-              <div className="team-directory-grid">{group.teams.map(renderCard)}</div>
-            </section>
-          ))}
+          {conferencesActive
+            ? schedule.setup.conferences!.map((conference) => {
+                const confGroups = divisionGroups.filter((group) => group.division.conferenceId === conference.id);
+                if (confGroups.length === 0) return null;
+                return (
+                  <section className="team-directory-conference-group" key={conference.id}>
+                    <header className="team-directory-conference-head">
+                      <DivisionIdentity division={conference} detail={`${confGroups.length} division${confGroups.length === 1 ? "" : "s"}`} />
+                    </header>
+                    {confGroups.map(renderDivisionGroup)}
+                  </section>
+                );
+              })
+            : divisionGroups.map(renderDivisionGroup)}
           {orphanTeams.length > 0 && (
             <section className="team-directory-division-group">
               <header className="team-directory-division-head"><strong>Independent</strong></header>
