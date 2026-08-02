@@ -53,6 +53,8 @@ export interface Team {
   color: string;
   logoUrl?: string;
   divisionId: string;
+  /** Derived from the team's current division when conferences are present. */
+  conferenceId?: string;
   overallRank: number;
   draftPlace?: number;
   stadium: string;

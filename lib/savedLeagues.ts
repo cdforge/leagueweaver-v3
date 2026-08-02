@@ -1,6 +1,7 @@
 import { teamMonogram } from "./teamIdentity";
+import { applyTeamConferenceIds } from "./conferences";
 import { divisionAcronym, leagueAcronym, resolveInitials } from "./monograms";
-import type { Division, LeagueSetupInput, SavedLeagueIdentity, SavedLeaguePreset, Team } from "./types";
+import type { Conference, Division, LeagueSetupInput, SavedLeagueIdentity, SavedLeaguePreset, Team } from "./types";
 
 interface LegacyDivision {
   id?: string;
@@ -63,6 +64,7 @@ export function identityFromSetup(setup: LeagueSetupInput): SavedLeagueIdentity 
       logoUrl: setup.logoUrl,
     },
     divisions: setup.divisions.map((division) => ({ ...division, initials: division.initials ?? "" })),
+    conferences: setup.conferences?.map((conference) => ({ ...conference, initials: conference.initials ?? "" })),
     teams: setup.teams.map((team) => ({ ...team, initials: team.initials ?? "" })),
     display: setup.display,
     priorSeason: setup.priorSeason,
@@ -85,12 +87,13 @@ export function normalizeSavedLeague(row: { id: string; name: string; data: unkn
   const data = row.data as SavedLeagueIdentity | LegacyLeagueData;
   if ("version" in data && data.version === 3 && Array.isArray(data.divisions) && Array.isArray(data.teams)) {
     const divisions = data.divisions.map((division, index) => normalizeDivision(division, index));
-    const teams = data.teams.map((team, index) => normalizeTeam(team, index, divisions[index % divisions.length]?.id || "division-1", data.teams.length));
+    const conferences = data.conferences?.map((conference, index) => normalizeConference(conference, index));
+    const teams = applyTeamConferenceIds(data.teams.map((team, index) => normalizeTeam(team, index, divisions[index % divisions.length]?.id || "division-1", data.teams.length)), divisions);
     const hasLeagueInitials = Object.prototype.hasOwnProperty.call(data.league, "initials");
     const leagueInitials = hasLeagueInitials ? data.league.initials || undefined : data.league.abbreviation || undefined;
     const league = { ...data.league, initials: leagueInitials?.slice(0, 4), abbreviation: data.league.abbreviation || leagueAcronym(data.league.name) };
     const priorSeason = data.priorSeason ? { ...data.priorSeason, entryMode: data.priorSeason.entryMode ?? (data.priorSeason.enabled ? data.priorSeason.hasData ? "history" : "manual" : "none") } : { enabled: false, hasData: false, entryMode: "none" as const, source: "regular-season" as const };
-    return { id: row.id, name: row.name, data: { ...data, league, divisions, teams, display: data.display || { cityNames: true, managers: true, venues: true }, priorSeason, platformConnection: data.platformConnection }, updatedAt: row.updated_at || row.updatedAt || new Date().toISOString() };
+    return { id: row.id, name: row.name, data: { ...data, league, divisions, conferences, teams, display: data.display || { cityNames: true, managers: true, venues: true }, priorSeason, platformConnection: data.platformConnection }, updatedAt: row.updated_at || row.updatedAt || new Date().toISOString() };
   }
   const legacy = data as LegacyLeagueData;
   if (!legacy.leagueName || !Array.isArray(legacy.divisions)) return null;
@@ -132,6 +135,18 @@ function normalizeDivision(division: Partial<Division>, index: number): Division
     initials: (hasInitials ? division.initials || undefined : legacyAcronym || undefined)?.slice(0, 4),
     color: division.color || "#117A45",
     logoUrl: division.logoUrl || undefined,
+    conferenceId: division.conferenceId || undefined,
+  };
+}
+
+function normalizeConference(conference: Partial<Conference>, index: number): Conference {
+  const hasInitials = Object.prototype.hasOwnProperty.call(conference, "initials");
+  return {
+    id: conference.id || `conference-${index + 1}`,
+    name: conference.name || `Conference ${index + 1}`,
+    initials: (hasInitials ? conference.initials || undefined : undefined)?.slice(0, 4),
+    color: conference.color || "#117A45",
+    logoUrl: conference.logoUrl || undefined,
   };
 }
 

@@ -39,12 +39,13 @@ import { ImportLeagueModal, type ImportSource } from "@/components/imports/Impor
 import { useAuthModal } from "@/components/account/AuthModalProvider";
 import { createClient } from "@/lib/supabase/client";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { ConferenceMark } from "@/components/ui/DivisionIdentity";
 import { ConfirmDialog, Modal } from "@/components/ui/Modal";
 import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { createBlankSetup, createConferences, createDefaultSetup, createDivisions, createTeams } from "@/lib/defaults";
-import { defaultConferenceAssignment } from "@/lib/conferences";
+import { applyTeamConferenceIds, reconcileConferenceSetup } from "@/lib/conferences";
 import { identityFromSetup, normalizeSavedLeague } from "@/lib/savedLeagues";
 import { getNflWeeks, getNflWeekWindow, getWeekDateLabel } from "@/lib/schedule";
 import { generateScheduleAsync } from "@/lib/generateScheduleAsync";
@@ -492,14 +493,14 @@ function minSchedulableDivisions(teamCount: number): number {
 // shrinking, and repair any divisionId that no longer points at a live division.
 function resizeTeams(existing: Team[], nextCount: number, divisions: Division[]): Team[] {
   const template = createTeams(nextCount, divisions);
-  return Array.from({ length: nextCount }, (_, index) => {
+  return applyTeamConferenceIds(Array.from({ length: nextCount }, (_, index) => {
     const kept = existing[index];
     if (!kept) return template[index];
     const divisionId = divisions.some((division) => division.id === kept.divisionId)
       ? kept.divisionId
       : divisions[index % divisions.length].id;
     return { ...kept, overallRank: index + 1, divisionId };
-  });
+  }), divisions);
 }
 
 // Resize divisions WITHOUT discarding the user's named/colored/logo'd divisions:
@@ -544,10 +545,12 @@ function TeamsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; s
       const divisions = divisionCountSchedulable(next, current.divisions.length)
         ? current.divisions
         : resizeDivisions(current.divisions, minSchedulableDivisions(next));
+      const conferenceSetup = reconcileConferenceSetup(divisions, current.conferences);
       return {
         ...current,
-        divisions,
-        teams: resizeTeams(current.teams, next, divisions),
+        divisions: conferenceSetup.divisions,
+        conferences: conferenceSetup.conferences,
+        teams: resizeTeams(current.teams, next, conferenceSetup.divisions),
         priorSeason: { ...current.priorSeason, enabled: false, hasData: false, entryMode: "none" },
       };
     });
@@ -609,20 +612,24 @@ function DivisionsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInpu
     const conferences = even ? createConferences(2) : undefined;
     setSetup((current) => {
       const resized = resizeDivisions(current.divisions, count);
-      const divisions = even ? defaultConferenceAssignment(resized, conferences!) : resized.map((division) => ({ ...division, conferenceId: undefined }));
+      const conferenceSetup = reconcileConferenceSetup(resized, conferences);
+      const divisions = conferenceSetup.divisions;
       return {
         ...current,
         divisions,
-        conferences,
-        teams: current.teams.map((team, index) => ({ ...team, divisionId: divisions[index % count].id })),
+        conferences: conferenceSetup.conferences,
+        teams: applyTeamConferenceIds(current.teams.map((team, index) => ({ ...team, divisionId: divisions[index % count].id })), divisions),
         playoffs: { ...current.playoffs, placementMode: "auto", fieldStatus: "live", lockedTeamIds: [] },
       };
     });
   };
   const updateConference = (id: string, patch: Partial<Conference>) => setSetup((current) => ({ ...current, conferences: current.conferences?.map((conference) => conference.id === id ? { ...conference, ...patch } : conference) }));
-  const assignDivisionConference = (divisionId: string, conferenceId: string) => setSetup((current) => ({ ...current, divisions: current.divisions.map((division) => division.id === divisionId ? { ...division, conferenceId } : division) }));
+  const assignDivisionConference = (divisionId: string, conferenceId: string) => setSetup((current) => {
+    const divisions = current.divisions.map((division) => division.id === divisionId ? { ...division, conferenceId } : division);
+    return { ...current, divisions, teams: applyTeamConferenceIds(current.teams, divisions) };
+  });
   const updateDivision = (id: string, patch: Partial<Division>) => setSetup((current) => ({ ...current, divisions: current.divisions.map((division) => division.id === id ? { ...division, ...patch } : division) }));
-  const updateTeam = (id: string, divisionId: string) => setSetup((current) => ({ ...current, teams: current.teams.map((team) => team.id === id ? { ...team, divisionId } : team) }));
+  const updateTeam = (id: string, divisionId: string) => setSetup((current) => ({ ...current, teams: applyTeamConferenceIds(current.teams.map((team) => team.id === id ? { ...team, divisionId } : team), current.divisions) }));
   const counts = setup.divisions.map((division) => setup.teams.filter((team) => team.divisionId === division.id).length);
   const balanced = Math.max(...counts) - Math.min(...counts) <= 1;
   return <div className="step-stack">
@@ -636,7 +643,7 @@ function DivisionsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInpu
         return <div className="conference-stage">
           <div className="division-assign-head"><strong>Conferences</strong><span>Split the divisions into two balanced conferences — each becomes half of the playoff bracket.</span></div>
           <div className="division-strip">{setup.conferences.map((conference) => <div className="division-identity-edit" key={conference.id}><IdentityColorPicker compact name={conference.name} abbreviation={resolveInitials(conference.initials, conference.name.slice(0, 3).toUpperCase())} color={conference.color} logoUrl={conference.logoUrl} onChange={(next) => updateConference(conference.id, next)} /><div><input aria-label={`${conference.name} name`} value={conference.name} onChange={(event) => updateConference(conference.id, { name: event.target.value })} /><input aria-label={`${conference.name} initials override`} maxLength={4} value={conference.initials ?? ""} onChange={(event) => updateConference(conference.id, { initials: event.target.value || undefined })} /></div></div>)}</div>
-          <div className={`roster-status ${confBalanced ? "" : "warning"}`}>{confBalanced ? <Check /> : <CircleAlert />}<span><strong>{confBalanced ? "Balanced conferences" : "Conferences need balancing"}</strong><small>{setup.conferences.map((conference, index) => `${conference.name}: ${confCounts[index]}`).join(" · ")}</small></span></div>
+          <div className={`roster-status ${confBalanced ? "" : "warning"}`}>{confBalanced ? <Check /> : <CircleAlert />}<span><strong>{confBalanced ? "Balanced conferences" : "Conferences need balancing"}</strong><small>{setup.conferences.map((conference, index) => <span className="conference-count-pill" key={conference.id}><ConferenceMark conference={conference} size={14} />{conference.name}: {confCounts[index]}</span>)}</small></span></div>
           <div className="division-assignments"><div>{setup.divisions.map((division) => <div className="division-assign-row" key={division.id}><EntityLogo color={division.color} logoUrl={division.logoUrl} monogram={resolveInitials(division.initials, divisionAcronym(division.name))} /><span><strong>{division.name}</strong></span><CustomSelect label={`${division.name} conference`} value={division.conferenceId ?? ""} onChange={(conferenceId) => assignDivisionConference(division.id, conferenceId)} options={setup.conferences!.map((conference) => ({ value: conference.id, label: conference.name, swatch: conference.color, logoUrl: conference.logoUrl, monogram: resolveInitials(conference.initials, conference.name.slice(0, 3).toUpperCase()) }))} /></div>)}</div></div>
         </div>;
       })()}
@@ -1513,6 +1520,7 @@ export function LeagueBuilder() {
       ...preset.data.league,
       display: preset.data.display,
       divisions: preset.data.divisions,
+      conferences: preset.data.conferences,
       teams: preset.data.teams,
       platformConnection: includeConnection ? preset.data.platformConnection : undefined,
       priorSeason: preset.data.priorSeason ?? { ...current.priorSeason, enabled: false, hasData: false, entryMode: "none" },
@@ -1641,12 +1649,14 @@ export function LeagueBuilder() {
     const divisionCount = divisionCountSchedulable(preview.teams.length, importedDivisionCount)
       ? importedDivisionCount
       : minSchedulableDivisions(preview.teams.length);
-    const divisions = createDivisions(divisionCount).map((division, index) => ({
+    const baseDivisions = createDivisions(divisionCount).map((division, index) => ({
       ...division,
       name: importedDivisionNames[index] || division.name,
     }));
+    const conferenceSetup = reconcileConferenceSetup(baseDivisions, divisionCount >= 4 && divisionCount % 2 === 0 ? createConferences(2) : undefined);
+    const divisions = conferenceSetup.divisions;
     const divisionByName = new Map(divisions.map((division) => [division.name.toLowerCase(), division.id]));
-    const teams = preview.teams.map((team, index): Team => {
+    const teams = applyTeamConferenceIds(preview.teams.map((team, index): Team => {
       const name = team.name.trim() || `Team ${index + 1}`;
       return {
         id: `team-${index + 1}`,
@@ -1661,7 +1671,7 @@ export function LeagueBuilder() {
         overallRank: team.rank || index + 1,
         stadium: team.stadium?.trim() || `${name} Stadium`,
       };
-    });
+    }), divisions);
     setSetup((current) => {
       const leagueName = preview.leagueName?.trim() || current.name;
       return {
@@ -1673,6 +1683,7 @@ export function LeagueBuilder() {
         logoUrl: preview.leagueLogoUrl || current.logoUrl,
         seasonYear: preview.seasonYear || current.seasonYear,
         divisions,
+        conferences: conferenceSetup.conferences,
         teams,
         platformConnection: preview.provider === "espn" || preview.provider === "sleeper" ? {
           provider: preview.provider,
