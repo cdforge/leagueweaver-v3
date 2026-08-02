@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { buildAllStars } from "../lib/allStars";
+import { createDefaultSetup, createDivisions, createTeams } from "../lib/defaults";
+import { buildMvt } from "../lib/mvt";
 import type { LineupTemplate, PlayerWeekStat, SlotKey } from "../lib/playerData";
+import { generateLeagueSchedule } from "../lib/schedule";
+import type { LeagueSetupInput } from "../lib/types";
 
 type CsvRow = string[];
 
@@ -281,6 +285,111 @@ assert.equal(edgeWeek1.slots.some((slot) => slot.slotLabel === "LB1"), false, "e
 assert.equal(edgeAllStars.seasonCountByTeam.get("team-a"), 2, "tie winners count once per winning slot");
 assert.equal(edgeAllStars.seasonCountByTeam.get("team-b"), 3, "season count includes shared accolades");
 
+function buildMvtFixtureSetup(id: string, divisionCount: number): LeagueSetupInput {
+  const divisions = createDivisions(divisionCount);
+  const teams = createTeams(Math.max(4, divisionCount * 2), divisions).map((team, index) => ({ ...team, draftPlace: index + 1 }));
+  return {
+    ...createDefaultSetup(),
+    id,
+    name: id,
+    weeks: 13,
+    divisions,
+    teams,
+    weekOne: { rankingSource: "draft-day" },
+  };
+}
+
+function scoreFirstWeeks(schedule: ReturnType<typeof generateLeagueSchedule>) {
+  const scores = [
+    [145, 111],
+    [88, 130],
+    [122, 84],
+    [100, 99],
+    [160, 90],
+    [104, 119],
+  ];
+  let index = 0;
+  for (const week of schedule.weeks.slice(0, 3)) {
+    for (const game of week.games) {
+      const score = scores[index % scores.length];
+      game.homeScore = score[0];
+      game.awayScore = score[1];
+      index += 1;
+    }
+  }
+}
+
+function fixturePlayerStats(schedule: ReturnType<typeof generateLeagueSchedule>, lineupTemplate: LineupTemplate): PlayerWeekStat[] {
+  const rows: PlayerWeekStat[] = [];
+  for (const week of schedule.weeks.slice(0, 3)) {
+    for (const team of schedule.setup.teams) {
+      lineupTemplate.slots.forEach((slot, slotIndex) => {
+        rows.push({
+          scheduleId: schedule.id,
+          provider: "sleeper",
+          providerLeagueId: "mvt-fixture",
+          season: schedule.setup.seasonYear,
+          week: week.weekNumber,
+          teamId: team.id,
+          providerRosterId: team.id,
+          providerPlayerId: `${team.id}:${week.weekNumber}:${slot.label ?? slot.slot}`,
+          canonicalPlayerId: `${team.id}:${week.weekNumber}:${slot.label ?? slot.slot}`,
+          points: 10 + (schedule.setup.teams.length - team.overallRank) + slotIndex + week.weekNumber,
+          lineupStatus: "starter",
+          starterIndex: slot.index,
+          inferredSlot: slot.slot,
+          rawSlot: slot.rawSlot ?? slot.slot,
+          slotConfidence: "confirmed",
+          isProvisional: false,
+          syncedAt: "2026-08-02T00:00:00.000Z",
+          sourcePayloadHash: "mvt-fixture",
+        });
+      });
+    }
+  }
+  return rows;
+}
+
+const superflexLineup: LineupTemplate = {
+  provider: "sleeper",
+  season: 2025,
+  slots: [
+    { slot: "QB", index: 0, rank: 1, label: "QB", group: "starter", confidence: "confirmed" },
+    { slot: "SUPERFLEX", index: 1, rank: 1, label: "SUPERFLEX", group: "starter", confidence: "confirmed" },
+  ],
+};
+const oneDivisionSchedule = generateLeagueSchedule(buildMvtFixtureSetup("mvt-1-one-division", 1), "mvt-one-division");
+scoreFirstWeeks(oneDivisionSchedule);
+const oneDivisionMvt = buildMvt({
+  schedule: oneDivisionSchedule,
+  lineupTemplate: superflexLineup,
+  playerStats: fixturePlayerStats(oneDivisionSchedule, superflexLineup),
+  transactionCounts: [{ teamId: oneDivisionSchedule.setup.teams[0].id, providerRosterId: "1", transactions: 5, adds: 5, drops: 2, waivers: 5, trades: 1 }],
+  previousTotals: new Map([[oneDivisionSchedule.setup.teams[0].id, 0]]),
+});
+assert.ok(oneDivisionMvt.awards.some((award) => award.bucket === "positional" && award.label.includes("SUPERFLEX")), "MVT-1 Superflex slot generates positional awards");
+assert.ok(oneDivisionMvt.awards.some((award) => award.bucket === "achievement" && award.label === "All-Star Players"), "MVT-1 includes All-Star Players achievement");
+assert.ok(oneDivisionMvt.awards.some((award) => award.bucket === "bonus" && award.label === "Top Ranked Matchup"), "MVT-1 includes score10 matchup bonus");
+assert.equal(oneDivisionMvt.awards.some((award) => award.id.includes("division:")), false, "MVT-1 one-division fixture awards league tier only");
+assert.equal(oneDivisionMvt.awards.some((award) => award.id.includes("conference:")), false, "MVT-1 one-division fixture has no conference tier");
+assert.equal(oneDivisionMvt.teams.some((team) => team.movement === "up"), true, "MVT-1 movement marks teams up/down/same");
+
+const conferenceSetup = buildMvtFixtureSetup("mvt-1-conference", 4);
+conferenceSetup.conferences = [
+  { id: "conference-a", name: "Conference A", initials: "A", color: "#117a45" },
+  { id: "conference-b", name: "Conference B", initials: "B", color: "#e3b940" },
+];
+conferenceSetup.divisions = conferenceSetup.divisions.map((division, index) => ({ ...division, conferenceId: index < 2 ? "conference-a" : "conference-b" }));
+conferenceSetup.teams = conferenceSetup.teams.map((team) => ({ ...team, conferenceId: conferenceSetup.divisions.find((division) => division.id === team.divisionId)?.conferenceId }));
+const conferenceSchedule = generateLeagueSchedule(conferenceSetup, "mvt-conference");
+scoreFirstWeeks(conferenceSchedule);
+const conferenceMvt = buildMvt({
+  schedule: conferenceSchedule,
+  lineupTemplate: superflexLineup,
+  playerStats: fixturePlayerStats(conferenceSchedule, superflexLineup),
+});
+assert.ok(conferenceMvt.awards.some((award) => award.id.includes("conference:")), "MVT-1 conference fixture includes conference tier");
+
 const mvtByTeam = new Map<string, { total: number; positional: number; achievement: number; divisionLeague: number; bonus: number }>();
 for (const row of mvtRows) {
   const team = row[37]?.trim();
@@ -328,7 +437,6 @@ for (const fixture of providerFixtures) {
 }
 
 const pendingEngineAssertions = [
-  "MVT-1: MVT engine reproduces GREEN as leader and DECOUPES 8+16+0+2=26.00",
   "X-1: non-PVE, IDP, Superflex, and 1-division scale fixtures prove no hardcoding",
 ];
 
@@ -339,6 +447,7 @@ console.log(`- Wk1 All-Star total: ${ALL_STAR_WEEK_1_TOTAL.toFixed(2)}`);
 console.log(`- Season All-Star counts: GREEN ${GREEN_ALL_STAR_COUNT}, YARDIES ${YARDIES_ALL_STAR_COUNT}`);
 console.log(`- AS-1 engine: Wk1 total ${sheetWeek1?.total.toFixed(2)}, GREEN ${sheetAllStars.seasonCountByTeam.get("GREEN")}, YARDIES ${sheetAllStars.seasonCountByTeam.get("YARDIES")}`);
 console.log("- AS-1 edge cases: inclusive tie, FLEX occupancy, empty slot omission, and IDP DL slots passed");
+console.log("- MVT-1 engine: all four buckets, Superflex, 1-division league-only tier, conference tier, and movement passed");
 console.log(`- MVT leader from mvt-20.csv: GREEN ${greenMvt.total.toFixed(2)} (stale PNG showed ${STALE_MOCKUP_GREEN_MVT_TOTAL.toFixed(2)})`);
 console.log(`- DECOUPES MVT: ${decoupesMvt.positional.toFixed(2)} + ${decoupesMvt.achievement.toFixed(2)} + ${decoupesMvt.divisionLeague.toFixed(2)} + ${decoupesMvt.bonus.toFixed(2)} = ${decoupesMvt.total.toFixed(2)}`);
 console.log(`- Pending engine assertions registered: ${pendingEngineAssertions.length}`);
