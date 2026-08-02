@@ -43,6 +43,7 @@ import { GenerationReveal } from "@/components/builder/GenerationReveal";
 import { AccountIdentity } from "@/components/account/AccountIdentity";
 import { useAuthModal } from "@/components/account/AuthModalProvider";
 import { AdUnit } from "@/components/ads/AdUnit";
+import { AllStarsWorkspace } from "@/components/season/AllStarsWorkspace";
 import { GotwWorkspace } from "@/components/season/GotwWorkspace";
 import { MvtWorkspace } from "@/components/season/MvtWorkspace";
 import { BracketConnectorLayer, type BracketConnection } from "@/components/season/BracketConnectorLayer";
@@ -113,7 +114,7 @@ import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
 import { GAME_DETAIL_CACHE_PREFIX, type GameDetailPlayerStat } from "@/lib/gameDetail";
 import type { GeneratedSchedule, ImportHistoryEvent, ImportPreview, LeagueSetupInput, PlatformConnection, PlatformSyncMode, PlayoffGame, ScheduledGame, Team, TiebreakerSettings } from "@/lib/types";
 
-type ViewKey = "this-week" | "league-schedule" | "team-schedule" | "gotw" | "matchup-ratings" | "standings" | "mvt" | "playoffs" | "simulator" | "settings";
+type ViewKey = "this-week" | "league-schedule" | "team-schedule" | "gotw" | "matchup-ratings" | "standings" | "mvt" | "all-stars" | "playoffs" | "simulator" | "settings";
 const CLOUD_SCHEDULE_ID = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
 
 type ExistingSeasonConflict = {
@@ -181,6 +182,7 @@ const VIEW_ITEMS: Array<{ key: ViewKey; label: string; icon: typeof CalendarDays
   { key: "matchup-ratings", label: "Matchup Ratings", icon: SlidersHorizontal },
   { key: "standings", label: "Standings", icon: BarChart3 },
   { key: "mvt", label: "MVT", icon: Medal },
+  { key: "all-stars", label: "All-Stars", icon: Sparkles },
   { key: "playoffs", label: "Playoffs", icon: Trophy },
   { key: "settings", label: "Settings", icon: Settings },
 ];
@@ -2337,6 +2339,7 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
           {view === "matchup-ratings" && <MatchupRatingsView schedule={activeSchedule} />}
           {view === "standings" && <StandingsView schedule={activeSchedule} playerStats={gameDetailPlayerStats} onUpdateTiebreakers={simulation ? undefined : onUpdateTiebreakers} readOnly={Boolean(simulation)} />}
           {view === "mvt" && <MvtWorkspace schedule={activeSchedule} playerStats={gameDetailPlayerStats} />}
+          {view === "all-stars" && <AllStarsWorkspace schedule={activeSchedule} playerStats={gameDetailPlayerStats} />}
           {view === "playoffs" && <PlayoffsView schedule={activeSchedule} onUpdatePlayoffs={simulation ? () => undefined : onUpdatePlayoffs} onUpdatePlayoffGame={simulation ? () => undefined : onUpdatePlayoffGame} highlightedGame={highlightedGame} simulationMode={Boolean(simulation)} playoffTab={playoffTab} onChangePlayoffTab={setPlayoffTab} />}
           {view === "simulator" && !simulation && simulationLoaded && <SimulatorLaunch hasSavedRun={Boolean(savedSimulation)} onPlay={playSimulation} onStartFromReal={startSimulationFromReal} />}
           {view === "simulator" && simulation && <SimulatorWorkspace
