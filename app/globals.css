@@ -1368,6 +1368,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
    emphasized primary; Quick create is the secondary shortcut with a settings
    preview + a "you'll regenerate to change these" note. */
 .build-fork { border: 1px solid var(--line-strong); border-radius: var(--radius); background: white; box-shadow: var(--shadow-sm); overflow: hidden; }
+.create-path-screen { min-height: 460px; align-content: center; }
+.create-path-heading { max-width: 720px; }
+.create-path-heading .step-kicker { color: var(--field-dark); }
+.create-path-panel { box-shadow: 0 18px 45px rgba(21, 35, 28, .12); }
 .build-fork-head { border-bottom: 1px solid var(--line); padding: 14px 16px; display: flex; flex-direction: column; gap: 3px; }
 .build-fork-head strong { font-size: var(--text-lg); }
 .build-fork-head small { color: var(--muted); font-size: var(--text-xs); }
@@ -1395,6 +1399,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .build-fork-note svg { flex: 0 0 auto; width: 13px; margin-top: 1px; color: #b06a00; }
 .build-fork-quick { align-self: flex-start; margin-top: 2px; display: inline-flex; align-items: center; gap: 7px; }
 .build-fork-quick svg { width: 15px; }
+.build-fork-quick:disabled { cursor: not-allowed; opacity: .62; }
 
 @media (max-width: 720px) {
   .welcome-capability-grid { grid-template-columns: 1fr 1fr; }

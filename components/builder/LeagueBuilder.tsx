@@ -191,57 +191,67 @@ function SavedLeagueShortcut({ loadedPreset, onStartFresh }: { loadedPreset: Sav
       <span className="saved-league-loaded-check"><Check aria-hidden="true" /></span>
       <div className="saved-league-loaded-copy">
         <strong>{loadedPreset.data.league.name || loadedPreset.name}</strong>
-        <small>Teams, divisions, colors, and logos loaded. Edit below, or continue to Season.</small>
+        <small>Teams, divisions, colors, and logos loaded. Edit below, or continue to Teams.</small>
       </div>
       <button type="button" className="saved-league-startfresh" onClick={onStartFresh}><RotateCcw aria-hidden="true" />Start fresh instead</button>
     </div>
   );
 }
 
-// The Quick create ⁄ Customize fork — a card at the top of the League step, shown
-// once a roster is loaded (import or saved league). "Customize everything" is the
-// primary path (the full wizard); "Quick create" is the secondary shortcut that
-// applies the PVE house settings and generates immediately.
-function BuildForkCard({ setup, onQuickCreate }: { setup: LeagueSetupInput; onQuickCreate: (weeks: 13 | 14) => void }) {
-  const [dismissed, setDismissed] = useState(false);
+// The Quick create ⁄ Customize fork is an untracked decision screen between
+// Start and League. It is not part of the numbered wizard, but it participates
+// in Back/Continue so the setup flow still feels linear.
+function CreatePathStep({ setup, quickCreateReady, quickCreateReason, onCustomize, onQuickCreate }: {
+  setup: LeagueSetupInput;
+  quickCreateReady: boolean;
+  quickCreateReason: string;
+  onCustomize: () => void;
+  onQuickCreate: (weeks: 13 | 14) => void;
+}) {
   // Season length is the user's choice (never recommended); Quick Create needs it to derive the
   // recommended playoff structure. Default to whatever the setup already carries, else 14.
   const [weeks, setWeeks] = useState<13 | 14>(setup.weeks === 13 ? 13 : 14);
-  if (dismissed) return null;
   const rec = recommendedPlayoffStructure(setup.teams.length, weeks);
   const grouping = rosterGroupingNoun(setup);
   return (
-    <div className="build-fork">
-      <div className="build-fork-head">
-        <strong>Your teams are in. How do you want to finish?</strong>
-        <small>Fine-tune every detail, or let us build it now with your usual settings.</small>
+    <div className="step-stack create-path-screen">
+      <div className="section-heading create-path-heading">
+        <span className="step-kicker">Build path</span>
+        <h1>How do you want to build this season?</h1>
+        <p>Customize every setting yourself, or pick a season length and let League Weaver create a ready-to-review schedule.</p>
       </div>
-      <div className="build-fork-options">
-        <button type="button" className="build-fork-primary" onClick={() => setDismissed(true)}>
-          <span className="build-fork-tag">Recommended</span>
-          <strong>Customize everything</strong>
-          <small>Walk each step: divisions, season, seeding, rules, and playoffs, exactly how you want them.</small>
-          <span className="build-fork-go" aria-hidden="true">Continue setup <ArrowRight /></span>
-        </button>
-        <div className="build-fork-secondary">
-          <span className="build-fork-secondary-head"><Zap aria-hidden="true" /><strong>Quick create</strong></span>
-          <small>Pick your season length; we’ll recommend the playoffs and generate now:</small>
-          <div className="build-fork-weeks">
-            <span>Regular season</span>
-            <div className="segmented">
-              <button type="button" className={weeks === 13 ? "active" : ""} onClick={() => setWeeks(13)}>13 weeks</button>
-              <button type="button" className={weeks === 14 ? "active" : ""} onClick={() => setWeeks(14)}>14 weeks</button>
+      <div className="build-fork create-path-panel">
+        <div className="build-fork-head">
+          <strong>Choose your setup path.</strong>
+          <small>You can still review everything before the schedule opens.</small>
+        </div>
+        <div className="build-fork-options">
+          <button type="button" className="build-fork-primary" onClick={onCustomize}>
+            <span className="build-fork-tag">Recommended</span>
+            <strong>Customize everything</strong>
+            <small>Walk each section: league identity, teams, divisions, season rules, seeding, and playoffs.</small>
+            <span className="build-fork-go" aria-hidden="true">Continue setup <ArrowRight /></span>
+          </button>
+          <div className="build-fork-secondary">
+            <span className="build-fork-secondary-head"><Zap aria-hidden="true" /><strong>Quick create</strong></span>
+            <small>Choose your regular-season length first. Quick Create applies recommended playoff settings and generates now.</small>
+            <div className="build-fork-weeks">
+              <span>Regular season</span>
+              <div className="segmented">
+                <button type="button" className={weeks === 13 ? "active" : ""} onClick={() => setWeeks(13)}>13 weeks</button>
+                <button type="button" className={weeks === 14 ? "active" : ""} onClick={() => setWeeks(14)}>14 weeks</button>
+              </div>
             </div>
+            <ul className="build-fork-summary">
+              <li>{grouping} · <b>{setup.teams.length} teams</b>{setup.divisions.length > 1 ? ` · ${setup.divisions.length} divisions` : ""}</li>
+              <li><b>{weeks}-week</b> season · <b>{rec.playoffWeeks}-week</b> playoff</li>
+              <li><b>{rec.fieldSize}-team</b> playoff · gold · single-elimination</li>
+              <li>Seeded by <b>last season</b></li>
+              <li>Balanced schedule rules &amp; standard tiebreakers</li>
+            </ul>
+            <p className="build-fork-note"><CircleAlert aria-hidden="true" />{quickCreateReady ? "These lock in when you generate. To change them later you’ll regenerate the schedule." : quickCreateReason}</p>
+            <button type="button" className="button-secondary build-fork-quick" disabled={!quickCreateReady} onClick={() => onQuickCreate(weeks)}><Zap aria-hidden="true" />Quick create schedule</button>
           </div>
-          <ul className="build-fork-summary">
-            <li>{grouping} · <b>{setup.teams.length} teams</b>{setup.divisions.length > 1 ? ` · ${setup.divisions.length} divisions` : ""}</li>
-            <li><b>{weeks}-week</b> season · <b>{rec.playoffWeeks}-week</b> playoff</li>
-            <li><b>{rec.fieldSize}-team</b> playoff · gold · single-elimination</li>
-            <li>Seeded by <b>last season</b></li>
-            <li>Balanced schedule rules &amp; standard tiebreakers</li>
-          </ul>
-          <p className="build-fork-note"><CircleAlert aria-hidden="true" />These lock in when you generate. To change them later you’ll regenerate the schedule.</p>
-          <button type="button" className="button-secondary build-fork-quick" onClick={() => onQuickCreate(weeks)}><Zap aria-hidden="true" />Quick create schedule</button>
         </div>
       </div>
     </div>
@@ -318,6 +328,17 @@ function rosterGroupingNoun(setup: LeagueSetupInput): string {
   if (Array.isArray(conferences) && conferences.length > 0) parts.push("Conferences");
   if (parts.length === 1) return parts[0];
   return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+function quickCreateBlocker(setup: LeagueSetupInput): string | null {
+  if (!setup.name.trim()) return "Quick Create unlocks after your league has a name and a ready team list.";
+  if (setup.teams.length < 8 || setup.teams.length > 32 || setup.teams.length % 2) return "Quick Create needs an even number of teams from 8 through 32.";
+  if (setup.teams.some((team) => !team.name.trim())) return "Quick Create unlocks after every team has a name.";
+  if (setup.divisions.some((division) => !division.name.trim())) return "Quick Create unlocks after every division has a name.";
+  if (setup.teams.some((team) => !setup.divisions.some((division) => division.id === team.divisionId))) return "Quick Create needs every team assigned to a division.";
+  const counts = setup.divisions.map((division) => setup.teams.filter((team) => team.divisionId === division.id).length);
+  if (counts.length && Math.max(...counts) - Math.min(...counts) > 1) return `Quick Create needs balanced divisions. Current team counts are ${counts.join(", ")}.`;
+  return null;
 }
 
 function SourceStep({ presets, onManual, onChooseSaved, onImport }: { presets: SavedLeaguePreset[]; onManual: () => void; onChooseSaved: () => void; onImport: (source: ImportSource) => void }) {
@@ -412,7 +433,7 @@ function SavedLeaguePicker({ presets, onChoose, onClose }: { presets: SavedLeagu
   );
 }
 
-function LeagueStep({ setup, setSetup, presets, loadedPreset, quickStartAvailable, onQuickCreate, onStartFresh, onLeagueLogoUploaded }: { setup: LeagueSetupInput; setSetup: React.Dispatch<React.SetStateAction<LeagueSetupInput>>; presets: SavedLeaguePreset[]; loadedPreset: SavedLeaguePreset | null; quickStartAvailable: boolean; onQuickCreate: (weeks: 13 | 14) => void; onStartFresh: () => void; onLeagueLogoUploaded: (logoUrl: string) => void }) {
+function LeagueStep({ setup, setSetup, presets, loadedPreset, onStartFresh, onLeagueLogoUploaded }: { setup: LeagueSetupInput; setSetup: React.Dispatch<React.SetStateAction<LeagueSetupInput>>; presets: SavedLeaguePreset[]; loadedPreset: SavedLeaguePreset | null; onStartFresh: () => void; onLeagueLogoUploaded: (logoUrl: string) => void }) {
   return (
     <div className="step-stack">
       <div className="section-heading">
@@ -420,7 +441,6 @@ function LeagueStep({ setup, setSetup, presets, loadedPreset, quickStartAvailabl
         <h1>Start with your league.</h1>
         <p>{presets.length ? "Pick up where you left off, or just fill in the form to start fresh." : "Name it, then set its colors and logo."}</p>
       </div>
-      {quickStartAvailable && <BuildForkCard setup={setup} onQuickCreate={onQuickCreate} />}
       <SavedLeagueShortcut loadedPreset={loadedPreset} onStartFresh={onStartFresh} />
       <div className="field-grid two-col">
         <div>
@@ -1452,6 +1472,7 @@ function BlueprintRoster({ setup }: { setup: LeagueSetupInput }) {
 
 type BuilderActionProps = {
   step: number;
+  createPath?: boolean;
   generating: boolean;
   skipDraftRankForNow: boolean;
   back: () => void;
@@ -1459,12 +1480,12 @@ type BuilderActionProps = {
   generate: () => void;
 };
 
-function BuilderActionButtons({ step, generating, skipDraftRankForNow, back, next, generate }: BuilderActionProps) {
+function BuilderActionButtons({ step, createPath = false, generating, skipDraftRankForNow, back, next, generate }: BuilderActionProps) {
   return (
     <>
       <button type="button" className="button-secondary" onClick={back} disabled={generating}><ArrowLeft />Back</button>
       {step < STEPS.length - 1
-        ? <button type="button" className="button-primary" onClick={next}>{skipDraftRankForNow ? "Skip draft rank for now" : "Continue"}<ArrowRight /></button>
+        ? <button type="button" className="button-primary" onClick={next}>{createPath ? "Customize everything" : skipDraftRankForNow ? "Skip draft rank for now" : "Continue"}<ArrowRight /></button>
         : <button type="button" className="button-primary generate-button" onClick={generate} disabled={generating}>{generating ? <><span className="spinner" />Weaving schedule…</> : <><Sparkles />Generate my season</>}</button>}
     </>
   );
@@ -1570,6 +1591,8 @@ export function LeagueBuilder() {
   // Step-1 saved-league picker (B1) + the Quick/Customize fork state (B2). The
   // fork only offers itself once a roster is loaded via import or saved league.
   const [savedPickerOpen, setSavedPickerOpen] = useState(false);
+  const [showCreatePath, setShowCreatePath] = useState(false);
+  const [createPathVisited, setCreatePathVisited] = useState(false);
   const [quickStartAvailable, setQuickStartAvailable] = useState(false);
   const [pendingQuickGenerate, setPendingQuickGenerate] = useState(false);
   const [connectedSavedLeaguePrompt, setConnectedSavedLeaguePrompt] = useState<SavedLeaguePreset | null>(null);
@@ -1638,13 +1661,13 @@ export function LeagueBuilder() {
     dismissedLogoFingerprint.current = null;
     savePromptResolved.current = false;
     setLeagueSaveState(null);
-    setStep(1);
+    openCreatePath();
   };
   // Manual entry from Step 1 — a clean slate, no Quick-create fork (there's no
   // roster to fast-forward yet).
   const startManual = () => {
     setQuickStartAvailable(false);
-    advanceToStep(1);
+    openCreatePath();
   };
 
   useEffect(() => {
@@ -1745,9 +1768,20 @@ export function LeagueBuilder() {
     if (target === 2) setTeamsTab(entry === "last" ? (teamsTabOrder[teamsTabOrder.length - 1] as TeamsTab) : "teams");
     if (target === 3) setSeasonTab(entry === "last" ? (seasonTabOrder[seasonTabOrder.length - 1] as SeasonTab) : "season");
     setStep(target);
+    setShowCreatePath(false);
     setBlueprintOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+  const openCreatePath = () => {
+    setError(null);
+    setShowFieldErrors(false);
+    setCreatePathVisited(true);
+    setShowCreatePath(true);
+    setStep(1);
+    setBlueprintOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const customizeEverything = () => advanceToStep(1);
   const matchingSavedLeague = () => savedLeagues.find((preset) => preset.id === activeSavedLeagueId)
     ?? savedLeagues.find((preset) => preset.name.trim().toLowerCase() === setup.name.trim().toLowerCase());
   function applySavedLeaguePreset(preset: SavedLeaguePreset, includeConnection: boolean) {
@@ -1768,12 +1802,13 @@ export function LeagueBuilder() {
     dismissedLogoFingerprint.current = null;
     setConnectedSavedLeaguePrompt(null);
     setQuickStartAvailable(true);
-    // Stay on the League step and show the "loaded" confirm bar so the user can
-    // eyeball the roster for churn before continuing — no silent jump to Season.
-    setStep(1);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    openCreatePath();
   }
   const next = () => {
+    if (showCreatePath) {
+      customizeEverything();
+      return;
+    }
     // Grouped steps (Teams & Divisions, Season & Rules) are walked one sub-tab at a time: Continue
     // validates the current sub-tab and moves to the next one; only from the last sub-tab does it
     // leave the step (re-validating the whole step first so nothing skipped slips through).
@@ -1820,6 +1855,15 @@ export function LeagueBuilder() {
   const back = () => {
     setError(null);
     setShowFieldErrors(false);
+    if (showCreatePath) {
+      setShowCreatePath(false);
+      advanceToStep(0);
+      return;
+    }
+    if (step === 1 && createPathVisited) {
+      openCreatePath();
+      return;
+    }
     // Inside a grouped step, Back steps to the previous sub-tab before leaving the step.
     const order = step === 2 ? teamsTabOrder : step === 3 ? seasonTabOrder : null;
     const current = step === 2 ? teamsTab : step === 3 ? seasonTab : null;
@@ -1970,8 +2014,7 @@ export function LeagueBuilder() {
     setActiveSavedLeagueId(null);
     setQuickStartAvailable(true);
     dismissedLogoFingerprint.current = null;
-    setStep(1);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    openCreatePath();
   };
   const runGenerate = () => {
     if (generating) return;
@@ -2054,6 +2097,9 @@ export function LeagueBuilder() {
     setSaveLeaguePrompt(false);
     runGenerate();
   };
+  const displayStep = showCreatePath ? 1 : step;
+  const quickCreateReason = quickCreateBlocker(setup);
+  const quickCreateReady = quickStartAvailable || quickCreateReason == null;
 
   return (
     <section className="builder-section" aria-label="League schedule builder" ref={builderSectionRef}>
@@ -2063,20 +2109,21 @@ export function LeagueBuilder() {
       </div>
       <div className="page-width wizard-progress" aria-label="Setup progress">
         <div className="wizard-progress-summary">
-          <span><small>Step {step + 1} of {STEPS.length}</small><strong>{STEPS[step].label}</strong></span>
-          <em>{Math.round(((step + 1) / STEPS.length) * 100)}% complete</em>
-          <div aria-hidden="true"><i style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} /></div>
+          <span><small>{showCreatePath ? "Choose build path" : `Step ${displayStep + 1} of ${STEPS.length}`}</small><strong>{showCreatePath ? "League next" : STEPS[displayStep].label}</strong></span>
+          <em>{setupProgress(displayStep)}% complete</em>
+          <div aria-hidden="true"><i style={{ width: `${setupProgress(displayStep)}%` }} /></div>
         </div>
-        <ol className="wizard-progress-track" ref={progressTrackRef} style={{ "--wizard-progress-ratio": step / (STEPS.length - 1), "--wizard-steps": STEPS.length } as React.CSSProperties}>
-          {STEPS.map((item, index) => <li key={item.label}><button type="button" title={item.label} aria-current={index === step ? "step" : undefined} aria-label={`Step ${index + 1}: ${item.label}${index < step ? ", complete" : index === step ? ", current" : ", upcoming"}`} disabled={index > step} className={index === step ? "active" : index < step ? "complete" : ""} onClick={() => { setError(null); setStep(index); }}><span>{index < step ? <Check /> : index + 1}</span><em><b>{item.label}</b><small>{item.shortLabel}</small></em></button></li>)}
+        <ol className="wizard-progress-track" ref={progressTrackRef} style={{ "--wizard-progress-ratio": displayStep / (STEPS.length - 1), "--wizard-steps": STEPS.length } as React.CSSProperties}>
+          {STEPS.map((item, index) => <li key={item.label}><button type="button" title={item.label} aria-current={index === displayStep ? "step" : undefined} aria-label={`Step ${index + 1}: ${item.label}${index < displayStep ? ", complete" : index === displayStep ? ", current" : ", upcoming"}`} disabled={index > displayStep} className={index === displayStep ? "active" : index < displayStep ? "complete" : ""} onClick={() => { setError(null); if (showCreatePath && index === 0) { setShowCreatePath(false); setStep(0); return; } if (showCreatePath && index === 1) { customizeEverything(); return; } setShowCreatePath(false); setStep(index); }}><span>{index < displayStep ? <Check /> : index + 1}</span><em><b>{item.label}</b><small>{item.shortLabel}</small></em></button></li>)}
         </ol>
       </div>
       <div className="page-width builder-layout">
         <div className="builder-tool">
-          <p className="sr-only" aria-live="polite">Step {step + 1} of {STEPS.length}: {STEPS[step].label}</p>
+          <p className="sr-only" aria-live="polite">{showCreatePath ? "Choose how to build this season. League is the next tracked step." : `Step ${displayStep + 1} of ${STEPS.length}: ${STEPS[displayStep].label}`}</p>
           <div className="builder-content" ref={builderContentRef} tabIndex={-1}>
-            {step === 0 && <SourceStep presets={savedLeagues} onManual={startManual} onChooseSaved={() => setSavedPickerOpen(true)} onImport={(source) => setImportSource(source)} />}
-            {step === 1 && <LeagueStep setup={setup} setSetup={setSetup} presets={savedLeagues} loadedPreset={loadedPreset} quickStartAvailable={quickStartAvailable} onQuickCreate={quickCreateSchedule} onStartFresh={startNewLeague} onLeagueLogoUploaded={suggestAvatarFromLogo} />}
+            {showCreatePath && <CreatePathStep setup={setup} quickCreateReady={quickCreateReady} quickCreateReason={quickCreateReason ?? "Quick Create is ready for this league."} onCustomize={customizeEverything} onQuickCreate={quickCreateSchedule} />}
+            {!showCreatePath && step === 0 && <SourceStep presets={savedLeagues} onManual={startManual} onChooseSaved={() => setSavedPickerOpen(true)} onImport={(source) => setImportSource(source)} />}
+            {!showCreatePath && step === 1 && <LeagueStep setup={setup} setSetup={setSetup} presets={savedLeagues} loadedPreset={loadedPreset} onStartFresh={startNewLeague} onLeagueLogoUploaded={suggestAvatarFromLogo} />}
             {step === 2 && <TeamsDivisionsStep setup={setup} setSetup={setSetup} showErrors={showFieldErrors} activeTab={teamsTab} onTab={setTeamsTab} />}
             {step === 3 && <SeasonRulesStep setup={setup} setSetup={setSetup} activeTab={seasonTab} onTab={setSeasonTab} />}
             {step === 4 && <PlayoffsStep setup={setup} setSetup={setSetup} />}
@@ -2084,12 +2131,12 @@ export function LeagueBuilder() {
           </div>
           {error && <div className="builder-error" role="alert"><CircleAlert />{error}</div>}
           {step > 0 && <div className="builder-actions">
-            <BuilderActionButtons step={step} generating={generating} skipDraftRankForNow={skipDraftRankForNow} back={back} next={next} generate={generate} />
+            <BuilderActionButtons step={displayStep} createPath={showCreatePath} generating={generating} skipDraftRankForNow={skipDraftRankForNow} back={back} next={next} generate={generate} />
           </div>}
         </div>
-        <LivePreview setup={setup} step={step} />
+        <LivePreview setup={setup} step={displayStep} />
       </div>
-      <BuilderBlueprintBar setup={setup} step={step} open={blueprintOpen} onToggle={() => setBlueprintOpen((current) => !current)} actions={{ step, generating, skipDraftRankForNow, back, next, generate }} />
+      <BuilderBlueprintBar setup={setup} step={displayStep} open={blueprintOpen} onToggle={() => setBlueprintOpen((current) => !current)} actions={{ step: displayStep, createPath: showCreatePath, generating, skipDraftRankForNow, back, next, generate }} />
       {importSource && <ImportLeagueModal source={importSource} setup={setup} onClose={() => setImportSource(null)} onConfirm={applyImport} />}
       {savedPickerOpen && (
         <SavedLeaguePicker
