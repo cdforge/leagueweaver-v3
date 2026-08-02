@@ -13,6 +13,10 @@ export interface SplitRecord {
 
 export interface TeamSeasonStats extends StandingsRow {
   record: string;
+  mvtScore: number;
+  mvtRank: number;
+  allStarCount: number;
+  allStarRank: number;
   home: SplitRecord;
   away: SplitRecord;
   bestStreak: string;
@@ -160,6 +164,10 @@ export function calculateTeamSeasonStats(schedule: GeneratedSchedule, playoffOdd
     return {
       ...row,
       record: formatRecord(row),
+      mvtScore: 0,
+      mvtRank: 0,
+      allStarCount: 0,
+      allStarRank: 0,
       home: home.get(row.teamId)!,
       away: away.get(row.teamId)!,
       bestStreak: bestWinStreak.get(row.teamId) ? `W${bestWinStreak.get(row.teamId)}` : "—",

@@ -820,8 +820,8 @@ function ScoreImageImport({ schedule, selectedWeek, onApply, onPendingChange }: 
   </section>;
 }
 
-function StandingsView({ schedule, onUpdateTiebreakers, readOnly = false }: { schedule: GeneratedSchedule; onUpdateTiebreakers?: (settings: TiebreakerSettings) => void; readOnly?: boolean }) {
-  return <StatsWorkspace schedule={schedule} onUpdateTiebreakers={onUpdateTiebreakers} readOnly={readOnly} />;
+function StandingsView({ schedule, playerStats, onUpdateTiebreakers, readOnly = false }: { schedule: GeneratedSchedule; playerStats?: GameDetailPlayerStat[]; onUpdateTiebreakers?: (settings: TiebreakerSettings) => void; readOnly?: boolean }) {
+  return <StatsWorkspace schedule={schedule} playerStats={playerStats} onUpdateTiebreakers={onUpdateTiebreakers} readOnly={readOnly} />;
 }
 
 function InlinePlayoffScoreEditor({
@@ -2330,10 +2330,10 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
         <div className="workspace-content">
           {view === "this-week" && <ThisWeekWorkspace schedule={activeSchedule} playerStats={gameDetailPlayerStats} simulationProbabilities={simulationProbabilityByGame} onOpenGame={openGameDetail} />}
           {view === "league-schedule" && <ScheduleView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} canAccessPlayoffs={canAccessPlayoffs} onOpenScores={openScoreEntry} onOpenPlayoffs={openPlayoffScores} onOpenGame={openGameDetail} highlightedGame={highlightedGame} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
-          {view === "team-schedule" && <TeamScheduleView schedule={activeSchedule} teamId={selectedTeamId} onSelectTeam={selectTeamSchedule} onSelectWeek={openLeagueScheduleWeek} simulationResults={simulationResultByGame} />}
+          {view === "team-schedule" && <TeamScheduleView schedule={activeSchedule} teamId={selectedTeamId} playerStats={gameDetailPlayerStats} onSelectTeam={selectTeamSchedule} onSelectWeek={openLeagueScheduleWeek} simulationResults={simulationResultByGame} />}
           {view === "gotw" && <GotwWorkspace schedule={activeSchedule} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
           {view === "matchup-ratings" && <MatchupRatingsView schedule={activeSchedule} />}
-          {view === "standings" && <StandingsView schedule={activeSchedule} onUpdateTiebreakers={simulation ? undefined : onUpdateTiebreakers} readOnly={Boolean(simulation)} />}
+          {view === "standings" && <StandingsView schedule={activeSchedule} playerStats={gameDetailPlayerStats} onUpdateTiebreakers={simulation ? undefined : onUpdateTiebreakers} readOnly={Boolean(simulation)} />}
           {view === "playoffs" && <PlayoffsView schedule={activeSchedule} onUpdatePlayoffs={simulation ? () => undefined : onUpdatePlayoffs} onUpdatePlayoffGame={simulation ? () => undefined : onUpdatePlayoffGame} highlightedGame={highlightedGame} simulationMode={Boolean(simulation)} playoffTab={playoffTab} onChangePlayoffTab={setPlayoffTab} />}
           {view === "simulator" && !simulation && simulationLoaded && <SimulatorLaunch hasSavedRun={Boolean(savedSimulation)} onPlay={playSimulation} onStartFromReal={startSimulationFromReal} />}
           {view === "simulator" && simulation && <SimulatorWorkspace
