@@ -2256,7 +2256,7 @@ export function LeagueBuilder() {
         markClassName="provider-app-icon"
         mark={<img src={`/providers/${importedConnectionPrompt.provider}.png`} alt="" />}
         kicker={`${providerName(importedConnectionPrompt.provider)} connected`.toUpperCase()}
-        title={signedIn ? "Save this connection for score updates?" : "Create an account to keep this link?"}
+        title={signedIn ? "Use connected league data?" : "Create account to use connected league data?"}
         labelId="imported-connection-title"
         descriptionId="imported-connection-description"
         closeLabel="Close imported connection choice"
@@ -2264,13 +2264,13 @@ export function LeagueBuilder() {
         onClose={continueImportedRosterOnly}
         actions={[
           { label: "Roster only", onClick: continueImportedRosterOnly, variant: "secondary", autoFocus: true, disabled: importedConnectionBusy },
-          { label: importedConnectionBusy ? "Saving…" : signedIn ? "Save connected league" : "Create free account", onClick: () => void saveImportedConnection(), variant: "primary", icon: signedIn ? <RefreshCw /> : <LogIn />, disabled: importedConnectionBusy },
+          { label: importedConnectionBusy ? "Saving…" : signedIn ? "Use & save connection" : "Create free account", onClick: () => void saveImportedConnection(), variant: "primary", icon: signedIn ? <RefreshCw /> : <LogIn />, disabled: importedConnectionBusy },
         ]}
       >
         <strong>{importedConnectionPrompt.leagueName}</strong>
         <p id="imported-connection-description">{signedIn
-          ? `Save this ${providerName(importedConnectionPrompt.provider)} connection to your account so League Weaver can auto-fill scores after you generate the season.`
-          : `Guests can import the roster, but platform score sync needs an account. Create a free account to keep this ${providerName(importedConnectionPrompt.provider)} link for auto-filled scores.`}</p>
+          ? `This import includes ${providerName(importedConnectionPrompt.provider)} League ${importedConnectionPrompt.providerLeagueId}. You can save the league with this connection for score refresh later, or load only the teams and divisions.`
+          : `This import includes ${providerName(importedConnectionPrompt.provider)} League ${importedConnectionPrompt.providerLeagueId}. Guests can load the roster only. Create a free account to keep this connection for score refresh later.`}</p>
         <small>League Weaver still cannot update ESPN or Sleeper schedules for you.</small>
         {importedConnectionError && <span className="league-logo-save-error" role="alert">{importedConnectionError}</span>}
       </ConfirmDialog>}
