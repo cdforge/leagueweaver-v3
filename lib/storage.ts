@@ -1,4 +1,5 @@
 import type { GeneratedSchedule, LeagueSetupInput } from "./types";
+import { applyTeamConferenceIds } from "./conferences";
 import { normalizeScheduleMatchups } from "./matchups";
 import { divisionAcronym, entityMonogram, leagueAcronym, resolveInitials } from "./monograms";
 import { normalizePlayoffSettings } from "./playoffs";
@@ -9,6 +10,7 @@ import { normalizeTiebreakerSettings } from "./tiebreakers";
 export function normalizeSetup(setup: LeagueSetupInput): LeagueSetupInput {
   const hasLeagueInitials = Object.prototype.hasOwnProperty.call(setup, "initials");
   const initials = hasLeagueInitials ? setup.initials : setup.abbreviation || undefined;
+  const divisions = setup.divisions.map((division) => ({ ...division, initials: Object.prototype.hasOwnProperty.call(division, "initials") ? division.initials : undefined }));
   return {
     ...setup,
     abbreviation: leagueAcronym(setup.name),
@@ -25,15 +27,16 @@ export function normalizeSetup(setup: LeagueSetupInput): LeagueSetupInput {
       status: setup.platformConnection.status ?? "idle",
       warnings: setup.platformConnection.warnings ?? [],
     } : undefined,
-    divisions: setup.divisions.map((division) => ({ ...division, initials: Object.prototype.hasOwnProperty.call(division, "initials") ? division.initials : undefined })),
-    teams: setup.teams.map((team) => {
+    conferences: setup.conferences?.map((conference) => ({ ...conference, initials: Object.prototype.hasOwnProperty.call(conference, "initials") ? conference.initials : undefined })),
+    divisions,
+    teams: applyTeamConferenceIds(setup.teams.map((team) => {
       const { draftScore: legacyDraftScore, ...teamWithoutLegacyScore } = team as typeof team & { draftScore?: number };
       const city = team.city || "";
       const teamInitials = Object.prototype.hasOwnProperty.call(team, "initials") ? team.initials : team.shortName || undefined;
       const storedDraftPlace = Number.isInteger(team.draftPlace) && team.draftPlace! >= 1 && team.draftPlace! <= setup.teams.length ? team.draftPlace : undefined;
       const migratedDraftPlace = Number.isInteger(legacyDraftScore) && legacyDraftScore! >= 1 && legacyDraftScore! <= setup.teams.length ? legacyDraftScore : undefined;
       return { ...teamWithoutLegacyScore, providerId: team.providerId, city, initials: teamInitials, draftPlace: storedDraftPlace ?? migratedDraftPlace, shortName: resolveInitials(teamInitials, entityMonogram(team.name, city)) };
-    }),
+    }), divisions),
   };
 }
 

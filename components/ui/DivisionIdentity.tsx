@@ -1,8 +1,8 @@
 import { type CSSProperties } from "react";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
-import { divisionAcronym, resolveInitials } from "@/lib/monograms";
-import type { Division } from "@/lib/types";
+import { divisionAcronym, entityMonogram, resolveInitials } from "@/lib/monograms";
+import type { Conference, Division } from "@/lib/types";
 
 export function DivisionMark({ division, size = 18, className = "" }: { division: Division; size?: number; className?: string }) {
   const initials = resolveInitials(division.initials, divisionAcronym(division.name));
@@ -48,6 +48,51 @@ export function DivisionIdentity({ division, detail, iconOnly = false, className
           />}
       {!iconOnly && <span>
         <strong>{division.name}</strong>
+        {detail && <small>{detail}</small>}
+      </span>}
+    </span>
+  );
+}
+
+export function ConferenceMark({ conference, size = 18, className = "" }: { conference: Conference; size?: number; className?: string }) {
+  const initials = resolveInitials(conference.initials, entityMonogram(conference.name));
+  const hasImage = Boolean(conference.logoUrl);
+  return <span
+    className={`division-mark conference-mark ${hasImage ? "" : "division-mark-filled"} ${className}`}
+    style={{
+      width: size,
+      height: size,
+      color: accessibleTeamColor(conference.color),
+      ...(hasImage ? {} : { "--dm-bg": conference.color, "--dm-ink": readableTextColor(conference.color) }),
+    } as CSSProperties}
+    aria-hidden="true"
+  >
+    {hasImage ? <img src={conference.logoUrl} alt="" /> : <b style={{ fontSize: `${Math.max(7, Math.round(size * 0.5))}px`, lineHeight: 1 }}>{initials}</b>}
+  </span>;
+}
+
+export function ConferenceIdentity({ conference, detail, iconOnly = false, className = "" }: {
+  conference: Conference;
+  detail?: string;
+  iconOnly?: boolean;
+  className?: string;
+}) {
+  return (
+    <span
+      className={`division-identity conference-identity ${iconOnly ? "division-identity-icon" : ""} ${className}`}
+      aria-label={iconOnly ? `${conference.name} conference` : undefined}
+      title={iconOnly ? `${conference.name} conference` : undefined}
+    >
+      {iconOnly
+        ? <ConferenceMark conference={conference} />
+        : <EntityLogo
+            color={conference.color}
+            logoUrl={conference.logoUrl}
+            monogram={resolveInitials(conference.initials, entityMonogram(conference.name))}
+            size={32}
+          />}
+      {!iconOnly && <span>
+        <strong>{conference.name}</strong>
         {detail && <small>{detail}</small>}
       </span>}
     </span>

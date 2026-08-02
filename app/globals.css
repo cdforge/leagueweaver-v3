@@ -525,6 +525,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .roster-status span { display: flex; flex-direction: column; gap: 2px; }
 .roster-status strong { font-size: var(--text-xs); }
 .roster-status small { color: var(--muted); font-size: var(--text-2xs); }
+.roster-status .conference-count-pill { display: inline-flex; flex-direction: row; align-items: center; gap: 4px; margin-right: 8px; }
 .division-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .division-identity-edit { min-height: 46px; border: 1px solid var(--line); border-radius: var(--radius); display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; padding: 5px 7px; gap: 6px; }
 .division-identity-edit > div:last-child { min-width: 0; display: grid; gap: 2px; }
