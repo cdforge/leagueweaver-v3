@@ -1,6 +1,7 @@
 import "server-only";
-import { fetchEspnLeague, mapEspnScores } from "./espn";
-import { mapSleeperScores } from "./sleeper";
+import { fetchEspnLeague, mapEspnPlayers, mapEspnScores } from "./espn";
+import { mapSleeperPlayers, mapSleeperScores } from "./sleeper";
+import type { PlayerWeekStat } from "@/lib/playerData";
 import type { GeneratedSchedule, PlatformSyncResult } from "@/lib/types";
 
 // Public-only score pull for a connected schedule — the shared core behind both
@@ -35,4 +36,31 @@ export async function computeScheduleScores(
     result.warnings.forEach((warning) => warnings.add(warning));
   }
   return { rows, unmatched, warnings: [...warnings], syncedAt: new Date().toISOString() };
+}
+
+export async function computeSchedulePlayers(
+  schedule: GeneratedSchedule,
+  opts?: { weeks?: number[] },
+): Promise<PlayerWeekStat[]> {
+  const connection = schedule.setup.platformConnection;
+  if (!connection?.provider || !connection.providerLeagueId) {
+    throw new Error("This schedule is not connected to ESPN or Sleeper.");
+  }
+
+  if (connection.provider === "espn") {
+    const weeks = opts?.weeks ?? schedule.weeks.map((week) => week.weekNumber);
+    const rows: PlayerWeekStat[] = [];
+    for (const week of weeks) {
+      const league = await fetchEspnLeague(connection.providerLeagueId, connection.seasonYear, ["mRoster", "mBoxscore"], undefined, { scoringPeriodId: week });
+      rows.push(...mapEspnPlayers(schedule, league, { weeks: [week] }));
+    }
+    return rows;
+  }
+
+  const weeks = opts?.weeks ?? schedule.weeks.map((week) => week.weekNumber);
+  const rows: PlayerWeekStat[] = [];
+  for (const week of weeks) {
+    rows.push(...await mapSleeperPlayers(schedule, week));
+  }
+  return rows;
 }
