@@ -272,7 +272,7 @@ function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores }: { schedule
     };
     return <MatchupCard
       game={game} away={away} home={home}
-      awayDivision={divisionById.get(away.divisionId)} homeDivision={divisionById.get(home.divisionId)}
+      awayDivision={divisionById.get(away.divisionId)} homeDivision={divisionById.get(home.divisionId)} setup={schedule.setup}
       awayRank={awaySeed} homeRank={homeSeed}
       awayRecord={recordFor(awayTeamId)} homeRecord={recordFor(homeTeamId)}
       featured={false} gameLabel={gameLabel} showCity={showCity} showVenue projected={projected}
@@ -461,6 +461,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
       home,
       awayDivision: divisionById.get(away.divisionId),
       homeDivision: divisionById.get(home.divisionId),
+      setup: schedule.setup,
       awayRank: standingsByTeam.get(away.id)?.rank ?? away.overallRank,
       homeRank: standingsByTeam.get(home.id)?.rank ?? home.overallRank,
       awayRecord: recordFor(away.id),
@@ -634,7 +635,7 @@ function MatchupRatingsView({ schedule }: { schedule: GeneratedSchedule }) {
             <td><TeamIdentityBlock compact showRecord={false} team={away} division={divisionById.get(away.divisionId)} leagueRank={rowRanks.get(away.id) ?? away.overallRank} record={{ overall: "0-0" }} showCity={schedule.setup.display.cityNames} href={`/season/${schedule.id}/team/${away.id}`} /></td>
             <td>{played ? <span className="matchup-table-result" aria-label={`Final score: ${away.name} ${game.awayScore}, ${home.name} ${game.homeScore}`}><span><strong className={awayWon ? "winner" : homeWon ? "loser" : ""}>{formatPoints(game.awayScore!)}</strong><b aria-label="at">@</b><strong className={homeWon ? "winner" : awayWon ? "loser" : ""}>{formatPoints(game.homeScore!)}</strong></span><small>FINAL</small></span> : <span className="matchup-table-result pending">—<small>NOT PLAYED</small></span>}</td>
             <td><TeamIdentityBlock mirrored compact showRecord={false} team={home} division={divisionById.get(home.divisionId)} leagueRank={rowRanks.get(home.id) ?? home.overallRank} record={{ overall: "0-0" }} showCity={schedule.setup.display.cityNames} href={`/season/${schedule.id}/team/${home.id}`} /></td>
-            <td><MatchupSeriesChip game={game} division={divisionById.get(home.divisionId)} /></td>
+            <td><MatchupSeriesChip game={game} awayDivision={divisionById.get(away.divisionId)} homeDivision={divisionById.get(home.divisionId)} setup={schedule.setup} /></td>
             <td><span className="table-rating-cell"><span className={`table-signal signal-${signal.label.toLowerCase()}`} aria-label={`${signal.label} matchup, rated ${signal.score10.toFixed(1)} out of 10`}>{[1, 2, 3].map((bar) => <i className={bar <= signal.bars ? "active" : ""} key={bar} />)}<strong>{signal.score10.toFixed(1)}</strong></span><small className="table-rating-ranks">W{game.week} ranks · #{rowRanks.get(away.id) ?? away.overallRank} vs #{rowRanks.get(home.id) ?? home.overallRank}</small></span></td>
           </tr>;
         })}</tbody>
@@ -645,7 +646,7 @@ function MatchupRatingsView({ schedule }: { schedule: GeneratedSchedule }) {
       const home = teamById.get(game.homeTeamId)!;
       const rowRanks = ranksForGame(game);
       return <MatchupCard key={game.id} game={game} away={away} home={home}
-        awayDivision={divisionById.get(away.divisionId)} homeDivision={divisionById.get(home.divisionId)}
+        awayDivision={divisionById.get(away.divisionId)} homeDivision={divisionById.get(home.divisionId)} setup={schedule.setup}
         awayRank={rowRanks.get(away.id) ?? away.overallRank} homeRank={rowRanks.get(home.id) ?? home.overallRank}
         awayRecord={{ overall: weeklyRecords.get(game.week)?.get(away.id) ?? "0-0" }} homeRecord={{ overall: weeklyRecords.get(game.week)?.get(home.id) ?? "0-0" }}
         signal={getMatchupSignal(game, lens === "live" ? rowRanks : undefined, ratingRange, teamCount)}
@@ -1282,7 +1283,7 @@ function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, onUpdatePlay
   importHistoryError: string | null;
   onRefreshImportHistory: () => void;
 }) {
-  const seeding = schedule.setup.priorSeason.entryMode === "manual" ? "Manual order" : schedule.setup.priorSeason.entryMode === "history" ? schedule.setup.priorSeason.source === "playoffs" ? "Last year’s playoff finish" : "Last year’s regular-season finish" : "Not used";
+  const seeding = schedule.setup.priorSeason.entryMode === "manual" ? "Manual order" : schedule.setup.priorSeason.entryMode === "random" ? "Randomized order" : schedule.setup.priorSeason.entryMode === "history" ? schedule.setup.priorSeason.source === "playoffs" ? "Last year’s playoff finish" : "Last year’s regular-season finish" : "Not used";
   const draftRankingPending = schedule.setup.weekOne.rankingSource === "draft-day" && getTeamsMissingDraftPlaces(schedule.setup).length > 0;
   return <div className="workspace-stack">
     <div className="settings-band"><div><Pencil /><span><strong>Schedule setup</strong><small>Changing league structure regenerates the complete matchup slate as a new revision.</small></span></div><button type="button" className="button-secondary" onClick={onRegenerate}><Pencil />Edit and regenerate</button></div>

@@ -1,8 +1,8 @@
 import { type CSSProperties } from "react";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
-import { divisionAcronym, resolveInitials } from "@/lib/monograms";
-import type { Division } from "@/lib/types";
+import { conferenceAcronym, divisionAcronym, resolveInitials } from "@/lib/monograms";
+import type { Conference, Division } from "@/lib/types";
 
 export function DivisionMark({ division, size = 18, className = "" }: { division: Division; size?: number; className?: string }) {
   const initials = resolveInitials(division.initials, divisionAcronym(division.name));
@@ -23,6 +23,25 @@ export function DivisionMark({ division, size = 18, className = "" }: { division
     {/* Size the acronym to the box so a 2–3 char monogram keeps a visible margin
         (a box-filling acronym reads as cramped/off-center) and centers cleanly. */}
     {hasImage ? <img src={division.logoUrl} alt="" /> : <b style={{ fontSize: `${Math.max(7, Math.round(size * 0.5))}px`, lineHeight: 1 }}>{initials}</b>}
+  </span>;
+}
+
+/** Same small identity badge as DivisionMark, one tier up: a conference's logo or
+ *  color+initials chip — used to prefix a division's own mark once conferences exist. */
+export function ConferenceMark({ conference, size = 18, className = "" }: { conference: Conference; size?: number; className?: string }) {
+  const initials = resolveInitials(conference.initials, conferenceAcronym(conference.name));
+  const hasImage = Boolean(conference.logoUrl);
+  return <span
+    className={`division-mark conference-mark ${hasImage ? "" : "division-mark-filled"} ${className}`}
+    style={{
+      width: size,
+      height: size,
+      color: accessibleTeamColor(conference.color),
+      ...(hasImage ? {} : { "--dm-bg": conference.color, "--dm-ink": readableTextColor(conference.color) }),
+    } as CSSProperties}
+    aria-hidden="true"
+  >
+    {hasImage ? <img src={conference.logoUrl} alt="" /> : <b style={{ fontSize: `${Math.max(7, Math.round(size * 0.5))}px`, lineHeight: 1 }}>{initials}</b>}
   </span>;
 }
 

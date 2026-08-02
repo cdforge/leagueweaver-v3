@@ -1,12 +1,15 @@
 import "server-only";
-import type { GeneratedSchedule, ImportDataFound, PlatformSyncResult, PlatformSyncScoreRow } from "@/lib/types";
+import type { GeneratedSchedule, ImportDataFound, PlatformSyncResult, PlatformSyncScoreRow, PriorSeasonFinishEntry } from "@/lib/types";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 
 export interface SleeperLeague { league_id: string; name?: string; season?: string; avatar?: string | null; draft_id?: string | null; previous_league_id?: string | null }
 export interface SleeperUser { user_id: string; display_name?: string; avatar?: string | null; metadata?: { team_name?: string } }
-export interface SleeperRoster { roster_id: number; owner_id?: string | null; settings?: { division?: number } }
+interface SleeperRosterSettings { division?: number; wins?: number; losses?: number; ties?: number; fpts?: number; fpts_decimal?: number }
+export interface SleeperRoster { roster_id: number; owner_id?: string | null; settings?: SleeperRosterSettings }
 interface SleeperMatchup { roster_id: number; matchup_id?: number; points?: number }
+/** One node of Sleeper's winners_bracket. `p` marks a placement game (1 = title). */
+interface SleeperBracketMatch { r?: number; m?: number; t1?: number | null; t2?: number | null; w?: number | null; l?: number | null; p?: number }
 
 export async function sleeperFetch<T>(path: string): Promise<T> {
   const response = await fetch(`${SLEEPER_API}${path}`, { headers: { Accept: "application/json" }, cache: "no-store" });
@@ -44,6 +47,58 @@ export async function scanSleeperHistory(leagueId: string): Promise<ImportDataFo
     }
   }
   return { availableHistoryYears: years, blockedHistoryYears: [], hasDraftData: true, hasRosterData: false, hasPlayerData: false, hasScoreSync: true };
+}
+
+function sleeperRosterPoints(settings?: SleeperRosterSettings) {
+  return (settings?.fpts ?? 0) + (settings?.fpts_decimal ?? 0) / 100;
+}
+
+/**
+ * Last season's finish for seeding a new schedule. Walks one `previous_league_id`
+ * hop from the connected league, then reads the prior season's rosters (for the
+ * regular-season order) and winners_bracket (for the true playoff finish). Keyed by
+ * owner id, which is stable across Sleeper seasons even though roster ids are not.
+ * Returns [] when there is no prior season to walk back to.
+ */
+export async function fetchSleeperPriorFinish(leagueId: string): Promise<PriorSeasonFinishEntry[]> {
+  const league = await sleeperFetch<SleeperLeague>(`/league/${encodeURIComponent(leagueId)}`);
+  const previousId = league.previous_league_id;
+  if (!previousId) return [];
+  const [rosters, bracket] = await Promise.all([
+    sleeperFetch<SleeperRoster[]>(`/league/${encodeURIComponent(previousId)}/rosters`),
+    sleeperFetch<SleeperBracketMatch[]>(`/league/${encodeURIComponent(previousId)}/winners_bracket`).catch(() => [] as SleeperBracketMatch[]),
+  ]);
+  if (rosters.length === 0) return [];
+  // Regular-season order: most wins, then most points.
+  const regularSeasonRankByRoster = new Map<number, number>(
+    [...rosters]
+      .sort((left, right) =>
+        (right.settings?.wins ?? 0) - (left.settings?.wins ?? 0) ||
+        sleeperRosterPoints(right.settings) - sleeperRosterPoints(left.settings) ||
+        left.roster_id - right.roster_id,
+      )
+      .map((roster, index) => [roster.roster_id, index + 1]),
+  );
+  // Playoff finish from placement games: a match with `p` awards rank p to the
+  // winner and p + 1 to the loser (p:1 title game -> champion + runner-up). Keep the
+  // best rank if a roster somehow appears in more than one placement game.
+  const playoffRankByRoster = new Map<number, number>();
+  for (const match of bracket) {
+    if (!match.p) continue;
+    const assign = (rosterId: number | null | undefined, rank: number) => {
+      if (rosterId == null) return;
+      const existing = playoffRankByRoster.get(rosterId);
+      if (existing == null || rank < existing) playoffRankByRoster.set(rosterId, rank);
+    };
+    assign(match.w, match.p);
+    assign(match.l, match.p + 1);
+  }
+  return rosters.map((roster) => ({
+    ownerId: roster.owner_id ?? undefined,
+    providerTeamId: String(roster.roster_id),
+    regularSeasonRank: regularSeasonRankByRoster.get(roster.roster_id),
+    playoffRank: playoffRankByRoster.get(roster.roster_id),
+  }));
 }
 
 export async function mapSleeperScores(schedule: GeneratedSchedule, week: number): Promise<PlatformSyncResult> {

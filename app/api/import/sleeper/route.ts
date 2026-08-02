@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import type { ImportPreview } from "@/lib/types";
-import { resolveSleeperLeagueId, scanSleeperHistory, sleeperAvatarUrl, sleeperFetch, type SleeperLeague, type SleeperRoster, type SleeperUser } from "@/lib/platform/sleeper";
+import type { ImportPreview, PriorSeasonFinishEntry } from "@/lib/types";
+import { fetchSleeperPriorFinish, resolveSleeperLeagueId, scanSleeperHistory, sleeperAvatarUrl, sleeperFetch, type SleeperLeague, type SleeperRoster, type SleeperUser } from "@/lib/platform/sleeper";
+import { applyPriorFinish } from "@/lib/platform/priorFinish";
 
 export async function POST(request: Request) {
   try {
@@ -17,14 +18,22 @@ export async function POST(request: Request) {
       sleeperFetch<SleeperRoster[]>(`/league/${encodeURIComponent(leagueId)}/rosters`),
     ]);
     const usersById = new Map(users.map((user) => [user.user_id, user]));
+    // Last season's finish, matched by owner id (roster ids change between seasons).
+    // Never block the import if the history walk fails.
+    const priorFinish: PriorSeasonFinishEntry[] = await fetchSleeperPriorFinish(league.league_id).catch(() => []);
+    const finish = applyPriorFinish(rosters.map((roster) => ({ ownerId: roster.owner_id ?? undefined, providerTeamId: String(roster.roster_id) })), priorFinish);
     const teams = rosters.map((roster, index) => {
       const owner = roster.owner_id ? usersById.get(roster.owner_id) : undefined;
+      const seed = finish.perTeam[index];
       return {
         providerId: `sleeper-${league.league_id}-${roster.roster_id}`,
         name: owner?.metadata?.team_name?.trim() || owner?.display_name?.trim() || `Roster ${roster.roster_id}`,
         manager: owner?.display_name?.trim() || "",
         division: roster.settings?.division ? `Division ${roster.settings.division}` : "",
-        rank: index + 1,
+        rank: seed?.rank ?? index + 1,
+        regularSeasonRank: seed?.regularSeasonRank,
+        playoffRank: seed?.playoffRank,
+        isNewManager: seed?.isNewManager,
         logoUrl: sleeperAvatarUrl(owner?.avatar),
       };
     });
@@ -40,7 +49,13 @@ export async function POST(request: Request) {
       dataFound,
       authType: "public",
       syncMode: "manual",
-      warnings: ["Sleeper uses a read-only public API. League Weaver cannot edit your Sleeper league.", ...warnings],
+      hasPriorSeasonRanks: finish.hasData,
+      warnings: [
+        "Sleeper uses a read-only public API. League Weaver cannot edit your Sleeper league.",
+        ...warnings,
+        ...(finish.hasData ? [`Seeded from the ${(Number(league.season) || seasonYear) - 1} regular-season finish. Switch to playoff finish in the Seeding step.`] : []),
+        ...(finish.newbieCount ? [`${finish.newbieCount} new manager${finish.newbieCount === 1 ? "" : "s"} had no last-season finish, so they're seeded last — adjust anytime in Seeding.`] : []),
+      ],
       requiresConfirmation: true,
     };
     return NextResponse.json(preview);

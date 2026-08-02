@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { CalendarClock, ChevronDown, CircleAlert, Gamepad2, LockKeyhole, MapPin, Medal, SlidersHorizontal, Star, StickyNote, TrendingUp, Zap } from "lucide-react";
-import { DivisionIdentity, DivisionMark } from "@/components/ui/DivisionIdentity";
+import { ConferenceMark, DivisionIdentity, DivisionMark } from "@/components/ui/DivisionIdentity";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
+import { conferenceOfDivision, hasConferences, matchupRelationship } from "@/lib/conferences";
 import { formatGameDateTimeOverride, getWeeklyMatchupSignal, matchupSeriesLabel, type MatchupSignal } from "@/lib/matchups";
 import { formatPoints, type GameBadge } from "@/lib/statistics";
 import { teamInitials } from "@/lib/teamIdentity";
-import type { Division, ScheduledGame, Team } from "@/lib/types";
+import type { Division, LeagueSetupInput, ScheduledGame, Team } from "@/lib/types";
 
 export interface TeamRecordDisplay {
   overall: string;
@@ -83,23 +84,50 @@ export function WeekMatchupRank({ rank, total, score, compact = false, withLabel
   </span>;
 }
 
-export function MatchupSeriesChip({ game, division }: { game: ScheduledGame; division?: Division }) {
-  const isDivision = game.matchupType === "division";
-  const label = matchupSeriesLabel(game);
-  const style = isDivision && division ? {
-    "--division-chip-color": division.color,
-    "--division-chip-ink": accessibleTeamColor(division.color),
-  } as React.CSSProperties : undefined;
+/**
+ * The schedule's relationship chip. Without `setup` (or in a league without conferences) this is
+ * exactly the historical two-way chip — Div / Cross-div, division mark only. Once conferences
+ * exist and both divisions are known, it splits Cross-div into Conf (same conference, different
+ * division) and Cross-conf (different conference) — and a Div chip gains a leading conference
+ * mark ahead of its division mark, since a division only means something within its conference.
+ */
+export function MatchupSeriesChip({ game, awayDivision, homeDivision, setup }: {
+  game: ScheduledGame;
+  awayDivision?: Division;
+  homeDivision?: Division;
+  setup?: Pick<LeagueSetupInput, "divisions" | "conferences">;
+}) {
+  const conferencesEnabled = Boolean(setup && hasConferences(setup));
+  const relationship = conferencesEnabled && setup && awayDivision && homeDivision
+    ? matchupRelationship(game.matchupType, awayDivision.id, homeDivision.id, setup)
+    : (game.matchupType === "division" ? "division" as const : "cross-division" as const);
+  const isDivision = relationship === "division";
+  const isConference = relationship === "conference";
+  const division = isDivision ? homeDivision : undefined;
+  const conference = conferencesEnabled && setup && (isDivision || isConference)
+    ? conferenceOfDivision(setup, (homeDivision ?? awayDivision)!.id)
+    : undefined;
   // A one-off (series of one) needs no "1 of 1" — only note the count when the
   // pair actually plays a multi-game series (1 of 2, 2 of 2).
   const seriesCount = game.seriesLength > 1 ? ` ${game.seriesGame} of ${game.seriesLength}` : "";
-  return <span className={`series-chip ${isDivision ? "division-series-chip" : "cross-series-chip"}`} style={style} aria-label={division && isDivision ? `${division.name} division${seriesCount ? `, game${seriesCount}` : ""}` : label}>
-    {isDivision ? <>
-      {division && <DivisionMark division={division} />}
-      <span>Div{seriesCount}</span>
-    </> : <>
-      <span>Cross-div{seriesCount}</span>
-    </>}
+  const label = matchupSeriesLabel(game, conferencesEnabled && setup && awayDivision && homeDivision
+    ? { awayDivisionId: awayDivision.id, homeDivisionId: homeDivision.id, setup }
+    : undefined);
+  const chipClass = isDivision ? "division-series-chip" : isConference ? "conference-series-chip" : "cross-series-chip";
+  const style = {
+    ...(isDivision && division ? { "--division-chip-color": division.color, "--division-chip-ink": accessibleTeamColor(division.color) } : {}),
+    ...(conference ? { "--conference-chip-color": conference.color, "--conference-chip-ink": accessibleTeamColor(conference.color) } : {}),
+  } as React.CSSProperties;
+  const text = isDivision ? `Div${seriesCount}` : isConference ? `Conf${seriesCount}` : `${conferencesEnabled ? "Cross-conf" : "Cross-div"}${seriesCount}`;
+  const ariaLabel = isDivision && division
+    ? `${division.name} division${seriesCount ? `, game${seriesCount}` : ""}`
+    : isConference && conference
+      ? `${conference.name} conference${seriesCount ? `, game${seriesCount}` : ""}`
+      : label;
+  return <span className={`series-chip ${chipClass}`} style={Object.keys(style).length ? style : undefined} aria-label={ariaLabel}>
+    {conference && <ConferenceMark conference={conference} />}
+    {division && <DivisionMark division={division} />}
+    <span>{text}</span>
   </span>;
 }
 
@@ -130,12 +158,14 @@ function GameDetails({ game }: { game: ScheduledGame }) {
   </div>;
 }
 
-export function MatchupCard({ game, away, home, awayDivision, homeDivision, awayRank, homeRank, awayRecord, homeRecord, signal, featured, featuredLabel = "GOTW", gameLabel, dateLabel, showCity, showVenue, variant = "standard", teamHrefBase, badges = [], medalRank, medalLabel, highlighted = false, simulationSource, simulationLocked = false, winProbability, projected = false }: {
+export function MatchupCard({ game, away, home, awayDivision, homeDivision, setup, awayRank, homeRank, awayRecord, homeRecord, signal, featured, featuredLabel = "GOTW", gameLabel, dateLabel, showCity, showVenue, variant = "standard", teamHrefBase, badges = [], medalRank, medalLabel, highlighted = false, simulationSource, simulationLocked = false, winProbability, projected = false }: {
   game: ScheduledGame;
   away: Team;
   home: Team;
   awayDivision?: Division;
   homeDivision?: Division;
+  /** Only needed to make the series chip conference-aware; omit and it behaves exactly as before. */
+  setup?: Pick<LeagueSetupInput, "divisions" | "conferences">;
   awayRank: number;
   homeRank: number;
   awayRecord: TeamRecordDisplay;
@@ -172,7 +202,7 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, away
       <div className="matchup-card-chips">
         {featured && <span className="gotw-chip"><Star fill="currentColor" /><strong>{featuredLabel}</strong></span>}
         {gameLabel && <span className="game-order-chip">{gameLabel}</span>}
-        <MatchupSeriesChip game={game} division={homeDivision} />
+        <MatchupSeriesChip game={game} awayDivision={awayDivision} homeDivision={homeDivision} setup={setup} />
         {medalRank && medalRank <= 3 && <span className={`schedule-medal medal-${medalRank}`} title={medalLabel}><Medal />{medalLabel || medalRank}</span>}
         {simulationSource && <span className={`simulation-chip source-${simulationSource}`}><Gamepad2 />{simulationSource === "override" ? "Commissioner result" : "Simulated"}{simulationLocked && <LockKeyhole />}</span>}
         {badges.filter((badge) => badge !== "GOTW").map((badge) => <GameBadgeChip badge={badge} key={badge} />)}

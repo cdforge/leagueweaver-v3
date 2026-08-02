@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { CircleAlert, ShieldCheck, Sparkles } from "lucide-react";
 import { MatchupCard } from "@/components/season/MatchupPresentation";
+import { useRouteBase } from "@/components/season/routeBase";
 import { getMatchupRatingRange, getMatchupSignal } from "@/lib/matchups";
 import { formatRecord, getEnteringWeekRankSnapshot } from "@/lib/standings";
 import { gameOfWeekStatusLabel, getScheduleGameSignals } from "@/lib/statistics";
@@ -13,6 +14,7 @@ export function GotwWorkspace({ schedule, simulationResults = {}, simulationProb
   simulationResults?: Record<string, { source: "simulated" | "override"; locked: boolean }>;
   simulationProbabilities?: Record<string, { away: number; home: number }>;
 }) {
+  const routeBase = useRouteBase(`/season/${schedule.id}`);
   const signals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
   const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
   const divisionById = new Map(schedule.setup.divisions.map((division) => [division.id, division]));
@@ -60,6 +62,7 @@ export function GotwWorkspace({ schedule, simulationResults = {}, simulationProb
             home={home}
             awayDivision={divisionById.get(away.divisionId)}
             homeDivision={divisionById.get(home.divisionId)}
+            setup={schedule.setup}
             awayRank={entry.ranks.get(away.id) ?? away.overallRank}
             homeRank={entry.ranks.get(home.id) ?? home.overallRank}
             awayRecord={recordFor(away.id)}
@@ -74,7 +77,7 @@ export function GotwWorkspace({ schedule, simulationResults = {}, simulationProb
             simulationSource={simulationResult?.source}
             simulationLocked={simulationResult?.locked}
             winProbability={simulationProbabilities[entry.game.id]}
-            teamHrefBase={`/season/${schedule.id}/team`}
+            teamHrefBase={`${routeBase}/team`}
           />
         </section>;
       })}

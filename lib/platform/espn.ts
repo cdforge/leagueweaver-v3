@@ -1,5 +1,5 @@
 import "server-only";
-import type { GeneratedSchedule, ImportDataFound, PlatformSyncResult, PlatformSyncScoreRow } from "@/lib/types";
+import type { GeneratedSchedule, ImportDataFound, PlatformSyncResult, PlatformSyncScoreRow, PriorSeasonFinishEntry } from "@/lib/types";
 
 const ESPN_BASE = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl";
 
@@ -9,7 +9,8 @@ export interface EspnAuthInput {
 }
 
 export interface EspnMember { id: string; displayName?: string; firstName?: string; lastName?: string }
-export interface EspnTeam { id: number; name?: string; location?: string; nickname?: string; abbrev?: string; logo?: string; primaryOwner?: string; owners?: string[]; divisionId?: number }
+interface EspnTeamRecord { overall?: { wins?: number; losses?: number; ties?: number; pointsFor?: number } }
+export interface EspnTeam { id: number; name?: string; location?: string; nickname?: string; abbrev?: string; logo?: string; primaryOwner?: string; owners?: string[]; divisionId?: number; playoffSeed?: number; rankCalculatedFinal?: number; rankFinal?: number; record?: EspnTeamRecord }
 export interface EspnLeague {
   id: number;
   seasonId?: number;
@@ -80,6 +81,44 @@ export async function scanEspnHistory(leagueId: string, seasonYear: number, auth
     hasPlayerData: false,
     hasScoreSync: true,
   };
+}
+
+function positiveRank(value?: number) {
+  return typeof value === "number" && value > 0 ? value : undefined;
+}
+
+/**
+ * Last season's finish for seeding a new schedule. Public leagues only — reuses the
+ * same no-cookie path as the import. ESPN keeps the same leagueId across seasons, so
+ * we read the prior year (seasonYear - 1) and return each team's regular-season seed
+ * and final (playoff-inclusive) standing, keyed by owner id with the team id as a
+ * fallback. Teams with no match this season are treated as newbies by the caller.
+ */
+export async function fetchEspnPriorFinish(leagueId: string, seasonYear: number, auth?: EspnAuthInput): Promise<PriorSeasonFinishEntry[]> {
+  const league = await fetchEspnLeague(leagueId, seasonYear - 1, ["mTeam", "mStandings"], auth);
+  const teams = league.teams ?? [];
+  if (teams.length === 0) return [];
+  // Prefer ESPN's own regular-season seed when every team has one; otherwise derive
+  // the order from final records (wins, then points-for) so we never hand back
+  // duplicate ranks from a half-populated payload.
+  const everyTeamSeeded = teams.every((team) => positiveRank(team.playoffSeed) != null)
+    && new Set(teams.map((team) => team.playoffSeed)).size === teams.length;
+  const recordOrder = [...teams].sort((left, right) =>
+    (right.record?.overall?.wins ?? 0) - (left.record?.overall?.wins ?? 0) ||
+    (right.record?.overall?.pointsFor ?? 0) - (left.record?.overall?.pointsFor ?? 0) ||
+    left.id - right.id,
+  );
+  const regularSeasonRankByTeam = new Map<number, number>(
+    everyTeamSeeded
+      ? teams.map((team) => [team.id, team.playoffSeed as number])
+      : recordOrder.map((team, index) => [team.id, index + 1]),
+  );
+  return teams.map((team) => ({
+    ownerId: team.primaryOwner || team.owners?.[0],
+    providerTeamId: String(team.id),
+    regularSeasonRank: regularSeasonRankByTeam.get(team.id),
+    playoffRank: positiveRank(team.rankCalculatedFinal) ?? positiveRank(team.rankFinal),
+  }));
 }
 
 function espnProviderId(leagueId: string, teamId?: number) {
