@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarClock, ChevronDown, CircleAlert, Gamepad2, LockKeyhole, MapPin, Medal, SlidersHorizontal, Star, StickyNote, TrendingUp, Zap } from "lucide-react";
+import { CalendarClock, ChevronDown, CircleAlert, ClipboardList, Gamepad2, LockKeyhole, MapPin, Medal, SlidersHorizontal, Star, StickyNote, TrendingUp, Zap } from "lucide-react";
 import { DivisionIdentity, DivisionMark } from "@/components/ui/DivisionIdentity";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
@@ -130,7 +130,11 @@ function GameDetails({ game }: { game: ScheduledGame }) {
   </div>;
 }
 
-export function MatchupCard({ game, away, home, awayDivision, homeDivision, awayRank, homeRank, awayRecord, homeRecord, signal, featured, featuredLabel = "GOTW", gameLabel, dateLabel, showCity, showVenue, variant = "standard", teamHrefBase, badges = [], medalRank, medalLabel, highlighted = false, simulationSource, simulationLocked = false, winProbability, projected = false }: {
+function isInteractiveTarget(target: EventTarget | null) {
+  return target instanceof HTMLElement && Boolean(target.closest("a, button, input, select, textarea, summary"));
+}
+
+export function MatchupCard({ game, away, home, awayDivision, homeDivision, awayRank, homeRank, awayRecord, homeRecord, signal, featured, featuredLabel = "GOTW", gameLabel, dateLabel, showCity, showVenue, variant = "standard", teamHrefBase, badges = [], medalRank, medalLabel, highlighted = false, simulationSource, simulationLocked = false, winProbability, projected = false, onOpenGame }: {
   game: ScheduledGame;
   away: Team;
   home: Team;
@@ -157,6 +161,7 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, away
   simulationLocked?: boolean;
   winProbability?: { away: number; home: number };
   projected?: boolean;
+  onOpenGame?: (gameId: string) => void;
 }) {
   // A 0-0 "score" is never a real fantasy result — treat it as not-yet-played so an
   // unstarted season reads as scheduled/projected instead of a fake FINAL 0-0.
@@ -167,7 +172,22 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, away
   const hasAdditionalDetails = Boolean(game.dateTimeOverride || game.rescheduleStatus || game.specialEvent || game.notes?.length || game.tbdReason);
   const awayResult = !played ? "open" : game.awayScore! > game.homeScore! ? "winner" : game.awayScore! < game.homeScore! ? "loser" : "open";
   const homeResult = !played ? "open" : game.homeScore! > game.awayScore! ? "winner" : game.homeScore! < game.awayScore! ? "loser" : "open";
-  return <article id={game.id} className={`matchup-card ${featured ? "is-gotw" : ""} ${highlighted ? "is-stat-highlight" : ""} ${showProjected ? "is-projected" : ""} ${simulationSource ? `is-simulated simulation-${simulationSource}` : ""} matchup-card-${variant}`}>
+  const openLabel = `Open box score for ${away.name} at ${home.name}`;
+  return <article
+    id={game.id}
+    className={`matchup-card ${onOpenGame ? "is-openable" : ""} ${featured ? "is-gotw" : ""} ${highlighted ? "is-stat-highlight" : ""} ${showProjected ? "is-projected" : ""} ${simulationSource ? `is-simulated simulation-${simulationSource}` : ""} matchup-card-${variant}`}
+    role={onOpenGame ? "button" : undefined}
+    tabIndex={onOpenGame ? 0 : undefined}
+    aria-label={onOpenGame ? openLabel : undefined}
+    onClick={(event) => { if (onOpenGame && !isInteractiveTarget(event.target)) onOpenGame(game.id); }}
+    onKeyDown={(event) => {
+      if (!onOpenGame || isInteractiveTarget(event.target)) return;
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onOpenGame(game.id);
+      }
+    }}
+  >
     <div className="matchup-card-badges">
       <div className="matchup-card-chips">
         {featured && <span className="gotw-chip"><Star fill="currentColor" /><strong>{featuredLabel}</strong></span>}
@@ -185,6 +205,7 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, away
           <small>AWAY {Math.round(winProbability.away * 100)}%</small>
           <small>HOME {Math.round(winProbability.home * 100)}%</small>
         </span>}
+        {onOpenGame && <button type="button" className="matchup-box-score-trigger" aria-label={openLabel} onClick={() => onOpenGame(game.id)}><ClipboardList />Box score</button>}
         {signal && <SignalBars signal={signal} awayRank={awayRank} homeRank={homeRank} />}
       </div>
     </div>

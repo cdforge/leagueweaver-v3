@@ -1836,6 +1836,9 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
    holds bordered, rounded cards with breathing room between them. */
 .matchup-card-list { display: grid; gap: 10px; background: var(--canvas); padding: 12px; }
 .matchup-card { position: relative; min-width: 0; scroll-margin-block: 110px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; background: white; padding: 12px 14px; }
+.matchup-card.is-openable { cursor: pointer; }
+.matchup-card.is-openable:hover { border-color: color-mix(in srgb, var(--field) 26%, var(--line)); box-shadow: var(--shadow-sm); }
+.matchup-card.is-openable:focus-visible { outline: 3px solid color-mix(in srgb, var(--field) 42%, transparent); outline-offset: 2px; }
 .matchup-card.is-stat-highlight { background: #fffdf4; box-shadow: inset 4px 0 var(--gold), inset 0 0 0 1px color-mix(in srgb, var(--gold) 58%, white); }
 .matchup-card:last-child { border-bottom: 1px solid var(--line); }
 .matchup-card.is-gotw { background: #fffaf0; box-shadow: inset 4px 0 var(--gold); }
@@ -1843,6 +1846,9 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 /* Desktop: the chip / meta wrappers are transparent so everything flows as one
    wrapping row (unchanged); mobile splits them into two footer rows. */
 .matchup-card-chips, .matchup-card-meta { display: contents; }
+.matchup-box-score-trigger { min-height: 30px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid color-mix(in srgb, var(--field) 20%, var(--line)); border-radius: var(--radius); background: var(--field-soft); color: var(--field-dark); padding: 0 9px; font-size: var(--text-xs); font-weight: var(--w-black); cursor: pointer; }
+.matchup-box-score-trigger:hover { border-color: var(--field); background: white; }
+.matchup-box-score-trigger svg { width: 14px; height: 14px; }
 .matchup-venue-mono { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: 0 0 auto; border-radius: 4px; font-size: 8px; font-weight: var(--w-black); line-height: 1; }
 .gotw-chip, .series-chip { width: fit-content; min-height: 24px; display: inline-flex; align-items: center; gap: 5px; border-radius: var(--radius-chip); padding: 4px 7px; font-family: var(--font-archivo), sans-serif; font-size: var(--text-2xs); font-weight: var(--w-bold); letter-spacing: 0; line-height: 1.2; white-space: nowrap; }
 .gotw-chip { background: var(--gold-soft); color: #6b5300; box-shadow: none; text-transform: none; }
@@ -3242,6 +3248,92 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .score-entry-modal > footer > span svg { width: 16px; color: var(--field); }
 .score-entry-modal > footer small { font-size: var(--text-2xs); }
 .score-entry-modal > footer button { min-width: 92px; }
+.game-detail-modal-backdrop { z-index: 1000; background: rgba(7, 20, 13, .78); }
+.game-detail-modal { width: min(1120px, 100%); max-height: min(900px, calc(100dvh - 40px)); overflow: hidden; border: 1px solid rgb(255 255 255 / .28); border-radius: var(--radius); background: var(--surface); box-shadow: 0 26px 80px rgb(7 20 13 / .42); display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); }
+.game-detail-modal.is-broadcast { background: var(--pk); color: var(--pk-ink); box-shadow: 0 30px 88px rgb(0 0 0 / .54), inset 0 4px var(--gold); }
+.gdm-header { min-height: 82px; display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 12px; border-bottom: 1px solid var(--line); background: var(--ink); color: white; padding: 12px 14px; }
+.is-broadcast .gdm-header { border-bottom-color: var(--pk-line); background: linear-gradient(90deg, color-mix(in srgb, var(--gold) 12%, var(--pk)), var(--pk)); }
+.gdm-back, .gdm-close { width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: var(--radius-sm); background: transparent; color: inherit; cursor: pointer; }
+.gdm-back:hover, .gdm-close:hover { background: rgb(255 255 255 / .1); }
+.gdm-back svg, .gdm-close svg { width: 19px; height: 19px; }
+.gdm-title-lockup { min-width: 0; }
+.gdm-title-lockup > span { display: inline-flex; align-items: center; gap: 6px; color: var(--gold); font-size: var(--text-xs); font-weight: var(--w-black); text-transform: uppercase; }
+.gdm-title-lockup > span svg { width: 14px; height: 14px; }
+.gdm-title-lockup h2 { margin: 3px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-2xl); line-height: 1; }
+.gdm-title-lockup small { display: flex; align-items: center; gap: 6px; color: #c7d4ce; font-size: var(--text-xs); line-height: 1.3; }
+.gdm-title-lockup small svg { width: 14px; height: 14px; flex: 0 0 auto; }
+.gdm-scoreline { min-height: 74px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; align-items: center; gap: 14px; border-bottom: 1px solid var(--line); background: linear-gradient(90deg, color-mix(in srgb, var(--away) 10%, white), white 45%, color-mix(in srgb, var(--home) 10%, white)); padding: 10px 18px; }
+.is-broadcast .gdm-scoreline { border-bottom-color: var(--pk-line); background: linear-gradient(90deg, color-mix(in srgb, var(--away) 24%, var(--pk)), var(--pk) 48%, color-mix(in srgb, var(--home) 24%, var(--pk))); }
+.gdm-scoreline > span { min-width: 0; display: grid; gap: 2px; }
+.gdm-scoreline > span:last-of-type { text-align: right; }
+.gdm-scoreline small, .gdm-scoreline em { color: var(--muted); font-size: var(--text-xs); font-style: normal; font-weight: var(--w-black); text-transform: uppercase; }
+.is-broadcast .gdm-scoreline small, .is-broadcast .gdm-scoreline em { color: var(--pk-mut); }
+.gdm-scoreline strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--num-lg); line-height: 1; }
+.gdm-scoreline > b { color: var(--muted); font-size: var(--text-md); }
+.gdm-unsynced { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); background: var(--field-soft); color: var(--field-dark); padding: 10px 18px; }
+.is-broadcast .gdm-unsynced { border-bottom-color: var(--pk-line); background: color-mix(in srgb, var(--field) 18%, var(--pk)); color: var(--pk-ink); }
+.gdm-unsynced svg { width: 18px; height: 18px; flex: 0 0 auto; }
+.gdm-unsynced span { display: grid; line-height: 1.25; }
+.gdm-unsynced small { color: inherit; opacity: .78; font-size: var(--text-xs); }
+.gdm-rosters { min-height: 0; overflow: auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; padding: 14px; background: var(--canvas); }
+.is-broadcast .gdm-rosters { background: color-mix(in srgb, var(--pk) 88%, black); }
+.gdm-team-panel { min-width: 0; display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--line); border-top: 4px solid var(--team); border-radius: var(--radius); background: white; padding: 12px; }
+.is-broadcast .gdm-team-panel { border-color: var(--pk-line); border-top-color: var(--team); background: color-mix(in srgb, var(--pk-2) 92%, var(--team)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--team) 16%, transparent), 0 18px 42px rgb(0 0 0 / .18); }
+.gdm-team-panel > header { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.gdm-team-panel > header > span { min-width: 0; display: grid; gap: 2px; }
+.gdm-team-panel > header small { display: flex; align-items: center; gap: 4px; min-width: 0; color: var(--muted); font-size: var(--text-xs); font-weight: var(--w-black); }
+.is-broadcast .gdm-team-panel > header small { color: var(--pk-mut); }
+.gdm-team-panel > header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--team-ink); font-size: var(--text-lg); line-height: 1.1; }
+.is-broadcast .gdm-team-panel > header strong { color: var(--pk-ink); }
+.gdm-team-panel > header > b { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--num-md); line-height: 1; }
+.gdm-roster-section { display: grid; gap: 6px; }
+.gdm-roster-section > header { min-height: 28px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); color: var(--ink); }
+.is-broadcast .gdm-roster-section > header { border-bottom-color: var(--pk-line); color: var(--pk-ink); }
+.gdm-roster-section > header strong { font-size: var(--text-xs); text-transform: uppercase; }
+.gdm-roster-section > header small { min-width: 24px; border-radius: var(--radius-chip); background: var(--canvas); color: var(--muted); text-align: center; font-size: var(--text-2xs); font-weight: var(--w-black); }
+.is-broadcast .gdm-roster-section > header small { background: var(--pk-line); color: var(--pk-mut); }
+.gdm-roster-section ul { list-style: none; display: grid; gap: 5px; margin: 0; padding: 0; }
+.gdm-roster-section p, .gdm-team-fallback small { margin: 0; color: var(--muted); font-size: var(--text-xs); }
+.is-broadcast .gdm-roster-section p, .is-broadcast .gdm-team-fallback small { color: var(--pk-mut); }
+.gdm-player-row { min-height: 42px; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto 76px 20px; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fbfdfc; padding: 6px 7px; }
+.is-broadcast .gdm-player-row { border-color: var(--pk-line); background: rgb(255 255 255 / .04); }
+.gdm-player-row.status-bench, .gdm-player-row.status-ir, .gdm-player-row.status-taxi, .gdm-player-row.status-reserve { opacity: .82; }
+.gdm-slot-badge, .gdm-nfl-badge { min-height: 24px; display: inline-grid; place-items: center; border-radius: var(--radius-chip); padding: 0 6px; font-size: var(--text-2xs); font-weight: var(--w-black); line-height: 1; }
+.gdm-slot-badge { background: var(--ink); color: white; }
+.is-broadcast .gdm-slot-badge { background: var(--pk-line); color: var(--pk-ink); }
+.gdm-player-main { min-width: 0; display: grid; gap: 1px; }
+.gdm-player-main strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); line-height: 1.1; }
+.gdm-player-main small, .gdm-player-points small { color: var(--muted); font-size: var(--text-2xs); line-height: 1.1; }
+.is-broadcast .gdm-player-main small, .is-broadcast .gdm-player-points small { color: var(--pk-mut); }
+.gdm-player-points { min-width: 0; display: grid; text-align: right; }
+.gdm-player-points strong { font-variant-numeric: tabular-nums; font-size: var(--text-sm); line-height: 1.1; }
+.gdm-allstar-slot { width: 18px; height: 18px; border: 1px dashed var(--line-strong); border-radius: var(--radius-pill); }
+.is-broadcast .gdm-allstar-slot { border-color: var(--pk-line); }
+.gdm-team-fallback { min-height: 96px; display: flex; align-items: center; gap: 10px; border: 1px dashed var(--line-strong); border-radius: var(--radius); background: var(--canvas); padding: 14px; }
+.is-broadcast .gdm-team-fallback { border-color: var(--pk-line); background: rgb(255 255 255 / .04); }
+.gdm-team-fallback svg { width: 20px; height: 20px; color: var(--field); }
+.gdm-team-fallback span { display: grid; gap: 2px; }
+
+@media (max-width: 640px) {
+  .game-detail-modal-backdrop { padding: 0; }
+  .game-detail-modal { align-self: stretch; justify-self: stretch; width: 100%; height: 100vh; height: 100dvh; min-height: 100vh; max-height: 100dvh; border: 0; border-radius: 0; background: var(--surface); }
+  .game-detail-modal.is-broadcast { background: #111916; }
+  .gdm-header { min-height: 70px; padding: 8px 10px; }
+  .gdm-title-lockup h2 { white-space: normal; font-size: var(--text-xl); line-height: 1.02; }
+  .gdm-title-lockup small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gdm-scoreline { min-height: 62px; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; padding: 8px 10px; }
+  .gdm-scoreline em { grid-column: 1 / -1; text-align: center; }
+  .gdm-rosters { grid-template-columns: 1fr; gap: 10px; background: var(--canvas); padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); }
+  .is-broadcast .gdm-rosters { background: #111916; }
+  .gdm-team-panel { padding: 10px; }
+  .is-broadcast .gdm-team-panel { background: #1e2622; }
+  .is-broadcast .gdm-team-fallback { background: #24302a; }
+  .gdm-team-panel > header { grid-template-columns: 44px minmax(0, 1fr) auto; }
+  .gdm-team-panel > header .entity-logo { width: 44px !important; height: 44px !important; }
+  .gdm-player-row { grid-template-columns: 40px minmax(0, 1fr) 68px 18px; gap: 6px; }
+  .gdm-nfl-badge { display: none; }
+  .gdm-player-points { width: 68px; }
+}
 .import-modal { width: min(880px, 100%); max-height: min(820px, calc(100vh - 40px)); overflow: hidden; border: 1px solid rgba(255,255,255,.35); border-radius: var(--radius); background: white; box-shadow: 0 24px 70px rgba(7, 20, 13, .35); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
 .import-modal-head { min-height: 72px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 48px 1fr 44px; align-items: center; gap: 13px; padding: 11px 18px; }
 .import-modal-head .step-kicker { margin-bottom: 2px; }
