@@ -1,7 +1,8 @@
 import "server-only";
-import { fetchEspnLeague, mapEspnPlayers, mapEspnScores } from "./espn";
-import { mapSleeperPlayers, mapSleeperScores } from "./sleeper";
+import { fetchEspnLeague, fetchEspnTransactions, mapEspnPlayers, mapEspnScores } from "./espn";
+import { fetchSleeperTransactions, mapSleeperPlayers, mapSleeperScores } from "./sleeper";
 import type { PlayerWeekStat } from "@/lib/playerData";
+import type { NormalizedTransaction } from "@/lib/transactions";
 import type { GeneratedSchedule, PlatformSyncResult } from "@/lib/types";
 
 // Public-only score pull for a connected schedule — the shared core behind both
@@ -63,4 +64,27 @@ export async function computeSchedulePlayers(
     rows.push(...await mapSleeperPlayers(schedule, week));
   }
   return rows;
+}
+
+export async function computeScheduleTransactions(
+  schedule: GeneratedSchedule,
+  opts?: { weeks?: number[] },
+): Promise<{ rows: NormalizedTransaction[]; warnings: string[] }> {
+  const connection = schedule.setup.platformConnection;
+  if (!connection?.provider || !connection.providerLeagueId) {
+    throw new Error("This schedule is not connected to ESPN or Sleeper.");
+  }
+  const weeks = opts?.weeks ?? schedule.weeks.map((week) => week.weekNumber);
+  const rows: NormalizedTransaction[] = [];
+  const warnings = new Set<string>();
+  for (const week of weeks) {
+    if (connection.provider === "espn") {
+      const result = await fetchEspnTransactions(schedule, week);
+      rows.push(...result.rows);
+      result.warnings.forEach((warning) => warnings.add(warning));
+    } else {
+      rows.push(...await fetchSleeperTransactions(schedule, week));
+    }
+  }
+  return { rows, warnings: [...warnings] };
 }
