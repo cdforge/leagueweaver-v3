@@ -1364,33 +1364,29 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .saved-league-pager .button-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
 .saved-league-pager-count { color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-bold); font-variant-numeric: tabular-nums; }
 
-/* Quick-create ⁄ Customize fork card on the League step (B2). Customize is the
-   emphasized primary; Quick create is the secondary shortcut with a settings
-   preview + a "you'll regenerate to change these" note. */
-.build-fork { border: 1px solid var(--line-strong); border-radius: var(--radius); background: white; box-shadow: var(--shadow-sm); overflow: hidden; }
 .create-path-screen { min-height: 460px; align-content: center; }
 .create-path-heading { max-width: 720px; }
 .create-path-heading .step-kicker { color: var(--field-dark); }
-.create-path-panel { box-shadow: 0 18px 45px rgba(21, 35, 28, .12); }
-.build-fork-head { border-bottom: 1px solid var(--line); padding: 14px 16px; display: flex; flex-direction: column; gap: 3px; }
-.build-fork-head strong { font-size: var(--text-lg); }
-.build-fork-head small { color: var(--muted); font-size: var(--text-xs); }
-.build-fork-options { display: grid; grid-template-columns: 1.15fr 1fr; }
-.build-fork-primary { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; border: 0; border-right: 1px solid var(--line); background: var(--field-soft); padding: 18px 16px; cursor: pointer; transition: background var(--transition); }
-.build-fork-primary:hover { background: color-mix(in srgb, var(--field) 12%, white); }
-.build-fork-primary strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); line-height: 1.05; color: var(--ink); }
-.build-fork-primary small { color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
-.build-fork-primary:focus-visible { outline: 3px solid color-mix(in srgb, var(--field), white 58%); outline-offset: -3px; }
+.create-path-options { display: grid; grid-template-columns: 1.08fr .95fr; gap: 14px; align-items: stretch; }
+.create-path-choice { min-height: 214px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: white; box-shadow: var(--shadow-sm); padding: 22px; text-align: left; }
+.create-path-choice-primary { display: grid; grid-template-columns: 54px 1fr; grid-template-rows: auto 1fr auto; align-items: start; gap: 16px; border-color: color-mix(in srgb, var(--field) 72%, var(--line)); background: linear-gradient(135deg, color-mix(in srgb, var(--field) 12%, white), white 68%); cursor: pointer; box-shadow: 0 18px 45px rgba(21, 35, 28, .13); transition: background var(--transition), border-color var(--transition), transform var(--transition); }
+.create-path-choice-primary:hover { border-color: var(--field); background: linear-gradient(135deg, color-mix(in srgb, var(--field) 18%, white), white 64%); transform: translateY(-1px); }
+.create-path-choice-primary:focus-visible { outline: 3px solid color-mix(in srgb, var(--field), white 58%); outline-offset: 3px; }
+.create-path-choice-quick { display: flex; flex-direction: column; gap: 10px; background: var(--canvas); }
+.create-path-choice-head { display: grid; grid-template-columns: 44px 1fr; align-items: center; gap: 12px; }
+.create-path-choice-icon { width: 54px; height: 54px; border-radius: var(--radius); display: inline-flex; align-items: center; justify-content: center; background: var(--field); color: white; }
+.create-path-choice-icon svg { width: 24px; }
+.create-path-choice-quick .create-path-choice-icon { width: 44px; height: 44px; background: var(--gold-soft); color: #806000; }
+.create-path-choice-quick .create-path-choice-icon svg { width: 20px; }
+.create-path-choice-copy { display: flex; flex-direction: column; gap: 6px; }
+.create-path-choice-copy strong { color: var(--ink); font-size: var(--text-lg); }
+.create-path-choice-primary .create-path-choice-copy strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-3xl); line-height: .98; }
+.create-path-choice-copy small { color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
 .build-fork-tag { align-self: flex-start; font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: 0.05em; color: var(--field-dark); background: white; border: 1px solid var(--field); border-radius: var(--radius-pill); padding: 2px 8px; }
-.build-fork-go { margin-top: 4px; display: inline-flex; align-items: center; gap: 6px; color: var(--field-dark); font-weight: var(--w-bold); font-size: var(--text-sm); }
+.build-fork-go { grid-column: 2; margin: auto 0 0; display: inline-flex; align-items: center; gap: 6px; color: var(--field-dark); font-weight: var(--w-bold); font-size: var(--text-sm); white-space: nowrap; }
 .build-fork-go svg { width: 16px; }
-.build-fork-secondary { display: flex; flex-direction: column; gap: 8px; padding: 18px 16px; background: var(--canvas); }
-.build-fork-secondary-head { display: inline-flex; align-items: center; gap: 6px; }
 .build-fork-weeks { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .build-fork-weeks > span { font-size: var(--text-2xs); font-weight: var(--w-bold); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-.build-fork-secondary-head svg { width: 16px; color: var(--field); }
-.build-fork-secondary-head strong { font-size: var(--text-md); }
-.build-fork-secondary > small { color: var(--muted); font-size: var(--text-xs); }
 .build-fork-summary { list-style: none; margin: 2px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .build-fork-summary li { position: relative; padding-left: 16px; font-size: var(--text-xs); color: var(--ink); line-height: 1.35; }
 .build-fork-summary li::before { content: ""; position: absolute; left: 2px; top: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--field); }
@@ -1411,8 +1407,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .start-option--main { padding: 22px; }
   .start-primary-row.has-saved { grid-template-columns: 1fr; }
   .start-option--saved { padding: 22px; }
-  .build-fork-options { grid-template-columns: 1fr; }
-  .build-fork-primary { border-right: 0; border-bottom: 1px solid var(--line); }
+  .create-path-options { grid-template-columns: 1fr; }
+  .create-path-choice-primary { grid-template-columns: 44px 1fr; min-height: 156px; }
+  .create-path-choice-primary .create-path-choice-icon { width: 44px; height: 44px; }
+  .create-path-choice-primary .create-path-choice-icon svg { width: 20px; }
+  .create-path-choice-primary .build-fork-go { grid-column: 2; }
+  .build-fork-weeks { align-items: flex-start; flex-direction: column; }
 }
 
 /* Phones + portrait tablets: the art becomes a clear band under the copy. A tall

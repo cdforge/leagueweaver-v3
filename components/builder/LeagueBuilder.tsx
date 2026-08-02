@@ -20,6 +20,7 @@ import {
   Plus,
   RefreshCw,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   Trophy,
   Users,
@@ -220,39 +221,41 @@ function CreatePathStep({ setup, quickCreateReady, quickCreateReason, onCustomiz
         <h1>How do you want to build this season?</h1>
         <p>Customize every setting yourself, or pick a season length and let League Weaver create a ready-to-review schedule.</p>
       </div>
-      <div className="build-fork create-path-panel">
-        <div className="build-fork-head">
-          <strong>Choose your setup path.</strong>
-          <small>You can still review everything before the schedule opens.</small>
-        </div>
-        <div className="build-fork-options">
-          <button type="button" className="build-fork-primary" onClick={onCustomize}>
+      <div className="create-path-options" role="group" aria-label="Choose setup path">
+        <button type="button" className="create-path-choice create-path-choice-primary" onClick={onCustomize}>
+          <span className="create-path-choice-icon"><SlidersHorizontal aria-hidden="true" /></span>
+          <span className="create-path-choice-copy">
             <span className="build-fork-tag">Recommended</span>
             <strong>Customize everything</strong>
-            <small>Walk each section: league identity, teams, divisions, season rules, seeding, and playoffs.</small>
-            <span className="build-fork-go" aria-hidden="true">Continue setup <ArrowRight /></span>
-          </button>
-          <div className="build-fork-secondary">
-            <span className="build-fork-secondary-head"><Zap aria-hidden="true" /><strong>Quick create</strong></span>
-            <small>Choose your regular-season length first. Quick Create applies recommended playoff settings and generates now.</small>
-            <div className="build-fork-weeks">
-              <span>Regular season</span>
-              <div className="segmented">
-                <button type="button" className={weeks === 13 ? "active" : ""} onClick={() => setWeeks(13)}>13 weeks</button>
-                <button type="button" className={weeks === 14 ? "active" : ""} onClick={() => setWeeks(14)}>14 weeks</button>
-              </div>
-            </div>
-            <ul className="build-fork-summary">
-              <li>{grouping} · <b>{setup.teams.length} teams</b>{setup.divisions.length > 1 ? ` · ${setup.divisions.length} divisions` : ""}</li>
-              <li><b>{weeks}-week</b> season · <b>{rec.playoffWeeks}-week</b> playoff</li>
-              <li><b>{rec.fieldSize}-team</b> playoff · gold · single-elimination</li>
-              <li>Seeded by <b>last season</b></li>
-              <li>Balanced schedule rules &amp; standard tiebreakers</li>
-            </ul>
-            <p className="build-fork-note"><CircleAlert aria-hidden="true" />{quickCreateReady ? "These lock in when you generate. To change them later you’ll regenerate the schedule." : quickCreateReason}</p>
-            <button type="button" className="button-secondary build-fork-quick" disabled={!quickCreateReady} onClick={() => onQuickCreate(weeks)}><Zap aria-hidden="true" />Quick create schedule</button>
+            <small>Walk each section yourself: league identity, teams, divisions, season rules, seeding, and playoffs.</small>
+          </span>
+          <span className="build-fork-go" aria-hidden="true">Continue setup <ArrowRight /></span>
+        </button>
+        <section className="create-path-choice create-path-choice-quick" aria-labelledby="quick-create-heading">
+          <div className="create-path-choice-head">
+            <span className="create-path-choice-icon"><Zap aria-hidden="true" /></span>
+            <span className="create-path-choice-copy">
+              <strong id="quick-create-heading">Quick create</strong>
+              <small>Pick a season length first. League Weaver applies recommended playoff settings and generates now.</small>
+            </span>
           </div>
-        </div>
+          <div className="build-fork-weeks">
+            <span>Regular season</span>
+            <div className="segmented">
+              <button type="button" className={weeks === 13 ? "active" : ""} onClick={() => setWeeks(13)}>13 weeks</button>
+              <button type="button" className={weeks === 14 ? "active" : ""} onClick={() => setWeeks(14)}>14 weeks</button>
+            </div>
+          </div>
+          <ul className="build-fork-summary">
+            <li>{grouping} · <b>{setup.teams.length} teams</b>{setup.divisions.length > 1 ? ` · ${setup.divisions.length} divisions` : ""}</li>
+            <li><b>{weeks}-week</b> season · <b>{rec.playoffWeeks}-week</b> playoff</li>
+            <li><b>{rec.fieldSize}-team</b> playoff · gold · single-elimination</li>
+            <li>Seeded by <b>last season</b></li>
+            <li>Balanced schedule rules &amp; standard tiebreakers</li>
+          </ul>
+          <p className="build-fork-note"><CircleAlert aria-hidden="true" />{quickCreateReady ? "These lock in when you generate. To change them later you’ll regenerate the schedule." : quickCreateReason}</p>
+          <button type="button" className="button-secondary build-fork-quick" disabled={!quickCreateReady} onClick={() => onQuickCreate(weeks)}><Zap aria-hidden="true" />Quick create schedule</button>
+        </section>
       </div>
     </div>
   );
