@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { chromium, type Browser } from "playwright";
+import { chromium, type Browser, type Locator } from "playwright";
 import { defaultConferenceAssignment } from "../lib/conferences";
 import { createConferences, createDefaultSetup, createDivisions, createTeams } from "../lib/defaults";
 import { GAME_DETAIL_CACHE_PREFIX, type GameDetailPlayerStat } from "../lib/gameDetail";
@@ -198,6 +198,44 @@ async function screenshotGameDetail(browser: Browser, name: string, schedule: Ge
   await page.close();
 }
 
+async function screenshotThisWeek(browser: Browser, name: string, schedule: GeneratedSchedule, viewport: { width: number; height: number }, rows?: GameDetailPlayerStat[]) {
+  const page = await browser.newPage({ viewport });
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => {
+    pageErrors.push(error.message);
+  });
+
+  await page.addInitScript(({ seededSchedule, seededRows, cachePrefix }) => {
+    window.localStorage.setItem("leagueweaver:v3:welcomed", "1");
+    window.localStorage.setItem("leagueweaver:v3:seasons", JSON.stringify({ [seededSchedule.id]: { schedule: seededSchedule, savedAt: Date.now() } }));
+    if (seededRows) window.localStorage.setItem(`${cachePrefix}${seededSchedule.id}`, JSON.stringify({ rows: seededRows }));
+  }, { seededSchedule: schedule, seededRows: rows, cachePrefix: GAME_DETAIL_CACHE_PREFIX });
+
+  const response = await page.goto(`${baseUrl}/season/${schedule.id}`, { waitUntil: "networkidle" });
+  assert.ok(response, `${name}: season route returned a response`);
+  assert.ok(response.status() >= 200 && response.status() < 400, `${name}: season route is reachable`);
+  await page.locator("h1", { hasText: "This Week" }).waitFor();
+  await expectText(page.locator(".workspace-rail nav button").first(), /This Week/i, `${name}: This Week is first in nav`);
+  await page.locator(".tw-hero").click();
+  await page.getByRole("dialog", { name: / at /i }).waitFor();
+  await page.getByRole("button", { name: /close game detail/i }).click();
+  await page.locator("h1", { hasText: "This Week" }).waitFor();
+  await page.screenshot({ path: path.join(screenshotDir, `ui-smoke-${name}.png`), fullPage: true });
+  assert.deepEqual(pageErrors, [], `${name}: no page errors`);
+  assert.deepEqual(consoleErrors, [], `${name}: no console errors`);
+  await page.close();
+}
+
+async function expectText(locator: Locator, pattern: RegExp, message: string) {
+  const text = await locator.textContent();
+  assert.match(text ?? "", pattern, message);
+}
+
 async function stopServer(server: ChildProcessWithoutNullStreams) {
   if (server.killed) return;
   server.kill("SIGTERM");
@@ -231,6 +269,9 @@ async function main() {
     await screenshotBuilderSetup(browser, "conf-1-non-conference", createDefaultSetup());
     await screenshotBuilderSetup(browser, "conf-1-conference", conferenceSmokeSetup());
     const synced = gameDetailSmokeSchedule("ui-smoke-gdm-synced");
+    const twSynced = gameDetailSmokeSchedule("ui-smoke-tw-synced");
+    await screenshotThisWeek(browser, "tw-1-synced-desktop", twSynced, { width: 1440, height: 1000 }, gameDetailSmokeRows(twSynced));
+    await screenshotThisWeek(browser, "tw-1-unsynced-mobile", gameDetailSmokeSchedule("ui-smoke-tw-unsynced"), { width: 390, height: 844 });
     await screenshotGameDetail(browser, "gdm-1-synced-desktop", synced, { width: 1440, height: 1000 }, gameDetailSmokeRows(synced));
     await screenshotGameDetail(browser, "gdm-1-unsynced-mobile", gameDetailSmokeSchedule("ui-smoke-gdm-unsynced"), { width: 390, height: 844 });
     console.log(`UI smoke passed: screenshots written to ${path.relative(process.cwd(), screenshotDir)}`);
