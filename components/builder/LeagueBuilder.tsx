@@ -160,6 +160,10 @@ function connectedLabel(preset: SavedLeaguePreset) {
   return provider === "espn" ? "ESPN connected" : "Sleeper connected";
 }
 
+function providerName(provider: "espn" | "sleeper") {
+  return provider === "espn" ? "ESPN" : "Sleeper";
+}
+
 function formatSavedLeagueDate(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
@@ -201,6 +205,7 @@ function SavedLeagueShortcut({ loadedPreset, onStartFresh }: { loadedPreset: Sav
 }
 
 type CreatePathMode = "customize" | "quick";
+type ImportedConnectionPrompt = { provider: "espn" | "sleeper"; providerLeagueId: string; leagueName: string };
 
 // The Quick create ⁄ Customize fork is an untracked decision screen between
 // Start and League. It is not part of the numbered wizard, but it participates
@@ -1632,6 +1637,9 @@ export function LeagueBuilder() {
   const [createPathWeeks, setCreatePathWeeks] = useState<13 | 14>(14);
   const [quickStartAvailable, setQuickStartAvailable] = useState(false);
   const [connectedSavedLeaguePrompt, setConnectedSavedLeaguePrompt] = useState<SavedLeaguePreset | null>(null);
+  const [importedConnectionPrompt, setImportedConnectionPrompt] = useState<ImportedConnectionPrompt | null>(null);
+  const [importedConnectionBusy, setImportedConnectionBusy] = useState(false);
+  const [importedConnectionError, setImportedConnectionError] = useState<string | null>(null);
   const [logoSavePrompt, setLogoSavePrompt] = useState<LogoSavePrompt | null>(null);
   const [logoSaveBusy, setLogoSaveBusy] = useState(false);
   const [logoSaveError, setLogoSaveError] = useState<string | null>(null);
@@ -2005,6 +2013,32 @@ export function LeagueBuilder() {
     setLogoSavePrompt(null);
     advanceToStep(nextStep);
   };
+  const continueImportedRosterOnly = () => {
+    setSetup((current) => ({
+      ...current,
+      platformConnection: undefined,
+      teams: current.teams.map((team) => ({ ...team, providerId: undefined })),
+    }));
+    setImportedConnectionPrompt(null);
+    setImportedConnectionBusy(false);
+    setImportedConnectionError(null);
+  };
+  const saveImportedConnection = async () => {
+    if (!importedConnectionPrompt || importedConnectionBusy) return;
+    if (!signedIn) {
+      openSignIn("signup");
+      return;
+    }
+    setImportedConnectionBusy(true);
+    setImportedConnectionError(null);
+    const saved = await saveLeaguePreset();
+    setImportedConnectionBusy(false);
+    if (!saved) {
+      setImportedConnectionError("The connection could not be saved yet. You can keep building and save it later from your account.");
+      return;
+    }
+    setImportedConnectionPrompt(null);
+  };
   const applyImport = (preview: ImportPreview) => {
     const importedDivisionNames = Array.from(new Set(preview.teams.map((team) => team.division?.replace(/\s+division$/i, "").trim()).filter((name): name is string => Boolean(name))));
     const importedDivisionCount = Math.min(MAX_DIVISIONS, Math.max(2, importedDivisionNames.length || 2));
@@ -2069,6 +2103,14 @@ export function LeagueBuilder() {
     setActiveSavedLeagueId(null);
     setQuickStartAvailable(true);
     dismissedLogoFingerprint.current = null;
+    if (preview.provider === "espn" || preview.provider === "sleeper") {
+      setImportedConnectionPrompt({
+        provider: preview.provider,
+        providerLeagueId: preview.providerLeagueId || "",
+        leagueName: preview.leagueName?.trim() || "Imported league",
+      });
+      setImportedConnectionError(null);
+    }
     openCreatePath();
   };
   const runGenerate = () => {
@@ -2209,6 +2251,28 @@ export function LeagueBuilder() {
         <strong>{connectedSavedLeaguePrompt.name}</strong>
         <p id="connected-saved-league-description">This saved league includes {connectedSavedLeaguePrompt.data.platformConnection?.provider === "espn" ? "ESPN" : "Sleeper"} League {connectedSavedLeaguePrompt.data.platformConnection?.providerLeagueId}. You can keep that connection for score refresh later, or load only the teams and divisions.</p>
         <small>LeagueWeaver still generates the schedule here. It will not update ESPN or Sleeper for you.</small>
+      </ConfirmDialog>}
+      {importedConnectionPrompt && <ConfirmDialog
+        markClassName="provider-app-icon"
+        mark={<img src={`/providers/${importedConnectionPrompt.provider}.png`} alt="" />}
+        kicker={`${providerName(importedConnectionPrompt.provider)} connected`.toUpperCase()}
+        title={signedIn ? "Save this connection for score updates?" : "Create an account to keep this link?"}
+        labelId="imported-connection-title"
+        descriptionId="imported-connection-description"
+        closeLabel="Close imported connection choice"
+        busy={importedConnectionBusy}
+        onClose={continueImportedRosterOnly}
+        actions={[
+          { label: "Roster only", onClick: continueImportedRosterOnly, variant: "secondary", autoFocus: true, disabled: importedConnectionBusy },
+          { label: importedConnectionBusy ? "Saving…" : signedIn ? "Save connected league" : "Create free account", onClick: () => void saveImportedConnection(), variant: "primary", icon: signedIn ? <RefreshCw /> : <LogIn />, disabled: importedConnectionBusy },
+        ]}
+      >
+        <strong>{importedConnectionPrompt.leagueName}</strong>
+        <p id="imported-connection-description">{signedIn
+          ? `Save this ${providerName(importedConnectionPrompt.provider)} connection to your account so League Weaver can auto-fill scores after you generate the season.`
+          : `Guests can import the roster, but platform score sync needs an account. Create a free account to keep this ${providerName(importedConnectionPrompt.provider)} link for auto-filled scores.`}</p>
+        <small>League Weaver still cannot update ESPN or Sleeper schedules for you.</small>
+        {importedConnectionError && <span className="league-logo-save-error" role="alert">{importedConnectionError}</span>}
       </ConfirmDialog>}
       {logoSavePrompt && <ConfirmDialog
         icon={<ImagePlus />}
