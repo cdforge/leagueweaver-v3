@@ -1282,7 +1282,7 @@ function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, onUpdatePlay
   importHistoryError: string | null;
   onRefreshImportHistory: () => void;
 }) {
-  const seeding = schedule.setup.priorSeason.entryMode === "manual" ? "Manual order" : schedule.setup.priorSeason.entryMode === "history" ? schedule.setup.priorSeason.source === "playoffs" ? "Last year’s playoff finish" : "Last year’s regular-season finish" : "Not used";
+  const seeding = schedule.setup.priorSeason.entryMode === "manual" ? "Manual order" : schedule.setup.priorSeason.entryMode === "random" ? "Randomized order" : schedule.setup.priorSeason.entryMode === "history" ? schedule.setup.priorSeason.source === "playoffs" ? "Last year’s playoff finish" : "Last year’s regular-season finish" : "Not used";
   const draftRankingPending = schedule.setup.weekOne.rankingSource === "draft-day" && getTeamsMissingDraftPlaces(schedule.setup).length > 0;
   return <div className="workspace-stack">
     <div className="settings-band"><div><Pencil /><span><strong>Schedule setup</strong><small>Changing league structure regenerates the complete matchup slate as a new revision.</small></span></div><button type="button" className="button-secondary" onClick={onRegenerate}><Pencil />Edit and regenerate</button></div>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import type { ImportPreview } from "@/lib/types";
-import { fetchEspnLeague, parseEspnLeagueId, scanEspnHistory, type EspnAuthInput, type EspnMember, type EspnTeam } from "@/lib/platform/espn";
+import type { ImportPreview, PriorSeasonFinishEntry } from "@/lib/types";
+import { fetchEspnLeague, fetchEspnPriorFinish, parseEspnLeagueId, scanEspnHistory, type EspnAuthInput, type EspnMember, type EspnTeam } from "@/lib/platform/espn";
+import { applyPriorFinish } from "@/lib/platform/priorFinish";
 
 interface EspnSplitName { city: string; name: string; inferred: boolean; ruleMatched: boolean }
 
@@ -124,6 +125,11 @@ export async function POST(request: Request) {
     }));
     const members = new Map((league.members ?? []).map((member) => [member.id, member]));
     const divisions = new Map((league.settings?.scheduleSettings?.divisions ?? []).map((division) => [division.id, division.name || `Division ${division.id}`]));
+    // Last season's finish (public-only), matched by owner id. Failure here must never
+    // block the import — we just fall back to array order and manual seeding.
+    const priorFinish: PriorSeasonFinishEntry[] = await fetchEspnPriorFinish(leagueId, seasonYear, auth).catch(() => []);
+    const teamKeys = (league.teams ?? []).map((team) => ({ ownerId: team.primaryOwner || team.owners?.[0], providerTeamId: String(team.id) }));
+    const finish = applyPriorFinish(teamKeys, priorFinish);
     let inferredTeamNames = false;
     let ruleMatchedTeamNames = false;
     const teams = (league.teams ?? []).map((team, index) => {
@@ -133,13 +139,17 @@ export async function POST(request: Request) {
       const splitName = splitTeamName(team, `Team ${index + 1}`);
       inferredTeamNames ||= splitName.inferred;
       ruleMatchedTeamNames ||= Boolean(splitName.ruleMatched);
+      const seed = finish.perTeam[index];
       return {
         providerId: `espn-${leagueId}-${team.id}`,
         city: splitName.city,
         name: splitName.name,
         manager: managerName(owner),
         division: team.divisionId == null ? "" : cleanDivisionName(divisions.get(team.divisionId) || `Division ${team.divisionId}`),
-        rank: index + 1,
+        rank: seed?.rank ?? index + 1,
+        regularSeasonRank: seed?.regularSeasonRank,
+        playoffRank: seed?.playoffRank,
+        isNewManager: seed?.isNewManager,
         color: teamColor(fullName),
         colorSuggestions: teamColorSuggestions(fullName),
         logoUrl: cleanText(team.logo) || undefined,
@@ -155,11 +165,14 @@ export async function POST(request: Request) {
       dataFound,
       authType: auth ? "private-cookie" : "public",
       syncMode: "manual",
+      hasPriorSeasonRanks: finish.hasData,
       warnings: [
         auth
           ? "ESPN private access is active — League Weaver never asks for your ESPN password."
           : "Double-check each team name and division below before continuing.",
         ...(inferredTeamNames || ruleMatchedTeamNames ? ["ESPN combines city and team in one field — we've split them for you, so give each a quick look."] : []),
+        ...(finish.hasData ? [`Seeded from ${seasonYear - 1} regular-season finish. You can switch to playoff finish in the Seeding step.`] : []),
+        ...(finish.newbieCount ? [`${finish.newbieCount} new manager${finish.newbieCount === 1 ? "" : "s"} had no last-season finish, so ${finish.newbieCount === 1 ? "they're" : "they're"} seeded last — adjust anytime in Seeding.`] : []),
       ],
       requiresConfirmation: true,
     };

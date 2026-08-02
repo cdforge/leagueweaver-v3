@@ -34,6 +34,8 @@ import {
   RotateCcw,
   FolderClock,
   Zap,
+  Shuffle,
+  Lock,
 } from "lucide-react";
 import { ImportLeagueModal, type ImportSource } from "@/components/imports/ImportLeagueModal";
 import { useAuthModal } from "@/components/account/AuthModalProvider";
@@ -685,9 +687,36 @@ function SeasonStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: Re
   );
 }
 
+/** A team with no last-season match — seeded last by the "ease the newbie in" house rule. */
+function isNewManagerTeam(team: Team) {
+  return team.priorRegularSeasonRank == null && team.priorPlayoffRank == null;
+}
+
+/**
+ * Re-derive the overall order from a chosen prior-season signal. Teams that made the
+ * bracket lead by playoff finish; teams that only played the regular season fall in
+ * behind by their standings; true newbies (no prior data) sort last. Regular-season
+ * mode just orders by standings, newbies last.
+ */
+function deriveSeedOrder(teams: Team[], source: LeagueSetupInput["priorSeason"]["source"]): Team[] {
+  const INF = Number.POSITIVE_INFINITY;
+  const primary = (team: Team) => (source === "playoffs" ? team.priorPlayoffRank ?? INF : team.priorRegularSeasonRank ?? INF);
+  const secondary = (team: Team) => team.priorRegularSeasonRank ?? INF;
+  return [...teams].sort((left, right) =>
+    primary(left) - primary(right) ||
+    secondary(left) - secondary(right) ||
+    left.overallRank - right.overallRank ||
+    left.id.localeCompare(right.id),
+  );
+}
+
 function SeedingStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: React.Dispatch<React.SetStateAction<LeagueSetupInput>> }) {
   const [draggedTeamId, setDraggedTeamId] = useState<string | null>(null);
   const rankedTeams = [...setup.teams].sort((left, right) => left.overallRank - right.overallRank || left.id.localeCompare(right.id));
+  // Newbie handling only applies to a genuinely imported prior season. A saved/sample
+  // league can carry hasData without per-team ranks — don't flag everyone as new there.
+  const hasAnyPriorData = setup.teams.some((team) => team.priorRegularSeasonRank != null || team.priorPlayoffRank != null);
+  const newbieCount = hasAnyPriorData ? setup.teams.filter(isNewManagerTeam).length : 0;
   const moveTeam = (teamId: string, nextIndex: number) => {
     const ordered = [...rankedTeams];
     const currentIndex = ordered.findIndex((team) => team.id === teamId);
@@ -696,22 +725,41 @@ function SeedingStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: R
     ordered.splice(Math.max(0, Math.min(ordered.length, nextIndex)), 0, team);
     setSetup((current) => ({ ...current, teams: ordered.map((item, index) => ({ ...item, overallRank: index + 1 })) }));
   };
+  const chooseHistorySource = (source: LeagueSetupInput["priorSeason"]["source"]) => setSetup((current) => ({
+    ...current,
+    priorSeason: { ...current.priorSeason, enabled: true, entryMode: "history", source },
+    teams: deriveSeedOrder(current.teams, source).map((team, index) => ({ ...team, overallRank: index + 1 })),
+  }));
+  const randomizeOrder = () => setSetup((current) => {
+    // Fisher–Yates so every order is equally likely; the result stays hidden until the
+    // schedule generates. Random is a pure shuffle — newbies take their chances too.
+    const shuffled = [...current.teams];
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+      const swap = Math.floor(Math.random() * (index + 1));
+      [shuffled[index], shuffled[swap]] = [shuffled[swap], shuffled[index]];
+    }
+    return { ...current, priorSeason: { ...current.priorSeason, enabled: true, entryMode: "random" }, teams: shuffled.map((team, index) => ({ ...team, overallRank: index + 1 })) };
+  });
+  const showList = setup.priorSeason.enabled && (setup.priorSeason.entryMode === "manual" || setup.priorSeason.entryMode === "history");
   return <div className="step-stack">
     <div className="section-heading"><span className="step-kicker">Step 6 of 10</span><h1>Set last season’s order.</h1><p>Seeding is optional. Use it only when prior-season results should shape cross-division matchups.</p></div>
     <div className="seeding-methods" role="group" aria-label="Seeding method">
       <button type="button" className={setup.priorSeason.entryMode === "manual" ? "active" : ""} onClick={() => setSetup((current) => ({ ...current, priorSeason: { ...current.priorSeason, enabled: true, entryMode: "manual" } }))}><span><GripVertical /></span><strong>Enter order manually</strong><small>Recommended for most leagues. Drag teams or choose each rank.</small></button>
-      <button type="button" disabled={!setup.priorSeason.hasData} className={setup.priorSeason.entryMode === "history" && setup.priorSeason.source === "playoffs" ? "active" : ""} onClick={() => setSetup((current) => ({ ...current, priorSeason: { ...current.priorSeason, enabled: true, entryMode: "history", source: "playoffs" } }))}><span><Trophy /></span><strong>Last year’s playoff finish</strong><small>{setup.priorSeason.hasData ? "Use imported or saved playoff placement." : "No imported history available."}</small></button>
-      <button type="button" disabled={!setup.priorSeason.hasData} className={setup.priorSeason.entryMode === "history" && setup.priorSeason.source === "regular-season" ? "active" : ""} onClick={() => setSetup((current) => ({ ...current, priorSeason: { ...current.priorSeason, enabled: true, entryMode: "history", source: "regular-season" } }))}><span><Medal /></span><strong>Last year’s regular season</strong><small>{setup.priorSeason.hasData ? "Use imported or saved final standings." : "No imported history available."}</small></button>
+      <button type="button" disabled={!setup.priorSeason.hasData} className={setup.priorSeason.entryMode === "history" && setup.priorSeason.source === "playoffs" ? "active" : ""} onClick={() => chooseHistorySource("playoffs")}><span><Trophy /></span><strong>Last year’s playoff finish</strong><small>{setup.priorSeason.hasData ? "Use imported or saved playoff placement." : "No imported history available."}</small></button>
+      <button type="button" disabled={!setup.priorSeason.hasData} className={setup.priorSeason.entryMode === "history" && setup.priorSeason.source === "regular-season" ? "active" : ""} onClick={() => chooseHistorySource("regular-season")}><span><Medal /></span><strong>Last year’s regular season</strong><small>{setup.priorSeason.hasData ? "Use imported or saved final standings." : "No imported history available."}</small></button>
+      <button type="button" className={setup.priorSeason.entryMode === "random" ? "active" : ""} onClick={randomizeOrder}><span><Shuffle /></span><strong>Randomize (sealed)</strong><small>Shuffle the order and keep it hidden until the schedule generates.</small></button>
     </div>
-    {!setup.priorSeason.hasData && <div className="info-callout gold"><Info /><span><strong>Manual order is ready.</strong> League history was not imported, so the two automatic choices stay unavailable.</span></div>}
-    {setup.priorSeason.entryMode !== "none" && setup.priorSeason.enabled && <div className="ranking-editor">
+    {!setup.priorSeason.hasData && <div className="info-callout gold"><Info /><span><strong>Manual order is ready.</strong> League history was not imported, so the two automatic choices stay unavailable — but you can still randomize.</span></div>}
+    {setup.priorSeason.hasData && newbieCount > 0 && setup.priorSeason.entryMode === "history" && <div className="info-callout"><Users /><span><strong>{newbieCount} new manager{newbieCount === 1 ? "" : "s"} seeded last.</strong> They had no {setup.seasonYear - 1} finish, so they start at the bottom for a gentler opening slate. Drag to override.</span></div>}
+    {setup.priorSeason.entryMode === "random" && <div className="info-callout"><Lock /><span><strong>Order sealed.</strong> A random seeding has been drawn and stays hidden until you generate the schedule — no peeking. Pick another method to reveal an order.</span></div>}
+    {showList && <div className="ranking-editor">
       <div className="ranking-head"><div><span className="step-kicker">{setup.seasonYear - 1} {setup.priorSeason.entryMode === "manual" ? "manual order" : setup.priorSeason.source === "playoffs" ? "playoff finish" : "regular-season finish"}</span><h2>Slot teams into their final rank.</h2><p>Drag a row or choose its number. Rank 1 is last season’s strongest finish.</p></div><span>{rankedTeams.length} teams</span></div>
       <div className="ranking-list" role="list" aria-label="Prior-season team ranking">
         {rankedTeams.map((team, index) => <div className={`ranking-row ${draggedTeamId === team.id ? "dragging" : ""}`} role="listitem" draggable key={team.id} onDragStart={() => setDraggedTeamId(team.id)} onDragEnd={() => setDraggedTeamId(null)} onDragOver={(event) => event.preventDefault()} onDrop={() => { if (draggedTeamId) moveTeam(draggedTeamId, index); setDraggedTeamId(null); }}>
           <GripVertical className="ranking-grip" aria-hidden="true" />
           <CustomSelect label={`${teamDisplayName(team)} rank`} value={String(index + 1)} onChange={(value) => moveTeam(team.id, Number(value) - 1)} options={rankedTeams.map((_, optionIndex) => ({ value: String(optionIndex + 1), label: `#${optionIndex + 1}`, description: optionIndex === 0 ? "Strongest finish" : optionIndex === rankedTeams.length - 1 ? "Last-place finish" : "Prior-season order" }))} />
           <EntityLogo className="ranking-mark" color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} />
-          <span className="ranking-team"><strong>{team.name}</strong></span>
+          <span className="ranking-team"><strong>{team.name}</strong>{setup.priorSeason.entryMode === "history" && hasAnyPriorData && isNewManagerTeam(team) && <em className="ranking-newbie">New manager</em>}</span>
           <span className="ranking-actions"><Tooltip label="Move up"><button type="button" aria-label={`Move ${teamDisplayName(team)} up`} disabled={index === 0} onClick={() => moveTeam(team.id, index - 1)}><ArrowUp /></button></Tooltip><Tooltip label="Move down"><button type="button" aria-label={`Move ${teamDisplayName(team)} down`} disabled={index === rankedTeams.length - 1} onClick={() => moveTeam(team.id, index + 1)}><ArrowDown /></button></Tooltip></span>
         </div>)}
       </div>
@@ -1226,9 +1274,12 @@ function setupProgress(step: number) {
 
 function BlueprintRoster({ setup }: { setup: LeagueSetupInput }) {
   const divisions = previewDivisions(setup);
+  // A sealed (random) seeding must not leak its order — hide the rank badge here too,
+  // not just in the seeding editor, or the blueprint becomes the peek-hole.
+  const sealed = setup.priorSeason.entryMode === "random";
   return (
     <div className="preview-divisions">
-      {divisions.map((division) => <div key={division.id}><div className="preview-division-title"><EntityLogo className="preview-division-mark" color={division.color} logoUrl={division.logoUrl} monogram={resolveInitials(division.initials, divisionAcronym(division.name))} /><strong>{division.name}</strong><small>{division.teams.length}</small></div>{division.teams.map((team) => { const accent = accessibleAccentColor(team.color); return <div className="preview-team" key={team.id} title={`${teamDisplayName(team, setup.display.cityNames)} · Rank ${team.overallRank}`}><EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} /><span>{setup.display.cityNames && team.city && <small className="team-city">{team.city}</small>}<strong style={setup.display.cityNames ? { color: accent } : undefined}>{team.name}</strong><small>{[teamInitials(team), setup.display.managers ? team.manager || "No manager" : "", setup.display.venues ? team.stadium || "Venue TBD" : ""].filter(Boolean).join(" · ")}</small></span><b style={{ color: accent }}>#{team.overallRank}</b></div>; })}</div>)}
+      {divisions.map((division) => <div key={division.id}><div className="preview-division-title"><EntityLogo className="preview-division-mark" color={division.color} logoUrl={division.logoUrl} monogram={resolveInitials(division.initials, divisionAcronym(division.name))} /><strong>{division.name}</strong><small>{division.teams.length}</small></div>{division.teams.map((team) => { const accent = accessibleAccentColor(team.color); return <div className="preview-team" key={team.id} title={sealed ? `${teamDisplayName(team, setup.display.cityNames)} · Seeding sealed` : `${teamDisplayName(team, setup.display.cityNames)} · Rank ${team.overallRank}`}><EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} /><span>{setup.display.cityNames && team.city && <small className="team-city">{team.city}</small>}<strong style={setup.display.cityNames ? { color: accent } : undefined}>{team.name}</strong><small>{[teamInitials(team), setup.display.managers ? team.manager || "No manager" : "", setup.display.venues ? team.stadium || "Venue TBD" : ""].filter(Boolean).join(" · ")}</small></span>{sealed ? <b className="preview-rank-sealed" aria-label="Seeding sealed"><Lock /></b> : <b style={{ color: accent }}>#{team.overallRank}</b>}</div>; })}</div>)}
     </div>
   );
 }
@@ -1651,6 +1702,8 @@ export function LeagueBuilder() {
         logoUrl: team.logoUrl,
         divisionId: team.division ? divisionByName.get(team.division.trim().toLowerCase()) || divisions[index % divisionCount].id : divisions[index % divisionCount].id,
         overallRank: team.rank || index + 1,
+        priorRegularSeasonRank: team.regularSeasonRank,
+        priorPlayoffRank: team.playoffRank,
         stadium: team.stadium?.trim() || `${name} Stadium`,
       };
     });
@@ -1682,7 +1735,7 @@ export function LeagueBuilder() {
           hasPlayerData: preview.dataFound?.hasPlayerData,
           hasScoreSync: preview.dataFound?.hasScoreSync,
         } : undefined,
-        priorSeason: { ...current.priorSeason, enabled: Boolean(preview.hasPriorSeasonRanks), hasData: Boolean(preview.hasPriorSeasonRanks), entryMode: preview.hasPriorSeasonRanks ? "history" : "none" },
+        priorSeason: { ...current.priorSeason, enabled: Boolean(preview.hasPriorSeasonRanks), hasData: Boolean(preview.hasPriorSeasonRanks), entryMode: preview.hasPriorSeasonRanks ? "history" : "none", source: preview.hasPriorSeasonRanks ? "regular-season" : current.priorSeason.source },
       };
     });
     setImportSource(null);

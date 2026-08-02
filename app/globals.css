@@ -449,6 +449,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .preview-team > span:not(.entity-logo) strong { font-size: var(--text-2xs); }
 .preview-team > span:not(.entity-logo) small { color: #91a49a; font-size: var(--text-2xs); }
 .preview-team > b { color: #91a49a; }
+.preview-team > b.preview-rank-sealed { display: inline-flex; align-items: center; color: #91a49a; opacity: .75; }
+.preview-team > b.preview-rank-sealed svg { width: 13px; height: 13px; }
 .preview-footer { padding: 17px 18px 20px; background: rgba(255,255,255,.04); display: grid; grid-template-columns: 1fr auto; gap: 8px; font-size: var(--text-micro); }
 .preview-footer > div { grid-column: 1 / -1; height: 4px; border-radius: var(--radius-chip); background: rgba(255,255,255,.12); }
 .preview-footer > div i { display: block; height: 100%; background: var(--gold); border-radius: inherit; transition: width .2s ease; }
@@ -576,6 +578,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .ranking-team strong, .ranking-team small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .ranking-team strong { font-size: var(--text-2xs); }
 .ranking-team small { color: var(--muted); font-size: var(--text-2xs); }
+.ranking-newbie { align-self: flex-start; font-style: normal; font-size: var(--text-3xs, 10px); font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--muted); background: var(--field-soft); border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px; }
 .ranking-actions { display: flex; justify-content: flex-end; gap: 4px; }
 .ranking-actions button { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: white; color: var(--ink); display: grid; place-items: center; cursor: pointer; }
 .ranking-actions button:disabled { opacity: .35; cursor: default; }
