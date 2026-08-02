@@ -1,5 +1,5 @@
 import "server-only";
-import { mapEspnPlayerWeekStats, type EspnMatchupPayload, type EspnPlayerEntryPayload, type PlayerWeekStat } from "@/lib/playerData";
+import { deriveEspnTemplates, mapEspnPlayerWeekStats, type EspnMatchupPayload, type EspnPlayerEntryPayload, type LineupTemplate, type PlayerWeekStat, type RosterTemplate } from "@/lib/playerData";
 import type { GeneratedSchedule, ImportDataFound, PlatformSyncResult, PlatformSyncScoreRow } from "@/lib/types";
 
 const ESPN_BASE = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl";
@@ -18,7 +18,7 @@ export interface EspnLeague {
   teams?: EspnTeam[];
   schedule?: EspnMatchup[];
   draftDetail?: { drafted?: boolean; inProgress?: boolean; picks?: unknown[] };
-  settings?: { name?: string; scheduleSettings?: { divisions?: Array<{ id: number; name?: string }> } };
+  settings?: { name?: string; scheduleSettings?: { divisions?: Array<{ id: number; name?: string }> }; rosterSettings?: { lineupSlotCounts?: Record<string, number> } };
 }
 
 interface EspnMatchupTeam { teamId?: number; totalPoints?: number }
@@ -134,5 +134,12 @@ export function mapEspnPlayers(schedule: GeneratedSchedule, league: EspnLeague, 
     teams: schedule.setup.teams,
     schedule: (league.schedule ?? []) as EspnMatchupPayload[],
     weeks: opts?.weeks,
+  });
+}
+
+export function mapEspnTemplates(league: EspnLeague): { lineupTemplate: LineupTemplate; rosterTemplate: RosterTemplate } {
+  return deriveEspnTemplates({
+    season: league.seasonId ?? new Date().getFullYear(),
+    lineupSlotCounts: league.settings?.rosterSettings?.lineupSlotCounts ?? {},
   });
 }
