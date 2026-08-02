@@ -1340,10 +1340,18 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
         <strong className="ppw-preview-title">{showPlacementView ? "Where everyone finishes" : showConsolationView ? "Placement bracket" : p.bracketType === "ladder" ? "The playoff ladder" : "Road to the title"}</strong>
         <small className="ppw-preview-sub">{showPlacementView ? `Projected final order · ${setup.teams.length} teams` : showConsolationView ? `${Math.max(0, setup.teams.length - p.fieldSize)} teams outside the title hunt` : `${p.fieldSize} teams · ${previewHalves ? (conferencesActive ? "conference halves" : "division halves") : p.placementMode === "overall" ? "overall seeds" : "auto seeding"} · ${byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"}` : "no byes"}`}</small>
         {showPlacementView
-          ? <ol className="ppw-chart">{placementChart.map((slot) => <li key={slot.placeStart} className={`ppw-chart-row ${slot.exact ? "exact" : "range"}`}>
-              <span className="ppw-chart-place">{slot.label}</span>
-              <span className="ppw-chart-teams">{slot.source}</span>
-            </li>)}</ol>
+          ? <ol className="ppw-chart">{placementChart.flatMap((slot, i) => {
+              // Draw a labeled separator where the finishing tier changes: championship → consolation,
+              // and consolation → eliminated (teams that made neither bracket).
+              const changed = i > 0 && placementChart[i - 1].tier !== slot.tier;
+              const row = <li key={slot.placeStart} className={`ppw-chart-row ${slot.exact ? "exact" : "range"}`}>
+                <span className="ppw-chart-place">{slot.label}</span>
+                <span className="ppw-chart-teams">{slot.source}</span>
+              </li>;
+              return changed
+                ? [<li key={`sep-${slot.placeStart}`} className="ppw-chart-sep" aria-hidden="true"><span>{slot.tier === "consolation" ? "Consolation bracket" : "Eliminated — no bracket"}</span></li>, row]
+                : [row];
+            })}</ol>
           : renderBracket(previewBracket)}
         <div className="ppw-facts">
           <span className="ppw-fact">🏟 <b>{p.championshipVenueMode === "neutral-site" ? "Neutral site" : "Higher seed hosts"}</b></span>

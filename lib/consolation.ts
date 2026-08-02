@@ -330,6 +330,8 @@ export interface ProjectedPlacementSlot {
   teamIds: string[];
   /** True when this slot is a single exact place; false for a range. */
   exact: boolean;
+  /** Which of the three finishing tiers this slot belongs to — used to draw separators. */
+  tier: "championship" | "consolation" | "eliminated";
 }
 
 /**
@@ -376,6 +378,9 @@ export function projectPlacementChart(schedule: GeneratedSchedule): ProjectedPla
         : placeStart === field + 1 && placeStart === placeEnd ? "Consolation winner"
           : placeStart === field + 2 && placeStart === placeEnd ? "Consolation runner-up"
             : "Consolation bracket";
+    const tier: ProjectedPlacementSlot["tier"] = placeEnd <= field
+      ? "championship"
+      : placeStart > field + cap ? "eliminated" : "consolation";
     return {
       placeStart,
       placeEnd,
@@ -383,6 +388,7 @@ export function projectPlacementChart(schedule: GeneratedSchedule): ProjectedPla
       source,
       teamIds: placements.slice(placeStart - 1, placeEnd).map((entry) => entry.teamId),
       exact: placeStart === placeEnd,
+      tier,
     };
   });
 }
