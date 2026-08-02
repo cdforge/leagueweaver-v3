@@ -1199,7 +1199,7 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
     logoUrl
       ? <img className="ppw-slogo" src={logoUrl} alt="" />
       : <b className="ppw-dchip" style={{ background: color, color: readableTextColor(color) } as React.CSSProperties}>{initials}</b>;
-  const legendDivision = (division: Division) => <span key={division.id} className="ppw-legend-item is-div">{legendMark(division.color, division.logoUrl, divInitials(division))}<span className="ppw-legend-name">{division.name}</span></span>;
+  const legendDivision = (division: Division) => <span key={division.id} className="ppw-legend-item is-div">{legendMark(division.color, division.logoUrl, divInitials(division))}<span className="ppw-legend-name">{division.name} <em className="ppw-legend-kind">(Div.)</em></span></span>;
   const legendWildcard = <span className="ppw-legend-item is-wild"><b className="ppw-dchip" style={{ background: WILDCARD_COLOR, color: "#fff" }}>#</b><span className="ppw-legend-name">Wild card</span></span>;
   // Marks a slot that is reserved for a division leader (auto-bid). Shown wherever leaders are protected.
   const legendLeader = <span className="ppw-legend-item is-leader"><ShieldCheck className="ppw-legend-glyph" aria-hidden="true" /><span className="ppw-legend-name">Division leader</span></span>;
@@ -1208,7 +1208,7 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
     <div className="ppw-legend" aria-label="Bracket legend">
       {legendMode === "halves-conf" && setup.conferences!.map((conference, hi) => (
         <div key={conference.id} className="ppw-legend-group">
-          <span className="ppw-legend-item is-conf">{legendMark(conference.color, conference.logoUrl, resolveInitials(conference.initials, conference.name.slice(0, 3).toUpperCase()))}<span className="ppw-legend-name" style={{ color: accessibleAccentColor(conference.color, "#171d1a") }}>{conference.name}</span></span>
+          <span className="ppw-legend-item is-conf">{legendMark(conference.color, conference.logoUrl, resolveInitials(conference.initials, conference.name.slice(0, 3).toUpperCase()))}<span className="ppw-legend-name" style={{ color: accessibleAccentColor(conference.color, "#171d1a") }}>{conference.name} <em className="ppw-legend-kind">(Conf.)</em></span></span>
           {divisions.filter((division) => halfDivisionIds[hi].has(division.id)).map(legendDivision)}
         </div>
       ))}

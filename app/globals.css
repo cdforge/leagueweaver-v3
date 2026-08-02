@@ -5312,7 +5312,11 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .ppw-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; justify-content: flex-end; max-width: 64%; }
 .ppw-legend-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding-left: 9px; border-left: 1px solid var(--pk-line); }
 .ppw-legend-item { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
-.ppw-legend-item .ppw-slogo, .ppw-legend-item .ppw-dchip { width: 15px; height: 15px; min-width: 15px; }
+.ppw-legend-item .ppw-slogo { width: 15px; height: 15px; min-width: 15px; }
+/* Let the color chip grow to fit 2–3 char initials so the lettering stays centered (a fixed
+   15px square cramped "NOR"/"SOU"); the base .ppw-dchip already centers via place-items. */
+.ppw-legend-item .ppw-dchip { height: 15px; min-width: 15px; padding: 0 4px; line-height: 1; }
+.ppw-legend-kind { font-style: normal; font-weight: var(--w-medium); color: var(--pk-mut); }
 .ppw-legend-item .ppw-legend-glyph { width: 14px; height: 14px; min-width: 14px; color: var(--pk-ink); }
 .ppw-legend-name { font-size: var(--text-2xs); font-weight: var(--w-bold); color: var(--pk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
 .ppw-legend-item.is-conf .ppw-legend-name { font-weight: var(--w-black); letter-spacing: .01em; }
