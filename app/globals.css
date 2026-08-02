@@ -5370,6 +5370,8 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .ppw-slot { display: flex; align-items: center; gap: 7px; padding: 6px 8px; min-width: 0; font-size: var(--text-2xs); background: color-mix(in srgb, var(--slot-c, #586761) 28%, transparent); }
 .ppw-match .ppw-slot + .ppw-slot { border-top: 1px solid var(--pk-line); }
 .ppw-slot .ppw-name { color: inherit; font-weight: var(--w-bold); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* Reserved-for-division-leader marker (auto-bid, hosts) — inherits the slot/side accent color. */
+.ppw-slot-leader { flex: 0 0 auto; width: 12px; height: 12px; margin-left: auto; opacity: .95; }
 .ppw-slogo { flex: 0 0 auto; width: 17px; height: 17px; border-radius: 4px; object-fit: contain; background: rgba(255,255,255,.92); padding: 1px; }
 .ppw-match.ppw-gold { border-left-color: var(--gold); }
 .ppw-preview-toggle { display: inline-flex; gap: 2px; padding: 2px; margin: 9px 0 3px; border-radius: var(--radius-sm); background: rgba(255,255,255,.06); }

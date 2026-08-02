@@ -972,7 +972,7 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   const teamInHalf = (hi: number, divisionId: string) => halfDivisionIds[hi]?.has(divisionId) ?? false;
   const previewHalves = p.placementMode === "division-halves" && halvesUsable && divisions.length >= 2;
 
-  type PSlot = { division?: Division; seed?: number; feederId?: string; text?: string };
+  type PSlot = { division?: Division; seed?: number; feederId?: string; text?: string; leader?: boolean };
   type PMatch = { id: string; accent?: string; gold?: boolean; gameNo?: number; slots: PSlot[] };
   type PRound = { name: string; matches: PMatch[] };
   type PBracket = { rounds: PRound[]; connections: BracketConnection[]; gameNo: Record<string, number> };
@@ -1048,7 +1048,9 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
       const per = Math.ceil(n / 2);
       const halfTeamCount = (hi: number) => seeded.filter((t) => teamInHalf(hi, t.divisionId)).length;
       const offset = isCons ? per : 0; // consolation continues each side's seed ranking below the qualifiers
-      const counts = [0, 1].map((hi) => (isCons ? Math.max(0, halfTeamCount(hi) - per) : per));
+      // Cap consolation per half so the whole consolation bracket stays at/under championship depth.
+      const consolCapPerHalf = 2 ** Math.max(0, roundNames.length - 1);
+      const counts = [0, 1].map((hi) => (isCons ? Math.min(Math.max(0, halfTeamCount(hi) - per), consolCapPerHalf) : per));
       if (counts[0] + counts[1] >= 2 && counts[0] >= 1 && counts[1] >= 1) {
         // Each side is a conference (4/6/8-div) or a division (2-div); label by its name, or its
         // initials when the name is too long for the slot (e.g. "Conference A" → "A champ").
@@ -1060,8 +1062,11 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
         };
         const halves = [0, 1].map((hi) => {
           const side = halfIdentities[hi] ?? halfIdentities[0];
+          // The top seeds in each half are the reserved division leaders (auto-bid, host); the rest
+          // are wildcards. `dCount` = divisions in this half, so seeds 1..dCount are leaders.
+          const dCount = halfDivisionIds[hi]?.size ?? 1;
           const localSeeds = Array.from({ length: counts[hi] }, (_, i) => i + 1);
-          return { side, count: counts[hi], ...buildSeedBracket(localSeeds, `pv-h${hi}`, (s) => ({ division: side as Division | undefined, seed: offset + s })) };
+          return { side, count: counts[hi], ...buildSeedBracket(localSeeds, `pv-h${hi}`, (s) => ({ division: side as Division | undefined, seed: offset + s, leader: !isCons && s <= dCount })) };
         });
         const roundLeaf = conferencesActive ? "Conference Championship" : "Divisional Championship";
         const maxRounds = Math.max(halves[0].rounds.length, halves[1].rounds.length);
@@ -1093,13 +1098,15 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
       const lo = wildStart + Math.floor((s - wildStart) / 2) * 2;
       return `#${lo} / #${lo + 1} seed`;
     };
+    // Consolation is capped at the championship's depth (2^rounds seats); lower seeds beyond that
+    // are cut (eliminated), so the consolation bracket never runs more rounds than the championship.
     const poolSeeds = isCons
-      ? Array.from({ length: Math.max(0, total - n) }, (_, i) => n + 1 + i)
+      ? Array.from({ length: Math.min(Math.max(0, total - n), 2 ** roundNames.length) }, (_, i) => n + 1 + i)
       : Array.from({ length: n }, (_, i) => i + 1);
     if (poolSeeds.length < 2) return { rounds: [], connections: [], gameNo: {} };
     const slotFor = (s: number): PSlot => isCons
       ? { seed: s }
-      : (isOverall ? { seed: s } : (s <= divisions.length ? { division: divOfSeed(s), text: leaderLabel } : { text: seedPairLabel(s) }));
+      : (isOverall ? { seed: s } : (s <= divisions.length ? { division: divOfSeed(s), text: leaderLabel, leader: true } : { text: seedPairLabel(s) }));
     const { rounds: bracketRounds } = buildSeedBracket(poolSeeds, isCons ? "pv-c" : "pv", slotFor);
     bracketRounds.forEach((matches, i) => {
       const last = i === bracketRounds.length - 1;
@@ -1132,9 +1139,10 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
     const d = slot.division;
     const color = d?.color ?? "#586761";
     const label = slot.text ?? (slot.seed != null ? `#${slot.seed} seed` : slot.feederId ? `Winner · Game ${gameNo[slot.feederId] ?? "?"}` : "TBD");
-    return <span key={key} className="ppw-slot" style={{ "--slot-c": color, color: accessibleAccentColor(color, "#161d18") } as React.CSSProperties}>
+    return <span key={key} className={`ppw-slot ${slot.leader ? "ppw-slot-lead" : ""}`} style={{ "--slot-c": color, color: accessibleAccentColor(color, "#161d18") } as React.CSSProperties}>
       {d?.logoUrl ? <img className="ppw-slogo" src={d.logoUrl} alt="" /> : <b className="ppw-dchip" style={{ background: color, color: readableTextColor(color) } as React.CSSProperties}>{d ? divInitials(d) : "#"}</b>}
       <span className="ppw-name">{label}</span>
+      {slot.leader && <ShieldCheck className="ppw-slot-leader" aria-label="Division leader — hosts at home" />}
     </span>;
   };
   const renderBracket = (data: PBracket) => (
