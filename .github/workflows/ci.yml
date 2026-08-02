@@ -32,6 +32,8 @@ jobs:
         run: npm run build
       - name: Tests (engine/stats/awards matrices — golden fixtures)
         run: npm test
+      - name: Install Playwright browser
+        run: npx playwright install chromium
       # UI issues add a Playwright smoke that renders the page and uploads a screenshot artifact.
       # Guarded so it no-ops until TEST-0 adds the script.
       - name: UI smoke (optional)
