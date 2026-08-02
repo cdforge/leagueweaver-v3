@@ -168,6 +168,54 @@ function gameDetailSmokeRows(schedule: GeneratedSchedule): GameDetailPlayerStat[
   ];
 }
 
+function allStarsSmokeSchedule(id: string): GeneratedSchedule {
+  const schedule = gameDetailSmokeSchedule(id);
+  for (const [index, game] of [...(schedule.weeks[0]?.games ?? []), ...(schedule.weeks[1]?.games ?? [])].entries()) {
+    const gameNumber = game.gameNumber ?? index + 1;
+    game.awayScore = 112.4 + gameNumber;
+    game.homeScore = 104.2 + gameNumber;
+  }
+  return schedule;
+}
+
+function allStarsSmokeRows(schedule: GeneratedSchedule): GameDetailPlayerStat[] {
+  const rows = [...gameDetailSmokeRows(schedule)];
+  const weekTwoGame = schedule.weeks[1]?.games[0];
+  if (!weekTwoGame) return rows;
+  const syncedAt = "2026-08-02T12:00:00.000Z";
+  const makeRow = (teamId: string, id: string, name: string, slot: "QB" | "RB" | "WR" | "TE", nflTeam: string, points: number, starterIndex?: number): GameDetailPlayerStat => ({
+    scheduleId: schedule.id,
+    provider: "sleeper",
+    providerLeagueId: "as-ui-smoke",
+    season: schedule.setup.seasonYear,
+    week: weekTwoGame.week,
+    teamId,
+    providerRosterId: teamId,
+    providerPlayerId: id,
+    canonicalPlayerId: `sleeper:${id}`,
+    displayName: name,
+    position: slot,
+    nflTeam,
+    points,
+    lineupStatus: "starter",
+    starterIndex,
+    inferredSlot: slot,
+    rawSlot: slot,
+    slotConfidence: "confirmed",
+    isProvisional: false,
+    finalLockAt: syncedAt,
+    syncedAt,
+    sourcePayloadHash: `ui-smoke-${id}`,
+  });
+  rows.push(
+    makeRow(weekTwoGame.awayTeamId, "jackson", "Lamar Jackson", "QB", "BAL", 34.1, 0),
+    makeRow(weekTwoGame.awayTeamId, "bijan", "Bijan Robinson", "RB", "ATL", 24.2, 1),
+    makeRow(weekTwoGame.homeTeamId, "hurts", "Jalen Hurts", "QB", "PHI", 30.5, 0),
+    makeRow(weekTwoGame.homeTeamId, "amonra", "Amon-Ra St. Brown", "WR", "DET", 27.4, 1),
+  );
+  return rows;
+}
+
 async function screenshotGameDetail(browser: Browser, name: string, schedule: GeneratedSchedule, viewport: { width: number; height: number }, rows?: GameDetailPlayerStat[]) {
   const page = await browser.newPage({ viewport });
   const consoleErrors: string[] = [];
@@ -297,6 +345,42 @@ async function screenshotMvt(browser: Browser, name: string, schedule: Generated
   await page.close();
 }
 
+async function screenshotAllStars(browser: Browser, name: string, schedule: GeneratedSchedule, viewport: { width: number; height: number }, rows: GameDetailPlayerStat[]) {
+  const page = await browser.newPage({ viewport });
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => {
+    pageErrors.push(error.message);
+  });
+
+  await page.addInitScript(({ seededSchedule, seededRows, cachePrefix }) => {
+    window.localStorage.setItem("leagueweaver:v3:welcomed", "1");
+    window.localStorage.setItem("leagueweaver:v3:seasons", JSON.stringify({ [seededSchedule.id]: { schedule: seededSchedule, savedAt: Date.now() } }));
+    window.localStorage.setItem(`${cachePrefix}${seededSchedule.id}`, JSON.stringify({ rows: seededRows }));
+  }, { seededSchedule: schedule, seededRows: rows, cachePrefix: GAME_DETAIL_CACHE_PREFIX });
+
+  const response = await page.goto(`${baseUrl}/season/${schedule.id}?view=all-stars`, { waitUntil: "networkidle" });
+  assert.ok(response, `${name}: All-Stars route returned a response`);
+  assert.ok(response.status() >= 200 && response.status() < 400, `${name}: All-Stars route is reachable`);
+  await page.getByRole("button", { name: /All-Stars/i }).waitFor();
+  await page.getByRole("heading", { name: /All-Star Team of the Week/i }).waitFor();
+  await expectText(page.locator(".allstars-board"), /Week 2 Board/s, `${name}: latest week board is present`);
+  await expectText(page.locator(".allstars-rail"), /All-Stars by Team/s, `${name}: team count rail is present`);
+  await expectText(page.locator(".allstar-trend"), /Weekly Total Trend/s, `${name}: trend is present`);
+  await page.getByRole("button", { name: /Previous All-Star week/i }).click();
+  await expectText(page.locator(".allstars-board"), /Week 1 Board/s, `${name}: week switcher changes board`);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(100);
+  await page.screenshot({ path: path.join(screenshotDir, `ui-smoke-${name}.png`), fullPage: true });
+  assert.deepEqual(pageErrors, [], `${name}: no page errors`);
+  assert.deepEqual(consoleErrors, [], `${name}: no console errors`);
+  await page.close();
+}
+
 async function expectText(locator: Locator, pattern: RegExp, message: string) {
   const text = await locator.textContent();
   assert.match(text ?? "", pattern, message);
@@ -339,12 +423,16 @@ async function main() {
     const stdSynced = gameDetailSmokeSchedule("ui-smoke-std-synced");
     const mvtSynced = gameDetailSmokeSchedule("ui-smoke-mvt-synced");
     const mvtMobile = gameDetailSmokeSchedule("ui-smoke-mvt-mobile");
+    const allStarsSynced = allStarsSmokeSchedule("ui-smoke-as-synced");
+    const allStarsMobile = allStarsSmokeSchedule("ui-smoke-as-mobile");
     await screenshotThisWeek(browser, "tw-1-synced-desktop", twSynced, { width: 1440, height: 1000 }, gameDetailSmokeRows(twSynced));
     await screenshotThisWeek(browser, "tw-1-unsynced-mobile", gameDetailSmokeSchedule("ui-smoke-tw-unsynced"), { width: 390, height: 844 });
     await screenshotStandingsAwards(browser, "std-1-synced-desktop", stdSynced, { width: 1440, height: 1000 }, gameDetailSmokeRows(stdSynced));
     await screenshotStandingsAwards(browser, "std-1-unsynced-mobile", gameDetailSmokeSchedule("ui-smoke-std-unsynced"), { width: 390, height: 844 });
     await screenshotMvt(browser, "mvt-2-desktop", mvtSynced, { width: 1440, height: 1000 }, gameDetailSmokeRows(mvtSynced));
     await screenshotMvt(browser, "mvt-2-mobile", mvtMobile, { width: 390, height: 844 }, gameDetailSmokeRows(mvtMobile));
+    await screenshotAllStars(browser, "as-2-desktop", allStarsSynced, { width: 1440, height: 1000 }, allStarsSmokeRows(allStarsSynced));
+    await screenshotAllStars(browser, "as-2-mobile", allStarsMobile, { width: 390, height: 844 }, allStarsSmokeRows(allStarsMobile));
     await screenshotGameDetail(browser, "gdm-1-synced-desktop", synced, { width: 1440, height: 1000 }, gameDetailSmokeRows(synced));
     await screenshotGameDetail(browser, "gdm-1-unsynced-mobile", gameDetailSmokeSchedule("ui-smoke-gdm-unsynced"), { width: 390, height: 844 });
     console.log(`UI smoke passed: screenshots written to ${path.relative(process.cwd(), screenshotDir)}`);
