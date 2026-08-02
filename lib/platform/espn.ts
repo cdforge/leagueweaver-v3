@@ -1,5 +1,6 @@
 import "server-only";
 import { deriveEspnTemplates, mapEspnPlayerWeekStats, type EspnMatchupPayload, type EspnPlayerEntryPayload, type LineupTemplate, type PlayerWeekStat, type RosterTemplate } from "@/lib/playerData";
+import { mapEspnTransactions, type EspnTransactionPayload, type NormalizedTransaction } from "@/lib/transactions";
 import { fetchProviderJson } from "./request";
 import type { GeneratedSchedule, ImportDataFound, PlatformSyncResult, PlatformSyncScoreRow } from "@/lib/types";
 
@@ -20,6 +21,7 @@ export interface EspnLeague {
   schedule?: EspnMatchup[];
   draftDetail?: { drafted?: boolean; inProgress?: boolean; picks?: unknown[] };
   settings?: { name?: string; scheduleSettings?: { divisions?: Array<{ id: number; name?: string }> }; rosterSettings?: { lineupSlotCounts?: Record<string, number> } };
+  transactions?: EspnTransactionPayload[];
 }
 
 interface EspnMatchupTeam { teamId?: number; totalPoints?: number }
@@ -141,5 +143,17 @@ export function mapEspnTemplates(league: EspnLeague): { lineupTemplate: LineupTe
   return deriveEspnTemplates({
     season: league.seasonId ?? new Date().getFullYear(),
     lineupSlotCounts: league.settings?.rosterSettings?.lineupSlotCounts ?? {},
+  });
+}
+
+export async function fetchEspnTransactions(schedule: GeneratedSchedule, week: number): Promise<{ rows: NormalizedTransaction[]; warnings: string[] }> {
+  const connection = schedule.setup.platformConnection;
+  if (!connection?.providerLeagueId) throw new Error("This season is not connected to ESPN.");
+  const league = await fetchEspnLeague(connection.providerLeagueId, connection.seasonYear, ["mTransactions2"], undefined, { scoringPeriodId: week });
+  return mapEspnTransactions({
+    providerLeagueId: connection.providerLeagueId,
+    week,
+    teams: schedule.setup.teams,
+    transactions: league.transactions,
   });
 }

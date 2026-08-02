@@ -1,5 +1,6 @@
 import "server-only";
 import { deriveSleeperTemplates, mapSleeperPlayerWeekStats, type LineupTemplate, type PlayerWeekStat, type RosterTemplate } from "@/lib/playerData";
+import { mapSleeperTransactions, type NormalizedTransaction, type SleeperTransactionPayload } from "@/lib/transactions";
 import { fetchProviderJson } from "./request";
 import type { GeneratedSchedule, ImportDataFound, PlatformSyncResult, PlatformSyncScoreRow } from "@/lib/types";
 
@@ -96,4 +97,16 @@ export async function mapSleeperScores(schedule: GeneratedSchedule, week: number
     rows.push({ gameId: game.id, week, homeTeamId: game.homeTeamId, awayTeamId: game.awayTeamId, homeScore: homeMatchup.points, awayScore: awayMatchup.points, confidence: "high", source: "sleeper" });
   }
   return { rows, unmatched, warnings: unmatched.length ? ["Some Sleeper games did not match the generated LeagueWeaver slate."] : [], syncedAt: new Date().toISOString() };
+}
+
+export async function fetchSleeperTransactions(schedule: GeneratedSchedule, week: number): Promise<NormalizedTransaction[]> {
+  const connection = schedule.setup.platformConnection;
+  if (!connection?.providerLeagueId) throw new Error("This season is not connected to Sleeper.");
+  const transactions = await sleeperFetch<SleeperTransactionPayload[]>(`/league/${encodeURIComponent(connection.providerLeagueId)}/transactions/${week}`);
+  return mapSleeperTransactions({
+    providerLeagueId: connection.providerLeagueId,
+    week,
+    teams: schedule.setup.teams,
+    transactions,
+  });
 }
