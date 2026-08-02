@@ -1320,6 +1320,7 @@ export function LeagueBuilder() {
   const [step, setStep] = useState(0);
   const progressTrackRef = useRef<HTMLOListElement>(null);
   const builderContentRef = useRef<HTMLDivElement>(null);
+  const builderSectionRef = useRef<HTMLElement>(null);
   const stepMountedRef = useRef(false);
   const [setup, setSetup] = useState<LeagueSetupInput>(createDefaultSetup);
   const logoBaseline = useRef<Map<string, string>>(new Map(setupLogoEntries(setup)));
@@ -1369,6 +1370,37 @@ export function LeagueBuilder() {
     draftSavedTimer.current = setTimeout(() => setDraftSaved(false), 2200);
   };
   useEffect(() => () => { if (draftSavedTimer.current) clearTimeout(draftSavedTimer.current); }, []);
+
+  // The blueprint bar is fixed to the bottom on tablet/mobile and its collapsed
+  // height changes (Back/Continue wrap to a second row on narrow screens). Reserve
+  // exactly that much space under the content so nothing hides behind it. We measure
+  // the persistent footer (progress + action row + safe-area padding), never the
+  // expanded sheet, so an open blueprint doesn't balloon the reservation.
+  useEffect(() => {
+    const section = builderSectionRef.current;
+    if (!section) return;
+    const setVar = (px: number) => section.style.setProperty("--blueprint-bar-h", `${px}px`);
+    const bar = section.querySelector<HTMLElement>(".builder-blueprint-bar");
+    if (!bar) { setVar(0); return; }
+    const row = bar.querySelector<HTMLElement>(".blueprint-bar-row");
+    const progress = bar.querySelector<HTMLElement>(".blueprint-bar-progress");
+    const measure = () => {
+      if (getComputedStyle(bar).display === "none") { setVar(0); return; }
+      const padBottom = parseFloat(getComputedStyle(bar).paddingBottom) || 0;
+      const h = (row?.offsetHeight ?? 0) + (progress?.offsetHeight ?? 0) + padBottom;
+      setVar(Math.ceil(h));
+    };
+    measure();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    if (observer && row) observer.observe(row);
+    window.addEventListener("resize", measure);
+    window.addEventListener("orientationchange", measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("orientationchange", measure);
+    };
+  }, [step]);
 
   const startNewLeague = () => {
     const blankSetup = createBlankSetup();
@@ -1743,7 +1775,7 @@ export function LeagueBuilder() {
   };
 
   return (
-    <section className="builder-section" aria-label="League schedule builder">
+    <section className="builder-section" aria-label="League schedule builder" ref={builderSectionRef}>
       <div className="page-width builder-heading-row">
         <div><p className="eyebrow">Fantasy football schedule maker</p><h2>Build the season your league deserves.</h2></div>
         {step > 0 && <button type="button" aria-live="polite" className={`button-secondary builder-save-draft${draftSaved ? " is-saved" : ""}`} onClick={saveDraft}>{draftSaved ? <><Check />Draft saved</> : <><BookmarkPlus />Save draft</>}</button>}

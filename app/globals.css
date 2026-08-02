@@ -1202,7 +1202,19 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .footer-row nav a:hover { color: var(--field-dark); }
 
 /* Welcome (intro) page */
-.welcome-hero { position: relative; display: flex; align-items: center; min-height: 460px; border-bottom: 1px solid var(--line); background-color: var(--field-soft); background-image: linear-gradient(to right, var(--field-soft) 0%, var(--field-soft) 42%, rgba(234, 245, 239, 0.88) 58%, rgba(234, 245, 239, 0) 82%), url("/branding/hero-welcome-marquee.jpg"); background-size: cover, cover; background-position: center, right center; background-repeat: no-repeat; }
+.welcome-hero { position: relative; overflow: hidden; display: flex; align-items: center; min-height: 460px; border-bottom: 1px solid var(--line); background-color: var(--field-soft); background-image: url("/branding/hero-welcome-desktop.jpg"); background-size: cover; background-position: right center; background-repeat: no-repeat; }
+/* Animated hero: video sits over the still fallback; the gradient scrim (::before) rides above the video but below the copy. The art is padded to the right of its frame so the helmet clash clears the copy; the scrim only needs to cover the copy column, then goes fully clear before the helmets. */
+.welcome-hero-video { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; object-fit: cover; object-position: right center; pointer-events: none; }
+.welcome-hero-video--band { display: none; }
+.welcome-hero::before { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(to right, var(--field-soft) 0%, var(--field-soft) 38%, rgba(234, 245, 239, 0) 58%); }
+.welcome-hero > .page-width { position: relative; z-index: 2; }
+/* Small laptop / landscape tablet: side-by-side, but the copy column is wide
+   relative to the viewport and runs over the helmets, so keep a stronger scrim
+   here than the roomy desktop one. (Narrower widths stack — see below.) */
+@media (min-width: 901px) and (max-width: 1024px) {
+  .welcome-hero::before { background: linear-gradient(to right, var(--field-soft) 0%, var(--field-soft) 44%, rgba(234, 245, 239, 0.9) 60%, rgba(234, 245, 239, 0) 84%); }
+}
+@media (prefers-reduced-motion: reduce) { .welcome-hero-video { display: none; } }
 .welcome-hero-inner { width: 100%; padding: 56px 0; max-width: 720px; }
 .welcome-hero h1 { margin: 0; font-family: var(--font-barlow-condensed), sans-serif; font-size: clamp(40px, 1.75vw + 31px, 54px); line-height: 0.96; letter-spacing: -0.01em; color: var(--ink); }
 .welcome-lede { margin: 16px 0 0; max-width: 500px; color: var(--muted); font-size: var(--text-lg); line-height: 1.6; }
@@ -1343,9 +1355,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .build-fork-quick svg { width: 15px; }
 
 @media (max-width: 720px) {
-  /* Mobile keeps the hero art, dropped to a faded band below the copy. */
-  .welcome-hero { min-height: auto; background-image: linear-gradient(to bottom, var(--field-soft) 0%, var(--field-soft) 56%, rgba(234, 245, 239, 0.6) 74%, rgba(234, 245, 239, 0) 100%), url("/branding/hero-welcome-marquee.jpg"); background-size: cover, 150% auto; background-position: center, center bottom; }
-  .welcome-hero-inner { padding: 40px 0 176px; }
   .welcome-capability-grid { grid-template-columns: 1fr 1fr; }
   .welcome-platforms-inner { gap: 12px; }
   .welcome-showcase { padding: 40px 0; }
@@ -1357,6 +1366,26 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .start-option--saved { padding: 22px; }
   .build-fork-options { grid-template-columns: 1fr; }
   .build-fork-primary { border-right: 0; border-bottom: 1px solid var(--line); }
+}
+
+/* Phones + portrait tablets: the art becomes a clear band under the copy. A tall
+   hero forces the video to scale by height, which would bury the helmet clash
+   behind the headline — so confine the video to a bottom band where the clash
+   reads, and drop the full-bleed still (the video/poster supplies the art).
+   Capped at 900px: beyond that a wide band would expose the video's padded edge,
+   so wider viewports use the side-by-side layout instead. */
+@media (max-width: 900px) {
+  .welcome-hero { min-height: auto; background-image: none; }
+  .welcome-hero-video--wide { display: none; }
+  .welcome-hero-video--band { display: block; top: auto; bottom: 0; height: 300px; object-position: center; }
+  .welcome-hero::before { background: linear-gradient(to bottom, var(--field-soft) 0%, var(--field-soft) 58%, rgba(234, 245, 239, 0.5) 69%, rgba(234, 245, 239, 0) 82%); }
+  .welcome-hero-inner { padding: 40px 0 210px; }
+}
+
+/* Reduced-motion: the video is hidden, so restore the still as the bottom art
+   band (mirrors the video framing above). */
+@media (max-width: 900px) and (prefers-reduced-motion: reduce) {
+  .welcome-hero { background-image: url("/branding/hero-welcome-mobile.jpg"); background-repeat: no-repeat; background-size: auto 300px; background-position: center bottom; }
 }
 
 @media (max-width: 560px) {
@@ -3905,7 +3934,10 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .builder-preview { display: none; }
   .builder-actions { display: none; }
   .builder-blueprint-bar { display: block; }
-  .builder-section { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+  /* Reserve space for the fixed blueprint bar using its measured height (set in
+     JS as --blueprint-bar-h) so a two-row Back/Continue never clips content.
+     The measured value already includes the bar's safe-area padding. */
+  .builder-section { padding-bottom: calc(var(--blueprint-bar-h, 132px) + 14px); }
   .import-grid { grid-template-columns: 1fr 1fr; }
   .source-choice-panel { grid-template-columns: 1fr; }
   .proof-grid { gap: 40px; }

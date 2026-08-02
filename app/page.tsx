@@ -42,6 +42,33 @@ export default function HomePage() {
     <main>
       <AppHeader />
       <section className="welcome-hero" aria-labelledby="welcome-title">
+        {/* Two framings of the same animation: a wide, right-weighted cut for the
+            side-by-side desktop layout, and a tightly-framed cut for the phone/
+            tablet art band. CSS shows one per breakpoint. */}
+        <video
+          className="welcome-hero-video welcome-hero-video--wide"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          poster="/branding/hero-welcome-desktop.jpg"
+          aria-hidden="true"
+        >
+          <source src="/branding/hero-welcome-desktop.mp4" type="video/mp4" />
+        </video>
+        <video
+          className="welcome-hero-video welcome-hero-video--band"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="none"
+          poster="/branding/hero-welcome-mobile.jpg"
+          aria-hidden="true"
+        >
+          <source src="/branding/hero-welcome-mobile.mp4" type="video/mp4" />
+        </video>
         <div className="page-width">
           <div className="welcome-hero-inner">
           <p className="eyebrow">Fantasy Football Commissioner Studio</p>
