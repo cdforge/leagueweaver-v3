@@ -60,6 +60,7 @@ import {
   isPlayoffPlacementUsable,
   normalizePlayoffSettings,
   PLAYOFF_THEME_COLORS,
+  recommendedPlayoffStructure,
 } from "@/lib/playoffs";
 import { projectConsolationBracket, projectPlacementChart } from "@/lib/consolation";
 import { BracketConnectorLayer, type BracketConnection } from "@/components/season/BracketConnectorLayer";
@@ -199,10 +200,13 @@ function SavedLeagueShortcut({ loadedPreset, onStartFresh }: { loadedPreset: Sav
 // once a roster is loaded (import or saved league). "Customize everything" is the
 // primary path (the full wizard); "Quick create" is the secondary shortcut that
 // applies the PVE house settings and generates immediately.
-function BuildForkCard({ setup, onQuickCreate }: { setup: LeagueSetupInput; onQuickCreate: () => void }) {
+function BuildForkCard({ setup, onQuickCreate }: { setup: LeagueSetupInput; onQuickCreate: (weeks: 13 | 14) => void }) {
   const [dismissed, setDismissed] = useState(false);
+  // Season length is the user's choice (never recommended); Quick Create needs it to derive the
+  // recommended playoff structure. Default to whatever the setup already carries, else 14.
+  const [weeks, setWeeks] = useState<13 | 14>(setup.weeks === 13 ? 13 : 14);
   if (dismissed) return null;
-  const fieldSize = quickCreateFieldSize(setup);
+  const rec = recommendedPlayoffStructure(setup.teams.length, weeks);
   const grouping = rosterGroupingNoun(setup);
   return (
     <div className="build-fork">
@@ -219,16 +223,23 @@ function BuildForkCard({ setup, onQuickCreate }: { setup: LeagueSetupInput; onQu
         </button>
         <div className="build-fork-secondary">
           <span className="build-fork-secondary-head"><Zap aria-hidden="true" /><strong>Quick create</strong></span>
-          <small>Skip ahead and generate now with these settings:</small>
+          <small>Pick your season length; we’ll recommend the playoffs and generate now:</small>
+          <div className="build-fork-weeks">
+            <span>Regular season</span>
+            <div className="segmented">
+              <button type="button" className={weeks === 13 ? "active" : ""} onClick={() => setWeeks(13)}>13 weeks</button>
+              <button type="button" className={weeks === 14 ? "active" : ""} onClick={() => setWeeks(14)}>14 weeks</button>
+            </div>
+          </div>
           <ul className="build-fork-summary">
             <li>{grouping} · <b>{setup.teams.length} teams</b>{setup.divisions.length > 1 ? ` · ${setup.divisions.length} divisions` : ""}</li>
-            <li><b>14-week</b> regular season</li>
-            <li><b>{fieldSize}-team</b> playoff · gold · single-elimination</li>
+            <li><b>{weeks}-week</b> season · <b>{rec.playoffWeeks}-week</b> playoff</li>
+            <li><b>{rec.fieldSize}-team</b> playoff · gold · single-elimination</li>
             <li>Seeded by <b>last season</b></li>
             <li>Balanced schedule rules &amp; standard tiebreakers</li>
           </ul>
           <p className="build-fork-note"><CircleAlert aria-hidden="true" />These lock in when you generate. To change them later you’ll regenerate the schedule.</p>
-          <button type="button" className="button-secondary build-fork-quick" onClick={onQuickCreate}><Zap aria-hidden="true" />Quick create schedule</button>
+          <button type="button" className="button-secondary build-fork-quick" onClick={() => onQuickCreate(weeks)}><Zap aria-hidden="true" />Quick create schedule</button>
         </div>
       </div>
     </div>
@@ -264,20 +275,16 @@ function resolveQuickPlacement(divisionCount: number, fieldSize: number): League
   return "overall";
 }
 
-// The playoff field is clamped to what the team count / season length can support,
-// so a small imported league still gets a valid bracket.
-function quickCreateFieldSize(setup: LeagueSetupInput): number {
-  const max = getMaximumPlayoffFieldSize(setup.teams.length, QUICK_CREATE_DEFAULTS.weeks, QUICK_CREATE_DEFAULTS.playoffs.bracketType);
-  return Math.min(QUICK_CREATE_DEFAULTS.playoffs.fieldSize, max);
-}
-
-function applyQuickCreateDefaults(setup: LeagueSetupInput): LeagueSetupInput {
+function applyQuickCreateDefaults(setup: LeagueSetupInput, weeks: 13 | 14): LeagueSetupInput {
   const d = QUICK_CREATE_DEFAULTS;
-  const fieldSize = quickCreateFieldSize(setup);
+  // Season length is the user's choice; the playoff field + tourney length are the recommended
+  // NFL-shaped structure for the roster under that season length (docs/PLAYOFF-RECOMMENDATION-MATRIX.md).
+  const rec = recommendedPlayoffStructure(setup.teams.length, weeks);
+  const fieldSize = rec.fieldSize;
   const placementMode = resolveQuickPlacement(setup.divisions.length, fieldSize);
   return {
     ...setup,
-    weeks: d.weeks,
+    weeks,
     priorSeason: { ...setup.priorSeason, ...d.priorSeason },
     weekOne: { ...setup.weekOne, ...d.weekOne },
     fairness: { ...setup.fairness, ...d.fairness },
@@ -285,6 +292,7 @@ function applyQuickCreateDefaults(setup: LeagueSetupInput): LeagueSetupInput {
     playoffs: {
       ...setup.playoffs,
       fieldSize,
+      playoffWeeks: rec.playoffWeeks,
       placementMode,
       theme: d.playoffs.theme,
       color: PLAYOFF_THEME_COLORS[d.playoffs.theme],
@@ -402,7 +410,7 @@ function SavedLeaguePicker({ presets, onChoose, onClose }: { presets: SavedLeagu
   );
 }
 
-function LeagueStep({ setup, setSetup, presets, loadedPreset, quickStartAvailable, onQuickCreate, onStartFresh, onLeagueLogoUploaded }: { setup: LeagueSetupInput; setSetup: React.Dispatch<React.SetStateAction<LeagueSetupInput>>; presets: SavedLeaguePreset[]; loadedPreset: SavedLeaguePreset | null; quickStartAvailable: boolean; onQuickCreate: () => void; onStartFresh: () => void; onLeagueLogoUploaded: (logoUrl: string) => void }) {
+function LeagueStep({ setup, setSetup, presets, loadedPreset, quickStartAvailable, onQuickCreate, onStartFresh, onLeagueLogoUploaded }: { setup: LeagueSetupInput; setSetup: React.Dispatch<React.SetStateAction<LeagueSetupInput>>; presets: SavedLeaguePreset[]; loadedPreset: SavedLeaguePreset | null; quickStartAvailable: boolean; onQuickCreate: (weeks: 13 | 14) => void; onStartFresh: () => void; onLeagueLogoUploaded: (logoUrl: string) => void }) {
   return (
     <div className="step-stack">
       <div className="section-heading">
@@ -860,6 +868,18 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   const effectivePlayoffWeeks = setup.weeks === 14 ? 3 : (p.playoffWeeks ?? 4);
   const patch = (next: Partial<LeagueSetupInput["playoffs"]>) =>
     setSetup((current) => ({ ...current, playoffs: { ...current.playoffs, ...next } }));
+  // Recommended NFL-shaped structure for this roster under the chosen season length (season length
+  // itself is never recommended — it's the user's choice from the Season step).
+  const seasonWeeks: 13 | 14 = setup.weeks === 13 ? 13 : 14;
+  const recommended = recommendedPlayoffStructure(setup.teams.length, seasonWeeks);
+  const usingRecommended = p.fieldSize === recommended.fieldSize && effectivePlayoffWeeks === recommended.playoffWeeks;
+  const applyRecommendedPlayoffs = () => patch({
+    fieldSize: recommended.fieldSize,
+    playoffWeeks: setup.weeks === 13 ? recommended.playoffWeeks : undefined,
+    placementMode: resolveQuickPlacement(setup.divisions.length, recommended.fieldSize),
+    fieldStatus: "live",
+    lockedTeamIds: [],
+  });
 
   const setFieldSize = (fieldSize: number) => {
     const halvesUsable = isPlayoffPlacementUsable("division-halves", divisionCount, fieldSize);
@@ -1208,6 +1228,15 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
     <div className="playoff-wizard-layout">
       <div className="playoff-wizard-form">
         {subPage === "format" && <>
+          <div className={`ppw-reco ${usingRecommended ? "is-set" : ""}`}>
+            <div className="ppw-reco-copy">
+              <strong>{usingRecommended ? "Using the recommended playoffs" : "Recommended for your league"}</strong>
+              <small>{setup.teams.length} teams · {seasonWeeks}-week season → <b>{recommended.fieldSize}-team</b> field · <b>{recommended.playoffWeeks}-week</b> tourney</small>
+            </div>
+            {usingRecommended
+              ? <Check aria-hidden="true" />
+              : <button type="button" className="button-secondary ppw-reco-apply" onClick={applyRecommendedPlayoffs}>Use it</button>}
+          </div>
           {canChoosePlayoffLength && <div className="ppw-group"><FieldLabel hint="a 13-week season leaves room for a longer playoff">Playoff length</FieldLabel>
             <div className="choice-row">{[3, 4].map((wk) => <button key={wk} type="button" className={effectivePlayoffWeeks === wk ? "active" : ""} onClick={() => {
               const nextMax = getMaximumPlayoffFieldSize(setup.teams.length, setup.weeks, p.bracketType, wk as 3 | 4);
@@ -1907,9 +1936,9 @@ export function LeagueBuilder() {
   // run the normal generate path (same validation, save-league prompt, and guest
   // warning). setSetup is async, so we flip a flag and let the effect below fire
   // generate() once the defaulted setup has committed.
-  const quickCreateSchedule = () => {
+  const quickCreateSchedule = (weeks: 13 | 14) => {
     if (generating) return;
-    setSetup((current) => applyQuickCreateDefaults(current));
+    setSetup((current) => applyQuickCreateDefaults(current, weeks));
     setPendingQuickGenerate(true);
   };
   useEffect(() => {

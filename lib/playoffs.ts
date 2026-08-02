@@ -57,6 +57,32 @@ export function recommendedPlayoffFieldSize(teamCount: number, regularSeasonWeek
   return Math.min(6, getMaximumPlayoffFieldSize(teamCount, regularSeasonWeeks));
 }
 
+/**
+ * The ideal NFL-shaped playoff field for a league size, before any season/tourney cap: roughly
+ * 40–55% of the league snapped to a clean bracket size {6,8,12,16}, floor 6, never 2/10/14.
+ * (docs/PLAYOFF-RECOMMENDATION-MATRIX.md)
+ */
+export function idealPlayoffFieldSize(teamCount: number): number {
+  if (teamCount <= 14) return 6;
+  if (teamCount <= 22) return 8;
+  if (teamCount <= 28) return 12;
+  return 16;
+}
+
+/**
+ * The recommended playoff structure for a league, given its size and the user-chosen season length.
+ * Season length is NEVER recommended (it is the user's choice) — it only bounds the tourney: a
+ * 4-week tourney (field up to 16) is reached only when the ideal field needs it AND the season
+ * allows it (13-week). The field is the ideal, capped by what the tourney length supports.
+ */
+export function recommendedPlayoffStructure(teamCount: number, regularSeasonWeeks: 13 | 14): { playoffWeeks: 3 | 4; fieldSize: number } {
+  const ideal = idealPlayoffFieldSize(teamCount);
+  const ceiling = getMaximumPlayoffWeeks(regularSeasonWeeks); // 3 for 14-week, 4 for 13-week
+  const playoffWeeks: 3 | 4 = ceiling >= 4 && ideal >= 12 ? 4 : 3;
+  const fieldSize = Math.min(ideal, getMaximumPlayoffFieldSize(teamCount, regularSeasonWeeks, "single-elimination", playoffWeeks));
+  return { playoffWeeks, fieldSize };
+}
+
 export function createDefaultPlayoffSettings(teamCount: number, _leagueColor = "#117A45", regularSeasonWeeks: 13 | 14 = 14): PlayoffSettings {
   return {
     fieldSize: recommendedPlayoffFieldSize(teamCount, regularSeasonWeeks),
