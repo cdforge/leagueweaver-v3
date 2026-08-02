@@ -9,10 +9,14 @@ import { CustomSelect } from "@/components/ui/CustomSelect";
 import { DivisionIdentity } from "@/components/ui/DivisionIdentity";
 import { FloatingPopover } from "@/components/ui/FloatingPopover";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { buildAllStars } from "@/lib/allStars";
 import { accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
 import { getTeamClinchTimelines, type TeamClinchTimeline } from "@/lib/clinch";
 import { isGamePlayed } from "@/lib/game";
+import type { GameDetailPlayerStat } from "@/lib/gameDetail";
 import { calculateMatchupRating, formatGameDateTimeOverride, getMatchupRatingRange, getMatchupSignal, toMatchupScore10 } from "@/lib/matchups";
+import { buildMvt } from "@/lib/mvt";
+import type { LineupTemplate, SlotKey } from "@/lib/playerData";
 import { getWeekOneRankMap } from "@/lib/rankings";
 import { getNflWeekWindow } from "@/lib/schedule";
 import { formatRecord, getEnteringWeekRankSnapshot, getWeekRankSnapshot } from "@/lib/standings";
@@ -59,6 +63,39 @@ function streakValue(streak: string) {
   if (streak.startsWith("W")) return Number(streak.slice(1)) || 0;
   if (streak.startsWith("L")) return -(Number(streak.slice(1)) || 0);
   return 0;
+}
+
+function rankValues(values: Map<string, number>) {
+  const sorted = [...values.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
+  const ranks = new Map<string, number>();
+  let previous: number | undefined;
+  let rank = 0;
+  sorted.forEach(([teamId, value], index) => {
+    if (previous === undefined || value !== previous) rank = index + 1;
+    previous = value;
+    ranks.set(teamId, rank);
+  });
+  return ranks;
+}
+
+function inferLineupTemplate(schedule: GeneratedSchedule, rows: GameDetailPlayerStat[]): LineupTemplate | null {
+  const starters = rows.filter((row) => row.lineupStatus === "starter" && typeof row.starterIndex === "number");
+  if (!starters.length) return null;
+  const byIndex = new Map<number, GameDetailPlayerStat>();
+  for (const row of starters) {
+    if (!byIndex.has(row.starterIndex!)) byIndex.set(row.starterIndex!, row);
+  }
+  const counts = new Map<SlotKey, number>();
+  return {
+    provider: rows[0]?.provider ?? "sleeper",
+    season: schedule.setup.seasonYear,
+    slots: [...byIndex.entries()].sort(([left], [right]) => left - right).map(([index, row]) => {
+      const slot = row.inferredSlot as SlotKey;
+      const rank = (counts.get(slot) ?? 0) + 1;
+      counts.set(slot, rank);
+      return { slot, index, rank, label: rank > 1 ? `${slot}${rank}` : slot, rawSlot: row.rawSlot, group: "starter", confidence: row.slotConfidence };
+    }),
+  };
 }
 
 function statPlacement(teamId: string, values: Array<{ teamId: string; value: number | null }>, direction: "asc" | "desc", toneMode: "best-good" | "best-bad" | "neutral" = "best-good") {
@@ -229,9 +266,10 @@ function TeamScheduleDirectory({ schedule, summaries, clinches, onSelectTeam }: 
   );
 }
 
-export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek, simulationResults = {} }: {
+export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectTeam, onSelectWeek, simulationResults = {} }: {
   schedule: GeneratedSchedule;
   teamId: string;
+  playerStats?: GameDetailPlayerStat[];
   onSelectTeam: (teamId: string) => void;
   onSelectWeek: (week: number) => void;
   simulationResults?: Record<string, {
@@ -241,7 +279,19 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
 }) {
   const scheduleSignals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
   const summaries = useMemo(() => buildTeamScheduleSummaries(schedule), [schedule]);
-  const seasonStatsByTeam = useMemo(() => new Map(calculateTeamSeasonStats(schedule).map((row) => [row.teamId, row])), [schedule]);
+  const awardsLineup = useMemo(() => inferLineupTemplate(schedule, playerStats), [schedule, playerStats]);
+  const allStars = useMemo(() => awardsLineup ? buildAllStars({ lineupTemplate: awardsLineup, stats: playerStats }) : null, [awardsLineup, playerStats]);
+  const mvt = useMemo(() => awardsLineup ? buildMvt({ schedule, lineupTemplate: awardsLineup, playerStats, allStars: allStars ?? undefined }) : null, [schedule, awardsLineup, playerStats, allStars]);
+  const mvtByTeam = useMemo(() => new Map((mvt?.teams ?? []).map((row) => [row.teamId, row])), [mvt]);
+  const allStarCountByTeam = useMemo(() => allStars?.seasonCountByTeam ?? new Map<string, number>(), [allStars]);
+  const allStarRankByTeam = useMemo(() => rankValues(allStarCountByTeam), [allStarCountByTeam]);
+  const seasonStatsByTeam = useMemo(() => new Map(calculateTeamSeasonStats(schedule).map((row) => [row.teamId, {
+    ...row,
+    mvtScore: mvtByTeam.get(row.teamId)?.total ?? 0,
+    mvtRank: mvtByTeam.get(row.teamId)?.rank ?? 0,
+    allStarCount: allStarCountByTeam.get(row.teamId) ?? 0,
+    allStarRank: allStarRankByTeam.get(row.teamId) ?? 0,
+  }])), [schedule, mvtByTeam, allStarCountByTeam, allStarRankByTeam]);
   const currentClinches = useMemo(() => new Map(getTeamClinchTimelines(schedule).map((timeline) => [timeline.teamId, timeline])), [schedule]);
   // Field visibility is fixed to the league's display settings (the per-view
   // "Display" toggle button was removed by request).
@@ -359,6 +409,10 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
               ? <DivisionIdentity division={division} detail={`${divisionTeamCount}-team division`} />
               : <strong>Independent</strong>}
             <small className="team-schedule-rankline">Live rank <b>#{summary.liveRank}</b> · Preseason seed #{summary.divisionSeed}</small>
+            <span className="team-award-chips" aria-label="Team awards summary">
+              <span className="award-chip"><strong>MVT {formatPoints(teamStats.mvtScore)}</strong>{teamStats.mvtRank ? <small>#{teamStats.mvtRank}</small> : <small>—</small>}</span>
+              <span className="award-chip"><strong>★ {teamStats.allStarCount}</strong>{teamStats.allStarRank ? <small>#{teamStats.allStarRank}</small> : <small>—</small>}</span>
+            </span>
             <ClinchBadges timeline={currentClinches.get(team.id)} division={division} />
             <small>{[
               schedule.setup.display?.managers !== false ? team.manager || "No manager" : "",

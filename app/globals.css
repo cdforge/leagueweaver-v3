@@ -2351,6 +2351,8 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .standings-table th:nth-child(2), .standings-table td:nth-child(2) { position: sticky; left: 110px; z-index: 1; width: 1%; background: white; box-shadow: 1px 0 var(--line); }
 .standings-table th:nth-child(2) { background: var(--canvas); }
 .standings-table tr.is-eliminated td { background: #fff3f2; }
+.award-chip { display: inline-flex; min-width: 58px; align-items: center; justify-content: center; gap: 5px; border: 1px solid color-mix(in srgb, var(--brand) 22%, var(--line)); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--brand) 7%, white); padding: 5px 7px; color: var(--ink); font-size: var(--text-2xs); font-weight: var(--w-black); line-height: 1; white-space: nowrap; }
+.award-chip small { color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-black); }
 .table-team { width: 184px; min-width: 184px; max-width: 184px; display: flex; align-items: center; gap: 9px; }
 .table-team > span { min-width: 0; display: flex; flex-direction: column; gap: 2px; text-align: left; }
 .table-team strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--text-2xs); }
@@ -2860,6 +2862,9 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .team-schedule-hero .team-identity-division-record > b::after { content: ")"; }
 .team-schedule-facts { min-width: 0; display: flex; flex-direction: column; gap: 6px; border-left: 1px solid color-mix(in srgb, var(--team-brand-on, white) 24%, transparent); padding-left: 24px; }
 .team-schedule-facts > .division-identity { width: fit-content; }
+.team-award-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.team-award-chips .award-chip { border-color: color-mix(in srgb, var(--team-brand-on, white) 28%, transparent); background: color-mix(in srgb, var(--team-brand-on, white) 12%, transparent); color: var(--team-brand-on, white); }
+.team-award-chips .award-chip small { color: color-mix(in srgb, var(--team-brand-on, white) 78%, transparent); }
 .team-schedule-facts .division-identity strong,
 .team-schedule-facts .division-identity small,
 .team-schedule-facts > strong,
