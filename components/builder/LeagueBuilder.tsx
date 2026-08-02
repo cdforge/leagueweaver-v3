@@ -222,14 +222,14 @@ function CreatePathStep({ setup, quickCreateReady, quickCreateReason, onCustomiz
         <p>Customize every setting yourself, or pick a season length and let League Weaver create a ready-to-review schedule.</p>
       </div>
       <div className="create-path-options" role="group" aria-label="Choose setup path">
-        <button type="button" className="create-path-choice create-path-choice-primary" onClick={onCustomize}>
-          <span className="create-path-choice-icon"><SlidersHorizontal aria-hidden="true" /></span>
-          <span className="create-path-choice-copy">
+        <button type="button" className="start-option start-option--main create-path-recommended" onClick={onCustomize}>
+          <span className="start-option-icon"><SlidersHorizontal aria-hidden="true" /></span>
+          <span className="start-option-copy">
             <span className="build-fork-tag">Recommended</span>
             <strong>Customize everything</strong>
             <small>Walk each section yourself: league identity, teams, divisions, season rules, seeding, and playoffs.</small>
           </span>
-          <span className="build-fork-go" aria-hidden="true">Continue setup <ArrowRight /></span>
+          <span className="start-option-go" aria-hidden="true"><ArrowRight /></span>
         </button>
         <section className="create-path-choice create-path-choice-quick" aria-labelledby="quick-create-heading">
           <div className="create-path-choice-head">
