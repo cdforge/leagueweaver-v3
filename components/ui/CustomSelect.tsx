@@ -71,7 +71,7 @@ export function CustomSelect({ value, options, onChange, label, disabled = false
 
   useEffect(() => {
     if (!open) return;
-    setActiveIndex(selectedIndex);
+    queueMicrotask(() => setActiveIndex(selectedIndex));
     const escape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setOpen(false);

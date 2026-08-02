@@ -12,14 +12,11 @@ export function SignupProfileFields({ onChange }: { onChange: (profile: SignupPr
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [leagueLogo, setLeagueLogo] = useState<string | null>(null);
+  const [leagueLogo] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return loadSetup()?.logoUrl ?? null;
+  });
   const inputRef = useRef<HTMLInputElement>(null);
-
-  // Offer the league logo the commissioner is already building with as a one-tap avatar.
-  useEffect(() => {
-    const logo = loadSetup()?.logoUrl;
-    if (logo) setLeagueLogo(logo);
-  }, []);
 
   useEffect(() => {
     onChange({ leagueName, avatarUrl, busy });

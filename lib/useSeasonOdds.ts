@@ -37,11 +37,11 @@ export function useSeasonOdds(schedule: GeneratedSchedule | null | undefined, tr
 
   useEffect(() => {
     if (!enabled || !schedule) {
-      setComputing(false);
+      queueMicrotask(() => setComputing(false));
       return;
     }
     const id = ++requestId.current;
-    setComputing(true);
+    queueMicrotask(() => setComputing(true));
 
     const computeSync = () => {
       const handle = window.setTimeout(() => {

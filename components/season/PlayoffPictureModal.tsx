@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type CSSProperties } from "react";
+import { Fragment, useMemo, type CSSProperties } from "react";
 import { CircleX, Medal, ShieldCheck, Trophy, X } from "lucide-react";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { DivisionMark } from "@/components/ui/DivisionIdentity";
@@ -34,7 +34,7 @@ export function PlayoffPicturePanel({ schedule, onClose }: { schedule: Generated
   const leagueLogo = schedule.setup.logoUrl;
   const leagueColor = schedule.setup.color;
 
-  const LeagueBadge = ({ corner = false }: { corner?: boolean }) => (
+  const renderLeagueBadge = (corner = false) => (
     <span
       className={`pp-league${corner ? " pp-league-corner" : ""}`}
       style={{
@@ -54,7 +54,7 @@ export function PlayoffPicturePanel({ schedule, onClose }: { schedule: Generated
     </span>
   );
 
-  const StatusTag = ({ entry, division }: { entry: PlayoffPictureEntry; division?: Division }) => {
+  const renderStatusTag = (entry: PlayoffPictureEntry, division?: Division) => {
     if (entry.status === "top-seed") return <span className="pp-tag is-top"><Medal aria-hidden="true" />#1 Seed</span>;
     if (entry.status === "division") return <span className="pp-tag">{division && <DivisionMark division={division} size={13} className="pp-dmark" />}Div Champ</span>;
     if (entry.status === "clinched") return <span className="pp-tag is-clinched"><ShieldCheck aria-hidden="true" />Clinched</span>;
@@ -69,14 +69,14 @@ export function PlayoffPicturePanel({ schedule, onClose }: { schedule: Generated
     return <div className="pp-when">Clinched {what} in {weekLabel(entry.clinchWeek)}</div>;
   };
 
-  const FieldRow = ({ entry }: { entry: PlayoffPictureEntry }) => {
+  const renderFieldRow = (entry: PlayoffPictureEntry) => {
     const team = teamById.get(entry.teamId);
     if (!team) return null;
     const division = divisionById.get(entry.divisionId);
     return (
       <>
         <div className={`pp-srow${entry.isTopSeed ? " is-top" : ""}`} style={{ "--tc": team.color, "--bar": accessibleTeamColor(team.color), "--dc": division?.color ?? "#5b6b64" } as CSSProperties}>
-          <span className="pp-seed">{entry.seed}{entry.isTopSeed && <LeagueBadge corner />}</span>
+          <span className="pp-seed">{entry.seed}{entry.isTopSeed && renderLeagueBadge(true)}</span>
           <EntityLogo className="pp-crest" color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={38} />
           <div className="pp-bar">
             <div className="pp-tm">
@@ -84,7 +84,7 @@ export function PlayoffPicturePanel({ schedule, onClose }: { schedule: Generated
               {division && <span className="pp-div"><DivisionMark division={division} size={13} className="pp-dmark" />{division.name}</span>}
             </div>
             <span className="pp-sp" />
-            <StatusTag entry={entry} division={division} />
+            {renderStatusTag(entry, division)}
             <span className="pp-recs"><b className="pp-rec">{entry.overallRecord}</b><small className="pp-drec">{entry.divisionRecord} Div</small></span>
           </div>
         </div>
@@ -93,7 +93,7 @@ export function PlayoffPicturePanel({ schedule, onClose }: { schedule: Generated
     );
   };
 
-  const MutedRow = ({ entry }: { entry: PlayoffPictureEntry }) => {
+  const renderMutedRow = (entry: PlayoffPictureEntry) => {
     const team = teamById.get(entry.teamId);
     if (!team) return null;
     const division = divisionById.get(entry.divisionId);
@@ -137,22 +137,22 @@ export function PlayoffPicturePanel({ schedule, onClose }: { schedule: Generated
       ) : (
         <>
           <div className="pp-sec"><span>In the field</span><i /><em>Seeds 1–{picture.fieldSize}</em></div>
-          {picture.field.map((entry) => <FieldRow key={entry.teamId} entry={entry} />)}
+          {picture.field.map((entry) => <Fragment key={entry.teamId}>{renderFieldRow(entry)}</Fragment>)}
 
           <div className="pp-cut"><i /><span>Playoff cut line</span><i /></div>
 
           {picture.hunt.length > 0 && <>
             <div className="pp-sec"><span>In the hunt</span><i /><em>First out</em></div>
-            {picture.hunt.map((entry) => <MutedRow key={entry.teamId} entry={entry} />)}
+            {picture.hunt.map((entry) => <Fragment key={entry.teamId}>{renderMutedRow(entry)}</Fragment>)}
           </>}
 
           {picture.eliminated.length > 0 && <>
             <div className="pp-sec"><span>Eliminated</span><i /><em>{picture.eliminated.length} {picture.eliminated.length === 1 ? "team" : "teams"}</em></div>
-            {picture.eliminated.map((entry) => <MutedRow key={entry.teamId} entry={entry} />)}
+            {picture.eliminated.map((entry) => <Fragment key={entry.teamId}>{renderMutedRow(entry)}</Fragment>)}
           </>}
 
           <div className="pp-foot">
-            <span className="pp-lg"><LeagueBadge />#1 seed · league logo</span>
+            <span className="pp-lg">{renderLeagueBadge()}#1 seed · league logo</span>
             <span className="pp-lg"><span className="pp-sw" style={{ background: "#7fe3ac" }} />Clinched berth</span>
             <span className="pp-lg"><span className="pp-sw" style={{ background: "var(--gold)" }} />On the bubble</span>
             <span className="pp-lg"><span className="pp-sw" style={{ background: "var(--live)" }} />Eliminated</span>

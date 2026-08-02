@@ -240,7 +240,9 @@ export function ImportLeagueModal({ source, setup, onClose, onConfirm }: {
   // scroll lock, and Escape are handled by <Modal>.
   useEffect(() => () => abortRef.current?.abort(), []);
   useEffect(() => {
-    if (source === "espn") setSavedEspnImports(loadSavedEspnImports());
+    if (source !== "espn") return;
+    const handle = window.setTimeout(() => setSavedEspnImports(loadSavedEspnImports()), 0);
+    return () => window.clearTimeout(handle);
   }, [source]);
 
   const supported = preview ? preview.teams.length >= 8 && preview.teams.length <= 16 && preview.teams.length % 2 === 0 : false;
