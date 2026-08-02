@@ -1,5 +1,6 @@
 import "server-only";
 import { deriveSleeperTemplates, mapSleeperPlayerWeekStats, type LineupTemplate, type PlayerWeekStat, type RosterTemplate } from "@/lib/playerData";
+import { fetchProviderJson } from "./request";
 import type { GeneratedSchedule, ImportDataFound, PlatformSyncResult, PlatformSyncScoreRow } from "@/lib/types";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
@@ -10,9 +11,9 @@ export interface SleeperRoster { roster_id: number; owner_id?: string | null; se
 interface SleeperMatchup { roster_id: number; matchup_id?: number; points?: number; players?: string[]; starters?: string[]; players_points?: Record<string, number> }
 
 export async function sleeperFetch<T>(path: string): Promise<T> {
-  const response = await fetch(`${SLEEPER_API}${path}`, { headers: { Accept: "application/json" }, cache: "no-store" });
+  const { response, json } = await fetchProviderJson<T>(`${SLEEPER_API}${path}`);
   if (!response.ok) throw new Error(response.status === 404 ? "We couldn't find that Sleeper league or account." : "Sleeper is unavailable right now. Try again in a moment.");
-  return response.json() as Promise<T>;
+  return json as T;
 }
 
 export function sleeperAvatarUrl(value?: string | null) {

@@ -1,5 +1,6 @@
 import "server-only";
 import { deriveEspnTemplates, mapEspnPlayerWeekStats, type EspnMatchupPayload, type EspnPlayerEntryPayload, type LineupTemplate, type PlayerWeekStat, type RosterTemplate } from "@/lib/playerData";
+import { fetchProviderJson } from "./request";
 import type { GeneratedSchedule, ImportDataFound, PlatformSyncResult, PlatformSyncScoreRow } from "@/lib/types";
 
 const ESPN_BASE = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl";
@@ -45,11 +46,10 @@ export async function fetchEspnLeague(leagueId: string, seasonYear: number, view
   const searchParams = new URLSearchParams();
   for (const view of views) searchParams.append("view", view);
   for (const [key, value] of Object.entries(params ?? {})) searchParams.set(key, String(value));
-  const response = await fetch(`${ESPN_BASE}/seasons/${seasonYear}/segments/0/leagues/${leagueId}?${searchParams}`, {
-    headers: espnHeaders(auth),
-    cache: "no-store",
-  });
-  const league = await response.json().catch(() => null) as (EspnLeague & { messages?: string[]; details?: { message?: string }[] }) | null;
+  const { response, json: league } = await fetchProviderJson<EspnLeague & { messages?: string[]; details?: { message?: string }[] }>(
+    `${ESPN_BASE}/seasons/${seasonYear}/segments/0/leagues/${leagueId}?${searchParams}`,
+    { headers: espnHeaders(auth) },
+  );
   if (!response.ok || league?.messages?.length || league?.details?.length) {
     const message = league?.messages?.[0] || league?.details?.[0]?.message || "We couldn't load that ESPN league.";
     throw new Error(message);

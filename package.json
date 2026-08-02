@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "npm run test:engine && npm run test:playoffs && npm run test:stats && npm run test:mapping && npm run test:clinch && npm run test:scenarios && npm run test:conference && npm run test:player-data && npm run test:player-parser && npm run test:lineup-template && npm run test:awards",
+    "test": "npm run test:engine && npm run test:playoffs && npm run test:stats && npm run test:mapping && npm run test:clinch && npm run test:scenarios && npm run test:conference && npm run test:player-data && npm run test:player-parser && npm run test:lineup-template && npm run test:player-sync && npm run test:awards",
     "test:engine": "tsx scripts/engine-matrix.ts",
     "test:playoffs": "tsx scripts/playoff-matrix.ts",
     "test:stats": "tsx scripts/statistics-matrix.ts",
@@ -19,6 +19,7 @@
     "test:player-data": "tsx scripts/player-data-matrix.ts",
     "test:player-parser": "tsx scripts/player-parser-matrix.ts",
     "test:lineup-template": "tsx scripts/lineup-template-matrix.ts",
+    "test:player-sync": "tsx scripts/player-sync-matrix.ts",
     "test:awards": "tsx scripts/awards-matrix.ts",
     "test:ui": "tsx scripts/ui-smoke.ts"
   },
