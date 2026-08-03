@@ -285,13 +285,11 @@ function ScheduleShareModal({
 }
 
 function DashboardLoadingNotice({ view }: { view: "schedules" | "leagues" }) {
-  return <div className="product-loading product-loading-inline" role="status" aria-live="polite">
-    <LoaderCircle className="spin" />
-    <span>
-      <strong>{view === "schedules" ? "Still checking your account schedules..." : "Still checking your saved leagues..."}</strong>
-      <small>{view === "schedules" ? "Guest schedules can appear first. Cloud schedules will be added here as soon as they finish loading." : "Cached leagues can appear first. Account leagues will be added here as soon as they finish loading."}</small>
-    </span>
-  </div>;
+  return <LoadingPlaybook
+    compact
+    expectedSeconds={8}
+    label={view === "schedules" ? "Still checking your account schedules..." : "Still checking your saved leagues..."}
+  />;
 }
 
 async function fetchSavedLeaguePresets() {

@@ -221,25 +221,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .loading-playbook-timer { color: var(--field-dark); font-size: var(--text-2xs); font-style: normal; font-weight: var(--w-black); }
 .product-loading-playbook small { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--text-2xs); line-height: 1.35; }
 .product-loading-playbook small svg { width: 14px; height: 14px; color: var(--gold); }
-.product-loading-inline {
+.product-loading-playbook-compact {
   margin-inline: 0;
-  border-style: solid;
   background: color-mix(in srgb, white 90%, var(--field-soft));
   padding: 12px 14px;
 }
-.product-loading-inline > span {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-.product-loading-inline strong {
+.product-loading-playbook-compact strong {
   color: var(--field-dark);
   font-size: var(--text-xs);
-}
-.product-loading-inline small {
-  color: var(--muted);
-  font-size: var(--text-2xs);
-  line-height: 1.35;
 }
 .product-message { border-style: solid; border-color: var(--gold); background: var(--gold-soft); color: #66540f; }
 .schedule-share-modal { width: min(620px, calc(100vw - 28px)); overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: white; box-shadow: 0 24px 70px rgba(7, 20, 13, .28); }

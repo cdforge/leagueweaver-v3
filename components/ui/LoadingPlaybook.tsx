@@ -29,7 +29,7 @@ const TIPS = [
   "Tip: standings tiebreakers can be reviewed from a schedule's Settings page.",
 ];
 
-export function LoadingPlaybook({ label = "Loading fantasy football...", expectedSeconds = 8 }: { label?: string; expectedSeconds?: number }) {
+export function LoadingPlaybook({ label = "Loading fantasy football...", expectedSeconds = 8, compact = false }: { label?: string; expectedSeconds?: number; compact?: boolean }) {
   const [showTip, setShowTip] = useState(false);
   const [tipIndex, setTipIndex] = useState(() => Math.floor(Math.random() * TIPS.length));
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -54,7 +54,7 @@ export function LoadingPlaybook({ label = "Loading fantasy football...", expecte
   }, [showTip]);
 
   return (
-    <div className="product-loading product-loading-playbook" role="status" aria-live="polite">
+    <div className={`product-loading product-loading-playbook ${compact ? "product-loading-playbook-compact" : ""}`} role="status" aria-live="polite">
       <LoaderCircle className="spin" />
       <span>
         <strong>{label}</strong>
