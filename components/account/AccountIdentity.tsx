@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { CircleUserRound, LoaderCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -43,7 +43,9 @@ function identityFromUser(user: { email?: string; user_metadata?: Record<string,
 export function AccountIdentity({ identity, plan }: { identity?: AccountIdentityData; plan?: "free" | "pro" }) {
   const [resolved, setResolved] = useState<AccountIdentityData>(identity ?? { signedIn: false });
   const [loading, setLoading] = useState(identity === undefined);
-  const [avatarLoading, setAvatarLoading] = useState(Boolean(identity?.avatarUrl));
+  const avatarRef = useRef<HTMLImageElement | null>(null);
+  const [loadedAvatarUrl, setLoadedAvatarUrl] = useState<string | null>(null);
+  const [avatarLoadingUrl, setAvatarLoadingUrl] = useState<string | null>(identity?.avatarUrl ?? null);
   const { openSignIn } = useAuthModal();
 
   useEffect(() => {
@@ -79,14 +81,31 @@ export function AccountIdentity({ identity, plan }: { identity?: AccountIdentity
   }, [identity]);
 
   useEffect(() => {
-    setAvatarLoading(Boolean(resolved.avatarUrl));
+    if (!resolved.avatarUrl) {
+      setLoadedAvatarUrl(null);
+      setAvatarLoadingUrl(null);
+      return;
+    }
+    const image = avatarRef.current;
+    if (image?.complete && image.naturalWidth > 0) {
+      setLoadedAvatarUrl(resolved.avatarUrl);
+      setAvatarLoadingUrl(null);
+      return;
+    }
+    setAvatarLoadingUrl(resolved.avatarUrl);
   }, [resolved.avatarUrl]);
 
   if (!resolved.signedIn) return <button type="button" onClick={() => openSignIn()} className={`account-link account-identity${loading ? " loading" : ""}`} aria-label="Sign in to League Weaver"><CircleUserRound aria-hidden="true" /><span><strong>{loading ? "Account" : "Sign in"}</strong></span></button>;
 
   const name = resolved.displayName || friendlyEmailName(resolved.email);
+  const avatarLoading = Boolean(resolved.avatarUrl && avatarLoadingUrl === resolved.avatarUrl && loadedAvatarUrl !== resolved.avatarUrl);
+  const markAvatarLoaded = () => {
+    if (!resolved.avatarUrl) return;
+    setLoadedAvatarUrl(resolved.avatarUrl);
+    setAvatarLoadingUrl((current) => current === resolved.avatarUrl ? null : current);
+  };
   return <Link href="/account" className="account-link account-identity" aria-label={`Open account for ${name}`} title={resolved.email}>
-    <span className={`account-avatar${resolved.avatarUrl ? " has-image" : ""} ${avatarLoading ? "is-loading" : ""}`} aria-hidden="true">{resolved.avatarUrl ? <><img src={resolved.avatarUrl} alt="" onLoad={() => setAvatarLoading(false)} onError={() => setAvatarLoading(false)} />{avatarLoading && <LoaderCircle className="avatar-image-spinner spin" />}</> : accountInitials(name)}</span>
+    <span className={`account-avatar${resolved.avatarUrl ? " has-image" : ""} ${avatarLoading ? "is-loading" : ""}`} aria-hidden="true">{resolved.avatarUrl ? <><img ref={avatarRef} src={resolved.avatarUrl} alt="" onLoad={markAvatarLoaded} onError={() => { setLoadedAvatarUrl(null); setAvatarLoadingUrl(null); }} />{avatarLoading && <LoaderCircle className="avatar-image-spinner spin" />}</> : accountInitials(name)}</span>
     <span className="account-identity-copy"><strong>{name}</strong><small><span>My Account</span></small></span>
   </Link>;
 }
