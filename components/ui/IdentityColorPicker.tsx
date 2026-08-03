@@ -47,14 +47,32 @@ export function IdentityColorPicker({
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; placement: "below" | "above"; arrowLeft: number }>({ top: 0, left: 0, placement: "below", arrowLeft: 24 });
   const [pickMode, setPickMode] = useState(false);
   const [pickerError, setPickerError] = useState("");
+  const logoImageRef = useRef<HTMLImageElement | null>(null);
+  const [loadedLogo, setLoadedLogo] = useState<string | null>(null);
   const [loadingLogo, setLoadingLogo] = useState<string | null>(null);
   const paletteRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const visibleLogo = logoUrl && failedLogo !== logoUrl ? logoUrl : undefined;
-  const logoLoading = Boolean(visibleLogo && loadingLogo === visibleLogo);
+  const logoLoading = Boolean(visibleLogo && loadingLogo === visibleLogo && loadedLogo !== visibleLogo);
+  const markLogoLoaded = () => {
+    if (!visibleLogo) return;
+    setLoadedLogo(visibleLogo);
+    setLoadingLogo((current) => current === visibleLogo ? null : current);
+  };
   useEffect(() => {
-    setLoadingLogo(visibleLogo ?? null);
+    if (!visibleLogo) {
+      setLoadedLogo(null);
+      setLoadingLogo(null);
+      return;
+    }
+    const image = logoImageRef.current;
+    if (image?.complete && image.naturalWidth > 0) {
+      setLoadedLogo(visibleLogo);
+      setLoadingLogo(null);
+      return;
+    }
+    setLoadingLogo(visibleLogo);
   }, [visibleLogo]);
   useEffect(() => {
     const handle = window.setTimeout(() => setSuggestions(colorSuggestions), 0);
@@ -209,7 +227,7 @@ export function IdentityColorPicker({
       <input id={inputId} className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => upload(event.target.files?.[0])} />
       <Tooltip label={visibleLogo ? `Change ${name} logo` : `Upload ${name} logo`}>
         <label className={`identity-logo-button ${visibleLogo && imagePresentation === "bare" ? "identity-logo-button-bare" : ""} ${logoLoading ? "identity-logo-loading" : ""}`} htmlFor={inputId} style={compact ? { background: visibleLogo && imagePresentation === "bare" ? "transparent" : visibleLogo ? tintColor(color) : color, borderColor: color, color: readableTextColor(color) } : undefined}>
-          {busy ? <LoaderCircle className="spin" /> : visibleLogo ? <><img src={visibleLogo} alt="" onLoad={() => setLoadingLogo((current) => current === visibleLogo ? null : current)} onError={() => { setFailedLogo(visibleLogo); setLoadingLogo(null); }} />{logoLoading && <LoaderCircle className="identity-logo-spinner spin" aria-hidden="true" />}</> : compact ? <ImagePlus /> : <><ImagePlus /><span><strong>Add {name.toLowerCase()} logo</strong><small>We’ll pull its top colors</small></span></>}
+          {busy ? <LoaderCircle className="spin" /> : visibleLogo ? <><img ref={logoImageRef} src={visibleLogo} alt="" onLoad={markLogoLoaded} onError={() => { setFailedLogo(visibleLogo); setLoadedLogo(null); setLoadingLogo(null); }} />{logoLoading && <LoaderCircle className="identity-logo-spinner spin" aria-hidden="true" />}</> : compact ? <ImagePlus /> : <><ImagePlus /><span><strong>Add {name.toLowerCase()} logo</strong><small>We’ll pull its top colors</small></span></>}
         </label>
       </Tooltip>
       {compact && showAbbreviation && <span className="identity-name">{abbreviation}</span>}
