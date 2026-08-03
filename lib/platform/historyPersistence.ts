@@ -10,6 +10,14 @@ function seasonKey(providerLeagueId: string, season: number) {
 }
 
 const HISTORY_UPSERT_CHUNK_SIZE = 500;
+const LINEUP_STATUS_RANK: Record<string, number> = {
+  starter: 5,
+  bench: 4,
+  reserve: 3,
+  taxi: 2,
+  ir: 1,
+  unknown: 0,
+};
 
 export type HistoryPersistenceResult = {
   dataFound: ImportDataFound;
@@ -29,6 +37,37 @@ async function upsertChunks<T>(
     const { error } = await admin.from(table).upsert(chunk as never[], { onConflict });
     if (error) throw error;
   }
+}
+
+type OwnershipPersistenceRow = NonNullable<ReturnType<typeof mapOwnershipRow>>;
+
+function mapOwnershipRow(
+  row: LeagueHistoryDraft["ownershipHistory"][number],
+  leagueSeasonId?: string,
+) {
+  if (!leagueSeasonId) return null;
+  const { providerLeagueId: _providerLeagueId, season: _season, ...rest } = row;
+  return { league_season_id: leagueSeasonId, ...rest };
+}
+
+function betterOwnershipRow(
+  current: OwnershipPersistenceRow,
+  next: OwnershipPersistenceRow,
+) {
+  const currentRank = LINEUP_STATUS_RANK[current.roster_status] ?? 0;
+  const nextRank = LINEUP_STATUS_RANK[next.roster_status] ?? 0;
+  if (nextRank !== currentRank) return nextRank > currentRank ? next : current;
+  return next.fantasy_points > current.fantasy_points ? next : current;
+}
+
+function dedupeOwnershipRows(rows: OwnershipPersistenceRow[]) {
+  const byConflictKey = new Map<string, OwnershipPersistenceRow>();
+  for (const row of rows) {
+    const key = `${row.league_season_id}:${row.week}:${row.canonical_player_id}`;
+    const existing = byConflictKey.get(key);
+    byConflictKey.set(key, existing ? betterOwnershipRow(existing, row) : row);
+  }
+  return [...byConflictKey.values()];
 }
 
 export async function persistLeagueHistory(scheduleId: string, draft: LeagueHistoryDraft) {
@@ -54,11 +93,10 @@ export async function persistLeagueHistory(scheduleId: string, draft: LeagueHist
     const leagueSeasonId = idBySeason.get(seasonKey(providerLeagueId, season));
     return leagueSeasonId ? { league_season_id: leagueSeasonId, ...rest } : null;
   }).filter((row): row is NonNullable<typeof row> => Boolean(row));
-  const ownershipRows = draft.ownershipHistory.map((row) => {
-    const { providerLeagueId, season, ...rest } = row;
-    const leagueSeasonId = idBySeason.get(seasonKey(providerLeagueId, season));
-    return leagueSeasonId ? { league_season_id: leagueSeasonId, ...rest } : null;
-  }).filter((row): row is NonNullable<typeof row> => Boolean(row));
+  const ownershipRows = dedupeOwnershipRows(draft.ownershipHistory.map((row) => {
+    const leagueSeasonId = idBySeason.get(seasonKey(row.providerLeagueId, row.season));
+    return mapOwnershipRow(row, leagueSeasonId);
+  }).filter((row): row is OwnershipPersistenceRow => Boolean(row)));
 
   if (teamRows.length) {
     await upsertChunks("league_team_history", teamRows, "league_season_id,league_team_id");
