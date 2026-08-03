@@ -197,6 +197,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .builder-content { min-height: 590px; padding: 36px 40px; }
 .step-stack { display: grid; gap: 24px; }
 .section-heading { max-width: 680px; }
+.section-heading-with-action { max-width: none; display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.section-heading-with-action > div { max-width: 680px; min-width: 0; }
+.section-heading-with-action > .button-secondary { flex: 0 0 auto; margin-top: 2px; white-space: nowrap; }
 .step-kicker { display: block; margin-bottom: 7px; color: var(--field); font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: 0.05em; }
 .step-kicker .pro-badge { margin-left: 5px; vertical-align: middle; }
 .section-heading h1 { margin: 0; font-family: var(--font-barlow-condensed), sans-serif; font-size: clamp(30px, 0.9vw + 25px, 36px); line-height: 1; letter-spacing: -0.01em; }
@@ -5844,8 +5847,11 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 
 /* Grouped wizard step: sub-tab bar above the active sub-panel (Teams & Divisions, Season & Rules). */
 .wizard-group-step { display: flex; flex-direction: column; gap: 22px; }
+.wizard-group-step > .wizard-subnav { margin-bottom: 8px; }
 /* On narrow screens the 4-tab Season & Rules row scrolls sideways rather than wrapping into a tall stack. */
 @media (max-width: 560px) {
+  .section-heading-with-action { flex-direction: column; gap: 14px; }
+  .section-heading-with-action > .button-secondary { width: 100%; }
   .wizard-subnav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .wizard-subnav::-webkit-scrollbar { display: none; }
   .wizard-subnav button { flex: 0 0 auto; }
