@@ -53,7 +53,6 @@ import { useAuthModal } from "@/components/account/AuthModalProvider";
 import { AdUnit } from "@/components/ads/AdUnit";
 import { AllStarsWorkspace } from "@/components/season/AllStarsWorkspace";
 import { GotwWorkspace } from "@/components/season/GotwWorkspace";
-import { MvtWorkspace } from "@/components/season/MvtWorkspace";
 import {
   BracketConnectorLayer,
   type BracketConnection,
