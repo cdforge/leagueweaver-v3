@@ -606,7 +606,17 @@ async function screenshotMvt(browser: Browser, name: string, schedule: Generated
   await page.waitForTimeout(100);
   await page.screenshot({ path: path.join(screenshotDir, `ui-smoke-${name}.png`), fullPage: true });
   if (champions) {
+    await page.locator(".workspace-rail nav").getByRole("button", { name: /standings/i }).click();
+    await expectText(page.locator(".workspace-breadcrumb"), /2025/s, `${name}: historical season carries into standings`);
+    await expectText(page.locator(".standings-table"), /245\.70|255\.40/s, `${name}: standings uses historical schedule totals`);
     await page.locator(".workspace-rail nav").getByRole("button", { name: /league schedule/i }).click();
+    await expectText(page.locator(".workspace-breadcrumb"), /2025/s, `${name}: historical season carries back to schedule`);
+    await expectText(page.locator(".history-readonly-pill"), /Provider history/s, `${name}: historical schedule is read-only provider history`);
+    await page.locator(".matchup-card.is-openable").first().locator(".matchup-score").click();
+    await expectText(page.locator(".game-detail-modal"), /History Away QB.*History Home QB/s, `${name}: historical game opens its saved roster detail`);
+    await page.getByRole("button", { name: /next game/i }).click();
+    await expectText(page.locator(".game-detail-modal"), /History Away QB.*History Home QB/s, `${name}: historical game modal can navigate the week`);
+    await page.getByRole("button", { name: /close game detail/i }).click();
     await page.locator(".matchup-card.is-openable").first().locator("a.team-identity-block").first().click();
     await page.waitForURL(new RegExp(`/season/${schedule.id}/team/`));
     assert.ok(!page.url().includes("-history-"), `${name}: historical schedule team links use the real season route`);
