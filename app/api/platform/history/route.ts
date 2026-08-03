@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { collectEspnLeagueHistory, parseEspnLeagueId, scanEspnHistory } from "@/lib/platform/espn";
+import {
+  collectEspnLeagueHistory,
+  parseEspnLeagueId,
+  scanEspnHistory,
+  type EspnAuthInput,
+} from "@/lib/platform/espn";
+import { decryptSecret } from "@/lib/platform/crypto";
 import { collectSleeperLeagueHistory, resolveSleeperLeagueId, scanSleeperHistory } from "@/lib/platform/sleeper";
 import { dataFoundFromDraft, persistLeagueHistory } from "@/lib/platform/historyPersistence";
 import { getAuthenticatedClient } from "@/lib/supabase/auth";
@@ -33,6 +39,41 @@ function revisionAction(source?: string | null) {
   if (source === "manual_save") return "Saved revision";
   if (source === "restore") return "Restored revision";
   return "Saved revision";
+}
+
+function cleanError(message: string) {
+  return message
+    .replace(/espn_s2=[^;\s]+/gi, "espn_s2=[redacted]")
+    .replace(/SWID=[^;\s]+/gi, "SWID=[redacted]")
+    .slice(0, 500);
+}
+
+async function loadSavedEspnAuth(
+  auth: NonNullable<Awaited<ReturnType<typeof getAuthenticatedClient>>>,
+  scheduleId: string,
+  leagueId: string,
+): Promise<EspnAuthInput | undefined> {
+  const { data: link } = await auth.supabase
+    .from("external_league_links")
+    .select("id")
+    .eq("schedule_id", scheduleId)
+    .eq("provider", "espn")
+    .eq("provider_league_id", leagueId)
+    .maybeSingle();
+  if (!link) return undefined;
+  const { data: credentials } = await auth.supabase
+    .from("platform_provider_credentials")
+    .select("credential_json")
+    .eq("external_league_link_id", link.id)
+    .maybeSingle();
+  const payload = credentials?.credential_json as
+    | { swid?: string; espnS2?: string }
+    | undefined;
+  if (!payload?.swid || !payload.espnS2) return undefined;
+  return {
+    swid: decryptSecret(payload.swid),
+    espnS2: decryptSecret(payload.espnS2),
+  };
 }
 
 type HistoryBrowserSeason = {
@@ -333,15 +374,25 @@ export async function POST(request: Request) {
     if (parsed.data.provider === "espn") {
       const leagueId = parseEspnLeagueId(parsed.data.identifier);
       if (!leagueId) return NextResponse.json({ error: "Enter an ESPN league URL or ID." }, { status: 400 });
-      const auth = parsed.data.swid && parsed.data.espnS2 ? { swid: parsed.data.swid, espnS2: parsed.data.espnS2 } : undefined;
+      const requestAuth = parsed.data.swid && parsed.data.espnS2 ? { swid: parsed.data.swid, espnS2: parsed.data.espnS2 } : undefined;
       if (parsed.data.populate && parsed.data.scheduleId) {
         const userAuth = await getAuthenticatedClient();
         if (!userAuth) return NextResponse.json({ error: "Sign in before saving league history." }, { status: 401 });
         if (!(await assertScheduleOwner(userAuth, parsed.data.scheduleId))) return NextResponse.json({ error: "Choose a saved season you own." }, { status: 403 });
+        const auth = requestAuth ?? await loadSavedEspnAuth(userAuth, parsed.data.scheduleId, leagueId);
         const draft = await collectEspnLeagueHistory(parsed.data.scheduleId, leagueId, parsed.data.seasonYear, auth);
         const persisted = await persistLeagueHistory(parsed.data.scheduleId, draft);
         return NextResponse.json({ ...dataFoundFromDraft(draft), champions: draft.champions, rowsWritten: persisted.rowsWritten, warnings: persisted.warnings });
       }
+      const savedAuth =
+        parsed.data.scheduleId && UUID.test(parsed.data.scheduleId)
+          ? await getAuthenticatedClient().then((userAuth) =>
+              userAuth
+                ? loadSavedEspnAuth(userAuth, parsed.data.scheduleId!, leagueId)
+                : undefined,
+            )
+          : undefined;
+      const auth = requestAuth ?? savedAuth;
       return NextResponse.json(await scanEspnHistory(leagueId, parsed.data.seasonYear, auth));
     }
     const { leagueId } = await resolveSleeperLeagueId(parsed.data.identifier, parsed.data.seasonYear);
@@ -354,7 +405,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ ...dataFoundFromDraft(draft), champions: draft.champions, rowsWritten: persisted.rowsWritten, warnings: persisted.warnings });
     }
     return NextResponse.json(await scanSleeperHistory(leagueId));
-  } catch {
-    return NextResponse.json({ error: "History could not be scanned for this league." }, { status: 400 });
+  } catch (caught) {
+    return NextResponse.json(
+      {
+        error: cleanError(
+          caught instanceof Error
+            ? caught.message
+            : "History could not be scanned for this league.",
+        ),
+      },
+      { status: 400 },
+    );
   }
 }

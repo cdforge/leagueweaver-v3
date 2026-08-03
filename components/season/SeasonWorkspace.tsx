@@ -4417,6 +4417,67 @@ function PlatformSyncCard({
   );
 }
 
+function PlatformConnectionCenter({
+  schedule,
+  loading,
+  historyLoading,
+  onRefreshCurrentSeasonData,
+  onRefreshImportHistory,
+}: {
+  schedule: GeneratedSchedule;
+  loading: boolean;
+  historyLoading: boolean;
+  onRefreshCurrentSeasonData: () => void;
+  onRefreshImportHistory: () => void;
+}) {
+  const connection = schedule.setup.platformConnection;
+  const providerName = connection
+    ? providerLabel(connection.provider)
+    : "ESPN or Sleeper";
+  const disabled = !connection;
+  return (
+    <section
+      className="platform-connection-center"
+      aria-labelledby="platform-connection-title"
+    >
+      <div className="platform-connection-copy">
+        <span className="platform-connection-icon">
+          <Cloud />
+        </span>
+        <span>
+          <strong id="platform-connection-title">
+            {providerName} connectivity
+          </strong>
+          <small>
+            Manage the league connection, refresh this season’s available data,
+            and pull saved ESPN/Sleeper history from one place.
+          </small>
+        </span>
+      </div>
+      <div className="platform-connection-actions">
+        <button
+          type="button"
+          className="button-primary"
+          disabled={disabled || loading}
+          onClick={onRefreshCurrentSeasonData}
+        >
+          {loading ? <LoaderCircle className="spin" /> : <RefreshCw />}
+          Refresh current season data
+        </button>
+        <button
+          type="button"
+          className="button-secondary visible"
+          disabled={disabled || historyLoading}
+          onClick={onRefreshImportHistory}
+        >
+          {historyLoading ? <LoaderCircle className="spin" /> : <History />}
+          Refresh historic seasons
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function ImportHistoryPanel({
   events,
   loading,
@@ -4547,6 +4608,8 @@ function SettingsView({
   readOnly = false,
   canAccessPlatformSync,
   platformSyncLoading,
+  historySyncing,
+  onRefreshCurrentSeasonData,
   onRefreshPlatformScores,
   onSavePlatformConnection,
   onDisconnectPlatform,
@@ -4554,6 +4617,7 @@ function SettingsView({
   importHistory,
   importHistoryLoading,
   importHistoryError,
+  onSyncLeagueHistory,
   onRefreshImportHistory,
 }: {
   schedule: GeneratedSchedule;
@@ -4564,6 +4628,8 @@ function SettingsView({
   readOnly?: boolean;
   canAccessPlatformSync: boolean;
   platformSyncLoading: boolean;
+  historySyncing: boolean;
+  onRefreshCurrentSeasonData: () => void;
   onRefreshPlatformScores: () => void;
   onSavePlatformConnection: (
     syncMode: PlatformSyncMode,
@@ -4575,6 +4641,7 @@ function SettingsView({
   importHistory: ImportHistoryEvent[];
   importHistoryLoading: boolean;
   importHistoryError: string | null;
+  onSyncLeagueHistory: () => void;
   onRefreshImportHistory: () => void;
 }) {
   const [tab, setTab] = useState<
@@ -4688,6 +4755,13 @@ function SettingsView({
       )}
       {tab === "connections" && (
         <>
+          <PlatformConnectionCenter
+            schedule={schedule}
+            loading={platformSyncLoading}
+            historyLoading={historySyncing}
+            onRefreshCurrentSeasonData={onRefreshCurrentSeasonData}
+            onRefreshImportHistory={onSyncLeagueHistory}
+          />
           <PlatformSyncCard
             schedule={schedule}
             canAccessPlatformSync={canAccessPlatformSync}
@@ -6342,6 +6416,17 @@ export function SeasonWorkspace({
       window.setTimeout(() => setNotice(null), 6200);
     }
   }
+  const refreshCurrentSeasonData = () => {
+    if (
+      canAccessPlatformSync &&
+      schedule?.setup.platformConnection &&
+      !simulation
+    ) {
+      void refreshPlatformScores();
+      return;
+    }
+    void loadImportHistory();
+  };
   const savePlatformConnection = async (
     syncMode: PlatformSyncMode,
     swid?: string,
@@ -7291,14 +7376,28 @@ export function SeasonWorkspace({
           style={workspaceMainStyle}
         >
           <div className="workspace-toolbar">
-            <div>
-              <span className="workspace-breadcrumb">
-                {schedule.setup.abbreviation} /{" "}
-                {historyViewActive && selectedHistorySeason
-                  ? selectedHistorySeason.season
-                  : schedule.setup.seasonYear}
+            <div
+              className="workspace-toolbar-identity"
+              aria-label={`${currentTitle} for ${schedule.setup.name}`}
+            >
+              <EntityLogo
+                color={schedule.setup.color}
+                logoUrl={schedule.setup.logoUrl}
+                monogram={
+                  schedule.setup.initials || schedule.setup.abbreviation || "LW"
+                }
+                size={52}
+              />
+              <span className="workspace-title-stack">
+                <span className="workspace-breadcrumb">
+                  {schedule.setup.name} - NFL{" "}
+                  {historyViewActive && selectedHistorySeason
+                    ? selectedHistorySeason.season
+                    : schedule.setup.seasonYear}{" "}
+                  season
+                </span>
+                <h1>{currentTitle}</h1>
               </span>
-              <h1>{currentTitle}</h1>
             </div>
             <div className="toolbar-actions">
               {showHistoryPicker && (
@@ -7881,6 +7980,8 @@ export function SeasonWorkspace({
                 readOnly={Boolean(simulation)}
                 canAccessPlatformSync={canAccessPlatformSync}
                 platformSyncLoading={platformSyncLoading}
+                historySyncing={historySyncing}
+                onRefreshCurrentSeasonData={refreshCurrentSeasonData}
                 onRefreshPlatformScores={refreshPlatformScores}
                 onSavePlatformConnection={savePlatformConnection}
                 onDisconnectPlatform={disconnectPlatform}
@@ -7888,6 +7989,7 @@ export function SeasonWorkspace({
                 importHistory={importHistory}
                 importHistoryLoading={importHistoryLoading}
                 importHistoryError={importHistoryError}
+                onSyncLeagueHistory={syncLeagueHistory}
                 onRefreshImportHistory={loadImportHistory}
               />
             )}
