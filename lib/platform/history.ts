@@ -103,6 +103,11 @@ function numberValue(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function positiveNumberValue(value: unknown) {
+  const parsed = numberValue(value);
+  return parsed && parsed > 0 ? parsed : null;
+}
+
 function wholePlusDecimal(whole: unknown, decimal: unknown) {
   const base = numberValue(whole);
   if (base == null) return null;
@@ -381,7 +386,7 @@ export function buildEspnLeagueHistoryDraft(scheduleId: string, seasons: EspnHis
 
     for (const team of teams) {
       const teamName = espnTeamName(team);
-      const finalStanding = numberValue(team.rankCalculatedFinal);
+      const finalStanding = positiveNumberValue(team.rankCalculatedFinal);
       const wins = espnRecordValue(team.record, "wins");
       const losses = espnRecordValue(team.record, "losses");
       const ties = espnRecordValue(team.record, "ties");
@@ -426,7 +431,7 @@ export function buildEspnLeagueHistoryDraft(scheduleId: string, seasons: EspnHis
       manager: espnMemberName(league, team) ?? "",
       color: "#117a45",
       divisionId: team.divisionId == null ? "0" : String(team.divisionId),
-      overallRank: numberValue(team.rankCalculatedFinal) ?? team.id,
+      overallRank: positiveNumberValue(team.rankCalculatedFinal) ?? team.id,
       stadium: "",
       providerId: espnLeagueTeamId(providerLeagueId, team.id),
     }));
