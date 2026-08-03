@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { parseEspnLeagueId, scanEspnHistory } from "@/lib/platform/espn";
+import { collectEspnLeagueHistory, parseEspnLeagueId, scanEspnHistory } from "@/lib/platform/espn";
 import { collectSleeperLeagueHistory, resolveSleeperLeagueId, scanSleeperHistory } from "@/lib/platform/sleeper";
 import { dataFoundFromDraft, persistLeagueHistory } from "@/lib/platform/historyPersistence";
 import { getAuthenticatedClient } from "@/lib/supabase/auth";
@@ -296,6 +296,14 @@ export async function POST(request: Request) {
       const leagueId = parseEspnLeagueId(parsed.data.identifier);
       if (!leagueId) return NextResponse.json({ error: "Enter an ESPN league URL or ID." }, { status: 400 });
       const auth = parsed.data.swid && parsed.data.espnS2 ? { swid: parsed.data.swid, espnS2: parsed.data.espnS2 } : undefined;
+      if (parsed.data.populate && parsed.data.scheduleId) {
+        const userAuth = await getAuthenticatedClient();
+        if (!userAuth) return NextResponse.json({ error: "Sign in before saving league history." }, { status: 401 });
+        if (!(await assertScheduleOwner(userAuth, parsed.data.scheduleId))) return NextResponse.json({ error: "Choose a saved season you own." }, { status: 403 });
+        const draft = await collectEspnLeagueHistory(parsed.data.scheduleId, leagueId, parsed.data.seasonYear, auth);
+        const persisted = await persistLeagueHistory(parsed.data.scheduleId, draft);
+        return NextResponse.json({ ...dataFoundFromDraft(draft), champions: draft.champions, rowsWritten: persisted.rowsWritten, warnings: persisted.warnings });
+      }
       return NextResponse.json(await scanEspnHistory(leagueId, parsed.data.seasonYear, auth));
     }
     const { leagueId } = await resolveSleeperLeagueId(parsed.data.identifier, parsed.data.seasonYear);

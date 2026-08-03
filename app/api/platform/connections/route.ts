@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getAuthenticatedClient, getEntitlements } from "@/lib/supabase/auth";
+import { getAuthenticatedClient } from "@/lib/supabase/auth";
 import { encryptSecret } from "@/lib/platform/crypto";
 import { collectAndPersistConnectionHistory, type HistoryPersistenceResult } from "@/lib/platform/historyPersistence";
 
@@ -49,10 +49,7 @@ export async function POST(request: Request) {
   if (!auth) return NextResponse.json({ error: "Sign in before saving a platform connection." }, { status: 401 });
   const parsed = connectionSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: "Connection details are incomplete." }, { status: 400 });
-  const entitlements = await getEntitlements(auth.userId, auth.supabase, parsed.data.scheduleId);
-  const proSync = entitlements.plan === "pro" || entitlements.features.includes("platform_sync");
   const hasPrivateEspn = parsed.data.provider === "espn" && parsed.data.swid && parsed.data.espnS2;
-  if ((hasPrivateEspn || parsed.data.syncMode !== "manual") && !proSync) return NextResponse.json({ error: "Deep platform sync is included with Pro." }, { status: 403 });
 
   const { data: schedule } = await auth.supabase.from("schedules").select("id").eq("id", parsed.data.scheduleId).maybeSingle();
   if (!schedule) return NextResponse.json({ error: "Save this season before connecting platform sync." }, { status: 404 });

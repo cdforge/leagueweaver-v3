@@ -51,10 +51,23 @@ async function persistScores(schedule: GeneratedSchedule, result: PlatformSyncRe
     is_final: row.homeScore != null && row.awayScore != null,
   }));
   if (rows.length) await auth.supabase.from("season_scores").upsert(rows, { onConflict: "schedule_id,game_id" });
-  await auth.supabase.from("external_league_links")
-    .update({ last_sync_at: result.syncedAt, sync_status: result.warnings.length ? "warning" : "ready", sanitized_error: result.warnings[0] ?? null })
-    .eq("schedule_id", schedule.id)
-    .eq("provider", schedule.setup.platformConnection?.provider);
+  const connection = schedule.setup.platformConnection;
+  if (connection?.provider && connection.providerLeagueId) {
+    await auth.supabase.from("external_league_links").upsert({
+      user_id: auth.userId,
+      schedule_id: schedule.id,
+      provider: connection.provider,
+      provider_league_id: connection.providerLeagueId,
+      sync_enabled: connection.syncMode !== "manual",
+      last_sync_at: result.syncedAt,
+      sync_status: result.warnings.length ? "warning" : "ready",
+      sanitized_error: result.warnings[0] ?? null,
+      metadata_json: {
+        seasonYear: connection.seasonYear,
+        authType: connection.authType,
+      },
+    }, { onConflict: "user_id,provider,provider_league_id" });
+  }
   await auth.supabase.from("import_runs").insert({
     user_id: auth.userId,
     schedule_id: schedule.id,

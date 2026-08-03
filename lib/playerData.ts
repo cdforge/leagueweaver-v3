@@ -124,6 +124,8 @@ export interface EspnPlayerEntryPayload {
     player?: {
       id?: number | string;
       fullName?: string;
+      firstName?: string;
+      lastName?: string;
       defaultPositionId?: number;
       proTeamId?: number;
     };

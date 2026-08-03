@@ -1932,7 +1932,7 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
     }
   }, [schedule?.id, simulation, simulationLoaded]);
   const canAccessScorekeeping = true;
-  const canAccessPlatformSync = entitlements.plan === "pro" || entitlements.features.includes("platform_sync");
+  const canAccessPlatformSync = true;
   const activeSchedule = useMemo(() => schedule && simulation ? materializeSimulationSchedule(simulation) : schedule, [schedule, simulation]);
   const historyOptions = useMemo(() => [
     { value: "current", label: `${schedule?.setup.seasonYear ?? "Current"}`, description: "Current LeagueWeaver season" },

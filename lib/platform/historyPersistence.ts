@@ -1,5 +1,5 @@
 import "server-only";
-import { scanEspnHistory, type EspnAuthInput } from "@/lib/platform/espn";
+import { collectEspnLeagueHistory, type EspnAuthInput } from "@/lib/platform/espn";
 import { collectSleeperLeagueHistory } from "@/lib/platform/sleeper";
 import type { LeagueHistoryDraft } from "@/lib/platform/history";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -93,10 +93,11 @@ export async function collectAndPersistConnectionHistory(args: {
     };
   }
 
-  const dataFound = await scanEspnHistory(args.providerLeagueId, args.seasonYear, args.espnAuth);
+  const draft = await collectEspnLeagueHistory(args.scheduleId, args.providerLeagueId, args.seasonYear, args.espnAuth);
+  const persisted = await persistLeagueHistory(args.scheduleId, draft);
   return {
-    dataFound,
-    rowsWritten: 0,
-    warnings: ["ESPN history was scanned. Full ESPN row capture is not available yet, so no historical schedule/player rows were saved."],
+    dataFound: dataFoundFromDraft(draft),
+    rowsWritten: persisted.rowsWritten,
+    warnings: persisted.warnings,
   };
 }

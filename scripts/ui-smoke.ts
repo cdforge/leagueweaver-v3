@@ -587,7 +587,7 @@ async function screenshotMvt(browser: Browser, name: string, schedule: Generated
   assert.ok(response.status() >= 200 && response.status() < 400, `${name}: MVT route is reachable`);
   await page.getByRole("button", { name: /^MVT$/i }).waitFor();
   await page.getByRole("heading", { name: /Most Valuable Team/i }).waitFor();
-  await expectText(page.locator(".mvt-overview"), /Power Ranking/s, `${name}: MVT overview is present`);
+  await expectText(page.locator(".mvt-overview"), /Overall MVT Score/s, `${name}: MVT overview is present`);
   if (champions) await expectText(page.locator(".past-champions-strip"), /Past Champions.*2025.*Harbor Kings/s, `${name}: past champions strip is present`);
   if (champions) {
     await page.getByLabel(/Select MVT season/i).click();
@@ -740,7 +740,13 @@ async function screenshotAwardEmptyState(browser: Browser, name: string, schedul
   const response = await page.goto(`${baseUrl}/season/${schedule.id}?view=${view}`, { waitUntil: "networkidle" });
   assert.ok(response, `${name}: ${view} route returned a response`);
   assert.ok(response.status() >= 200 && response.status() < 400, `${name}: ${view} route is reachable`);
-  await expectText(page.locator(view === "mvt" ? ".mvt-empty-panel" : ".allstars-empty-panel"), /Connect a public ESPN\/Sleeper league/s, `${name}: public ESPN/Sleeper empty state is present`);
+  if (view === "mvt") {
+    await expectText(page.locator(".mvt-status-panel"), /MVT categories are ready/s, `${name}: MVT placeholder categories are present`);
+    await expectText(page.locator(".mvt-tabs"), /Positional Awards.*Achievement Awards.*Divisional \/ League.*Bonus Awards/s, `${name}: MVT category tabs are present`);
+    await expectText(page.locator(".mvt-overview"), /Overall MVT Score/s, `${name}: MVT overall score shell is present`);
+  } else {
+    await expectText(page.locator(".allstars-empty-panel"), /Connect a public ESPN\/Sleeper league/s, `${name}: public ESPN/Sleeper empty state is present`);
+  }
   await page.screenshot({ path: path.join(screenshotDir, `ui-smoke-${name}.png`), fullPage: true });
   assert.deepEqual(pageErrors, [], `${name}: no page errors`);
   assert.deepEqual(consoleErrors, [], `${name}: no console errors`);

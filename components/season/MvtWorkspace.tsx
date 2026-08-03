@@ -22,6 +22,14 @@ const BUCKETS: Array<{ key: MvtBucket; label: string; short: string }> = [
   { key: "bonus", label: "Bonus Awards", short: "BON" },
 ];
 
+const PLACEHOLDER_AWARDS: Record<MvtPanelKey, string[]> = {
+  positional: ["Starter slot average", "Starter slot high score"],
+  achievement: ["MVP", "Total score average", "Total score high", "All-Star players", "Game-of-the-week record", "Blowouts", "Upsets", "Trades", "Waiver wire"],
+  divisionLeague: ["Best overall record", "Best divisional record", "Best cross-divisional record", "Sweeps", "Longest win streak", "Home record", "Away record"],
+  bonus: ["Game of the Week", "Blowout bonus", "Upset bonus"],
+  conference: ["Conference record", "Conference points", "Conference finish"],
+};
+
 function inferLineupTemplate(schedule: GeneratedSchedule, rows: GameDetailPlayerStat[]): LineupTemplate | null {
   const starters = rows.filter((row) => row.lineupStatus === "starter" && row.starterIndex != null && row.inferredSlot);
   if (!starters.length) return null;
@@ -79,6 +87,19 @@ function TeamLine({ row, team, maxTotal }: { row: MvtTeamResult; team: Team; max
   </article>;
 }
 
+function PendingTeamLine({ team, rank }: { team: Team; rank: number }) {
+  return <article className="mvt-team-line is-pending" style={{ "--team": team.color, "--mvt-t": 0 } as React.CSSProperties}>
+    <b>#{rank}</b>
+    <EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={46} />
+    <span>
+      <strong>{teamDisplayName(team)}</strong>
+      <small>Awaiting platform-scored starter rows</small>
+    </span>
+    <PointChip value={0} className="mvt-total-chip" />
+    <i aria-hidden="true"><span /></i>
+  </article>;
+}
+
 function WinnerCell({ award, place, teamById }: { award: MvtAwardResult; place: 1 | 2 | 3; teamById: Map<string, Team> }) {
   const winners = award.winners.filter((winner) => winner.place === place);
   if (!winners.length) return <td className="mvt-award-empty">--</td>;
@@ -103,6 +124,23 @@ function AwardTable({ title, awards, teamById }: { title: string; awards: MvtAwa
           <WinnerCell award={award} place={1} teamById={teamById} />
           <WinnerCell award={award} place={2} teamById={teamById} />
           <WinnerCell award={award} place={3} teamById={teamById} />
+        </tr>)}</tbody>
+      </table>
+    </div>
+  </section>;
+}
+
+function PlaceholderAwardTable({ title, awards }: { title: string; awards: string[] }) {
+  return <section className="mvt-award-panel is-pending">
+    <header><Medal /><span><strong>{title}</strong><small>Categories are ready; winners appear after scored starter rows sync.</small></span></header>
+    <div className="mvt-award-table-wrap">
+      <table className="mvt-award-table">
+        <thead><tr><th>Award</th><th>1st</th><th>2nd</th><th>3rd</th></tr></thead>
+        <tbody>{awards.map((award) => <tr key={award}>
+          <th scope="row">{award}</th>
+          <td className="mvt-award-empty">Waiting for data</td>
+          <td className="mvt-award-empty">--</td>
+          <td className="mvt-award-empty">--</td>
         </tr>)}</tbody>
       </table>
     </div>
@@ -163,21 +201,11 @@ export function MvtWorkspace({ schedule, playerStats, pastChampions = [] }: { sc
   const maxTotal = Math.max(0, ...(mvt?.teams.map((row) => row.total) ?? []));
   const awardsByBucket = React.useMemo(() => new Map(BUCKETS.map((bucket) => [bucket.key, (mvt?.awards ?? []).filter((award) => award.bucket === bucket.key)])), [mvt]);
   const activeBucketLabel = activeBucket === "conference" ? "Conference Awards" : BUCKETS.find((bucket) => bucket.key === activeBucket)?.label ?? "Awards";
+  const hasMvtData = Boolean(mvt?.teams.length);
+  const orderedTeams = React.useMemo(() => [...schedule.setup.teams].sort((left, right) => left.overallRank - right.overallRank || teamDisplayName(left).localeCompare(teamDisplayName(right))), [schedule.setup.teams]);
 
-  if (!mvt || !mvt.teams.length) {
-    return <div className="mvt-workspace">
-      <PastChampionsStrip champions={pastChampions} />
-      <section className="mvt-empty">
-        <div className="mvt-empty-panel">
-          <Sparkles />
-          <span><strong>Connect a public ESPN/Sleeper league to unlock MVT.</strong><small>League scores still work everywhere else; this page waits for real platform-scored starter rows so no award data is invented.</small></span>
-        </div>
-      </section>
-    </div>;
-  }
-
-  const leader = mvt.teams[0];
-  const leaderTeam = teamById.get(leader.teamId);
+  const leader = mvt?.teams[0];
+  const leaderTeam = leader ? teamById.get(leader.teamId) : undefined;
 
   return <div className="mvt-workspace">
     <section className="mvt-hero">
@@ -186,31 +214,39 @@ export function MvtWorkspace({ schedule, playerStats, pastChampions = [] }: { sc
         <h2>Most Valuable Team</h2>
         <p>MVT is the league power ranking, scored from positional, achievement, division/league, and bonus awards.</p>
       </div>
-      {leaderTeam && <aside>
+      {leaderTeam && leader ? <aside>
         <Trophy />
         <span><small>Current leader</small><strong>{teamDisplayName(leaderTeam)}</strong></span>
         <PointChip value={leader.total} className="mvt-leader-chip" />
+      </aside> : <aside className="mvt-pending-leader">
+        <Sparkles />
+        <span><small>Current leader</small><strong>Waiting for data</strong></span>
+        <PointChip value={0} className="mvt-leader-chip" />
       </aside>}
     </section>
     <PastChampionsStrip champions={pastChampions} />
+    {!hasMvtData && <section className="mvt-status-panel" role="status">
+      <Sparkles />
+      <span><strong>MVT categories are ready.</strong><small>This season has no platform-scored starter rows yet. Once ESPN or Sleeper player scores sync, these blanks become real totals without inventing data.</small></span>
+    </section>}
 
     <section className="mvt-overview" aria-label="MVT power ranking">
       <header>
-        <span><strong>Power Ranking</strong><small>Shared MVT scale</small></span>
-        <em>{mvt.teams.length} teams</em>
+        <span><strong>Overall MVT Score</strong><small>Standings-style total across all award tabs</small></span>
+        <em>{hasMvtData ? mvt!.teams.length : orderedTeams.length} teams</em>
       </header>
       <div className="mvt-leaderboard">
-        {mvt.teams.map((row) => {
+        {hasMvtData ? mvt!.teams.map((row) => {
           const team = teamById.get(row.teamId);
           return team ? <TeamLine key={row.teamId} row={row} team={team} maxTotal={maxTotal} /> : null;
-        })}
+        }) : orderedTeams.map((team, index) => <PendingTeamLine key={team.id} team={team} rank={index + 1} />)}
       </div>
     </section>
 
     <section className="mvt-buckets" aria-label="MVT score buckets">
       {BUCKETS.map((bucket) => <article key={bucket.key}>
         <small>{bucket.short}</small>
-        <PointChip value={mvt.teams.reduce((sum, row) => sum + bucketValue(row, bucket.key), 0)} label={bucket.short} />
+        <PointChip value={hasMvtData ? mvt!.teams.reduce((sum, row) => sum + bucketValue(row, bucket.key), 0) : 0} label={bucket.short} />
         <span>{bucket.label}</span>
       </article>)}
     </section>
@@ -226,7 +262,8 @@ export function MvtWorkspace({ schedule, playerStats, pastChampions = [] }: { sc
       >{bucket.label}</button>)}
     </div>
 
-    {activeBucket === "divisionLeague"
+    {!hasMvtData ? <PlaceholderAwardTable title={activeBucketLabel} awards={PLACEHOLDER_AWARDS[activeBucket]} />
+      : activeBucket === "divisionLeague"
       ? <DivisionLeagueAwards awards={awardsByBucket.get("divisionLeague") ?? []} teamById={teamById} schedule={schedule} />
       : activeBucket === "conference"
         ? <AwardTable title={activeBucketLabel} awards={(awardsByBucket.get("divisionLeague") ?? []).filter((award) => groupKind(award.id) === "conference")} teamById={teamById} />
