@@ -44,14 +44,29 @@ export function leagueAcronym(name: string) {
 
 export function divisionAcronym(name: string) {
   const nameWords = words(name);
-  const primary = nameWords[0] ? `${nameWords[0][0]}FC` : "";
+  const letteredDivision = /^division\s+([a-z])$/i.exec(name.trim());
+  const primary = letteredDivision
+    ? `${letteredDivision[1]}FC`
+    : nameWords[0] ? `${nameWords[0][0]}FC` : "";
   return safeCandidate([primary, nameWords.join("").slice(0, 3)], "DIV");
 }
 
 export function conferenceAcronym(name: string) {
   const nameWords = words(name);
-  const primary = nameWords.length > 1 ? nameWords.slice(0, 3).map((word) => word[0]).join("") : nameWords[0]?.slice(0, 3) ?? "";
+  const primary = nameWords[0] ? `${nameWords[0][0]}FC` : "";
   return safeCandidate([primary, nameWords.join("").slice(0, 3)], "CONF");
+}
+
+function divisionLetter(name: string, initials: string | undefined) {
+  const letteredDivision = /^division\s+([a-z])$/i.exec(name.trim());
+  if (letteredDivision) return letteredDivision[1].toUpperCase();
+  const resolved = resolveInitials(initials, divisionAcronym(name)).replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  return words(name)[0]?.[0]?.toUpperCase() || resolved[0] || "D";
+}
+
+export function conferenceDivisionAcronym(divisionName: string, divisionInitials: string | undefined, conferenceName: string, conferenceInitials: string | undefined, _compact = false) {
+  const conference = resolveInitials(conferenceInitials, conferenceAcronym(conferenceName)).replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  return `${conference || "C"}-${divisionLetter(divisionName, divisionInitials)}`;
 }
 
 export function resolveInitials(initials: string | undefined, automatic: string) {

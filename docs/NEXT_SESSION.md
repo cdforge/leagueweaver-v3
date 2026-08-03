@@ -1,51 +1,40 @@
 # Next Session
 
-Start here. Do not rediscover the plan unless these docs are missing or clearly stale.
+Start here. This file reflects the current MVP release state as of August 3, 2026.
 
 ## Current State
 
 League Weaver v3 currently has:
 
 - A polished home page in `app/page.tsx`
-- A five-step league setup builder in `components/builder/LeagueBuilder.tsx`
-- Local font setup and analytics in `app/layout.tsx`
-- Global brand and responsive CSS in `app/globals.css`
+- A 6-step grouped league setup builder in `components/builder/LeagueBuilder.tsx`
+- Generated season workspace routes at `app/season/[id]/page.tsx` and `app/season/[id]/team/[teamId]/page.tsx`
+- Saved schedule and saved league views under `/fantasy`
+- Public schedule sharing at `app/share/[slug]/page.tsx`
+- Pricing, privacy, terms, account, unsubscribe, and legal pages
+- Local font setup, analytics, and speed insights in `app/layout.tsx`
 - A v3 schedule engine under `lib/engine/v3/`
-- Storage helpers in `lib/storage.ts`
-- Engine test script at `scripts/engine-matrix.ts`
+- Local MVP persistence helpers in `lib/storage.ts`
 
-The builder currently routes generated seasons to:
+The old `/season/[id]` gap is closed. Do not spend another session rediscovering or rebuilding that route.
 
-`/season/${season.id}`
+## Release Guardrails
 
-At the time these notes were created, no matching `app/season/[id]` route was visible in this folder. That is the most likely next implementation gap.
+- Pickems, Pickums, and PV Pickums are on hold.
+- Do not add Pickems routes, APIs, copy, CSS, components, libraries, or reference images back into the deploy surface.
+- The normal MVP release path should stay free. Avoid visible paid-plan upsells or billing teasers.
+- Keep the UI dense, polished, commissioner-focused, and aligned with the current green/white workspace design.
+- Do not deploy until the user explicitly says `deploy`.
 
 ## Recommended Next Work
 
-1. Confirm the generated season route gap.
-2. Build the season results/workspace route if still missing.
-3. Keep the UI direction consistent with the existing builder:
-   - compact
-   - polished
-   - commissioner-focused
-   - green header only for top-level navigation
-4. Add schedule display grouped by week.
-5. Add workspace actions:
-   - Edit teams/settings
-   - Reroll schedule
-   - Export CSV
-   - Export PDF
-6. Run `npm run build`.
-7. Run `npm run test:engine` if schedule engine behavior changes.
-
-## UX Guardrails
-
-- Do not turn the results page into a landing page.
-- Show the usable season workspace immediately.
-- Keep actions clear and close to the schedule.
-- Use compact tables/cards that are easy for a commissioner to scan.
-- Make mobile usable without horizontal page overflow.
-- Keep text short and practical.
+1. Review `logs/TODO.md` for the latest launch checklist.
+2. Run `npm run lint`.
+3. Run `npm run build`.
+4. Run `npm run test`.
+5. Browser-check the listed main routes on desktop and mobile.
+6. Confirm old Pickems URLs return 404.
+7. Prepare the final deploy handoff, then wait for the user to say `deploy`.
 
 ## First Files To Read
 

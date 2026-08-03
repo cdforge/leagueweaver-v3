@@ -1,6 +1,7 @@
 type CrossDivisionTeamLike = {
   id: string;
   divisionId: string | null | undefined;
+  conferenceId?: string | null | undefined;
   divisionSeed: number | null | undefined;
   overallSeed?: number | null | undefined;
   city?: string | null | undefined;
@@ -12,11 +13,18 @@ export type CrossDivisionPriorityTeamSummary = {
   availableSameSeedOpponentIds: string[];
   playedSameSeedOpponentIds: string[];
   missingSameSeedOpponentIds: string[];
+  availableSameConferenceSameSeedOpponentIds?: string[];
+  playedSameConferenceSameSeedOpponentIds?: string[];
+  missingSameConferenceSameSeedOpponentIds?: string[];
+  availableCrossConferenceSameSeedOpponentIds?: string[];
+  playedCrossConferenceSameSeedOpponentIds?: string[];
+  missingCrossConferenceSameSeedOpponentIds?: string[];
   playedOtherCrossOpponentIds: string[];
   repeatedSameSeedOpponentIds: string[];
   repeatedOtherCrossOpponentIds: string[];
   missingAnySameSeed: boolean;
   skippedSameSeedForOtherCross: boolean;
+  skippedSameConferenceSameSeedForCrossConference?: boolean;
   usedRepeatBeforeUniqueExhausted: boolean;
   usedOtherRepeatBeforeSameSeedRepeat: boolean;
   isPriorityCompliant: boolean;
@@ -32,6 +40,8 @@ type CrossDivisionPair = {
   teamAId: string;
   teamBId: string;
   sameSeed: boolean;
+  sameConferenceSameSeed: boolean;
+  crossConferenceSameSeed: boolean;
 };
 
 type ScheduledCrossDivisionGameLike = {
@@ -50,12 +60,22 @@ function normalizeSeed(seed: number | null | undefined) {
   return Number.isFinite(seed) ? Number(seed) : null;
 }
 
+function sameKnownConference(teamA: CrossDivisionTeamLike, teamB: CrossDivisionTeamLike) {
+  return Boolean(teamA.conferenceId && teamB.conferenceId && teamA.conferenceId === teamB.conferenceId);
+}
+
+function differentKnownConference(teamA: CrossDivisionTeamLike, teamB: CrossDivisionTeamLike) {
+  return Boolean(teamA.conferenceId && teamB.conferenceId && teamA.conferenceId !== teamB.conferenceId);
+}
+
 export function toCrossDivisionPairKey(teamAId: string, teamBId: string) {
   return [teamAId, teamBId].sort().join("::");
 }
 
 function buildCrossDivisionPairs<T extends CrossDivisionTeamLike>(teams: T[]) {
-  const sameSeedPairs: CrossDivisionPair[] = [];
+  const sameConferenceSameSeedPairs: CrossDivisionPair[] = [];
+  const crossConferenceSameSeedPairs: CrossDivisionPair[] = [];
+  const legacySameSeedPairs: CrossDivisionPair[] = [];
   const otherPairs: CrossDivisionPair[] = [];
 
   for (let index = 0; index < teams.length; index += 1) {
@@ -68,21 +88,28 @@ function buildCrossDivisionPairs<T extends CrossDivisionTeamLike>(teams: T[]) {
       const teamBSeed = normalizeSeed(teamB.divisionSeed);
       if (!teamB.divisionId || teamA.divisionId === teamB.divisionId) continue;
 
+      const sameSeed = teamASeed != null && teamASeed === teamBSeed;
       const pair = {
         teamAId: teamA.id,
         teamBId: teamB.id,
-        sameSeed: teamASeed != null && teamASeed === teamBSeed,
+        sameSeed,
+        sameConferenceSameSeed: sameSeed && sameKnownConference(teamA, teamB),
+        crossConferenceSameSeed: sameSeed && differentKnownConference(teamA, teamB),
       };
 
-      if (pair.sameSeed) {
-        sameSeedPairs.push(pair);
+      if (pair.sameConferenceSameSeed) {
+        sameConferenceSameSeedPairs.push(pair);
+      } else if (pair.crossConferenceSameSeed) {
+        crossConferenceSameSeedPairs.push(pair);
+      } else if (pair.sameSeed) {
+        legacySameSeedPairs.push(pair);
       } else {
         otherPairs.push(pair);
       }
     }
   }
 
-  return { sameSeedPairs, otherPairs };
+  return { sameConferenceSameSeedPairs, crossConferenceSameSeedPairs, legacySameSeedPairs, otherPairs };
 }
 
 function shuffleInPlace<T>(items: T[], random: () => number) {
@@ -150,9 +177,11 @@ function allocateRepeatStage(
   pairCounts: Map<string, number>,
   remainingGamesByTeam: Map<string, number>,
   random: () => number,
+  maxPairCount: number,
 ) {
   while (true) {
     const candidates = sourcePairs
+      .filter((pair) => (pairCounts.get(toCrossDivisionPairKey(pair.teamAId, pair.teamBId)) ?? 0) < maxPairCount)
       .filter(
         (pair) =>
           (remainingGamesByTeam.get(pair.teamAId) ?? 0) > 0 &&
@@ -188,18 +217,31 @@ export function buildPrioritizedCrossDivisionPairCounts<T extends CrossDivisionT
   teams: T[],
   initialRemainingGamesByTeam: Map<string, number>,
   random: () => number = Math.random,
+  options?: { maxPairCount?: number },
 ) {
   const remainingGamesByTeam = new Map(initialRemainingGamesByTeam);
   const pairCounts = new Map<string, number>();
-  const { sameSeedPairs, otherPairs } = buildCrossDivisionPairs(teams);
+  const maxPairCount = Math.max(1, options?.maxPairCount ?? 2);
+  const {
+    sameConferenceSameSeedPairs,
+    crossConferenceSameSeedPairs,
+    legacySameSeedPairs,
+    otherPairs,
+  } = buildCrossDivisionPairs(teams);
 
-  shuffleInPlace(sameSeedPairs, random);
+  shuffleInPlace(sameConferenceSameSeedPairs, random);
+  shuffleInPlace(crossConferenceSameSeedPairs, random);
+  shuffleInPlace(legacySameSeedPairs, random);
   shuffleInPlace(otherPairs, random);
 
-  allocateUniqueStage(sameSeedPairs, pairCounts, remainingGamesByTeam, random);
+  allocateUniqueStage(sameConferenceSameSeedPairs, pairCounts, remainingGamesByTeam, random);
+  allocateUniqueStage(crossConferenceSameSeedPairs, pairCounts, remainingGamesByTeam, random);
+  allocateUniqueStage(legacySameSeedPairs, pairCounts, remainingGamesByTeam, random);
   allocateUniqueStage(otherPairs, pairCounts, remainingGamesByTeam, random);
-  allocateRepeatStage(sameSeedPairs, pairCounts, remainingGamesByTeam, random);
-  allocateRepeatStage(otherPairs, pairCounts, remainingGamesByTeam, random);
+  allocateRepeatStage(sameConferenceSameSeedPairs, pairCounts, remainingGamesByTeam, random, maxPairCount);
+  allocateRepeatStage(crossConferenceSameSeedPairs, pairCounts, remainingGamesByTeam, random, maxPairCount);
+  allocateRepeatStage(legacySameSeedPairs, pairCounts, remainingGamesByTeam, random, maxPairCount);
+  allocateRepeatStage(otherPairs, pairCounts, remainingGamesByTeam, random, maxPairCount);
 
   return {
     pairCounts,
@@ -215,6 +257,7 @@ export function solveCrossDivisionPairCounts<T extends CrossDivisionTeamLike>(
     maxAttempts?: number;
     maxRepairSteps?: number;
     divisionOrder?: Map<string, number>;
+    maxPairCount?: number;
   },
 ) {
   const orderedDivisionIds = Array.from(
@@ -232,6 +275,7 @@ export function solveCrossDivisionPairCounts<T extends CrossDivisionTeamLike>(
   const effectiveDivisionCount = Math.max(1, orderedDivisionIds.length);
   const maxAttempts = Math.max(8, options?.maxAttempts ?? teams.length);
   const maxRepairSteps = Math.max(1_000, options?.maxRepairSteps ?? 20_000);
+  const maxPairCount = Math.max(1, options?.maxPairCount ?? 2);
 
   const teamSort = (left: T, right: T, remainingGamesByTeam: Map<string, number>) => {
     const remainingDifference =
@@ -267,6 +311,7 @@ export function solveCrossDivisionPairCounts<T extends CrossDivisionTeamLike>(
         .filter((candidate) => candidate.id !== team.id)
         .filter((candidate) => candidate.divisionId !== team.divisionId)
         .filter((candidate) => (remainingGamesByTeam.get(candidate.id) ?? 0) > 0)
+        .filter((candidate) => (pairCounts.get(toCrossDivisionPairKey(team.id, candidate.id)) ?? 0) < maxPairCount)
         .sort((left, right) => {
           const leftPairKey = toCrossDivisionPairKey(team.id, left.id);
           const rightPairKey = toCrossDivisionPairKey(team.id, right.id);
@@ -277,6 +322,12 @@ export function solveCrossDivisionPairCounts<T extends CrossDivisionTeamLike>(
           const leftSameSeed = left.divisionSeed === team.divisionSeed ? 1 : 0;
           const rightSameSeed = right.divisionSeed === team.divisionSeed ? 1 : 0;
           if (leftSameSeed !== rightSameSeed) return rightSameSeed - leftSameSeed;
+
+          if (leftSameSeed === 1 && rightSameSeed === 1) {
+            const leftSameConference = sameKnownConference(team, left) ? 1 : 0;
+            const rightSameConference = sameKnownConference(team, right) ? 1 : 0;
+            if (leftSameConference !== rightSameConference) return rightSameConference - leftSameConference;
+          }
 
           const leftDivisionRank = orderedDivisionIds.indexOf(left.divisionId ?? "");
           const rightDivisionRank = orderedDivisionIds.indexOf(right.divisionId ?? "");
@@ -323,6 +374,7 @@ export function solveCrossDivisionPairCounts<T extends CrossDivisionTeamLike>(
       teams,
       initialRemainingGamesByTeam,
       random,
+      { maxPairCount },
     );
     const pairCounts = new Map(initialBuild.pairCounts);
     const remainingGamesByTeam = new Map(initialBuild.remainingGamesByTeam);
@@ -358,15 +410,17 @@ export function analyzeCrossDivisionPriority<T extends CrossDivisionTeamLike>(
 ): CrossDivisionPriorityAnalysis {
   const crossOpponentsByTeam = new Map<string, T[]>();
   const sameSeedOpponentsByTeam = new Map<string, T[]>();
+  const sameConferenceSameSeedOpponentsByTeam = new Map<string, T[]>();
+  const crossConferenceSameSeedOpponentsByTeam = new Map<string, T[]>();
   const playedOpponentsByTeam = new Map<string, Set<string>>();
   const repeatedOpponentsByTeam = new Map<string, Set<string>>();
   const repeatedSameSeedOpponentsByTeam = new Map<string, Set<string>>();
   const repeatedOtherOpponentsByTeam = new Map<string, Set<string>>();
-  const teamById = new Map(teams.map((team) => [team.id, team] as const));
-
   teams.forEach((team) => {
     crossOpponentsByTeam.set(team.id, []);
     sameSeedOpponentsByTeam.set(team.id, []);
+    sameConferenceSameSeedOpponentsByTeam.set(team.id, []);
+    crossConferenceSameSeedOpponentsByTeam.set(team.id, []);
     playedOpponentsByTeam.set(team.id, new Set());
     repeatedOpponentsByTeam.set(team.id, new Set());
     repeatedSameSeedOpponentsByTeam.set(team.id, new Set());
@@ -389,6 +443,13 @@ export function analyzeCrossDivisionPriority<T extends CrossDivisionTeamLike>(
       if (sameSeed) {
         sameSeedOpponentsByTeam.get(teamA.id)?.push(teamB);
         sameSeedOpponentsByTeam.get(teamB.id)?.push(teamA);
+        if (sameKnownConference(teamA, teamB)) {
+          sameConferenceSameSeedOpponentsByTeam.get(teamA.id)?.push(teamB);
+          sameConferenceSameSeedOpponentsByTeam.get(teamB.id)?.push(teamA);
+        } else if (differentKnownConference(teamA, teamB)) {
+          crossConferenceSameSeedOpponentsByTeam.get(teamA.id)?.push(teamB);
+          crossConferenceSameSeedOpponentsByTeam.get(teamB.id)?.push(teamA);
+        }
       }
 
       const pairCount = pairCounts.get(toCrossDivisionPairKey(teamA.id, teamB.id)) ?? 0;
@@ -417,10 +478,28 @@ export function analyzeCrossDivisionPriority<T extends CrossDivisionTeamLike>(
     const repeatedOtherOpponents = repeatedOtherOpponentsByTeam.get(team.id) ?? new Set<string>();
 
     const availableSameSeedOpponentIds = sameSeedOpponents.map((opponent) => opponent.id);
+    const availableSameConferenceSameSeedOpponentIds = (
+      sameConferenceSameSeedOpponentsByTeam.get(team.id) ?? []
+    ).map((opponent) => opponent.id);
+    const availableCrossConferenceSameSeedOpponentIds = (
+      crossConferenceSameSeedOpponentsByTeam.get(team.id) ?? []
+    ).map((opponent) => opponent.id);
     const playedSameSeedOpponentIds = availableSameSeedOpponentIds.filter((opponentId) =>
       playedOpponents.has(opponentId),
     );
+    const playedSameConferenceSameSeedOpponentIds = availableSameConferenceSameSeedOpponentIds.filter(
+      (opponentId) => playedOpponents.has(opponentId),
+    );
+    const playedCrossConferenceSameSeedOpponentIds = availableCrossConferenceSameSeedOpponentIds.filter(
+      (opponentId) => playedOpponents.has(opponentId),
+    );
     const missingSameSeedOpponentIds = availableSameSeedOpponentIds.filter(
+      (opponentId) => !playedOpponents.has(opponentId),
+    );
+    const missingSameConferenceSameSeedOpponentIds = availableSameConferenceSameSeedOpponentIds.filter(
+      (opponentId) => !playedOpponents.has(opponentId),
+    );
+    const missingCrossConferenceSameSeedOpponentIds = availableCrossConferenceSameSeedOpponentIds.filter(
       (opponentId) => !playedOpponents.has(opponentId),
     );
 
@@ -440,6 +519,9 @@ export function analyzeCrossDivisionPriority<T extends CrossDivisionTeamLike>(
 
     const missingAnySameSeed = missingSameSeedOpponentIds.length > 0;
     const skippedSameSeedForOtherCross = missingAnySameSeed && playedOtherCrossOpponentIds.length > 0;
+    const skippedSameConferenceSameSeedForCrossConference =
+      missingSameConferenceSameSeedOpponentIds.length > 0 &&
+      playedCrossConferenceSameSeedOpponentIds.length > 0;
     const usedRepeatBeforeUniqueExhausted =
       !missingAnySameSeed &&
       repeatedOpponentsByTeam.get(team.id)!.size > 0 &&
@@ -452,15 +534,23 @@ export function analyzeCrossDivisionPriority<T extends CrossDivisionTeamLike>(
       availableSameSeedOpponentIds,
       playedSameSeedOpponentIds,
       missingSameSeedOpponentIds,
+      availableSameConferenceSameSeedOpponentIds,
+      playedSameConferenceSameSeedOpponentIds,
+      missingSameConferenceSameSeedOpponentIds,
+      availableCrossConferenceSameSeedOpponentIds,
+      playedCrossConferenceSameSeedOpponentIds,
+      missingCrossConferenceSameSeedOpponentIds,
       playedOtherCrossOpponentIds,
       repeatedSameSeedOpponentIds: Array.from(repeatedSameSeedOpponents),
       repeatedOtherCrossOpponentIds: Array.from(repeatedOtherOpponents),
       missingAnySameSeed,
       skippedSameSeedForOtherCross,
+      skippedSameConferenceSameSeedForCrossConference,
       usedRepeatBeforeUniqueExhausted,
       usedOtherRepeatBeforeSameSeedRepeat,
       isPriorityCompliant:
         !skippedSameSeedForOtherCross &&
+        !skippedSameConferenceSameSeedForCrossConference &&
         !usedRepeatBeforeUniqueExhausted &&
         !usedOtherRepeatBeforeSameSeedRepeat,
       firstSkippedSameSeedWeek: null,
@@ -474,7 +564,11 @@ export function analyzeCrossDivisionPriority<T extends CrossDivisionTeamLike>(
 }
 
 function isCrossDivisionGame(game: ScheduledCrossDivisionGameLike) {
-  return game.matchupType === "Cross-Divisional" || game.matchType === "cross_division";
+  return (
+    game.matchupType === "cross-division" ||
+    game.matchupType === "Cross-Divisional" ||
+    game.matchType === "cross_division"
+  );
 }
 
 export function buildScheduledCrossDivisionPairCounts<W extends ScheduledCrossDivisionWeekLike>(weeks: W[]) {
@@ -513,13 +607,18 @@ export function analyzeScheduledCrossDivisionPriority<
 ): CrossDivisionPriorityAnalysis {
   const crossOpponentsByTeam = new Map<string, T[]>();
   const sameSeedOpponentsByTeam = new Map<string, T[]>();
+  const sameConferenceSameSeedOpponentsByTeam = new Map<string, T[]>();
+  const crossConferenceSameSeedOpponentsByTeam = new Map<string, T[]>();
   const playedSameSeedByTeam = new Map<string, Set<string>>();
+  const playedSameConferenceSameSeedByTeam = new Map<string, Set<string>>();
+  const playedCrossConferenceSameSeedByTeam = new Map<string, Set<string>>();
   const playedOtherByTeam = new Map<string, Set<string>>();
   const repeatedSameSeedByTeam = new Map<string, Set<string>>();
   const repeatedOtherByTeam = new Map<string, Set<string>>();
   const playedAnyByTeam = new Map<string, Set<string>>();
   const encounterCountsByTeam = new Map<string, Map<string, number>>();
   const skippedSameSeedWeekByTeam = new Map<string, number | null>();
+  const skippedSameConferenceSameSeedByTeam = new Map<string, boolean>();
   const usedRepeatBeforeUniqueExhaustedByTeam = new Map<string, boolean>();
   const usedOtherRepeatBeforeSameSeedRepeatByTeam = new Map<string, boolean>();
   const teamById = new Map(teams.map((team) => [team.id, team] as const));
@@ -527,13 +626,18 @@ export function analyzeScheduledCrossDivisionPriority<
   teams.forEach((team) => {
     crossOpponentsByTeam.set(team.id, []);
     sameSeedOpponentsByTeam.set(team.id, []);
+    sameConferenceSameSeedOpponentsByTeam.set(team.id, []);
+    crossConferenceSameSeedOpponentsByTeam.set(team.id, []);
     playedSameSeedByTeam.set(team.id, new Set());
+    playedSameConferenceSameSeedByTeam.set(team.id, new Set());
+    playedCrossConferenceSameSeedByTeam.set(team.id, new Set());
     playedOtherByTeam.set(team.id, new Set());
     repeatedSameSeedByTeam.set(team.id, new Set());
     repeatedOtherByTeam.set(team.id, new Set());
     playedAnyByTeam.set(team.id, new Set());
     encounterCountsByTeam.set(team.id, new Map());
     skippedSameSeedWeekByTeam.set(team.id, null);
+    skippedSameConferenceSameSeedByTeam.set(team.id, false);
     usedRepeatBeforeUniqueExhaustedByTeam.set(team.id, false);
     usedOtherRepeatBeforeSameSeedRepeatByTeam.set(team.id, false);
   });
@@ -554,6 +658,13 @@ export function analyzeScheduledCrossDivisionPriority<
       if (seedA != null && seedA === seedB) {
         sameSeedOpponentsByTeam.get(teamA.id)?.push(teamB);
         sameSeedOpponentsByTeam.get(teamB.id)?.push(teamA);
+        if (sameKnownConference(teamA, teamB)) {
+          sameConferenceSameSeedOpponentsByTeam.get(teamA.id)?.push(teamB);
+          sameConferenceSameSeedOpponentsByTeam.get(teamB.id)?.push(teamA);
+        } else if (differentKnownConference(teamA, teamB)) {
+          crossConferenceSameSeedOpponentsByTeam.get(teamA.id)?.push(teamB);
+          crossConferenceSameSeedOpponentsByTeam.get(teamB.id)?.push(teamA);
+        }
       }
     }
   }
@@ -578,10 +689,17 @@ export function analyzeScheduledCrossDivisionPriority<
         const isSameSeed =
           normalizeSeed(team.divisionSeed) != null &&
           normalizeSeed(team.divisionSeed) === normalizeSeed(opponent.divisionSeed);
+        const isSameConferenceSameSeed = isSameSeed && sameKnownConference(team, opponent);
+        const isCrossConferenceSameSeed = isSameSeed && differentKnownConference(team, opponent);
         const availableSameSeedOpponentIds = (
           sameSeedOpponentsByTeam.get(teamId) ?? []
         ).map((candidate) => candidate.id);
+        const availableSameConferenceSameSeedOpponentIds = (
+          sameConferenceSameSeedOpponentsByTeam.get(teamId) ?? []
+        ).map((candidate) => candidate.id);
         const playedSameSeedOpponentIds = playedSameSeedByTeam.get(teamId) ?? new Set<string>();
+        const playedSameConferenceSameSeedOpponentIds =
+          playedSameConferenceSameSeedByTeam.get(teamId) ?? new Set<string>();
         const encounterCounts = encounterCountsByTeam.get(teamId) ?? new Map<string, number>();
         const priorCount = encounterCounts.get(opponentId) ?? 0;
         const isRepeat = priorCount > 0;
@@ -592,6 +710,15 @@ export function analyzeScheduledCrossDivisionPriority<
           availableSameSeedOpponentIds.some((candidateId) => !playedSameSeedOpponentIds.has(candidateId))
         ) {
           skippedSameSeedWeekByTeam.set(teamId, week.weekNumber);
+        }
+
+        if (
+          isCrossConferenceSameSeed &&
+          availableSameConferenceSameSeedOpponentIds.some(
+            (candidateId) => !playedSameConferenceSameSeedOpponentIds.has(candidateId),
+          )
+        ) {
+          skippedSameConferenceSameSeedByTeam.set(teamId, true);
         }
 
         if (isRepeat) {
@@ -613,6 +740,12 @@ export function analyzeScheduledCrossDivisionPriority<
 
         if (isSameSeed) {
           playedSameSeedByTeam.get(teamId)?.add(opponentId);
+          if (isSameConferenceSameSeed) {
+            playedSameConferenceSameSeedByTeam.get(teamId)?.add(opponentId);
+          }
+          if (isCrossConferenceSameSeed) {
+            playedCrossConferenceSameSeedByTeam.get(teamId)?.add(opponentId);
+          }
           if (isRepeat) {
             repeatedSameSeedByTeam.get(teamId)?.add(opponentId);
           }
@@ -630,11 +763,31 @@ export function analyzeScheduledCrossDivisionPriority<
     const availableSameSeedOpponentIds = (sameSeedOpponentsByTeam.get(team.id) ?? []).map(
       (opponent) => opponent.id,
     );
+    const availableSameConferenceSameSeedOpponentIds = (
+      sameConferenceSameSeedOpponentsByTeam.get(team.id) ?? []
+    ).map((opponent) => opponent.id);
+    const availableCrossConferenceSameSeedOpponentIds = (
+      crossConferenceSameSeedOpponentsByTeam.get(team.id) ?? []
+    ).map((opponent) => opponent.id);
     const playedSameSeedOpponentIds = Array.from(playedSameSeedByTeam.get(team.id) ?? []);
+    const playedSameConferenceSameSeedOpponentIds = Array.from(
+      playedSameConferenceSameSeedByTeam.get(team.id) ?? [],
+    );
+    const playedCrossConferenceSameSeedOpponentIds = Array.from(
+      playedCrossConferenceSameSeedByTeam.get(team.id) ?? [],
+    );
     const missingSameSeedOpponentIds = availableSameSeedOpponentIds.filter(
       (opponentId) => !playedSameSeedByTeam.get(team.id)?.has(opponentId),
     );
+    const missingSameConferenceSameSeedOpponentIds = availableSameConferenceSameSeedOpponentIds.filter(
+      (opponentId) => !playedSameConferenceSameSeedByTeam.get(team.id)?.has(opponentId),
+    );
+    const missingCrossConferenceSameSeedOpponentIds = availableCrossConferenceSameSeedOpponentIds.filter(
+      (opponentId) => !playedCrossConferenceSameSeedByTeam.get(team.id)?.has(opponentId),
+    );
     const skippedSameSeedForOtherCross = (skippedSameSeedWeekByTeam.get(team.id) ?? null) != null;
+    const skippedSameConferenceSameSeedForCrossConference =
+      skippedSameConferenceSameSeedByTeam.get(team.id) ?? false;
     const usedRepeatBeforeUniqueExhausted = usedRepeatBeforeUniqueExhaustedByTeam.get(team.id) ?? false;
     const usedOtherRepeatBeforeSameSeedRepeat =
       usedOtherRepeatBeforeSameSeedRepeatByTeam.get(team.id) ?? false;
@@ -644,15 +797,23 @@ export function analyzeScheduledCrossDivisionPriority<
       availableSameSeedOpponentIds,
       playedSameSeedOpponentIds,
       missingSameSeedOpponentIds,
+      availableSameConferenceSameSeedOpponentIds,
+      playedSameConferenceSameSeedOpponentIds,
+      missingSameConferenceSameSeedOpponentIds,
+      availableCrossConferenceSameSeedOpponentIds,
+      playedCrossConferenceSameSeedOpponentIds,
+      missingCrossConferenceSameSeedOpponentIds,
       playedOtherCrossOpponentIds: Array.from(playedOtherByTeam.get(team.id) ?? []),
       repeatedSameSeedOpponentIds: Array.from(repeatedSameSeedByTeam.get(team.id) ?? []),
       repeatedOtherCrossOpponentIds: Array.from(repeatedOtherByTeam.get(team.id) ?? []),
       missingAnySameSeed: missingSameSeedOpponentIds.length > 0,
       skippedSameSeedForOtherCross,
+      skippedSameConferenceSameSeedForCrossConference,
       usedRepeatBeforeUniqueExhausted,
       usedOtherRepeatBeforeSameSeedRepeat,
       isPriorityCompliant:
         !skippedSameSeedForOtherCross &&
+        !skippedSameConferenceSameSeedForCrossConference &&
         !usedRepeatBeforeUniqueExhausted &&
         !usedOtherRepeatBeforeSameSeedRepeat,
       firstSkippedSameSeedWeek: skippedSameSeedWeekByTeam.get(team.id) ?? null,

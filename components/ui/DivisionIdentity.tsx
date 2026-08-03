@@ -33,7 +33,7 @@ function LoadingMarkImage({ src }: { src: string }) {
   </>;
 }
 
-export function DivisionMark({ division, size = 18, className = "" }: { division: Division; size?: number; className?: string }) {
+export function DivisionMark({ division, size = 18, className = "" }: { division: Division; conference?: Conference; size?: number; className?: string }) {
   const initials = resolveInitials(division.initials, divisionAcronym(division.name));
   const hasImage = Boolean(division.logoUrl);
   // Non-image marks expose their division color as CSS vars; the filled-badge treatment is

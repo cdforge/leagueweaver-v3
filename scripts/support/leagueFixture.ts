@@ -41,6 +41,7 @@ export function buildLeague(options: BuildLeagueOptions): GeneratedSchedule {
     seasonYear: 2026,
     weeks: regularSeasonWeeks,
     divisions,
+    divisionPlacementMode: "manual",
     teams,
     display: { cityNames: true, managers: true, venues: true },
     priorSeason: { enabled: true, hasData: true, entryMode: "history", source: "playoffs" },

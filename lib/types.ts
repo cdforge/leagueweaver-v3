@@ -1,5 +1,6 @@
 export type PlanKey = "free" | "pro";
 export type PlacementSource = "regular-season" | "playoffs";
+export type DivisionPlacementMode = "manual" | "random" | "rank-snake";
 export type PlayoffFieldSize = number;
 export type PlayoffBracketType = "single-elimination" | "ladder";
 export type PlayoffPlacementMode = "auto" | "division-halves" | "division-leaders" | "overall";
@@ -7,6 +8,7 @@ export type ResolvedPlayoffPlacementMode = Exclude<PlayoffPlacementMode, "auto">
 export type PlayoffReseedMode = "fixed" | "each-round" | "protected";
 export type PlayoffSeedDisplayMode = "reranked" | "standings-finish";
 export type PlayoffChampionshipVenueMode = "higher-seed" | "neutral-site";
+export type PlayoffDraftOrderMode = "placement-reward" | "reverse-standings";
 export type PlayoffTheme = "gold" | "silver" | "bronze" | "custom";
 export type PlayoffFieldStatus = "live" | "locked";
 export type PlayoffConsolationMode = "off" | "standard" | "division-halves";
@@ -37,6 +39,7 @@ export interface Division {
   name: string;
   initials?: string;
   color: string;
+  colorSource?: "auto" | "manual";
   logoUrl?: string;
   /** Assigned conference id — set only for even division counts; undefined otherwise. */
   conferenceId?: string;
@@ -50,6 +53,7 @@ export interface Team {
   shortName: string;
   initials?: string;
   manager: string;
+  managerEmail?: string;
   color: string;
   logoUrl?: string;
   divisionId: string;
@@ -100,6 +104,7 @@ export interface LeagueSetupInput {
   divisions: Division[];
   /** Present (exactly two) only for even division counts; empty/undefined otherwise. */
   conferences?: Conference[];
+  divisionPlacementMode: DivisionPlacementMode;
   teams: Team[];
   display: {
     cityNames: boolean;
@@ -125,6 +130,8 @@ export interface LeagueSetupInput {
     reseedMode: PlayoffReseedMode;
     seedDisplayMode: PlayoffSeedDisplayMode;
     championshipVenueMode: PlayoffChampionshipVenueMode;
+    championshipVenueName?: string;
+    draftOrderMode: PlayoffDraftOrderMode;
     theme: PlayoffTheme;
     fieldStatus: PlayoffFieldStatus;
     lockedTeamIds: string[];
@@ -139,6 +146,10 @@ export interface LeagueSetupInput {
     gameLogoUrls?: Record<string, string>;
   };
   platformConnection?: PlatformConnection;
+  savedLeague?: {
+    id: string;
+    updatedAt: string;
+  };
   fairness: {
     maxHomeAwayStreak: 2 | 3 | 4;
     preventImmediateRematches: boolean;
@@ -283,6 +294,7 @@ export interface ImportTeam {
   city?: string;
   name: string;
   manager?: string;
+  managerEmail?: string;
   division?: string;
   rank?: number;
   /** Last season's regular-season finish (1 = best), from connected-league history. */
@@ -391,6 +403,7 @@ export interface SavedLeagueIdentity {
   league: Pick<LeagueSetupInput, "name" | "abbreviation" | "initials" | "description" | "color" | "logoUrl">;
   divisions: Division[];
   conferences?: Conference[];
+  divisionPlacementMode?: LeagueSetupInput["divisionPlacementMode"];
   teams: Team[];
   display: LeagueSetupInput["display"];
   priorSeason?: LeagueSetupInput["priorSeason"];

@@ -96,6 +96,7 @@ export function createDefaultPlayoffSettings(teamCount: number, _leagueColor = "
     lockedTeamIds: [],
     consolationMode: "standard",
     thirdPlaceGame: true,
+    draftOrderMode: "placement-reward",
     name: "Championship Playoffs",
     color: PLAYOFF_THEME_COLORS.gold,
   };
@@ -131,6 +132,8 @@ export function normalizePlayoffSettings(value: LegacyPlayoffSettings | undefine
     reseedMode,
     seedDisplayMode: value.seedDisplayMode === "standings-finish" ? "standings-finish" : "reranked",
     championshipVenueMode: value.championshipVenueMode === "neutral-site" || value.hostVenueMode === "neutral-site" ? "neutral-site" : "higher-seed",
+    championshipVenueName: typeof value.championshipVenueName === "string" ? value.championshipVenueName.slice(0, 80) : undefined,
+    draftOrderMode: value.draftOrderMode === "reverse-standings" ? "reverse-standings" : defaults.draftOrderMode,
     theme,
     fieldStatus: value.fieldStatus === "locked" && lockedTeamIds.length === fieldSize ? "locked" : "live",
     lockedTeamIds,

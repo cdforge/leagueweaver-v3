@@ -251,6 +251,21 @@ check(() => {
 });
 
 check(() => {
+  // Conference halves stay conference-local even when playoff spots are tighter than division
+  // count: 8 division winners, 6 playoff spots → top 3 leaders per conference, no wildcards.
+  const divisions = defaultConferenceAssignment(createDivisions(8), createConferences(2));
+  const conferences = createConferences(2);
+  const base = createDefaultSetup();
+  const setup = { ...base, divisions, conferences, teams: createTeams(16, divisions), playoffs: { ...base.playoffs, fieldSize: 6, placementMode: "auto" as const } };
+  assert.equal(resolvePlayoffPlacementMode(setup), "division-halves");
+  const seeds = projectPlayoffSeeds(blankSchedule(setup), 6);
+  assert.equal(seeds.length, 6);
+  assert.equal(seeds.filter((seed) => seed.bracketSide === "A").length, 3);
+  assert.equal(seeds.filter((seed) => seed.bracketSide === "B").length, 3);
+  assert.ok(seeds.every((seed) => seed.divisionLeader));
+});
+
+check(() => {
   // Six divisions with conferences → 3 per side; 12-field seats all six leaders + six wild cards.
   const divisions = defaultConferenceAssignment(createDivisions(6), createConferences(2));
   const conferences = createConferences(2);
@@ -271,6 +286,20 @@ check(() => {
   assert.equal(resolvePlayoffPlacementMode(setup), "division-leaders");
   const seeds = projectPlayoffSeeds(blankSchedule(setup), 8);
   assert.ok(seeds.slice(0, 5).every((seed) => seed.divisionLeader));
+});
+
+check(() => {
+  // Odd division counts use one unified bracket, but leaders are still protected before
+  // wildcards. A 7-team field gives one bye and seats all 5 division winners first.
+  const divisions = createDivisions(5);
+  const base = createDefaultSetup();
+  const setup = { ...base, weeks: 14 as const, divisions, teams: createTeams(15, divisions), playoffs: { ...base.playoffs, fieldSize: 7, placementMode: "auto" as const } };
+  assert.equal(resolvePlayoffPlacementMode(setup), "division-leaders");
+  const seeds = projectPlayoffSeeds(blankSchedule(setup), 7);
+  assert.equal(seeds.length, 7);
+  assert.equal(seeds.filter((seed) => seed.divisionLeader).length, 5);
+  assert.ok(seeds.slice(0, 5).every((seed) => seed.divisionLeader));
+  assert.equal(getPlayoffByeCount(7), 1);
 });
 
 check(() => {
@@ -317,6 +346,53 @@ check(() => {
   const chart = projectPlacementChart(blankSchedule(setup));
   assert.equal(chart.length, 10);
   assert.ok(chart.every((slot) => slot.exact));
+});
+
+check(() => {
+  // 10 teams / 2 divisions / 6 playoff teams: four non-qualifiers can fully settle 7th-10th.
+  const setup = createDefaultSetup();
+  setup.playoffs = { ...setup.playoffs, fieldSize: 6, placementMode: "division-halves", consolationMode: "division-halves" };
+  const bracket = projectConsolationBracket(blankSchedule(setup));
+  assert.ok(bracket);
+  assert.equal(bracket.admittedTeamIds.length, 4);
+  assert.equal(bracket.eliminatedTeamIds.length, 0);
+  assert.equal(bracket.rounds[0].games.filter((game) => Boolean(game.divisionId)).length, 2);
+  assert.ok(bracket.rounds[1].games.some((game) => game.label === "Draft Pick Bowl (7th Place)"));
+  assert.ok(bracket.rounds[1].games.some((game) => game.label === "Toilet Bowl (9th Place)"));
+});
+
+check(() => {
+  // 16 teams / 6 playoff teams / 14-week regular season: only 3 playoff weeks, so consolation
+  // admits 8 teams and the final 2 teams are outside the bracket.
+  const divisions = defaultConferenceAssignment(createDivisions(4), createConferences(2));
+  const conferences = createConferences(2);
+  const base = createDefaultSetup();
+  const setup = { ...base, weeks: 14 as const, divisions, conferences, teams: createTeams(16, divisions), playoffs: { ...base.playoffs, fieldSize: 6, placementMode: "division-halves" as const, consolationMode: "standard" as const } };
+  const bracket = projectConsolationBracket(blankSchedule(setup));
+  assert.ok(bracket);
+  assert.equal(bracket.placementCap, 8);
+  assert.equal(bracket.admittedTeamIds.length, 8);
+  assert.equal(bracket.eliminatedTeamIds.length, 2);
+  const chart = projectPlacementChart(blankSchedule(setup));
+  assert.deepEqual(chart.at(-1), { placeStart: 15, placeEnd: 16, label: "15th–16th", tier: "eliminated", source: "Outside the bracket", teamIds: chart.at(-1)?.teamIds ?? [], exact: false });
+});
+
+check(() => {
+  // 16 teams / 6 playoff teams / 13-week regular season with 4 playoff weeks: all ten
+  // consolation teams fit, with top consolation seeds receiving byes into Week 2.
+  const divisions = defaultConferenceAssignment(createDivisions(4), createConferences(2));
+  const conferences = createConferences(2);
+  const base = createDefaultSetup();
+  const setup = { ...base, weeks: 13 as const, divisions, conferences, teams: createTeams(16, divisions), playoffs: { ...base.playoffs, playoffWeeks: 4 as const, fieldSize: 6, placementMode: "division-halves" as const, consolationMode: "standard" as const } };
+  const bracket = projectConsolationBracket(blankSchedule(setup));
+  assert.ok(bracket);
+  assert.equal(bracket.placementCap, 16);
+  assert.equal(bracket.admittedTeamIds.length, 10);
+  assert.equal(bracket.eliminatedTeamIds.length, 0);
+  assert.equal(bracket.rounds.length, 4);
+  assert.equal(bracket.rounds[0].games.length, 2);
+  assert.ok(bracket.rounds[1].games.some((game) => game.entrants.some((entrant) => entrant.kind === "team" && entrant.projectedSeed <= 8)));
+  assert.ok(bracket.rounds[3].games.some((game) => game.label === "7th Place"));
 });
 
 check(() => {

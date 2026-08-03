@@ -162,7 +162,7 @@ export function SchedulePreview() {
       <span className="welcome-showcase-bar" aria-hidden="true"><i></i><i></i><i></i></span>
       <div className="welcome-preview">
         <div className="wp-topline">
-          <EntityLogo className="wp-league-mark" color={LEAGUE.color} logoUrl={LEAGUE.logo} monogram="PVE" size={32} />
+          <EntityLogo className="wp-league-mark" color={LEAGUE.color} logoUrl={LEAGUE.logo} monogram="PVE" size={32} entityType="league" />
           <strong>{LEAGUE.name}</strong>
           <span>2026 &middot; 14 weeks</span>
           <button type="button" className="wp-preview-toggle" aria-expanded={open} onClick={() => setOpen((value) => !value)}>

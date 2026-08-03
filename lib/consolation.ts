@@ -1,4 +1,5 @@
-import { getPlayoffRoundNames, normalizePlayoffSettings, projectPlayoffRounds, projectPlayoffSeeds } from "./playoffs";
+import { conferenceDivisionGroups } from "./conferences";
+import { getPlayoffRoundNames, normalizePlayoffSettings, projectPlayoffRounds, projectPlayoffSeeds, resolvePlayoffPlacementMode } from "./playoffs";
 import { calculateStandings } from "./standings";
 import type { GeneratedSchedule, LeagueSetupInput, PlayoffConsolationMode } from "./types";
 
@@ -10,6 +11,7 @@ export type ProjectedConsolationEntrant =
       divisionId: string;
       label: string;
       projectedSeed: number;
+      bracketSide?: "A" | "B";
     }
   | {
       kind: "result";
@@ -17,6 +19,7 @@ export type ProjectedConsolationEntrant =
       outcome: "winner" | "loser";
       label: string;
       projectedSeed: number;
+      bracketSide?: "A" | "B";
     };
 
 export interface ProjectedConsolationGame {
@@ -26,6 +29,7 @@ export interface ProjectedConsolationGame {
   label: string;
   placementRange: [number, number];
   divisionId?: string;
+  bracketSide?: "A" | "B";
   entrants: [ProjectedConsolationEntrant, ProjectedConsolationEntrant];
 }
 
@@ -40,6 +44,9 @@ export interface ProjectedConsolationBracket {
   requestedMode: PlayoffConsolationMode;
   mode: Exclude<PlayoffConsolationMode, "off">;
   fallbackReason?: string;
+  admittedTeamIds: string[];
+  eliminatedTeamIds: string[];
+  placementCap: number;
   rounds: ProjectedConsolationRound[];
 }
 
@@ -68,6 +75,17 @@ function isPowerOfTwo(value: number) {
   return value > 0 && (value & (value - 1)) === 0;
 }
 
+function nextPowerOfTwo(value: number) {
+  let power = 1;
+  while (power < Math.max(1, value)) power *= 2;
+  return power;
+}
+
+function getAvailablePlayoffWeeks(schedule: Pick<GeneratedSchedule, "setup">, minimumRounds: number) {
+  if (schedule.setup.weeks === 13) return Math.max(minimumRounds, schedule.setup.playoffs.playoffWeeks ?? minimumRounds);
+  return minimumRounds;
+}
+
 export function isDivisionHalvesConsolationUsable(
   setup: Pick<LeagueSetupInput, "teams" | "divisions" | "playoffs">,
   fieldSize = setup.playoffs.fieldSize,
@@ -89,11 +107,13 @@ export function projectConsolationBracket(schedule: GeneratedSchedule): Projecte
   const normalizedSchedule = { ...schedule, setup: { ...schedule.setup, playoffs: settings } };
   const mainRounds = projectPlayoffRounds(normalizedSchedule);
   const roundNames = getPlayoffRoundNames(settings, schedule.setup.divisions.length);
+  const availablePlayoffWeeks = getAvailablePlayoffWeeks(normalizedSchedule, roundNames.length);
+  const placementCap = 2 ** availablePlayoffWeeks;
   const playoffSeeds = projectPlayoffSeeds(normalizedSchedule, settings.fieldSize);
   const playoffTeamIds = new Set(playoffSeeds.map((seed) => seed.teamId));
   const standings = calculateStandings(normalizedSchedule);
   const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
-  const gamesByRound: ProjectedConsolationGame[][] = Array.from({ length: roundNames.length }, () => []);
+  const gamesByRound: ProjectedConsolationGame[][] = Array.from({ length: availablePlayoffWeeks }, () => []);
   let gameSequence = 0;
 
   const addGame = (
@@ -102,6 +122,7 @@ export function projectConsolationBracket(schedule: GeneratedSchedule): Projecte
     placementRange: [number, number],
     entrants: [ProjectedConsolationEntrant, ProjectedConsolationEntrant],
     divisionId?: string,
+    bracketSide?: "A" | "B",
   ) => {
     if (!gamesByRound[roundIndex]) return null;
     gameSequence += 1;
@@ -112,6 +133,7 @@ export function projectConsolationBracket(schedule: GeneratedSchedule): Projecte
       label,
       placementRange,
       divisionId,
+      bracketSide,
       entrants,
     };
     gamesByRound[roundIndex].push(game);
@@ -129,7 +151,40 @@ export function projectConsolationBracket(schedule: GeneratedSchedule): Projecte
     projectedSeed: outcome === "winner"
       ? Math.min(...game.entrants.map((entrant) => entrant.projectedSeed))
       : Math.max(...game.entrants.map((entrant) => entrant.projectedSeed)),
+    bracketSide: game.bracketSide,
   });
+
+  const sideAwareClassify = (ordered: ProjectedConsolationEntrant[], startPlace: number, roundIndex: number) => {
+    const sides = (["A", "B"] as const).map((side) => ordered.filter((entrant) => entrant.bracketSide === side));
+    if (sides.some((side) => side.length < 2) || sides[0].length !== sides[1].length || roundIndex >= availablePlayoffWeeks - 1) return false;
+    const games: ProjectedConsolationGame[] = [];
+    sides.forEach((sideEntrants, sideIndex) => {
+      const bracketSide = sideIndex === 0 ? "A" : "B";
+      const bracketSize = nextPowerOfTwo(sideEntrants.length);
+      const byeCount = bracketSize - sideEntrants.length;
+      const playing = sideEntrants.slice(byeCount);
+      for (let index = 0; index < playing.length / 2; index += 1) {
+        const game = addGame(
+          roundIndex,
+          placementLabel(startPlace, startPlace + ordered.length - 1),
+          [startPlace, startPlace + ordered.length - 1],
+          [playing[index], playing[playing.length - 1 - index]],
+          undefined,
+          bracketSide,
+        );
+        if (game) games.push(game);
+      }
+    });
+    if (!games.length) return false;
+    const byeEntrants = sides.flatMap((sideEntrants) => sideEntrants.slice(0, nextPowerOfTwo(sideEntrants.length) - sideEntrants.length));
+    const winnerEntrants = [...byeEntrants, ...games.map((game) => resultEntrant(game, "winner"))]
+      .sort((left, right) => left.projectedSeed - right.projectedSeed);
+    const loserEntrants = games.map((game) => resultEntrant(game, "loser"))
+      .sort((left, right) => left.projectedSeed - right.projectedSeed);
+    classify(winnerEntrants, startPlace, roundIndex + 1);
+    classify(loserEntrants, startPlace + winnerEntrants.length, roundIndex + 1);
+    return true;
+  };
 
   const classifyPowerOfTwo = (
     entrants: ProjectedConsolationEntrant[],
@@ -170,9 +225,34 @@ export function projectConsolationBracket(schedule: GeneratedSchedule): Projecte
   };
 
   const classify = (entrants: ProjectedConsolationEntrant[], startPlace: number, roundIndex: number) => {
+    if (entrants.length < 2 || !gamesByRound[roundIndex]) return;
+    const ordered = [...entrants].sort((left, right) => left.projectedSeed - right.projectedSeed);
+    if (sideAwareClassify(ordered, startPlace, roundIndex)) return;
     if (isPowerOfTwo(entrants.length)) return classifyPowerOfTwo(entrants, startPlace, roundIndex);
     if (entrants.length === 6 && classifySix(entrants, startPlace, roundIndex)) return;
-    const ordered = [...entrants].sort((left, right) => left.projectedSeed - right.projectedSeed);
+    const bracketSize = nextPowerOfTwo(ordered.length);
+    const byeCount = bracketSize - ordered.length;
+    const requiredRounds = Math.ceil(Math.log2(bracketSize));
+    const remainingRounds = availablePlayoffWeeks - roundIndex;
+    if (byeCount > 0 && requiredRounds <= remainingRounds) {
+      const byes = ordered.slice(0, byeCount);
+      const playing = ordered.slice(byeCount);
+      const games: ProjectedConsolationGame[] = [];
+      for (let index = 0; index < playing.length / 2; index += 1) {
+        const game = addGame(
+          roundIndex,
+          placementLabel(startPlace, startPlace + ordered.length - 1),
+          [startPlace, startPlace + ordered.length - 1],
+          [playing[index], playing[playing.length - 1 - index]],
+        );
+        if (game) games.push(game);
+      }
+      const winnerEntrants = [...byes, ...games.map((game) => resultEntrant(game, "winner"))];
+      const loserEntrants = games.map((game) => resultEntrant(game, "loser"));
+      classify(winnerEntrants, startPlace, roundIndex + 1);
+      classify(loserEntrants, startPlace + winnerEntrants.length, roundIndex + 1);
+      return;
+    }
     for (let index = 0; index < Math.floor(ordered.length / 2); index += 1) {
       addGame(
         roundIndex,
@@ -191,13 +271,50 @@ export function projectConsolationBracket(schedule: GeneratedSchedule): Projecte
         outcome: "loser",
         label: `Loser of ${round.name} game ${index + 1}`,
         projectedSeed: Math.max(matchup.homeSeed, matchup.awaySeed),
+        bracketSide: matchup.bracketSide,
       }));
       const startPlace = 2 ** (mainRounds.length - round.roundIndex - 1) + 1;
       classify(loserEntrants, startPlace, round.roundIndex + 1);
     });
+    const thirdPlaceExists = gamesByRound.some((games) => games.some((game) => game.placementRange[0] === 3 && game.placementRange[1] === 4));
+    const thirdPlaceRoundIndex = Math.max(1, Math.min(availablePlayoffWeeks - 1, mainRounds.length - 1));
+    if (settings.thirdPlaceGame && settings.fieldSize >= 4 && !thirdPlaceExists && gamesByRound[thirdPlaceRoundIndex]) {
+      const sourceRoundIndex = Math.max(0, thirdPlaceRoundIndex - 1);
+      addGame(
+        thirdPlaceRoundIndex,
+        "3rd Place",
+        [3, 4],
+        [
+          {
+            kind: "result",
+            gameId: `main-r${sourceRoundIndex + 1}-g1`,
+            outcome: "loser",
+            label: `Loser of ${roundNames[sourceRoundIndex] ?? "Semifinal"} game 1`,
+            projectedSeed: 3,
+            bracketSide: mainRounds[sourceRoundIndex]?.matchups[0]?.bracketSide,
+          },
+          {
+            kind: "result",
+            gameId: `main-r${sourceRoundIndex + 1}-g2`,
+            outcome: "loser",
+            label: `Loser of ${roundNames[sourceRoundIndex] ?? "Semifinal"} game 2`,
+            projectedSeed: 4,
+            bracketSide: mainRounds[sourceRoundIndex]?.matchups[1]?.bracketSide,
+          },
+        ],
+      );
+    }
   }
 
-  const nonPlayoffEntrants = standings
+  const placementMode = resolvePlayoffPlacementMode(normalizedSchedule.setup);
+  const sideByDivision = new Map<string, "A" | "B">();
+  if (settings.consolationMode === "division-halves" && placementMode === "division-halves") {
+    conferenceDivisionGroups(schedule.setup).slice(0, 2).forEach((group, index) => {
+      group.forEach((divisionId) => sideByDivision.set(divisionId, index === 0 ? "A" : "B"));
+    });
+  }
+
+  const allNonPlayoffEntrants = standings
     .map((standing, index) => ({ standing, seed: index + 1 }))
     .filter(({ standing }) => !playoffTeamIds.has(standing.teamId))
     .map(({ standing, seed }): ProjectedConsolationEntrant => {
@@ -209,16 +326,24 @@ export function projectConsolationBracket(schedule: GeneratedSchedule): Projecte
         divisionId: team.divisionId,
         label: `${ordinal(seed)} seed`,
         projectedSeed: seed,
+        bracketSide: sideByDivision.get(team.divisionId),
       };
     });
+  const nonPlayoffEntrants = allNonPlayoffEntrants.slice(0, placementCap);
+  const eliminatedEntrants = allNonPlayoffEntrants.slice(placementCap);
 
   const divisionHalvesUsable = settings.consolationMode === "division-halves"
     && isDivisionHalvesConsolationUsable(schedule.setup, settings.fieldSize)
     && schedule.setup.divisions.every((division) => nonPlayoffEntrants.filter((entrant) => entrant.kind === "team" && entrant.divisionId === division.id).length === 2);
+  const sideCounts = (["A", "B"] as const).map((side) => nonPlayoffEntrants.filter((entrant) => entrant.bracketSide === side).length);
+  const sideHalvesUsable = settings.consolationMode === "division-halves"
+    && placementMode === "division-halves"
+    && sideCounts[0] > 0
+    && sideCounts[0] === sideCounts[1];
   let fallbackReason: string | undefined;
   let mode: Exclude<PlayoffConsolationMode, "off"> = settings.consolationMode;
 
-  if (settings.consolationMode === "division-halves" && !divisionHalvesUsable) {
+  if (settings.consolationMode === "division-halves" && !divisionHalvesUsable && !sideHalvesUsable) {
     mode = "standard";
     fallbackReason = "Division-halves placement needs exactly two divisions and four non-playoff teams, split two per division. This projection uses standard placement instead.";
   }
@@ -247,11 +372,18 @@ export function projectConsolationBracket(schedule: GeneratedSchedule): Projecte
     requestedMode: settings.consolationMode,
     mode,
     fallbackReason,
+    admittedTeamIds: nonPlayoffEntrants
+      .filter((entrant): entrant is Extract<ProjectedConsolationEntrant, { kind: "team" }> => entrant.kind === "team")
+      .map((entrant) => entrant.teamId),
+    eliminatedTeamIds: eliminatedEntrants
+      .filter((entrant): entrant is Extract<ProjectedConsolationEntrant, { kind: "team" }> => entrant.kind === "team")
+      .map((entrant) => entrant.teamId),
+    placementCap,
     rounds: gamesByRound
       .map((games, roundIndex) => ({
         roundIndex,
         weekNumber: schedule.setup.weeks + roundIndex + 1,
-        name: roundNames[roundIndex] ?? `Playoff Week ${roundIndex + 1}`,
+        name: roundNames[roundIndex] ?? `Placement Week ${roundIndex + 1}`,
         games,
       }))
       .filter((round) => round.games.length > 0),
@@ -350,7 +482,8 @@ export function projectPlacementChart(schedule: GeneratedSchedule): ProjectedPla
   const placements = projectFinalPlacements({ ...schedule, setup: { ...schedule.setup, playoffs: settings } });
   const total = schedule.setup.teams.length;
   const field = Math.max(2, Math.min(total, Math.round(settings.fieldSize)));
-  const rounds = getPlayoffRoundNames(settings, schedule.setup.divisions.length).length;
+  const roundCount = getPlayoffRoundNames(settings, schedule.setup.divisions.length).length;
+  const rounds = getAvailablePlayoffWeeks({ ...schedule, setup: { ...schedule.setup, playoffs: settings } }, roundCount);
   const cap = 2 ** rounds;
   const nonPlayoff = total - field;
 
@@ -385,10 +518,10 @@ export function projectPlacementChart(schedule: GeneratedSchedule): ProjectedPla
       placeStart,
       placeEnd,
       label: placeStart === placeEnd ? `${ordinal(placeStart)} Place` : `${ordinal(placeStart)}–${ordinal(placeEnd)}`,
+      tier,
       source,
       teamIds: placements.slice(placeStart - 1, placeEnd).map((entry) => entry.teamId),
       exact: placeStart === placeEnd,
-      tier,
     };
   });
 }

@@ -5,9 +5,10 @@ import { ArrowUpRight, Medal, ShieldCheck, Trophy, X, Zap } from "lucide-react";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { DivisionMark } from "@/components/ui/DivisionIdentity";
 import { readableTextColor } from "@/lib/colorContrast";
+import { conferenceOfDivision, hasConferences } from "@/lib/conferences";
 import { getWeekScenarios, type ConditionResult, type OwnResult, type Scenario, type ScenarioAchievement } from "@/lib/scenarios";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
-import type { GeneratedSchedule, ScheduledGame, Team } from "@/lib/types";
+import type { Conference, GeneratedSchedule, ScheduledGame, Team } from "@/lib/types";
 
 const ACHIEVEMENT_HEADLINE: Record<Exclude<ScenarioAchievement, "division-title">, string> = {
   "top-seed": "Clinch #1 Seed with:",
@@ -62,7 +63,7 @@ function GameRef({ game, teamId, teamById }: { game: ScheduledGame; teamId: stri
   return <span className="stakes-gameref">{preposition} <MiniMark team={opponent} size={15} />{opponent.name}</span>;
 }
 
-function ScenarioBar({ scenario, teamById, gameById, divisionName, divisionColor, divisionLogoUrl, divisionInitials, onGoToGame }: {
+function ScenarioBar({ scenario, teamById, gameById, divisionName, divisionColor, divisionLogoUrl, divisionInitials, conference, onGoToGame }: {
   scenario: Scenario;
   teamById: Map<string, Team>;
   gameById: Map<string, ScheduledGame>;
@@ -70,6 +71,7 @@ function ScenarioBar({ scenario, teamById, gameById, divisionName, divisionColor
   divisionColor?: string;
   divisionLogoUrl?: string;
   divisionInitials?: string;
+  conference?: Conference;
   onGoToGame: (gameId: string) => void;
 }) {
   const team = teamById.get(scenario.teamId);
@@ -111,7 +113,7 @@ function ScenarioBar({ scenario, teamById, gameById, divisionName, divisionColor
         {scenario.achievement === "playoff-berth" && <ShieldCheck aria-hidden="true" className="stakes-out-icon" />}
         {isElimination && <X aria-hidden="true" className="stakes-out-icon" />}
         {scenario.achievement === "division-title" && divisionColor && (
-          <span className="stakes-dmark"><DivisionMark division={{ id: scenario.divisionId ?? "", name: divisionName ?? "", color: divisionColor, logoUrl: divisionLogoUrl, initials: divisionInitials }} size={20} /></span>
+          <span className="stakes-dmark"><DivisionMark division={{ id: scenario.divisionId ?? "", name: divisionName ?? "", color: divisionColor, logoUrl: divisionLogoUrl, initials: divisionInitials }} conference={conference} size={20} /></span>
         )}
         <span className="stakes-out">
           {scenario.achievement === "division-title" ? `Clinch ${divisionName ?? ""} Division with:`.replace(/\s+/g, " ") : ACHIEVEMENT_HEADLINE[scenario.achievement]}
@@ -148,6 +150,7 @@ export function StakesButton({ schedule, weekNumber, onGoToGame }: {
     return new Map((week?.games ?? []).map((game) => [game.id, game]));
   }, [schedule, weekNumber]);
   const divisionById = useMemo(() => new Map(schedule.setup.divisions.map((division) => [division.id, division])), [schedule]);
+  const leagueHasConferences = hasConferences(schedule.setup);
 
   useEffect(() => {
     if (!open) return;
@@ -179,6 +182,7 @@ export function StakesButton({ schedule, weekNumber, onGoToGame }: {
         <div className="stakes-panel-body">
           {result.scenarios.map((scenario, index) => {
             const division = scenario.divisionId ? divisionById.get(scenario.divisionId) : undefined;
+            const conference = division && leagueHasConferences ? conferenceOfDivision(schedule.setup, division.id) : undefined;
             return <ScenarioBar
               key={`${scenario.teamId}-${scenario.achievement}-${index}`}
               scenario={scenario}
@@ -188,6 +192,7 @@ export function StakesButton({ schedule, weekNumber, onGoToGame }: {
               divisionColor={division?.color}
               divisionLogoUrl={division?.logoUrl}
               divisionInitials={division?.initials}
+              conference={conference}
               onGoToGame={handleGoToGame}
             />;
           })}

@@ -65,23 +65,23 @@ const STADIUMS = [
   "Championship Field",
 ];
 
-const DIVISION_NAME_POOL = ["North", "South", "East", "West", "Central", "Atlantic", "Pacific", "Mountain"];
 const DIVISION_COLORS = ["#117A45", "#B42318", "#2457A7", "#7A4A12", "#6D28D9", "#0F766E", "#BE185D", "#4338CA"];
 
+export function divisionLetterName(index: number) {
+  const letter = String.fromCharCode(65 + index);
+  return `Division ${letter}`;
+}
+
 export function createDivisions(count = 2): Division[] {
-  const names = count === 2 ? ["North", "South"]
-    : count === 3 ? ["North", "Central", "South"]
-    : count === 4 ? ["North", "South", "East", "West"]
-    : DIVISION_NAME_POOL.slice(0, count);
-  return names.map((name, index) => ({
+  return Array.from({ length: count }, (_, index) => ({
     id: `division-${index + 1}`,
-    name,
+    name: divisionLetterName(index),
     color: DIVISION_COLORS[index % DIVISION_COLORS.length],
+    colorSource: "auto",
   }));
 }
 
-const CONFERENCE_NAMES = ["Conference A", "Conference B"];
-const CONFERENCE_INITIALS = ["A", "B"];
+const CONFERENCE_NAMES = ["American", "National"];
 const CONFERENCE_COLORS = ["#1D4ED8", "#B42318"];
 
 /** Two conference identities (name/initials/color), branded further in the wizard. */
@@ -89,7 +89,6 @@ export function createConferences(count = 2): Conference[] {
   return Array.from({ length: count }, (_, index) => ({
     id: `conference-${index + 1}`,
     name: CONFERENCE_NAMES[index] ?? `Conference ${index + 1}`,
-    initials: CONFERENCE_INITIALS[index] ?? String.fromCharCode(65 + index),
     color: CONFERENCE_COLORS[index % CONFERENCE_COLORS.length],
   }));
 }
@@ -108,6 +107,20 @@ export function createTeams(teamCount: number, divisions: Division[]): Team[] {
   })), divisions);
 }
 
+export function createPlaceholderTeams(teamCount: number, divisions: Division[]): Team[] {
+  return Array.from({ length: teamCount }, (_, index) => ({
+    id: `team-${index + 1}`,
+    city: "",
+    name: `Team ${index + 1}`,
+    shortName: entityMonogram(`Team ${index + 1}`),
+    manager: "",
+    color: TEAM_COLORS[index],
+    divisionId: "",
+    overallRank: index + 1,
+    stadium: `Team ${index + 1} Stadium`,
+  }));
+}
+
 export function createDefaultSetup(): LeagueSetupInput {
   const divisions = createDivisions(2);
   return {
@@ -119,6 +132,7 @@ export function createDefaultSetup(): LeagueSetupInput {
     seasonYear: 2026,
     weeks: 14,
     divisions,
+    divisionPlacementMode: "manual",
     teams: createTeams(10, divisions),
     display: { cityNames: true, managers: true, venues: true },
     priorSeason: {
@@ -151,16 +165,8 @@ export function createBlankSetup(): LeagueSetupInput {
     description: "",
     logoUrl: undefined,
     divisions: setup.divisions.map((division) => ({ ...division, logoUrl: undefined })),
+    divisionPlacementMode: "manual",
     priorSeason: { ...setup.priorSeason, enabled: false, hasData: false, entryMode: "none" },
-    teams: setup.teams.map((team, index) => ({
-      ...team,
-      city: "",
-      name: `Team ${index + 1}`,
-      shortName: entityMonogram(`Team ${index + 1}`),
-      manager: "",
-      logoUrl: undefined,
-      overallRank: index + 1,
-      stadium: `Team ${index + 1} Stadium`,
-    })),
+    teams: createPlaceholderTeams(setup.teams.length, setup.divisions),
   };
 }

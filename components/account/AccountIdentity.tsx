@@ -40,7 +40,7 @@ function identityFromUser(user: { email?: string; user_metadata?: Record<string,
   };
 }
 
-export function AccountIdentity({ identity, plan }: { identity?: AccountIdentityData; plan?: "free" | "pro" }) {
+export function AccountIdentity({ identity }: { identity?: AccountIdentityData; plan?: "free" | "pro" }) {
   const [resolved, setResolved] = useState<AccountIdentityData>(identity ?? { signedIn: false });
   const [loading, setLoading] = useState(identity === undefined);
   const avatarRef = useRef<HTMLImageElement | null>(null);

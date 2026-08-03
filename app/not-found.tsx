@@ -1,5 +1,5 @@
-import { CalendarX2, House } from "lucide-react";
 import Link from "next/link";
+import { CalendarX2, House } from "lucide-react";
 import { BrandLockup } from "@/components/AppHeader";
 
 export default function NotFound() {

@@ -375,6 +375,9 @@ function recordedResults(schedule: GeneratedSchedule) {
 function bracketAsPlayoffGames(sandbox: SimulationSandbox): PlayoffGame[] | undefined {
   if (!sandbox.playoff) return undefined;
   const teamById = new Map(sandbox.baseSchedule.setup.teams.map((team) => [team.id, team]));
+  const neutralSiteName = sandbox.baseSchedule.setup.playoffs.championshipVenueName?.trim();
+  const finalRoundIndex = sandbox.playoff.rounds.length - 1;
+  const neutralChampionship = sandbox.baseSchedule.setup.playoffs.championshipVenueMode === "neutral-site";
   return sandbox.playoff.rounds.flatMap((round) => round.games.map((game, gameIndex) => ({
     id: game.id,
     week: sandbox.baseSchedule.setup.weeks + round.roundIndex + 1,
@@ -384,7 +387,7 @@ function bracketAsPlayoffGames(sandbox: SimulationSandbox): PlayoffGame[] | unde
     seriesGame: 1,
     seriesLength: 1,
     dateLabel: game.roundName,
-    stadium: teamById.get(game.homeTeamId)?.stadium ?? "Venue TBD",
+    stadium: neutralChampionship && round.roundIndex === finalRoundIndex ? neutralSiteName || "Neutral championship site" : teamById.get(game.homeTeamId)?.stadium ?? "Venue TBD",
     homeScore: game.result.homeScore,
     awayScore: game.result.awayScore,
     round: game.roundName,
@@ -758,7 +761,6 @@ function simulatePlayoffMatch(
   bracketSide?: "A" | "B",
 ): { winner: PlayoffParticipant; loser: PlayoffParticipant; game: SimulatedPlayoffGame } {
   const higherSeed = left.seed < right.seed ? left : right;
-  const lowerSeed = higherSeed === left ? right : left;
   const neutral = roundIndex === context.roundNames.length - 1
     && context.sandbox.baseSchedule.setup.playoffs.championshipVenueMode === "neutral-site";
   const home = neutral ? left : higherSeed;

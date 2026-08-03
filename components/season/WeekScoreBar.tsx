@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Division, ScheduledGame, ScheduleWeek, Team } from "@/lib/types";
+import type { Conference, Division, ScheduledGame, ScheduleWeek, Team } from "@/lib/types";
 import { readableTextColor, tintColor } from "@/lib/colorContrast";
 import { isGamePlayed } from "@/lib/game";
 import { formatGameDateTimeOverride, weekSlateScore10 } from "@/lib/matchups";
@@ -38,6 +38,8 @@ export interface WeekScoreBarProps {
   getTeam: (id: string) => Team | undefined;
   /** Resolve a division by id, for the division mark + chip on division matchups. */
   getDivision?: (id: string) => Division | undefined;
+  /** Resolve the conference a division belongs to when conference grouping exists. */
+  getConference?: (divisionId: string) => Conference | undefined;
   /** Resolve a team's rank entering this week, shown by each team. */
   getRank?: (teamId: string) => number | undefined;
   /** Game id flagged as Game of the Week; falls back to the top-rated game. */
@@ -92,7 +94,7 @@ function Crest({ team }: { team: Team }) {
   );
 }
 
-function SeriesMeta({ game, division }: { game: ScheduledGame; division?: Division }) {
+function SeriesMeta({ game, division, conference }: { game: ScheduledGame; division?: Division; conference?: Conference }) {
   const isDivision = game.matchupType === "division";
   const isSeries = game.seriesLength > 1;
   const text = game.dateTimeOverride
@@ -106,7 +108,7 @@ function SeriesMeta({ game, division }: { game: ScheduledGame; division?: Divisi
         : "Cross-div";
   return (
     <span className="sb-when">
-      {isDivision && division && <DivisionMark division={division} size={13} className="sb-divmark" />}
+      {isDivision && division && <DivisionMark division={division} conference={conference} size={13} className="sb-divmark" />}
       {text}
     </span>
   );
@@ -149,6 +151,7 @@ function GameCard({
   game,
   getTeam,
   getDivision,
+  getConference,
   getRank,
   featured,
   phase,
@@ -158,6 +161,7 @@ function GameCard({
   game: ScheduledGame;
   getTeam: (id: string) => Team | undefined;
   getDivision?: (id: string) => Division | undefined;
+  getConference?: (divisionId: string) => Conference | undefined;
   getRank?: (teamId: string) => number | undefined;
   featured: boolean;
   phase: WeekPhaseState["phase"];
@@ -196,7 +200,7 @@ function GameCard({
           ) : game.gameNumber ? (
             <span className="sb-rankchip">G{game.gameNumber}</span>
           ) : null}
-          <SeriesMeta game={game} division={division} />
+          <SeriesMeta game={game} division={division} conference={division ? getConference?.(division.id) : undefined} />
         </span>
         {live && <span className="sb-pill live"><span className="sb-dot" /> Live</span>}
         {played && <span className="sb-pill final">Final</span>}
@@ -213,6 +217,7 @@ export function WeekScoreBar({
   seasonYear,
   getTeam,
   getDivision,
+  getConference,
   getRank,
   gameOfWeekId,
   displayCityNames,
@@ -495,6 +500,7 @@ export function WeekScoreBar({
                 game={game}
                 getTeam={getTeam}
                 getDivision={getDivision}
+                getConference={getConference}
                 getRank={getRank}
                 featured={game.id === gotwId}
                 phase={phaseState.phase}
