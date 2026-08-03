@@ -17,6 +17,8 @@ const schema = z.object({
 });
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const HISTORY_PAGE_SIZE = 1000;
+const CATALOG_LOOKUP_SIZE = 500;
 
 function readSummary(value: unknown) {
   return value && typeof value === "object" ? value as Record<string, unknown> : {};
@@ -81,6 +83,47 @@ type HistoryBrowserSeason = {
   }>;
 };
 
+type OwnershipHistoryRow = {
+  league_season_id: string;
+  week: number;
+  canonical_player_id: string;
+  league_team_id: string;
+  provider_player_id: string;
+  nfl_team_at_time?: string | null;
+  position_at_time?: string | null;
+  roster_status: string;
+  lineup_slot: string;
+  fantasy_points?: number | string | null;
+};
+
+async function readOwnershipRows(auth: NonNullable<Awaited<ReturnType<typeof getAuthenticatedClient>>>, seasonIds: string[]) {
+  const rows: OwnershipHistoryRow[] = [];
+  for (let from = 0; ; from += HISTORY_PAGE_SIZE) {
+    const { data, error } = await auth.supabase
+      .from("player_ownership_history")
+      .select("league_season_id,week,canonical_player_id,league_team_id,provider_player_id,nfl_team_at_time,position_at_time,roster_status,lineup_slot,fantasy_points")
+      .in("league_season_id", seasonIds)
+      .order("week", { ascending: true })
+      .range(from, from + HISTORY_PAGE_SIZE - 1);
+    if (error) throw error;
+    rows.push(...((data ?? []) as OwnershipHistoryRow[]));
+    if (!data || data.length < HISTORY_PAGE_SIZE) break;
+  }
+  return rows;
+}
+
+async function readCatalogRows(auth: NonNullable<Awaited<ReturnType<typeof getAuthenticatedClient>>>, playerIds: string[]) {
+  const catalogById = new Map<string, { canonical_name?: string | null; position?: string | null; nfl_team?: string | null }>();
+  for (let index = 0; index < playerIds.length; index += CATALOG_LOOKUP_SIZE) {
+    const { data } = await auth.supabase
+      .from("player_catalog")
+      .select("id,canonical_name,position,nfl_team")
+      .in("id", playerIds.slice(index, index + CATALOG_LOOKUP_SIZE));
+    for (const row of data ?? []) catalogById.set(row.id, row);
+  }
+  return catalogById;
+}
+
 async function readHistoryBrowser(auth: NonNullable<Awaited<ReturnType<typeof getAuthenticatedClient>>>, scheduleId: string): Promise<HistoryBrowserSeason[]> {
   try {
     const { data: seasons, error: seasonsError } = await auth.supabase
@@ -91,7 +134,7 @@ async function readHistoryBrowser(auth: NonNullable<Awaited<ReturnType<typeof ge
       .limit(8);
     if (seasonsError || !seasons?.length) return [];
     const seasonIds = seasons.map((season) => season.id);
-    const [{ data: teams }, { data: games }, { data: ownership }] = await Promise.all([
+    const [{ data: teams }, { data: games }, ownership] = await Promise.all([
       auth.supabase
         .from("league_team_history")
         .select("league_season_id,league_team_id,provider_roster_or_team_id,team_name,manager_name,division_id,conference_id,final_standing,wins,losses,ties,points_for,points_against")
@@ -101,21 +144,10 @@ async function readHistoryBrowser(auth: NonNullable<Awaited<ReturnType<typeof ge
         .select("league_season_id,week,provider_matchup_id,home_league_team_id,away_league_team_id,home_score,away_score,status,final_lock_at")
         .in("league_season_id", seasonIds)
         .order("week", { ascending: true }),
-      auth.supabase
-        .from("player_ownership_history")
-        .select("league_season_id,week,canonical_player_id,league_team_id,provider_player_id,nfl_team_at_time,position_at_time,roster_status,lineup_slot,fantasy_points")
-        .in("league_season_id", seasonIds)
-        .order("week", { ascending: true }),
+      readOwnershipRows(auth, seasonIds),
     ]);
     const playerIds = [...new Set((ownership ?? []).map((row) => row.canonical_player_id).filter(Boolean))];
-    const catalogById = new Map<string, { canonical_name?: string | null; position?: string | null; nfl_team?: string | null }>();
-    if (playerIds.length) {
-      const { data: catalog } = await auth.supabase
-        .from("player_catalog")
-        .select("id,canonical_name,position,nfl_team")
-        .in("id", playerIds);
-      for (const row of catalog ?? []) catalogById.set(row.id, row);
-    }
+    const catalogById = playerIds.length ? await readCatalogRows(auth, playerIds) : new Map<string, { canonical_name?: string | null; position?: string | null; nfl_team?: string | null }>();
     const teamsBySeason = new Map<string, NonNullable<typeof teams>>();
     for (const row of teams ?? []) teamsBySeason.set(row.league_season_id, [...(teamsBySeason.get(row.league_season_id) ?? []), row]);
     const gamesBySeason = new Map<string, NonNullable<typeof games>>();
