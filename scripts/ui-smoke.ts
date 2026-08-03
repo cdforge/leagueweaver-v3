@@ -778,8 +778,14 @@ async function screenshotAwardEmptyState(browser: Browser, name: string, schedul
 }
 
 async function expectText(locator: Locator, pattern: RegExp, message: string) {
-  const text = await locator.textContent();
-  assert.match(text ?? "", pattern, message);
+  const startedAt = Date.now();
+  let text = "";
+  while (Date.now() - startedAt < 7_500) {
+    text = await locator.textContent().catch(() => "") ?? "";
+    if (pattern.test(text)) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.match(text, pattern, message);
 }
 
 async function assertHidden(locator: Locator, message: string) {
