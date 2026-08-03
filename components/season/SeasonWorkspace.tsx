@@ -5840,11 +5840,23 @@ export function SeasonWorkspace({
       });
       return;
     }
-    queueMicrotask(() =>
+    queueMicrotask(() => {
+      const params = new URLSearchParams(window.location.search);
+      const requestedViewValue = params.get("view");
+      const requestedView = (
+        requestedViewValue === "schedule" ||
+        requestedViewValue === "scores" ||
+        requestedViewValue === "fairness"
+          ? "league-schedule"
+          : requestedViewValue
+      ) as ViewKey | null;
+      const historyTargetView = requestedView ?? "league-schedule";
       setHistorySeasonKey(
-        new URLSearchParams(window.location.search).get("season") || "current",
-      ),
-    );
+        HISTORY_COMPATIBLE_VIEWS.has(historyTargetView)
+          ? params.get("season") || "current"
+          : "current",
+      );
+    });
     queueMicrotask(() => void loadImportHistory());
   }, [schedule?.id]);
   useEffect(() => {
@@ -5873,6 +5885,18 @@ export function SeasonWorkspace({
       queueMicrotask(() =>
         setHistorySeasonKey(requestedHistorySeason || "current"),
       );
+    else
+      queueMicrotask(() => {
+        setHistorySeasonKey("current");
+        if (!requestedHistorySeason) return;
+        const url = new URL(window.location.href);
+        url.searchParams.delete("season");
+        window.history.replaceState(
+          null,
+          "",
+          `${url.pathname}${url.search}${window.location.hash}`,
+        );
+      });
     if (
       requestedView &&
       VIEW_ITEMS.some((item) => item.key === requestedView) &&
