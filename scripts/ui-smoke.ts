@@ -401,6 +401,21 @@ async function screenshotGameDetail(browser: Browser, name: string, schedule: Ge
   const firstCard = page.locator(".matchup-card.is-openable").first();
   await firstCard.locator("a.team-identity-block").first().click();
   await page.waitForURL(new RegExp(`/season/${schedule.id}/team/`));
+  const teamScheduleUrl = page.url();
+  if (viewport.width <= 560) {
+    const teamCard = page.locator(".team-schedule-cards .matchup-card.is-openable").first();
+    await teamCard.locator("a.team-identity-block").first().click();
+    await page.waitForURL(new RegExp(`/season/${schedule.id}/team/`));
+    await page.goto(teamScheduleUrl, { waitUntil: "networkidle" });
+    await page.locator(".team-schedule-cards .matchup-card.is-openable").first().locator(".matchup-card-badges").click();
+  } else {
+    await page.locator(".team-schedule-table tbody tr.is-openable").first().locator("a.team-identity-block").click();
+    await page.waitForURL(new RegExp(`/season/${schedule.id}/team/`));
+    await page.goto(teamScheduleUrl, { waitUntil: "networkidle" });
+    await page.locator(".team-schedule-table tbody tr.is-openable").first().locator(".col-score").click();
+  }
+  await page.getByRole("dialog", { name: / at /i }).waitFor();
+  await page.getByRole("button", { name: /close game detail/i }).click();
   await page.goto(`${baseUrl}/season/${schedule.id}`, { waitUntil: "networkidle" });
   await page.locator(".workspace-rail nav").getByRole("button", { name: /league schedule/i }).click();
   await page.locator(".matchup-card.is-openable").first().locator(".matchup-card-badges").click();

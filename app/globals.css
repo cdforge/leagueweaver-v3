@@ -2207,6 +2207,8 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .team-schedule-table th > svg { width: 14px; height: 14px; vertical-align: middle; }
 .team-schedule-table td { height: 64px; border-bottom: 1px solid var(--line); background: white; padding: 7px 9px; vertical-align: middle; transition: background var(--transition); }
 .team-schedule-table tbody tr:last-child td { border-bottom: 0; }
+.team-schedule-table tbody tr.is-openable { cursor: pointer; }
+.team-schedule-table tbody tr.is-openable:focus-visible { outline: 3px solid color-mix(in srgb, var(--team-brand, var(--field)) 34%, transparent); outline-offset: -3px; }
 .team-schedule-table tbody tr:not(.is-gotw):not(.is-simulated):not(.simulation-override):hover td { background: #fafcfb; }
 .team-schedule-table tbody tr:not(.is-gotw):not(.is-simulated):not(.simulation-override):hover td.col-week { background: #fafcfb; }
 .team-schedule-table tbody tr.is-gotw td { background: #fffaf0; }
