@@ -284,6 +284,16 @@ function ScheduleShareModal({
   </Modal>;
 }
 
+function DashboardLoadingNotice({ view }: { view: "schedules" | "leagues" }) {
+  return <div className="product-loading product-loading-inline" role="status" aria-live="polite">
+    <LoaderCircle className="spin" />
+    <span>
+      <strong>{view === "schedules" ? "Still checking your account schedules..." : "Still checking your saved leagues..."}</strong>
+      <small>{view === "schedules" ? "Guest schedules can appear first. Cloud schedules will be added here as soon as they finish loading." : "Cached leagues can appear first. Account leagues will be added here as soon as they finish loading."}</small>
+    </span>
+  </div>;
+}
+
 async function fetchSavedLeaguePresets() {
   const leagueResponse = await fetch("/api/saved-leagues");
   const leaguePayload = await leagueResponse.json().catch(() => ({})) as { presets?: SavedLeaguePreset[]; error?: string };
@@ -316,14 +326,13 @@ export function FantasyDashboard({ view = "schedules" }: { view?: "schedules" | 
   const [sharePublicDisplay, setSharePublicDisplay] = useState<PublicDisplaySettings>({ cityNames: true, managers: false, venues: true });
   const [cloudTeamDetails, setCloudTeamDetails] = useState<Record<string, Team[]>>({});
   const [managerControlsOpen, setManagerControlsOpen] = useState(false);
-  const [loading, setLoading] = useState(() => view === "schedules" ? dashboardCache.seasons.length === 0 && listLocalSeasons().length === 0 : dashboardCache.savedLeagues.length === 0);
+  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [signedOut, setSignedOut] = useState(() => dashboardCache.signedOut);
 
   useEffect(() => {
     let active = true;
-    const hasCachedView = view === "schedules" ? dashboardCache.seasons.length > 0 || listLocalSeasons().length > 0 : dashboardCache.savedLeagues.length > 0;
-    setLoading(!hasCachedView);
+    setLoading(true);
     setMessage(null);
     setSignedOut(dashboardCache.signedOut);
     setPage(0);
@@ -477,6 +486,9 @@ export function FantasyDashboard({ view = "schedules" }: { view?: "schedules" | 
             : Number(new Date(b.updatedAt)) - Number(new Date(a.updatedAt)));
   const activeItems = isSchedules ? scheduleItems : leagueItems;
   const hasSchedules = allSchedules.length > 0;
+  const hasVisibleContent = isSchedules ? hasSchedules : savedLeagues.length > 0;
+  const showFullLoading = loading && !hasVisibleContent;
+  const showBackgroundLoading = loading && hasVisibleContent;
   const pageCount = Math.ceil(activeItems.length / DASHBOARD_PAGE_SIZE);
   const pageStart = page * DASHBOARD_PAGE_SIZE;
   const pagedSchedules = scheduleItems.slice(pageStart, pageStart + DASHBOARD_PAGE_SIZE);
@@ -768,10 +780,11 @@ export function FantasyDashboard({ view = "schedules" }: { view?: "schedules" | 
       </section>
     </div>
 
-    {loading && <LoadingPlaybook label={isSchedules ? "Downloading your schedules..." : "Loading saved leagues..."} />}
+    {showFullLoading && <LoadingPlaybook label={isSchedules ? "Downloading your schedules..." : "Loading saved leagues..."} />}
+    {showBackgroundLoading && <DashboardLoadingNotice view={isSchedules ? "schedules" : "leagues"} />}
     {message && <div className="product-message" role="alert">{message}</div>}
 
-    {!loading && isSchedules && <div className="product-dashboard-grid product-dashboard-grid-single">
+    {!showFullLoading && isSchedules && <div className="product-dashboard-grid product-dashboard-grid-single">
       <section className="product-panel">
         <header><span><strong>My schedules</strong><small>Open a fantasy schedule workspace.</small></span></header>
         <div className="product-list">
@@ -807,7 +820,7 @@ export function FantasyDashboard({ view = "schedules" }: { view?: "schedules" | 
       </section>
     </div>}
 
-    {!loading && !isSchedules && <div className="product-dashboard-grid product-dashboard-grid-single">
+    {!showFullLoading && !isSchedules && <div className="product-dashboard-grid product-dashboard-grid-single">
       <section className="product-panel">
         <header><span><strong>Saved leagues</strong><small>Reuse league details for fantasy schedules.</small></span></header>
         <div className="product-list">
