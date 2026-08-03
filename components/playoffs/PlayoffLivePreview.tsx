@@ -1214,7 +1214,7 @@ export function PlayoffLivePreview({
     const bracketStyle = isFullBracket
       ? ({
           "--ppw-full-champ-rows": fullChampRows,
-          "--ppw-full-divider-top": `${50 + fullChampRows * 94}px`,
+          "--ppw-full-divider-top": `${18 + fullChampRows * 94}px`,
           "--ppw-elim-divider-top": `${82 + (fullChampRows + fullConsoRows) * 94}px`,
         } as CSSProperties)
       : isConsolationBracket

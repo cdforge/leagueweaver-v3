@@ -6590,7 +6590,7 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .ppw-full-bracket .ppw-col-games { grid-auto-rows: 82px; }
 .ppw-conso-section-divider, .ppw-elim-section-divider { position: absolute; left: 0; right: 0; display: flex; align-items: center; gap: 10px; z-index: 1; pointer-events: none; color: #7fe3ac; }
 .ppw-conso-section-divider { top: var(--ppw-full-divider-top, calc(100% - 102px)); }
-.ppw-consolation-bracket .ppw-conso-section-divider { top: 70px; }
+.ppw-consolation-bracket .ppw-conso-section-divider { top: 122px; }
 .ppw-elim-section-divider { top: var(--ppw-elim-divider-top, calc(100% - 48px)); color: var(--pk-mut); }
 .ppw-conso-section-divider::after, .ppw-elim-section-divider::after { content: ""; flex: 1; min-width: 36px; border-top: 1px dashed currentColor; opacity: .45; }
 .ppw-conso-section-divider span, .ppw-elim-section-divider span { flex: 0 0 auto; max-width: 220px; padding: 2px 8px; border: 1px solid color-mix(in srgb, currentColor 50%, transparent); border-radius: 4px; background: var(--pk); font-size: 8.5px; font-weight: var(--w-black); letter-spacing: .09em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
