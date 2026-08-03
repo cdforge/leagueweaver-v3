@@ -623,6 +623,49 @@ MVT/All-Stars pages; treat ESPN pre-2018 no-cookie as unreliable (skip/flag).
 **Acceptance:** [ ] history populated across seasons; [ ] past-champions row; [ ] pre-2018 ESPN flagged.
 **QA:** §F.1; walk the Sleeper `previous_league_id` chain and show ≥2 prior seasons captured.
 
+### HIST-1 · Historical MVT / All-Stars browser  ·  issue:#136  ·  `phase:P7 type:ui area:history`  ·  Blocked by: #DEP-4,#MVT-2,#AS-2
+**Goal:** let commissioners browse prior-year award boards without inventing missing data.
+**Build:** add a season selector to MVT and All-Stars. MVT shows the selected season's leaderboard + award
+tables from saved `league_seasons` / award rows when present. All-Stars adds season + week selection and shows
+that historical week's board plus that season's team selection counts. If a season has no saved history rows,
+show a clear empty state and a safe "sync history" action only for public ESPN/Sleeper connections.
+**Acceptance:** [ ] MVT season selector; [ ] All-Stars season + week selector; [ ] uses only saved provider-scored
+history; [ ] missing years/weeks are empty, never fabricated; [ ] current-season default remains unchanged.
+**QA:** §F.1, §F.5; use the committed Sleeper history fixture to prove at least two prior seasons appear; screenshot
+MVT desktop + All-Stars mobile for current season, historical season, and missing-data state.
+
+### HIST-2 · Previous schedule browser  ·  issue:#137  ·  `phase:P7 type:ui area:history`  ·  Blocked by: #DEP-4
+**Goal:** let commissioners open previous schedules when LeagueWeaver has real saved schedules or provider matchup
+history for that season.
+**Build:** add a previous-schedules entry point from the season workspace. If a historical LeagueWeaver schedule is
+saved, open that schedule. If only provider history exists, show a read-only provider-history schedule using
+`league_schedule_history` rows with provider matchup labels and scores. Do not generate replacement matchups for
+missing seasons.
+**Acceptance:** [ ] previous schedule list; [ ] saved LeagueWeaver schedules open normally; [ ] provider-history-only
+seasons open read-only; [ ] missing seasons clearly explain there is no saved schedule; [ ] no fake generated matchups.
+**QA:** §F.1, §F.5; fixture-backed schedule-history rows render ≥2 prior seasons; screenshot saved-schedule,
+provider-history-only, and missing-data states.
+
+### GDM-2 · Game card opens box score directly  ·  issue:#138  ·  `phase:P7 type:ui area:game-detail`  ·  Blocked by: #GDM-1,#TW-1
+**Goal:** remove duplicate box-score buttons and make the game card itself the click target.
+**Build:** remove the separate "Box score" button from game/team cards where the full card can safely open the
+game-detail modal. Preserve keyboard access with a single focusable card/button pattern and an accessible label.
+Clicking or pressing Enter/Space on a live-week game opens the game-detail modal for that week.
+**Acceptance:** [ ] no redundant box-score button on team/game cards; [ ] clicking the card opens the game detail;
+[ ] keyboard activation works; [ ] live-week games open the same modal; [ ] no layout shift on cards.
+**QA:** §F.5, §F.6; Playwright clicks a This Week card and a schedule/team card; keyboard activates the card;
+screenshots desktop + mobile with no extra box-score button.
+
+### GDM-3 · Navigate week games inside modal  ·  issue:#139  ·  `phase:P7 type:ui area:game-detail`  ·  Blocked by: #GDM-2
+**Goal:** let commissioners move through every game in the selected week without closing the modal.
+**Build:** add Previous/Next game controls inside the game-detail modal, scoped to the current week. Preserve the
+selected week and modal state. Disable controls at the first/last game or wrap only if the UI clearly labels it.
+Keep focus management accessible after navigation and update the dialog title/score/rosters immediately.
+**Acceptance:** [ ] previous/next controls in modal; [ ] navigates all games in the current week; [ ] title, teams,
+score, rosters, All-Star/MVT badges update; [ ] focus remains inside the dialog; [ ] mobile controls are 44px+.
+**QA:** §F.5, §F.6; Playwright opens a live-week modal, clicks through all games in the week, verifies the title
+changes each time, and screenshots desktop + mobile.
+
 ---
 
 ## §H. Run order (dependency graph)
@@ -635,6 +678,8 @@ MVT/All-Stars pages; treat ESPN pre-2018 no-cookie as unreliable (skip/flag).
 - `CONF-1`+`MVT-1` → `CONF-2`
 - `STD-1`+`MVT-2`+`AS-2` → **`UI-1`** (brand pass also covers GDM-1/TW-1 surfaces)
 - `DATA-3` → `DEP-4` (v2/later)
+- `DEP-4`+`MVT-2`+`AS-2` → **`HIST-1`** → `HIST-2`
+- `GDM-1`+`TW-1` → **`GDM-2`** → `GDM-3`
 
 Full blocked-by: AS-3 ← AS-1, GDM-1 · TW-1 ← GDM-1, DATA-2. Label `agent:build` on ready stories
 (TEST-0, CONF-1, DATA-1 first); blocked stories are held automatically until their `Blocked by` issues close.
