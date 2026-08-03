@@ -52,6 +52,7 @@ import { BracketConnectorLayer, type BracketConnection } from "@/components/seas
 import { ConsolationBracket, FinalPlacementTable } from "@/components/season/ConsolationBracket";
 import { GameBadgeChip, MatchupCard, MatchupRatingLegend, MatchupSeriesChip, TeamIdentityBlock, WeekMatchupRank } from "@/components/season/MatchupPresentation";
 import { GameDetailSheet } from "@/components/season/GameDetailSheet";
+import { NflWeekTrail } from "@/components/season/NflWeekTrail";
 import { WeekSelector } from "@/components/season/WeekSelector";
 import { SimulatorWorkspace, type SimulatorResultView } from "@/components/season/SimulatorWorkspace";
 import { StatsWorkspace, TiebreakerEditor } from "@/components/season/StatsWorkspace";
@@ -112,7 +113,7 @@ import { formatPoints, gameOfWeekStatusLabel, getScheduleGameSignals } from "@/l
 import { normalizeTiebreakerSettings, TIEBREAKER_RULE_LABELS } from "@/lib/tiebreakers";
 import { formatDraftPlace, getTeamsMissingDraftPlaces, getWeekOneRankMap, getWeekOneTeamOrder, hasCompleteDraftRanking } from "@/lib/rankings";
 import { loadSeasonById, normalizeSeason, removeLocalSeason, saveSeason, saveSetup } from "@/lib/storage";
-import { getNflWeekWindow, getWeekDateLabel, updateGameScore } from "@/lib/schedule";
+import { getCurrentSlateWeek, getNflWeekWindow, getWeekDateLabel, updateGameScore } from "@/lib/schedule";
 import { getWeekPhase } from "@/lib/weekPhase";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
 import { GAME_DETAIL_CACHE_PREFIX, type GameDetailPlayerStat } from "@/lib/gameDetail";
@@ -2663,6 +2664,7 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
   const workspaceMainStyle = selectedTeamColor
     ? ({ "--workspace-team-wash": selectedTeamColor } as CSSProperties)
     : undefined;
+  const nflTrailWeek = getCurrentSlateWeek(new Date(), activeSchedule.setup.seasonYear, 18);
   const scoreBarTeamById = new Map(scoreBarSchedule.setup.teams.map((team) => [team.id, team]));
   const scoreBarRankByTeam = new Map((getEnteringWeekRankSnapshot(scoreBarSchedule, selectedWeek)?.rows ?? []).map((row) => [row.teamId, row.rank]));
   const scoreBarDivisionById = new Map(scoreBarSchedule.setup.divisions.map((division) => [division.id, division]));
@@ -2801,7 +2803,10 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
         </div>}
         <DraftRankingReminder schedule={schedule} onSave={onSaveDraftPlaces} openRequest={draftRankingRequest} onOpenSettings={openDraftRankingSettings} />
         <div className="workspace-content">
-          {view === "this-week" && <ThisWeekWorkspace schedule={activeSchedule} playerStats={gameDetailPlayerStats} simulationProbabilities={simulationProbabilityByGame} onOpenGame={openGameDetail} onOpenRecap={latestRecapWeek ? () => { setView("results"); router.push(`/season/${schedule.id}?view=results`); } : undefined} />}
+          {view === "this-week" && <div className="workspace-stack">
+            <NflWeekTrail seasonYear={activeSchedule.setup.seasonYear} week={nflTrailWeek} />
+            <ThisWeekWorkspace schedule={activeSchedule} playerStats={gameDetailPlayerStats} simulationProbabilities={simulationProbabilityByGame} onOpenGame={openGameDetail} onOpenRecap={latestRecapWeek ? () => { setView("results"); router.push(`/season/${schedule.id}?view=results`); } : undefined} />
+          </div>}
           {view === "results" && latestRecapWeek && <WeekRecapWorkspace schedule={activeSchedule} playerStats={gameDetailPlayerStats} onOpenGame={openGameDetail} />}
           {view === "league-schedule" && historyViewActive && !historySchedule
             ? <HistoryMissingState season={selectedHistorySeason} onSync={syncLeagueHistory} syncing={historySyncing} canSync={canSyncHistory} />
