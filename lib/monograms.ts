@@ -48,6 +48,12 @@ export function divisionAcronym(name: string) {
   return safeCandidate([primary, nameWords.join("").slice(0, 3)], "DIV");
 }
 
+export function conferenceAcronym(name: string) {
+  const nameWords = words(name);
+  const primary = nameWords.length > 1 ? nameWords.slice(0, 3).map((word) => word[0]).join("") : nameWords[0]?.slice(0, 3) ?? "";
+  return safeCandidate([primary, nameWords.join("").slice(0, 3)], "CONF");
+}
+
 export function resolveInitials(initials: string | undefined, automatic: string) {
   return initials?.trim() ? initials.trim().slice(0, 4) : automatic;
 }

@@ -4,6 +4,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { Check, Medal, Pencil, RefreshCw, Trophy } from "lucide-react";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { TeamIdentityBlock } from "@/components/season/MatchupPresentation";
+import { useRouteBase } from "@/components/season/routeBase";
 import { projectConsolationBracket, projectFinalPlacements, type ProjectedConsolationEntrant } from "@/lib/consolation";
 import { getWeekDateLabel } from "@/lib/schedule";
 import { calculateStandings, formatRecord } from "@/lib/standings";
@@ -11,6 +12,7 @@ import { teamInitials } from "@/lib/teamIdentity";
 import type { GeneratedSchedule, PlayoffGame, StandingsRow } from "@/lib/types";
 
 function ConsolationEntrant({ entrant, schedule, standingsByTeam }: { entrant: ProjectedConsolationEntrant; schedule: GeneratedSchedule; standingsByTeam: Map<string, StandingsRow> }) {
+  const routeBase = useRouteBase(`/season/${schedule.id}`);
   if (entrant.kind === "result") {
     return <div className="bracket-slot placeholder"><b>{entrant.outcome === "winner" ? "W" : "L"}</b><span><strong>{entrant.label}</strong><small>Updates after the prior result</small></span></div>;
   }
@@ -19,7 +21,7 @@ function ConsolationEntrant({ entrant, schedule, standingsByTeam }: { entrant: P
   const division = schedule.setup.divisions.find((item) => item.id === team.divisionId);
   const standing = standingsByTeam.get(team.id);
   return <div className="bracket-slot" style={{ "--slot-spine": team.color } as CSSProperties}>
-    <TeamIdentityBlock variant="stacked" compact team={team} division={division} leagueRank={entrant.seed} record={{ overall: standing ? formatRecord(standing) : "0-0", division: standing ? `${standing.divisionWins}-${standing.divisionLosses}` : undefined }} showCity={schedule.setup.display.cityNames !== false} href={`/season/${schedule.id}/team/${team.id}`} />
+    <TeamIdentityBlock variant="stacked" compact team={team} division={division} leagueRank={entrant.seed} record={{ overall: standing ? formatRecord(standing) : "0-0", division: standing ? `${standing.divisionWins}-${standing.divisionLosses}` : undefined }} showCity={schedule.setup.display.cityNames !== false} href={`${routeBase}/team/${team.id}`} />
   </div>;
 }
 

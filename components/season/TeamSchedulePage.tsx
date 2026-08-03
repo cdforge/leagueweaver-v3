@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useMemo, type CSSProperties } from "react";
-import { BarChart3, MapPin, MoreHorizontal, Star } from "lucide-react";
+import { BarChart3, MapPin, MoreHorizontal, Star, UsersRound } from "lucide-react";
 import { ClinchBadges } from "@/components/season/ClinchBadges";
 import { GameBadgeChip, MatchupCard, MatchupRatingLegend, MatchupSeriesChip, TeamIdentityBlock } from "@/components/season/MatchupPresentation";
+import { useRouteBase } from "@/components/season/routeBase";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { DivisionIdentity } from "@/components/ui/DivisionIdentity";
 import { FloatingPopover } from "@/components/ui/FloatingPopover";
@@ -12,6 +13,7 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { buildAllStars } from "@/lib/allStars";
 import { accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
 import { getTeamClinchTimelines, type TeamClinchTimeline } from "@/lib/clinch";
+import { hasConferences } from "@/lib/conferences";
 import { isGamePlayed } from "@/lib/game";
 import type { GameDetailPlayerStat } from "@/lib/gameDetail";
 import { calculateMatchupRating, formatGameDateTimeOverride, getMatchupRatingRange, getMatchupSignal, toMatchupScore10 } from "@/lib/matchups";
@@ -227,11 +229,12 @@ function TeamScheduleDirectory({ schedule, summaries, clinches, onSelectTeam }: 
     );
   };
 
-  // Group by division. Conferences are not a first-class entity yet (Division has no
-  // conferenceId), so no conference dividers are shown — matching "if there are no
-  // conferences, don't divide by conference." When a `conferences` grouping is added
-  // to the setup, wrap these division sections under conference headers here.
+  // Group by division. For 4/6/8-division leagues that carry a conference assignment, the
+  // division sections nest under two conference headers (each conference is one half of the
+  // playoff bracket); otherwise divisions render flat. `hasConferences` is the same gate the
+  // playoff seeding and clinch engine use, so the grouping here can't diverge from the bracket.
   const showDivisionGroups = schedule.setup.divisions.length > 1;
+  const conferencesActive = hasConferences(schedule.setup);
   const divisionGroups = schedule.setup.divisions
     .map((division) => ({
       division,
@@ -244,18 +247,33 @@ function TeamScheduleDirectory({ schedule, summaries, clinches, onSelectTeam }: 
     .filter((summary) => !divisionById.has(summary.team.divisionId))
     .sort((left, right) => left.liveRank - right.liveRank);
 
+  const renderDivisionGroup = (group: (typeof divisionGroups)[number]) => (
+    <section className="team-directory-division-group" key={group.division.id}>
+      <header className="team-directory-division-head">
+        <DivisionIdentity division={group.division} detail={`${group.teams.length} team${group.teams.length === 1 ? "" : "s"}`} />
+      </header>
+      <div className="team-directory-grid">{group.teams.map(renderCard)}</div>
+    </section>
+  );
+
   return (
     <div className="team-schedule-directory">
       {showDivisionGroups ? (
         <>
-          {divisionGroups.map((group) => (
-            <section className="team-directory-division-group" key={group.division.id}>
-              <header className="team-directory-division-head">
-                <DivisionIdentity division={group.division} detail={`${group.teams.length} team${group.teams.length === 1 ? "" : "s"}`} />
-              </header>
-              <div className="team-directory-grid">{group.teams.map(renderCard)}</div>
-            </section>
-          ))}
+          {conferencesActive
+            ? schedule.setup.conferences!.map((conference) => {
+                const confGroups = divisionGroups.filter((group) => group.division.conferenceId === conference.id);
+                if (confGroups.length === 0) return null;
+                return (
+                  <section className="team-directory-conference-group" key={conference.id}>
+                    <header className="team-directory-conference-head">
+                      <DivisionIdentity division={conference} detail={`${confGroups.length} division${confGroups.length === 1 ? "" : "s"}`} />
+                    </header>
+                    {confGroups.map(renderDivisionGroup)}
+                  </section>
+                );
+              })
+            : divisionGroups.map(renderDivisionGroup)}
           {orphanTeams.length > 0 && (
             <section className="team-directory-division-group">
               <header className="team-directory-division-head"><strong>Independent</strong></header>
@@ -285,6 +303,7 @@ export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectT
   leagueWeekHrefFor?: (week: number) => string;
   readOnlyHistory?: boolean;
 }) {
+  const routeBase = useRouteBase(`/season/${schedule.id}`);
   const scheduleSignals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
   const summaries = useMemo(() => buildTeamScheduleSummaries(schedule), [schedule]);
   const awardsLineup = useMemo(() => inferLineupTemplate(schedule, playerStats), [schedule, playerStats]);
@@ -317,6 +336,7 @@ export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectT
   const teamById = new Map(schedule.setup.teams.map((item) => [item.id, item]));
   const teamCount = schedule.setup.teams.length;
   const divisionById = new Map(schedule.setup.divisions.map((division) => [division.id, division]));
+  const teamHrefBase = `${routeBase}/team`;
   const planningRatingRange = getMatchupRatingRange(schedule.weeks.flatMap((week) => week.games));
   const currentSnapshot = getWeekRankSnapshot(schedule, schedule.setup.weeks);
   const currentStandingsByTeam = new Map(currentSnapshot.rows.map((row) => [row.teamId, row]));
@@ -543,7 +563,7 @@ export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectT
                         leagueRank={opponentStanding?.rank ?? opponent.overallRank}
                         record={{ overall: "0-0" }}
                         showCity={showCity}
-                        href={teamHrefFor ? teamHrefFor(opponent.id) : `/season/${schedule.id}/team/${opponent.id}`}
+                        href={teamHrefFor ? teamHrefFor(opponent.id) : `${teamHrefBase}/${opponent.id}`}
                       />
                     </div>
                   </td>
@@ -553,7 +573,7 @@ export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectT
                     {played ? <><strong className={awayScoreClass}>{game.awayScore}</strong><i aria-hidden="true">@</i><strong className={homeScoreClass}>{game.homeScore}</strong></> : "—"}
                   </td>
                   {display.venues && <td className="col-venue"><span className="table-venue"><MapPin />{home.logoUrl && <img src={home.logoUrl} alt="" />}<strong>{game.stadium}</strong></span></td>}
-                  {display.matchup && <td className="col-matchup"><MatchupSeriesChip game={game} division={opponentDivision} /></td>}
+                  {display.matchup && <td className="col-matchup"><MatchupSeriesChip game={game} awayDivision={divisionById.get(away.divisionId)} homeDivision={divisionById.get(home.divisionId)} setup={schedule.setup} /></td>}
                   {display.rating && <td className="col-rating"><span className="table-rating-cell"><span className={`table-signal signal-${signal.label.toLowerCase()}`} aria-label={`${signal.label} matchup, rated ${signal.score10.toFixed(1)} out of 10; higher is better`} title={`${signal.label} · ${signal.score10.toFixed(1)}/10; higher is better`}>{Array.from({ length: 3 }, (_, index) => <i className={index < signal.bars ? "active" : ""} key={index} />)}<strong>{signal.score10.toFixed(1)}</strong></span><small className="table-rating-ranks" aria-label={`${team.name} entered Week ${week.weekNumber} ranked ${teamRank}; opponent ranked ${opponentRank}. Away rank ${awayRank} versus home rank ${homeRank}.`}>{!isHome ? <Tooltip label={`${team.name}'s Week ${week.weekNumber} rank`}><span className="is-schedule-team-rank">#{awayRank}</span></Tooltip> : <span>#{awayRank}</span>}<em aria-hidden="true">vs</em>{isHome ? <Tooltip label={`${team.name}'s Week ${week.weekNumber} rank`}><span className="is-schedule-team-rank">#{homeRank}</span></Tooltip> : <span>#{homeRank}</span>}</small></span></td>}
                   {display.badges && <td className="col-badges">{badges.length ? <span className="game-badge-row">{badges.map((badge) => <GameBadgeChip badge={badge} key={badge} />)}</span> : "—"}</td>}
                   {display.details && <td className="col-details"><span className="team-game-details">{game.dateTimeOverride && <strong>{formatGameDateTimeOverride(game.dateTimeOverride)}</strong>}{metadata && <small>{metadata}</small>}{!game.dateTimeOverride && !metadata && "—"}</span></td>}
@@ -561,7 +581,7 @@ export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectT
                     <FloatingPopover className="table-actions" label={`Actions for Week ${week.weekNumber}`} trigger={<MoreHorizontal />} menuClassName="table-actions-menu">
                         {!readOnlyHistory && <Link href={`/season/${schedule.id}?view=scores&week=${week.weekNumber}`}>Set score</Link>}
                         <Link href={`${leagueWeekHrefFor ? leagueWeekHrefFor(week.weekNumber) : `/season/${schedule.id}?week=${week.weekNumber}`}#${game.id}`}>Game details</Link>
-                        <Link href={teamHrefFor ? teamHrefFor(opponent.id) : `/season/${schedule.id}/team/${opponent.id}`}>Opponent schedule</Link>
+                        <Link href={teamHrefFor ? teamHrefFor(opponent.id) : `${teamHrefBase}/${opponent.id}`}>Opponent schedule</Link>
                     </FloatingPopover>
                   </td>
                 </tr>
@@ -613,6 +633,7 @@ export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectT
               home={home}
               awayDivision={divisionById.get(away.divisionId)}
               homeDivision={divisionById.get(home.divisionId)}
+              setup={schedule.setup}
               awayRank={rankFor(away.id, away.overallRank)}
               homeRank={rankFor(home.id, home.overallRank)}
               awayRecord={recordThroughWeek(away.id)}
@@ -625,8 +646,8 @@ export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectT
               showCity={showCity}
               showVenue={schedule.setup.display?.venues !== false}
               badges={scheduleSignals.byGameId.get(game.id)?.badges ?? []}
+              teamHrefBase={teamHrefBase}
               teamHrefFor={teamHrefFor}
-              teamHrefBase={`/season/${schedule.id}/team`}
               onOpenGame={onOpenGame}
             />
           );
@@ -638,6 +659,13 @@ export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectT
         <dl className="team-performance-grid">
           {performanceStats.map((stat) => <div key={stat.label}><dt>{stat.label}</dt><dd className={stat.tone}><strong className="team-stat-value">{stat.value}</strong><small className={`team-stat-placement placement-${stat.placement.tone}`}>{stat.placement.label}</small></dd></div>)}
         </dl>
+      </section>
+
+      <section className="team-player-soon public-soon" aria-label={`${teamDisplayName(team, showCity)} player data`}>
+        <span className="public-soon-mark"><UsersRound /></span>
+        <strong>Roster / Players</strong>
+        <p>Player rosters, weekly player points, All-Star selections, and MVT breakdowns will appear here once player-level data is connected for this league.</p>
+        <span className="public-soon-chip">Coming soon</span>
       </section>
 
       <MatchupRatingLegend />

@@ -3,7 +3,7 @@ import { buildSleeperLeagueHistoryDraft, type LeagueHistoryDraft, type SleeperHi
 import { deriveSleeperTemplates, mapSleeperPlayerWeekStats, type LineupTemplate, type PlayerWeekStat, type RosterTemplate } from "@/lib/playerData";
 import { mapSleeperTransactions, type NormalizedTransaction, type SleeperTransactionPayload } from "@/lib/transactions";
 import { fetchProviderJson } from "./request";
-import type { GeneratedSchedule, ImportDataFound, PlatformSyncResult, PlatformSyncScoreRow } from "@/lib/types";
+import type { GeneratedSchedule, ImportDataFound, PlatformSyncResult, PlatformSyncScoreRow, PriorSeasonFinishEntry } from "@/lib/types";
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 
@@ -42,7 +42,10 @@ export interface SleeperRoster {
     fpts_against_decimal?: number;
   };
 }
+type SleeperRosterSettings = NonNullable<SleeperRoster["settings"]>;
 export interface SleeperMatchup { roster_id: number; matchup_id?: number; points?: number; players?: string[]; starters?: string[]; players_points?: Record<string, number> }
+/** One node of Sleeper's winners_bracket. `p` marks a placement game (1 = title). */
+interface SleeperBracketMatch { r?: number; m?: number; t1?: number | null; t2?: number | null; w?: number | null; l?: number | null; p?: number }
 
 export async function sleeperFetch<T>(path: string): Promise<T> {
   const { response, json } = await fetchProviderJson<T>(`${SLEEPER_API}${path}`);
@@ -132,6 +135,58 @@ export function mapSleeperTemplates(league: SleeperLeague): { lineupTemplate: Li
     rosterPositions: league.roster_positions ?? [],
     taxiSlots: league.settings?.taxi_slots,
   });
+}
+
+function sleeperRosterPoints(settings?: SleeperRosterSettings) {
+  return (settings?.fpts ?? 0) + (settings?.fpts_decimal ?? 0) / 100;
+}
+
+/**
+ * Last season's finish for seeding a new schedule. Walks one `previous_league_id`
+ * hop from the connected league, then reads the prior season's rosters (for the
+ * regular-season order) and winners_bracket (for the true playoff finish). Keyed by
+ * owner id, which is stable across Sleeper seasons even though roster ids are not.
+ * Returns [] when there is no prior season to walk back to.
+ */
+export async function fetchSleeperPriorFinish(leagueId: string): Promise<PriorSeasonFinishEntry[]> {
+  const league = await sleeperFetch<SleeperLeague>(`/league/${encodeURIComponent(leagueId)}`);
+  const previousId = league.previous_league_id;
+  if (!previousId) return [];
+  const [rosters, bracket] = await Promise.all([
+    sleeperFetch<SleeperRoster[]>(`/league/${encodeURIComponent(previousId)}/rosters`),
+    sleeperFetch<SleeperBracketMatch[]>(`/league/${encodeURIComponent(previousId)}/winners_bracket`).catch(() => [] as SleeperBracketMatch[]),
+  ]);
+  if (rosters.length === 0) return [];
+  // Regular-season order: most wins, then most points.
+  const regularSeasonRankByRoster = new Map<number, number>(
+    [...rosters]
+      .sort((left, right) =>
+        (right.settings?.wins ?? 0) - (left.settings?.wins ?? 0) ||
+        sleeperRosterPoints(right.settings) - sleeperRosterPoints(left.settings) ||
+        left.roster_id - right.roster_id,
+      )
+      .map((roster, index) => [roster.roster_id, index + 1]),
+  );
+  // Playoff finish from placement games: a match with `p` awards rank p to the
+  // winner and p + 1 to the loser (p:1 title game -> champion + runner-up). Keep the
+  // best rank if a roster somehow appears in more than one placement game.
+  const playoffRankByRoster = new Map<number, number>();
+  for (const match of bracket) {
+    if (!match.p) continue;
+    const assign = (rosterId: number | null | undefined, rank: number) => {
+      if (rosterId == null) return;
+      const existing = playoffRankByRoster.get(rosterId);
+      if (existing == null || rank < existing) playoffRankByRoster.set(rosterId, rank);
+    };
+    assign(match.w, match.p);
+    assign(match.l, match.p + 1);
+  }
+  return rosters.map((roster) => ({
+    ownerId: roster.owner_id ?? undefined,
+    providerTeamId: String(roster.roster_id),
+    regularSeasonRank: regularSeasonRankByRoster.get(roster.roster_id),
+    playoffRank: playoffRankByRoster.get(roster.roster_id),
+  }));
 }
 
 export async function mapSleeperScores(schedule: GeneratedSchedule, week: number): Promise<PlatformSyncResult> {

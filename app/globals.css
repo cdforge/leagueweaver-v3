@@ -452,6 +452,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .preview-team > span:not(.entity-logo) strong { font-size: var(--text-2xs); }
 .preview-team > span:not(.entity-logo) small { color: #91a49a; font-size: var(--text-2xs); }
 .preview-team > b { color: #91a49a; }
+.preview-team > b.preview-rank-sealed { display: inline-flex; align-items: center; color: #91a49a; opacity: .75; }
+.preview-team > b.preview-rank-sealed svg { width: 13px; height: 13px; }
 .preview-footer { padding: 17px 18px 20px; background: rgba(255,255,255,.04); display: grid; grid-template-columns: 1fr auto; gap: 8px; font-size: var(--text-micro); }
 .preview-footer > div { grid-column: 1 / -1; height: 4px; border-radius: var(--radius-chip); background: rgba(255,255,255,.12); }
 .preview-footer > div i { display: block; height: 100%; background: var(--gold); border-radius: inherit; transition: width .2s ease; }
@@ -580,6 +582,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .ranking-team strong, .ranking-team small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .ranking-team strong { font-size: var(--text-2xs); }
 .ranking-team small { color: var(--muted); font-size: var(--text-2xs); }
+.ranking-newbie { align-self: flex-start; font-style: normal; font-size: var(--text-3xs, 10px); font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--muted); background: var(--field-soft); border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px; }
 .ranking-actions { display: flex; justify-content: flex-end; gap: 4px; }
 .ranking-actions button { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: white; color: var(--ink); display: grid; place-items: center; cursor: pointer; }
 .ranking-actions button:disabled { opacity: .35; cursor: default; }
@@ -883,9 +886,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .reveal-bug { position: relative; display: flex; flex-direction: column; align-items: stretch; text-align: center; }
 .reveal-bug-tab { align-self: center; margin-top: 14px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 14px; border-radius: var(--radius-pill); background: var(--gold); color: var(--field-dark); font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .14em; text-transform: uppercase; }
 .reveal-bug-tab svg { width: 12px; height: 12px; }
-.reveal-bug-hero { position: relative; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; padding: 16px 14px 14px; }
-.reveal-bug-hero::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .2; background: linear-gradient(100deg, var(--away, transparent) 0 38%, transparent 55%), linear-gradient(280deg, var(--home, transparent) 0 38%, transparent 55%); }
-.reveal-bug-hero::after { content: ""; position: absolute; top: 14%; bottom: 14%; left: 50%; width: 1px; background: linear-gradient(180deg, transparent, rgba(230, 182, 76, .5), transparent); }
+.reveal-bug-hero, .reveal-conf-vs { position: relative; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; padding: 16px 14px 14px; }
+.reveal-bug-hero::before, .reveal-conf-vs::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .2; background: linear-gradient(100deg, var(--away, transparent) 0 38%, transparent 55%), linear-gradient(280deg, var(--home, transparent) 0 38%, transparent 55%); }
+.reveal-bug-hero::after, .reveal-conf-vs::after { content: ""; position: absolute; top: 14%; bottom: 14%; left: 50%; width: 1px; background: linear-gradient(180deg, transparent, rgba(230, 182, 76, .5), transparent); }
+/* The two-conferences beat reuses the marquee's VS framing, just wider (no card
+   border) since it isn't a "game" — a season-level statement, not a broadcast bug. */
+.reveal-conf-vs { width: min(480px, 92vw); margin: 0 auto; }
+.reveal-conf-vs .reveal-bug-vs { animation: bugVsPop 420ms cubic-bezier(.34, 1.56, .64, 1) both; animation-delay: 260ms; }
+.reveal-conf-vs > .reveal-bug-side:first-child { animation: bugCrashLeft 640ms cubic-bezier(.2, .85, .25, 1) both; }
+.reveal-conf-vs > .reveal-bug-side:last-child { animation: bugCrashRight 640ms cubic-bezier(.2, .85, .25, 1) both; }
 .reveal-bug-side { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
 .reveal-bug-side b { font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-weight: var(--w-bold); font-size: clamp(17px, 4.2vw, 23px); line-height: 1.02; text-wrap: balance; overflow-wrap: anywhere; }
 .reveal-bug-vs { position: relative; z-index: 1; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--field-dark); border: 1px solid rgba(255, 255, 255, .25); box-shadow: 0 0 0 4px rgba(6, 25, 20, .6); }
@@ -934,9 +943,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .reveal-share-crest .reveal-mark { border-radius: 13px; box-shadow: 0 0 0 3px rgba(255, 255, 255, .1), 0 8px 22px rgba(0, 0, 0, .45); }
 .reveal-share-league { display: block; font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-weight: var(--w-bold); font-size: clamp(24px, 6vw, 38px); line-height: 1.06; color: #fff; text-wrap: balance; }
 .reveal-share-year { margin-top: 10px; font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .18em; text-transform: uppercase; color: var(--gold); }
-.reveal-share-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 14px 10px; }
-.reveal-share-stats > span { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+/* Flex-wrap (not a fixed grid) so a 5th stat (conference leagues) simply wraps onto a
+   second row at its own natural width, instead of five equal-width columns squeezing
+   "conferences"/"matchups" narrower than the word itself. */
+.reveal-share-stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 6px; padding: 14px 10px; }
+.reveal-share-stats > span { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 0 0 auto; min-width: 56px; }
 .reveal-share-stats b { font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-weight: var(--w-bold); font-size: var(--text-2xl); color: var(--gold); line-height: 1; }
+/* Defensive fallback only — the flex-wrap above means labels no longer need to shrink
+   past their own word, but keep this so nothing overflows even under an unusually
+   narrow viewport. */
+.reveal-share-stats small { max-width: 100%; overflow-wrap: anywhere; text-wrap: balance; }
 .reveal-share-stats small { font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-bold); letter-spacing: .1em; text-transform: uppercase; color: rgba(255, 255, 255, .55); }
 .reveal-share-marquee { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 16px; border-top: 1px solid rgba(255, 255, 255, .08); }
 .reveal-share-tag { font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
@@ -973,6 +989,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .reveal-mark-mono { display: inline-grid; place-items: center; overflow: hidden; text-align: center; letter-spacing: -.01em; font-family: var(--font-archivo), system-ui, sans-serif; font-weight: var(--w-black); line-height: 1; }
 .reveal-seed-sm { font-style: normal; font-weight: var(--w-black); font-size: var(--text-2xs); color: var(--gold); }
 .reveal-slate-team { display: inline-flex; align-items: center; gap: 6px; }
+/* A team's division/conference affiliation, named in its color even in a truncated row. */
+.reveal-affiliation-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 0 1px rgba(255, 255, 255, .25); }
 /* Season window: emphasised Kickoff / Thanksgiving / Final-week milestones. */
 .reveal-window { display: flex; flex-direction: column; align-items: center; gap: 16px; }
 .reveal-window-weeks { font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-weight: var(--w-bold); font-size: clamp(30px, 6.4vw, 52px); line-height: 1; }
@@ -1004,8 +1022,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
    late final-week node (they can be only a week or two apart). */
 .reveal-tl-flame .reveal-timeline-label { top: auto; bottom: 18px; }
 @keyframes revealPop { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: none; } }
-/* The field: team crests grouped by division. */
-.reveal-field { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+/* The field: team crests grouped by division (and, with conferences, by conference first). */
+.reveal-field { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
 .reveal-field-count { font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-weight: var(--w-bold); font-size: clamp(26px, 5.4vw, 44px); line-height: 1; }
 .reveal-field-divs { display: flex; flex-direction: column; gap: 14px; }
 .reveal-field-div { display: flex; flex-direction: column; align-items: center; gap: 8px; }
@@ -1014,6 +1032,22 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .reveal-field-div-teams .reveal-crest { box-shadow: none; animation: none; font-size: var(--text-xs); }
 /* The field assembles: crests pop into their divisions in staggered order. */
 .reveal-field-crest { display: inline-flex; animation: revealPop 460ms cubic-bezier(.34, 1.56, .64, 1) both; animation-delay: calc(var(--i, 0) * 45ms); }
+/* Two conference bands, side by side where width allows so the field roughly halves in
+   height versus one long division stack; each band tinted faintly in its own colour. */
+.reveal-field-confs { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 16px 22px; width: 100%; }
+.reveal-field-conf { flex: 1 1 200px; min-width: 168px; max-width: 260px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px 10px 12px; border-radius: 14px; background: color-mix(in srgb, var(--conf-color, transparent) 12%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--conf-color, transparent) 32%, transparent); }
+.reveal-field-conf .reveal-field-divs { gap: 10px; }
+.reveal-field-conf-name { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-archivo), system-ui, sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .12em; text-transform: uppercase; }
+.reveal-field-conf-mark { width: 18px; height: 18px; border-radius: 5px; object-fit: contain; }
+/* Overflow-prone beat content (the field roster, the season weave) lives in its own
+   capped viewport so a long roster never grows/scrolls the whole story frame — only
+   this inner pane does. JS drives a one-time soft pan when content overflows; the
+   viewport stays scrollable underneath as a manual and reduced-motion fallback. */
+.reveal-pan-viewport { position: relative; width: 100%; max-height: var(--pan-max-h, min(300px, 42vh)); overflow-y: auto; overflow-x: hidden; scrollbar-width: none; -ms-overflow-style: none; }
+.reveal-pan-viewport::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.reveal-pan-content { display: block; }
+.reveal-pan-content.is-panning { animation-name: revealPan; animation-timing-function: cubic-bezier(.45, 0, .2, 1); animation-duration: var(--pan-duration, 2000ms); animation-delay: 900ms; animation-fill-mode: both; }
+@keyframes revealPan { from { transform: translateY(0); } to { transform: translateY(var(--pan-distance, 0)); } }
 /* The woven-season grid: columns are weeks, each cell a matchup filled with the two
    teams' logos (stacked away-over-home), drawing in on a diagonal sweep. */
 .reveal-weave { display: flex; align-items: flex-start; justify-content: center; gap: 6px; width: min(540px, 94vw); margin: 6px auto 0; }
@@ -1089,6 +1123,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .reveal-vcol-crests { display: inline-flex; align-items: center; gap: 8px; }
 .reveal-vcol-crests .reveal-mark { box-shadow: 0 2px 9px rgba(0, 0, 0, .42); }
 .reveal-vcol-pair { font-size: var(--text-2xs); font-weight: var(--w-bold); color: rgba(255, 255, 255, .72); line-height: 1.25; text-wrap: balance; }
+.reveal-vcol-relationship { font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .08em; text-transform: uppercase; color: var(--gold); line-height: 1.2; }
 .reveal-vcol-gap { font-size: var(--text-2xs); font-weight: var(--w-bold); letter-spacing: .05em; text-transform: uppercase; color: rgba(255, 255, 255, .5); line-height: 1; }
 .reveal-vcol-gap b { display: block; font-family: var(--font-barlow-condensed), system-ui, sans-serif; font-size: var(--text-3xl); font-weight: var(--w-bold); color: var(--gold); line-height: 1; margin-bottom: 2px; }
 .reveal-vtrack { position: relative; width: 8px; height: 100%; border-radius: var(--radius-pill); background: rgba(255, 255, 255, .14); }
@@ -1184,6 +1219,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   /* Marquee crests land in place — no crash, pop, or shockwave. */
   .reveal-bug-hero .reveal-crest, .reveal-bug-vs { animation: none; opacity: 1; transform: none; }
   .reveal-bug-vs::after { animation: none; opacity: 0; }
+  /* Same stillness for the two-conferences beat's VS marks. */
+  .reveal-conf-vs > .reveal-bug-side { animation: none; opacity: 1; transform: none; }
   /* Skip the weave sweep but keep the finished fabric fully drawn. */
   .reveal-weave-cell { animation: none; opacity: 1; transform: none; }
   /* The stat-show bars/rulers hold their finished shape without the grow animation. */
@@ -1192,6 +1229,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .reveal-timeline-line, .reveal-timeline-dot { animation: none; opacity: 1; }
   /* Field crests and the marquee power meter hold their finished state. */
   .reveal-field-crest, .reveal-power-fill { animation: none; opacity: 1; transform: none; }
+  /* No soft pan — overflowing beat content stays reachable via the viewport's own
+     (invisible) scroll instead of an automatic drift. */
+  .reveal-pan-content { animation: none !important; transform: none !important; }
   /* Transitions are motion too: snap the wash/halo instead of cross-fading. */
   .reveal-wash, .reveal-stage::before { transition: none; }
   /* Cards and rematch pins arrive fully formed, no cascade or pop. */
@@ -1328,35 +1368,55 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .saved-league-pager .button-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
 .saved-league-pager-count { color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-bold); font-variant-numeric: tabular-nums; }
 
-/* Quick-create ⁄ Customize fork card on the League step (B2). Customize is the
-   emphasized primary; Quick create is the secondary shortcut with a settings
-   preview + a "you'll regenerate to change these" note. */
-.build-fork { border: 1px solid var(--line-strong); border-radius: var(--radius); background: white; box-shadow: var(--shadow-sm); overflow: hidden; }
-.build-fork-head { border-bottom: 1px solid var(--line); padding: 14px 16px; display: flex; flex-direction: column; gap: 3px; }
-.build-fork-head strong { font-size: var(--text-lg); }
-.build-fork-head small { color: var(--muted); font-size: var(--text-xs); }
-.build-fork-options { display: grid; grid-template-columns: 1.15fr 1fr; }
-.build-fork-primary { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; border: 0; border-right: 1px solid var(--line); background: var(--field-soft); padding: 18px 16px; cursor: pointer; transition: background var(--transition); }
-.build-fork-primary:hover { background: color-mix(in srgb, var(--field) 12%, white); }
-.build-fork-primary strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); line-height: 1.05; color: var(--ink); }
-.build-fork-primary small { color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
-.build-fork-primary:focus-visible { outline: 3px solid color-mix(in srgb, var(--field), white 58%); outline-offset: -3px; }
+.create-path-screen { min-height: 460px; align-content: center; }
+.create-path-heading { max-width: 720px; }
+.create-path-heading .step-kicker { color: var(--field-dark); }
+.create-path-options { display: grid; grid-template-columns: 1fr; gap: 14px; max-width: 100%; }
+.create-path-options > * { box-sizing: border-box; max-width: 100%; }
+.create-path-choice { border: 1px solid var(--line-strong); border-radius: var(--radius); background: white; box-shadow: var(--shadow-sm); padding: 22px; text-align: left; }
+.create-path-recommended { width: 100%; min-height: 138px; border-color: color-mix(in srgb, var(--field) 78%, var(--line)); background: linear-gradient(135deg, color-mix(in srgb, var(--field) 14%, white), white 70%); box-shadow: 0 18px 45px rgba(21, 35, 28, .13); }
+.create-path-recommended:hover { background: linear-gradient(135deg, color-mix(in srgb, var(--field) 20%, white), white 64%); }
+.create-path-recommended.is-compact { min-height: 92px; padding: 18px; border-color: var(--line-strong); background: white; box-shadow: var(--shadow-sm); }
+.create-path-recommended.is-compact .start-option-icon { width: 46px; height: 46px; box-shadow: none; }
+.create-path-recommended.is-compact .start-option-icon svg { width: 21px; }
+.create-path-recommended.is-compact .build-fork-tag, .create-path-recommended.is-compact .start-option-copy small { display: none; }
+.create-path-recommended.is-compact .start-option-copy strong { font-size: var(--text-2xl); }
+.create-path-recommended .start-option-icon { width: 58px; height: 58px; box-shadow: 0 10px 24px rgba(17, 122, 69, .22); }
+.create-path-recommended .start-option-copy { gap: 6px; }
+.create-path-recommended .start-option-copy strong { font-size: var(--text-3xl); }
+.create-path-recommended .start-option-copy small { max-width: 560px; }
+.create-path-choice-quick { display: grid; grid-template-columns: 1fr; gap: 16px; border-color: color-mix(in srgb, var(--field) 58%, var(--line)); background: linear-gradient(135deg, color-mix(in srgb, var(--field) 8%, white), white 72%); box-shadow: 0 18px 45px rgba(21, 35, 28, .1); }
+.create-path-choice-quick.is-compact { display: block; min-height: 92px; cursor: pointer; }
+.create-path-choice-quick.is-compact .create-path-choice-copy small { max-width: 420px; }
+.create-path-choice-quick.is-selected { cursor: default; }
+.create-path-choice-head { display: grid; grid-template-columns: 58px 1fr; align-items: center; gap: 16px; }
+.create-path-choice-icon { width: 54px; height: 54px; border-radius: var(--radius); display: inline-flex; align-items: center; justify-content: center; background: var(--field); color: white; }
+.create-path-choice-icon svg { width: 24px; }
+.create-path-choice-quick .create-path-choice-icon { width: 58px; height: 58px; background: var(--field); color: white; box-shadow: 0 10px 24px rgba(17, 122, 69, .16); }
+.create-path-choice-quick .create-path-choice-icon svg { width: 24px; }
+.create-path-choice-copy { display: flex; flex-direction: column; gap: 6px; }
+.create-path-choice-copy strong { color: var(--ink); font-size: var(--text-lg); }
+.create-path-choice-copy small { color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
 .build-fork-tag { align-self: flex-start; font-size: var(--text-2xs); font-weight: var(--w-black); text-transform: uppercase; letter-spacing: 0.05em; color: var(--field-dark); background: white; border: 1px solid var(--field); border-radius: var(--radius-pill); padding: 2px 8px; }
-.build-fork-go { margin-top: 4px; display: inline-flex; align-items: center; gap: 6px; color: var(--field-dark); font-weight: var(--w-bold); font-size: var(--text-sm); }
-.build-fork-go svg { width: 16px; }
-.build-fork-secondary { display: flex; flex-direction: column; gap: 8px; padding: 18px 16px; background: var(--canvas); }
-.build-fork-secondary-head { display: inline-flex; align-items: center; gap: 6px; }
-.build-fork-secondary-head svg { width: 16px; color: var(--field); }
-.build-fork-secondary-head strong { font-size: var(--text-md); }
-.build-fork-secondary > small { color: var(--muted); font-size: var(--text-xs); }
+.create-path-quick-settings { display: grid; gap: 12px; }
+.create-path-quick-action { display: flex; align-items: flex-start; gap: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
+.build-fork-weeks { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.build-fork-weeks > span { font-size: var(--text-2xs); font-weight: var(--w-bold); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .build-fork-summary { list-style: none; margin: 2px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .build-fork-summary li { position: relative; padding-left: 16px; font-size: var(--text-xs); color: var(--ink); line-height: 1.35; }
 .build-fork-summary li::before { content: ""; position: absolute; left: 2px; top: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--field); }
 .build-fork-summary b { font-weight: var(--w-bold); }
 .build-fork-note { display: flex; align-items: flex-start; gap: 6px; font-size: var(--text-2xs); color: var(--muted); line-height: 1.35; }
 .build-fork-note svg { flex: 0 0 auto; width: 13px; margin-top: 1px; color: #b06a00; }
-.build-fork-quick { align-self: flex-start; margin-top: 2px; display: inline-flex; align-items: center; gap: 7px; }
+.build-fork-note-danger { border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--line)); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--danger) 7%, white); color: #842d2d; padding: 10px 11px; }
+.build-fork-note-danger svg { color: var(--danger); }
+.build-fork-quick { align-self: stretch; margin-top: 2px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
 .build-fork-quick svg { width: 15px; }
+.build-fork-quick:disabled { cursor: not-allowed; opacity: .62; }
+
+@media (max-width: 900px) {
+  .build-fork-weeks { align-items: flex-start; flex-direction: column; }
+}
 
 @media (max-width: 720px) {
   .welcome-capability-grid { grid-template-columns: 1fr 1fr; }
@@ -1368,8 +1428,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .start-option--main { padding: 22px; }
   .start-primary-row.has-saved { grid-template-columns: 1fr; }
   .start-option--saved { padding: 22px; }
-  .build-fork-options { grid-template-columns: 1fr; }
-  .build-fork-primary { border-right: 0; border-bottom: 1px solid var(--line); }
+  .create-path-choice { padding: 20px; }
+  .create-path-recommended { min-height: 156px; }
+  .create-path-recommended.is-compact { min-height: 88px; }
+  .create-path-recommended .start-option-icon { width: 46px; height: 46px; }
+  .create-path-recommended .start-option-icon svg { width: 21px; }
+  .create-path-recommended .start-option-copy strong { font-size: var(--text-2xl); }
+  .create-path-choice-head { grid-template-columns: 46px 1fr; }
+  .create-path-choice-quick .create-path-choice-icon { width: 46px; height: 46px; }
+  .create-path-choice-quick .create-path-choice-icon svg { width: 21px; }
+  .build-fork-quick { align-self: flex-start; min-width: 210px; }
+  .build-fork-weeks { align-items: flex-start; flex-direction: column; }
 }
 
 /* Phones + portrait tablets: the art becomes a clear band under the copy. A tall
@@ -1999,7 +2068,9 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .series-chip { color: var(--ink); }
 .cross-series-chip { background: #e9edeb; color: #46534d; box-shadow: none; }
 .division-series-chip { padding-left: 5px; background: color-mix(in srgb, var(--division-chip-color, var(--field)) 17%, white); color: var(--division-chip-ink, var(--field-dark)); box-shadow: none; }
-.division-series-chip .division-mark { margin-right: 1px; }
+.division-series-chip .division-mark, .conference-series-chip .division-mark { margin-right: 1px; }
+.division-series-chip .conference-mark { margin-right: -1px; }
+.conference-series-chip { padding-left: 5px; background: color-mix(in srgb, var(--conference-chip-color, var(--field)) 17%, white); color: var(--conference-chip-ink, var(--field-dark)); box-shadow: none; }
 .matchup-venue { min-width: 0; max-width: 260px; min-height: 28px; margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
 .matchup-venue > svg { width: 13px; flex: 0 0 auto; color: var(--field); }
 .matchup-venue > img { width: 22px; height: 22px; flex: 0 0 auto; object-fit: contain; background: transparent; }
@@ -3149,6 +3220,11 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .team-directory-division-group { display: flex; flex-direction: column; gap: 10px; }
 .team-directory-division-head { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 2px solid color-mix(in srgb, var(--line-strong), transparent 30%); }
 .team-directory-division-head > strong { font-size: var(--text-md); font-weight: var(--w-black); }
+/* Conference wrapper (4/6/8-division leagues): the two conferences head their division sections,
+   each becoming one half of the playoff bracket. */
+.team-directory-conference-group { display: flex; flex-direction: column; gap: 16px; }
+.team-directory-conference-head { display: flex; align-items: center; gap: 8px; }
+.team-directory-conference-group > .team-directory-division-group { padding-left: 14px; border-left: 2px solid color-mix(in srgb, var(--line-strong), transparent 55%); }
 .team-directory-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .team-directory-card { position: relative; min-width: 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--team-brand) 28%, var(--line)); border-left: 5px solid var(--team-brand); border-radius: var(--radius); background: white; padding: 14px 15px 12px; color: var(--ink); text-align: left; cursor: pointer; }
 .team-directory-card::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; background: var(--team-brand); }
@@ -4083,6 +4159,21 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .public-team strong { font-size: var(--text-xs); }
 .public-team small { color: var(--muted); font-size: var(--text-2xs); }
 .public-venue { color: var(--muted); font-size: var(--text-2xs); }
+/* Public share-page tabbed parity shell */
+.public-tabs { width: min(1120px, calc(100% - 32px)); margin: 16px auto 0; border-radius: var(--radius) var(--radius) 0 0; }
+.public-panel { width: min(1120px, calc(100% - 32px)); margin: 14px auto 42px; }
+.public-panel-stack { display: flex; flex-direction: column; gap: 18px; }
+.public-team-nav { width: min(1120px, calc(100% - 32px)); display: flex; justify-content: flex-start; margin: 14px auto 0; }
+.public-team-nav a { min-height: 44px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: white; color: var(--field-dark); padding: 0 12px; font-size: var(--text-2xs); font-weight: var(--w-black); text-decoration: none; }
+.public-team-nav svg { width: 16px; height: 16px; }
+.public-team-panel { margin-top: 12px; }
+.public-soon { border: 1px dashed var(--line-strong); border-radius: var(--radius); background: white; padding: 52px 24px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; }
+.public-soon-mark { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); color: var(--field); }
+.public-soon-mark svg { width: 27px; }
+.public-soon strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); }
+.public-soon p { max-width: 470px; color: var(--muted); font-size: var(--text-sm); line-height: 1.55; }
+.public-soon-chip { margin-top: 4px; padding: 5px 12px; border-radius: 999px; background: var(--surface); color: var(--field-dark); font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .04em; text-transform: uppercase; }
+.team-player-soon { padding: 32px 20px; }
 .public-subscribe { padding: 22px; }
 .public-subscribe > svg { width: 30px; height: 30px; border-radius: var(--radius-sm); background: var(--gold-soft); color: #806000; padding: 6px; }
 .public-subscribe h2 { margin: 14px 0 5px; font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-2xl); }
@@ -5694,21 +5785,38 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
    Branding) + a live bracket preview + per-round/per-game logos.
    ========================================================================== */
 .playoff-wizard { max-width: none; }
-.playoff-wizard-subnav { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
-.playoff-wizard-subnav button { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; cursor: pointer; padding: 10px 15px 13px; border-radius: var(--radius-sm) var(--radius-sm) 0 0; color: var(--muted); font-family: inherit; position: relative; }
-.playoff-wizard-subnav button:hover:not(.active) { color: var(--ink); }
-.playoff-wizard-subnav .ppw-n { flex: 0 0 auto; width: 23px; height: 23px; border-radius: 50%; display: grid; place-items: center; font-size: var(--text-2xs); font-weight: var(--w-black); background: var(--canvas); border: 1.5px solid var(--line-strong); color: var(--muted); }
-.playoff-wizard-subnav button.active { color: var(--ink); }
-.playoff-wizard-subnav button.active .ppw-n { background: var(--field); border-color: var(--field); color: #fff; }
-.playoff-wizard-subnav button.active::after { content: ""; position: absolute; left: 13px; right: 13px; bottom: -1px; height: 3px; border-radius: 3px; background: var(--field); }
-.playoff-wizard-subnav .ppw-lab { text-align: left; line-height: 1.18; }
-.playoff-wizard-subnav .ppw-lab strong { display: block; font-size: var(--text-sm); font-weight: var(--w-bold); }
-.playoff-wizard-subnav .ppw-lab small { color: var(--muted); font-size: var(--text-2xs); }
-.playoff-wizard-subnav button:focus-visible { outline: 2px solid var(--field); outline-offset: 2px; }
+.playoff-wizard-subnav, .wizard-subnav { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.playoff-wizard-subnav button, .wizard-subnav button { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; cursor: pointer; padding: 10px 15px 13px; border-radius: var(--radius-sm) var(--radius-sm) 0 0; color: var(--muted); font-family: inherit; position: relative; }
+.playoff-wizard-subnav button:hover:not(.active), .wizard-subnav button:hover:not(.active) { color: var(--ink); }
+.playoff-wizard-subnav .ppw-n, .wizard-subnav .ppw-n { flex: 0 0 auto; width: 23px; height: 23px; border-radius: 50%; display: grid; place-items: center; font-size: var(--text-2xs); font-weight: var(--w-black); background: var(--canvas); border: 1.5px solid var(--line-strong); color: var(--muted); }
+.playoff-wizard-subnav button.active, .wizard-subnav button.active { color: var(--ink); }
+.playoff-wizard-subnav button.active .ppw-n, .wizard-subnav button.active .ppw-n { background: var(--field); border-color: var(--field); color: #fff; }
+.playoff-wizard-subnav button.active::after, .wizard-subnav button.active::after { content: ""; position: absolute; left: 13px; right: 13px; bottom: -1px; height: 3px; border-radius: 3px; background: var(--field); }
+.playoff-wizard-subnav .ppw-lab, .wizard-subnav .ppw-lab { text-align: left; line-height: 1.18; }
+.playoff-wizard-subnav .ppw-lab strong, .wizard-subnav .ppw-lab strong { display: block; font-size: var(--text-sm); font-weight: var(--w-bold); }
+.playoff-wizard-subnav .ppw-lab small, .wizard-subnav .ppw-lab small { color: var(--muted); font-size: var(--text-2xs); }
+.playoff-wizard-subnav button:focus-visible, .wizard-subnav button:focus-visible { outline: 2px solid var(--field); outline-offset: 2px; }
+
+/* Grouped wizard step: sub-tab bar above the active sub-panel (Teams & Divisions, Season & Rules). */
+.wizard-group-step { display: flex; flex-direction: column; gap: 22px; }
+/* On narrow screens the 4-tab Season & Rules row scrolls sideways rather than wrapping into a tall stack. */
+@media (max-width: 560px) {
+  .wizard-subnav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .wizard-subnav::-webkit-scrollbar { display: none; }
+  .wizard-subnav button { flex: 0 0 auto; }
+}
 
 .playoff-wizard-layout { display: grid; gap: 18px; }
 .playoff-wizard-form { display: grid; gap: 20px; min-width: 0; }
 .ppw-group { display: grid; gap: 9px; min-width: 0; }
+/* Recommended-playoffs callout on the Format sub-tab. */
+.ppw-reco { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 13px; border-radius: var(--radius); border: 1px solid color-mix(in srgb, var(--field) 40%, var(--line)); background: color-mix(in srgb, var(--field) 8%, var(--surface)); }
+.ppw-reco.is-set { border-color: var(--line); background: var(--surface); }
+.ppw-reco-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ppw-reco-copy strong { font-size: var(--text-sm); font-weight: var(--w-bold); }
+.ppw-reco-copy small { font-size: var(--text-2xs); color: var(--muted); }
+.ppw-reco-apply { flex: 0 0 auto; padding: 6px 12px; }
+.ppw-reco.is-set > svg { flex: 0 0 auto; color: var(--field); width: 18px; height: 18px; }
 
 /* presets */
 .ppw-presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -5738,8 +5846,22 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 
 /* live preview (dark broadcast island — sits full-width below the form) */
 .playoff-wizard-preview { background: var(--pk); border-radius: var(--radius); padding: 16px 18px 18px; color: #eaf1ee; min-width: 0; }
-.ppw-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 3px; }
+.ppw-preview-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px 16px; margin-bottom: 3px; flex-wrap: wrap; }
 .ppw-preview-eyebrow { font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .12em; text-transform: uppercase; color: #7fe3ac; }
+/* Bracket legend — decodes the preview swatches (conference / division / wild card), top-right of the head. */
+.ppw-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; justify-content: flex-end; max-width: 64%; }
+.ppw-legend-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding-left: 9px; border-left: 1px solid var(--pk-line); }
+.ppw-legend-item { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.ppw-legend-item .ppw-slogo { width: 15px; height: 15px; min-width: 15px; }
+/* Let the color chip grow to fit 2–3 char initials so the lettering stays centered (a fixed
+   15px square cramped "NOR"/"SOU"); the base .ppw-dchip already centers via place-items. */
+.ppw-legend-item .ppw-dchip { height: 15px; min-width: 15px; padding: 0 4px; line-height: 1; }
+.ppw-legend-kind { font-style: normal; font-weight: var(--w-medium); color: var(--pk-mut); }
+.ppw-legend-item .ppw-legend-glyph { width: 14px; height: 14px; min-width: 14px; color: var(--pk-ink); }
+.ppw-legend-name { font-size: var(--text-2xs); font-weight: var(--w-bold); color: var(--pk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+.ppw-legend-item.is-conf .ppw-legend-name { font-weight: var(--w-black); letter-spacing: .01em; }
+.ppw-legend-item.is-wild .ppw-legend-name { color: var(--pk-mut); }
+@media (max-width: 880px) { .ppw-legend { max-width: 100%; justify-content: flex-start; } }
 .ppw-preview-live { font-size: 10px; font-weight: var(--w-black); letter-spacing: .07em; text-transform: uppercase; color: #7fe3ac; background: rgba(63,191,127,.16); padding: 3px 9px; border-radius: var(--radius-pill); display: inline-flex; align-items: center; gap: 6px; }
 .ppw-preview-live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #3fbf7f; animation: bracket-live-pulse 1.8s ease-out infinite; }
 @media (prefers-reduced-motion: reduce) { .ppw-preview-live::before { animation: none; } }
@@ -5802,6 +5924,8 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .ppw-slot { display: flex; align-items: center; gap: 7px; padding: 6px 8px; min-width: 0; font-size: var(--text-2xs); background: color-mix(in srgb, var(--slot-c, #586761) 28%, transparent); }
 .ppw-match .ppw-slot + .ppw-slot { border-top: 1px solid var(--pk-line); }
 .ppw-slot .ppw-name { color: inherit; font-weight: var(--w-bold); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* Reserved-for-division-leader marker (auto-bid, hosts) — inherits the slot/side accent color. */
+.ppw-slot-leader { flex: 0 0 auto; width: 12px; height: 12px; margin-left: auto; opacity: .95; }
 .ppw-slogo { flex: 0 0 auto; width: 17px; height: 17px; border-radius: 4px; object-fit: contain; background: rgba(255,255,255,.92); padding: 1px; }
 .ppw-match.ppw-gold { border-left-color: var(--gold); }
 .ppw-preview-toggle { display: inline-flex; gap: 2px; padding: 2px; margin: 9px 0 3px; border-radius: var(--radius-sm); background: rgba(255,255,255,.06); }
@@ -5936,6 +6060,10 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .ppw-chart-row.range .ppw-chart-place { color: var(--pk-mut, #94a49c); }
 .ppw-chart-teams { min-width: 0; color: var(--pk-mut, #94a49c); font-size: var(--text-xs); line-height: 1.4; overflow: hidden; text-overflow: ellipsis; }
 .ppw-chart-row.exact .ppw-chart-teams { color: #dfe7e3; }
+/* Tier separators in the placement chart: championship | consolation | eliminated. */
+.ppw-chart-sep { display: flex; align-items: center; gap: 8px; padding: 8px 2px 4px; }
+.ppw-chart-sep::before, .ppw-chart-sep::after { content: ""; flex: 1; height: 1px; background: var(--pk-line, #33403a); }
+.ppw-chart-sep span { flex: 0 0 auto; font-size: 9px; font-weight: var(--w-black); letter-spacing: .09em; text-transform: uppercase; color: var(--pk-mut, #94a49c); }
 
 /* conference assignment section in the Divisions step */
 .conference-stage { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; padding-top: 18px; border-top: 1px solid rgba(0,0,0,.08); }

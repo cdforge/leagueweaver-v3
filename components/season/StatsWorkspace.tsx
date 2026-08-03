@@ -34,6 +34,7 @@ import { Modal, ConfirmDialog } from "@/components/ui/Modal";
 import { ClinchBadges } from "@/components/season/ClinchBadges";
 import { GameBadgeChip } from "@/components/season/MatchupPresentation";
 import { ConferenceMark, DivisionIdentity } from "@/components/ui/DivisionIdentity";
+import { useRouteBase } from "@/components/season/routeBase";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { buildAllStars } from "@/lib/allStars";
 import { getTeamClinchTimelines, type TeamClinchTimeline } from "@/lib/clinch";
@@ -205,13 +206,14 @@ function GameHighlight({ schedule, analytics, rank, round, roundLogoUrl, deepLin
 }
 
 function GameHighlightPanel({ title, schedule, items, metric, direction, playoff = false }: { title: string; schedule: GeneratedSchedule; items: GameAnalytics[]; metric: "qualityScore" | "margin" | "total"; direction: "asc" | "desc"; playoff?: boolean }) {
+  const routeBase = useRouteBase(`/season/${schedule.id}`);
   const ranked = categoryRanks(items, metric, direction);
   return <article className="game-leader-panel"><header><Trophy /><strong>{title}</strong></header>{ranked.length ? <div>{ranked.map(({ item, rank }) => {
     const game = item.game as PlayoffGame;
     const query = new URLSearchParams(playoff ? { view: "playoffs" } : { view: "league-schedule", week: String(game.week) });
     query.set("medal", String(rank));
     query.set("medalCategory", title);
-    const deepLink = `/season/${schedule.id}?${query.toString()}#${game.id}`;
+    const deepLink = `${routeBase}?${query.toString()}#${game.id}`;
     return <GameHighlight schedule={schedule} analytics={item} rank={rank} round={playoff ? game.round : undefined} roundLogoUrl={playoff ? game.logoUrl || game.roundLogoUrl : undefined} deepLink={deepLink} key={item.game.id} />;
   })}</div> : <div className="leader-empty">No completed results yet</div>}</article>;
 }
@@ -593,6 +595,7 @@ function inferLineupTemplate(schedule: GeneratedSchedule, rows: GameDetailPlayer
 }
 
 export function StatsWorkspace({ schedule, playerStats = [], onUpdateTiebreakers, readOnly = false }: { schedule: GeneratedSchedule; playerStats?: GameDetailPlayerStat[]; onUpdateTiebreakers?: (settings: TiebreakerSettings) => void; readOnly?: boolean }) {
+  const routeBase = useRouteBase(`/season/${schedule.id}`);
   const [tab, setTab] = useState<StatsTab>("standings");
   const statsTabRefs = useRef<(HTMLButtonElement | null)[]>([]); // H8 — roving tabindex focus targets
   const [leagueLeaderView, setLeagueLeaderView] = useState<LeagueLeaderView>("overall");
@@ -716,7 +719,7 @@ export function StatsWorkspace({ schedule, playerStats = [], onUpdateTiebreakers
     scoring: <GameHighlightPanel title="Highest-scoring games" schedule={schedule} items={regularGames} metric="total" direction="desc" />,
     divisional: <GameHighlightPanel title="Best divisional showdowns" schedule={schedule} items={regularGames.filter((item) => item.game.matchupType === "division")} metric="qualityScore" direction="asc" />,
   } satisfies Record<LeagueLeaderView, React.ReactNode>;
-  const teamHrefBase = `/season/${schedule.id}/team`;
+  const teamHrefBase = `${routeBase}/team`;
 
   return <div className="stats-workspace">
     <div className="stats-tabs" role="tablist" aria-label="Standings and statistics">{tabs.map((item, index) => <button

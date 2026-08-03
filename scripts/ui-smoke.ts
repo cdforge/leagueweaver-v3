@@ -105,16 +105,17 @@ async function screenshotBuilderSetup(browser: Browser, name: string, setup: Lea
     pageErrors.push(error.message);
   });
 
-  await page.addInitScript((draftSetup) => {
+  await page.addInitScript(() => {
     window.localStorage.setItem("leagueweaver:v3:welcomed", "1");
-    window.localStorage.setItem("leagueweaver:v3:setup", JSON.stringify(draftSetup));
-  }, setup);
+  });
 
   const response = await page.goto(`${baseUrl}/build`, { waitUntil: "networkidle" });
   assert.ok(response, `${name}: builder returned a response`);
   assert.ok(response.status() >= 200 && response.status() < 400, `${name}: builder route is reachable`);
   await page.getByRole("button", { name: /start manually/i }).click();
+  await page.locator(".field-grid input").first().fill(setup.name || "UI Smoke League");
   await page.getByRole("button", { name: /^continue$/i }).click();
+  await page.getByRole("heading", { name: "Add every team." }).waitFor();
   await page.getByRole("button", { name: /^continue$/i }).click();
   await page.getByRole("heading", { name: "Build the divisions." }).waitFor();
   await page.screenshot({ path: path.join(screenshotDir, `ui-smoke-${name}.png`), fullPage: true });

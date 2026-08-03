@@ -75,7 +75,7 @@ import { apiErrorMessage } from "@/lib/apiErrors";
 import { downloadCsv } from "@/lib/csv";
 import { accessibleAccentColor, readableTextColor } from "@/lib/colorContrast";
 import { DivisionMark } from "@/components/ui/DivisionIdentity";
-import { isDivisionHalvesConsolationUsable, projectConsolationBracket } from "@/lib/consolation";
+import { isDivisionHalvesConsolationUsable, projectConsolationBracket, projectPlacementChart } from "@/lib/consolation";
 import { conferenceOfDivision, hasConferences } from "@/lib/conferences";
 import { downloadSchedulePdf } from "@/lib/pdf";
 import { getMatchupRatingRange, getMatchupSignal, matchupRating, sortGamesForDisplay, toMatchupScore10, weekSlateScore10 } from "@/lib/matchups";
@@ -511,7 +511,7 @@ function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores, onOpenGame }
     };
     return <MatchupCard
       game={game} away={away} home={home}
-      awayDivision={divisionById.get(away.divisionId)} homeDivision={divisionById.get(home.divisionId)}
+      awayDivision={divisionById.get(away.divisionId)} homeDivision={divisionById.get(home.divisionId)} setup={schedule.setup}
       awayRank={awaySeed} homeRank={homeSeed}
       awayRecord={recordFor(awayTeamId)} homeRecord={recordFor(homeTeamId)}
       featured={false} gameLabel={gameLabel} showCity={showCity} showVenue projected={projected}
@@ -705,6 +705,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
       home,
       awayDivision: divisionById.get(away.divisionId),
       homeDivision: divisionById.get(home.divisionId),
+      setup: schedule.setup,
       awayRank: standingsByTeam.get(away.id)?.rank ?? away.overallRank,
       homeRank: standingsByTeam.get(home.id)?.rank ?? home.overallRank,
       awayRecord: recordFor(away.id),
@@ -879,7 +880,7 @@ function MatchupRatingsView({ schedule, teamHrefFor, leagueWeekHrefFor }: { sche
             <td><TeamIdentityBlock compact showRecord={false} team={away} division={divisionById.get(away.divisionId)} leagueRank={rowRanks.get(away.id) ?? away.overallRank} record={{ overall: "0-0" }} showCity={schedule.setup.display.cityNames} href={teamHrefFor ? teamHrefFor(away.id) : `/season/${schedule.id}/team/${away.id}`} /></td>
             <td>{played ? <span className="matchup-table-result" aria-label={`Final score: ${away.name} ${game.awayScore}, ${home.name} ${game.homeScore}`}><span><strong className={awayWon ? "winner" : homeWon ? "loser" : ""}>{formatPoints(game.awayScore!)}</strong><b aria-label="at">@</b><strong className={homeWon ? "winner" : awayWon ? "loser" : ""}>{formatPoints(game.homeScore!)}</strong></span><small>FINAL</small></span> : <span className="matchup-table-result pending">—<small>NOT PLAYED</small></span>}</td>
             <td><TeamIdentityBlock mirrored compact showRecord={false} team={home} division={divisionById.get(home.divisionId)} leagueRank={rowRanks.get(home.id) ?? home.overallRank} record={{ overall: "0-0" }} showCity={schedule.setup.display.cityNames} href={teamHrefFor ? teamHrefFor(home.id) : `/season/${schedule.id}/team/${home.id}`} /></td>
-            <td><MatchupSeriesChip game={game} division={divisionById.get(home.divisionId)} /></td>
+            <td><MatchupSeriesChip game={game} awayDivision={divisionById.get(away.divisionId)} homeDivision={divisionById.get(home.divisionId)} setup={schedule.setup} /></td>
             <td><span className="table-rating-cell"><span className={`table-signal signal-${signal.label.toLowerCase()}`} aria-label={`${signal.label} matchup, rated ${signal.score10.toFixed(1)} out of 10`}>{[1, 2, 3].map((bar) => <i className={bar <= signal.bars ? "active" : ""} key={bar} />)}<strong>{signal.score10.toFixed(1)}</strong></span><small className="table-rating-ranks">W{game.week} ranks · #{rowRanks.get(away.id) ?? away.overallRank} vs #{rowRanks.get(home.id) ?? home.overallRank}</small></span></td>
           </tr>;
         })}</tbody>
@@ -890,7 +891,7 @@ function MatchupRatingsView({ schedule, teamHrefFor, leagueWeekHrefFor }: { sche
       const home = teamById.get(game.homeTeamId)!;
       const rowRanks = ranksForGame(game);
       return <MatchupCard key={game.id} game={game} away={away} home={home}
-        awayDivision={divisionById.get(away.divisionId)} homeDivision={divisionById.get(home.divisionId)}
+        awayDivision={divisionById.get(away.divisionId)} homeDivision={divisionById.get(home.divisionId)} setup={schedule.setup}
         awayRank={rowRanks.get(away.id) ?? away.overallRank} homeRank={rowRanks.get(home.id) ?? home.overallRank}
         awayRecord={{ overall: weeklyRecords.get(game.week)?.get(away.id) ?? "0-0" }} homeRecord={{ overall: weeklyRecords.get(game.week)?.get(home.id) ?? "0-0" }}
         signal={getMatchupSignal(game, lens === "live" ? rowRanks : undefined, ratingRange, teamCount)}
@@ -1218,6 +1219,7 @@ function PlayoffsView({
     round.games.map((game) => ({ ...game, roundName: round.name }))) ?? [];
   const projectedMainRounds = projectPlayoffRounds(normalizedSchedule);
   const consolationProjection = projectConsolationBracket(normalizedSchedule);
+  const placementChart = projectPlacementChart(normalizedSchedule);
   const mainConnections: BracketConnection[] = projectedMainRounds.slice(0, -1).flatMap((round) => {
     const nextRound = projectedMainRounds[round.roundIndex + 1];
     if (!nextRound) return [];
@@ -1410,6 +1412,54 @@ function PlayoffsView({
       </>}
     </div>
   );
+  const WizardSeedSlot = ({ number }: { number: number }) => {
+    const item = seed(number);
+    const team = item ? teamById.get(item.teamId) : undefined;
+    const division = item ? divisionById.get(item.divisionId) : undefined;
+    const slotColor = team?.color || division?.color || settings.color;
+    return <span className="ppw-slot" style={{ "--slot-c": slotColor, color: readableTextColor(slotColor) } as React.CSSProperties}>
+      <b className="ppw-seed">{number}</b>
+      {team?.logoUrl && <img className="ppw-slogo" src={team.logoUrl} alt="" />}
+      <span className="ppw-name">{team ? teamDisplayName(team, showCity) : `Seed ${number}`}</span>
+    </span>;
+  };
+  const wizardPreviewTitle = boardSection === "placement"
+    ? "Where everyone finishes"
+    : boardSection === "consolation"
+      ? "Placement bracket"
+      : "Road to the title";
+  const wizardPreviewSub = boardSection === "placement"
+    ? `Projected final order · ${schedule.setup.teams.length} teams`
+    : boardSection === "consolation"
+      ? `${Math.max(0, schedule.setup.teams.length - fieldSize)} teams outside the title hunt`
+      : `${fieldSize} teams · ${placement === "division-halves" ? (hasConferences(schedule.setup) ? "conference halves" : "division halves") : placement === "overall" ? "overall seeds" : "auto seeding"} · ${byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"}` : "no byes"}`;
+  const wizardPreviewConnections: BracketConnection[] = boardSection === "championship"
+    ? mainConnections
+    : boardSection === "consolation"
+      ? consolationInternalConnections
+      : [];
+  const wizardPreviewBracket = boardSection === "consolation" && consolationProjection
+    ? consolationProjection.rounds.map((round) => ({
+      name: round.name,
+      games: round.games.map((game) => ({
+        id: game.id,
+        entrants: game.entrants.map((entrant, index) => ({
+          seed: index + 1,
+          label: entrant.label,
+          color: settings.color,
+        })),
+      })),
+    }))
+    : projectedMainRounds.map((round) => ({
+      name: rounds[round.roundIndex] || `Round ${round.roundIndex + 1}`,
+      games: orderedRoundMatchups(round).map(({ matchup, gameIndex }) => ({
+        id: `main-r${round.roundIndex + 1}-g${gameIndex + 1}`,
+        entrants: [
+          { seed: matchup.homeSeed, label: "", color: seed(matchup.homeSeed)?.teamId ? teamById.get(seed(matchup.homeSeed)!.teamId)?.color : undefined },
+          { seed: matchup.awaySeed, label: "", color: seed(matchup.awaySeed)?.teamId ? teamById.get(seed(matchup.awaySeed)!.teamId)?.color : undefined },
+        ],
+      })),
+    }));
   return <div className="workspace-stack playoff-workspace" style={{ "--playoff-color": settings.color } as React.CSSProperties}>
     {mode === "settings" ? (<>
     <div className={`playoff-topline playoff-theme-${settings.theme}`}><div>{settings.logoUrl && <EntityLogo color={settings.color} logoUrl={settings.logoUrl} monogram="PO" imagePresentation="bare" />}<span><strong>{settings.name}</strong><small>{fieldSize} teams · {formatLabel} · Higher seed hosts before title · {championshipVenueCopy}</small></span></div><div className="playoff-field-actions">{simulationMode ? <span className="projected-pill simulation"><Gamepad2 />SIMULATED BRACKET</span> : <><span className={`projected-pill ${settings.fieldStatus === "locked" ? "locked" : ""}`}>{settings.fieldStatus === "locked" ? "FIELD LOCKED" : "LIVE PROJECTION"}</span><button type="button" onClick={lockField}><LockKeyhole />{settings.fieldStatus === "locked" ? "Unlock field" : "Lock field"}</button></>}</div></div>
@@ -1422,6 +1472,37 @@ function PlayoffsView({
         return <section key={`${roundIndex}-branding`}><header><strong>{round || `Round ${roundIndex + 1}`}</strong><small>NFL Week {schedule.setup.weeks + roundIndex + 1}</small></header><div>{mainSlots.map((slot) => { const fallback = mainGameBrandingLabel(slot); const label = gameDisplayName(slot.id, fallback); return <div key={slot.id}><label><span>Championship bracket</span><input aria-label={`${fallback} name`} defaultValue={label} maxLength={60} onBlur={(event) => updateGameName(slot.id, event.target.value)} /></label><IdentityColorPicker compact showColorControl={false} showAbbreviation={false} imagePresentation="bare" name={label} abbreviation={`G${slot.gameIndex + 1}`} color={settings.color} logoUrl={settings.gameLogoUrls?.[slot.id]} onChange={(next) => updateGameLogo(slot.id, next.logoUrl)} /></div>; })}{placementSlots.map((game) => { const label = gameDisplayName(game.id, game.label); return <div key={game.id}><label><span>Placement bracket</span><input aria-label={`${game.label} name`} defaultValue={label} maxLength={60} onBlur={(event) => updateGameName(game.id, event.target.value)} /></label><IdentityColorPicker compact showColorControl={false} showAbbreviation={false} imagePresentation="bare" name={label} abbreviation="CG" color={settings.color} logoUrl={settings.gameLogoUrls?.[game.id]} onChange={(next) => updateGameLogo(game.id, next.logoUrl)} /></div>; })}</div></section>;
       })}</div></section>
     </div>}</>}
+    <aside className="playoff-wizard-preview playoff-settings-wizard-preview" aria-label="Live playoff preview">
+      <div className="ppw-preview-head"><span className="ppw-preview-eyebrow">Live preview</span><span className="ppw-preview-live">{bracketModeChip}</span></div>
+      {(hasConsolation || placementChart.length > 0) && <div className="ppw-preview-toggle" role="tablist" aria-label="Preview view">
+        <button type="button" role="tab" aria-selected={boardSection === "championship"} className={boardSection === "championship" ? "active" : ""} onClick={() => setBoardSection("championship")}>Championship</button>
+        {hasConsolation && <button type="button" role="tab" aria-selected={boardSection === "consolation"} className={boardSection === "consolation" ? "active" : ""} onClick={() => setBoardSection("consolation")}>Consolation</button>}
+        {placementChart.length > 0 && <button type="button" role="tab" aria-selected={boardSection === "placement"} className={boardSection === "placement" ? "active" : ""} onClick={() => setBoardSection("placement")}>Placement chart</button>}
+      </div>}
+      <strong className="ppw-preview-title">{wizardPreviewTitle}</strong>
+      <small className="ppw-preview-sub">{wizardPreviewSub}</small>
+      {boardSection === "placement"
+        ? <ol className="ppw-chart">{placementChart.map((slot) => <li key={slot.placeStart} className={`ppw-chart-row ${slot.exact ? "exact" : "range"}`}>
+          <span className="ppw-chart-place">{slot.label}</span>
+          <span className="ppw-chart-teams">{slot.source}</span>
+        </li>)}</ol>
+        : <BracketConnectorLayer className="ppw-bracket" connections={wizardPreviewConnections}>
+          {wizardPreviewBracket.map((round, roundIndex) => <section className={`ppw-col ${roundIndex === wizardPreviewBracket.length - 1 ? "ppw-final" : ""}`} key={`${boardSection}-${round.name}-${roundIndex}`}>
+            <span className="ppw-rh">{round.name}</span>
+            {round.games.map((game, gameIndex) => <article className="ppw-match" data-bracket-game-id={game.id} key={game.id} style={{ "--ppw-accent": game.entrants[0]?.color || settings.color } as React.CSSProperties}>
+              <span className="ppw-gameno">{round.games.length > 1 ? `Game ${gameIndex + 1}` : "Matchup"}</span>
+              {game.entrants.map((entrant) => entrant.label
+                ? <span className="ppw-slot" key={`${game.id}-${entrant.label}`} style={{ "--slot-c": entrant.color || settings.color, color: readableTextColor(entrant.color || settings.color) } as React.CSSProperties}><b className="ppw-seed">{entrant.seed}</b><span className="ppw-name">{entrant.label}</span></span>
+                : <WizardSeedSlot key={`${game.id}-${entrant.seed}`} number={entrant.seed} />)}
+            </article>)}
+          </section>)}
+        </BracketConnectorLayer>}
+      <div className="ppw-facts">
+        <span className="ppw-fact"><b>{settings.championshipVenueMode === "neutral-site" ? "Neutral site" : "Higher seed hosts"}</b></span>
+        <span className="ppw-fact"><b>{settings.reseedMode === "each-round" ? "Reseed each round" : settings.reseedMode === "protected" ? "Protected reseed" : "Fixed bracket"}</b></span>
+        {byeCount > 0 && <span className="ppw-fact"><b>{byeCount} bye{byeCount === 1 ? "" : "s"}</b></span>}
+      </div>
+    </aside>
     </>) : (<>
     <div className="playoff-view-tabs" role="tablist" aria-label="Playoffs view">
       <button type="button" role="tab" aria-selected={playoffTab !== "picture"} className={playoffTab !== "picture" ? "active" : ""} onClick={() => onChangePlayoffTab?.("board")}><Trophy />Bracket</button>
@@ -1564,7 +1645,7 @@ function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, onUpdatePlay
   importHistoryError: string | null;
   onRefreshImportHistory: () => void;
 }) {
-  const seeding = schedule.setup.priorSeason.entryMode === "manual" ? "Manual order" : schedule.setup.priorSeason.entryMode === "history" ? schedule.setup.priorSeason.source === "playoffs" ? "Last year’s playoff finish" : "Last year’s regular-season finish" : "Not used";
+  const seeding = schedule.setup.priorSeason.entryMode === "manual" ? "Manual order" : schedule.setup.priorSeason.entryMode === "random" ? "Randomized order" : schedule.setup.priorSeason.entryMode === "history" ? schedule.setup.priorSeason.source === "playoffs" ? "Last year’s playoff finish" : "Last year’s regular-season finish" : "Not used";
   const draftRankingPending = schedule.setup.weekOne.rankingSource === "draft-day" && getTeamsMissingDraftPlaces(schedule.setup).length > 0;
   return <div className="workspace-stack">
     <div className="settings-band"><div><Pencil /><span><strong>Schedule setup</strong><small>Changing league structure regenerates the complete matchup slate as a new revision.</small></span></div><button type="button" className="button-secondary" onClick={onRegenerate}><Pencil />Edit and regenerate</button></div>
@@ -2543,6 +2624,7 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
   const selectView = (item: typeof VIEW_ITEMS[number]) => {
     setScoreModalOpen(false);
     if (!HISTORY_COMPATIBLE_VIEWS.has(item.key)) setHistorySeasonKey("current");
+    if (item.key === "league-schedule" && selectedWeek > schedule.weeks.length) setSelectedWeek(1);
     setView(item.key);
     if (HISTORY_COMPATIBLE_VIEWS.has(item.key)) router.push(historyViewHref(item.key));
     else if (item.key === "team-schedule") {

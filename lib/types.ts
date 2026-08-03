@@ -57,6 +57,10 @@ export interface Team {
   conferenceId?: string;
   overallRank: number;
   draftPlace?: number;
+  /** Last season's regular-season finish (1 = best), when imported from a connected league. */
+  priorRegularSeasonRank?: number;
+  /** Last season's playoff finish (1 = champion), when imported from a connected league. */
+  priorPlayoffRank?: number;
   stadium: string;
 }
 
@@ -105,7 +109,7 @@ export interface LeagueSetupInput {
   priorSeason: {
     enabled: boolean;
     hasData: boolean;
-    entryMode: "none" | "manual" | "history";
+    entryMode: "none" | "manual" | "history" | "random";
     source: PlacementSource;
   };
   weekOne: {
@@ -281,11 +285,28 @@ export interface ImportTeam {
   manager?: string;
   division?: string;
   rank?: number;
+  /** Last season's regular-season finish (1 = best), from connected-league history. */
+  regularSeasonRank?: number;
+  /** Last season's playoff finish (1 = champion), from connected-league history. */
+  playoffRank?: number;
+  /** True when this manager had no match in last season — seeded last by house rule. */
+  isNewManager?: boolean;
   color?: string;
   colorSuggestions?: string[];
   logoUrl?: string;
   stadium?: string;
   scores?: Array<{ week: number; value: number }>;
+}
+
+export interface PriorSeasonFinishEntry {
+  /** Stable manager/owner identity — the primary key for matching across seasons. */
+  ownerId?: string;
+  /** Provider team/roster id, used as a fallback match when owner ids are absent. */
+  providerTeamId?: string;
+  /** Regular-season finish (1 = best record). */
+  regularSeasonRank?: number;
+  /** Playoff finish (1 = champion); absent when the team missed the bracket. */
+  playoffRank?: number;
 }
 
 export interface ImportDataFound {
