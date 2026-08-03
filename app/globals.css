@@ -6494,9 +6494,19 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .ppw-preview-toggle button { border: 0; background: transparent; color: var(--pk-mut); font-family: inherit; font-weight: var(--w-bold); font-size: var(--text-2xs); padding: 5px 13px; border-radius: var(--radius-chip); cursor: pointer; }
 .ppw-preview-toggle button.active { background: var(--field); color: #fff; }
 .ppw-preview-toggle button:focus-visible { outline: 2px solid var(--field-mid); outline-offset: 1px; }
+.ppw-preview-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-top: 5px; }
+.ppw-preview-title-row > span { min-width: 0; }
+.ppw-expand-preview { flex: 0 0 auto; width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--pk-line); border-radius: var(--radius-sm); background: rgba(255,255,255,.04); color: var(--pk-ink); cursor: pointer; }
+.ppw-expand-preview:hover { background: rgba(255,255,255,.08); color: #fff; }
+.ppw-expand-preview svg { width: 16px; height: 16px; }
 
 /* preview: per-match game number title */
-.ppw-gameno { display: block; padding: 3px 8px 1px; font-size: 8.5px; font-weight: var(--w-black); letter-spacing: .08em; text-transform: uppercase; color: var(--pk-mut); }
+.ppw-gameno { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 3px 8px 1px; font-size: 8.5px; font-weight: var(--w-black); letter-spacing: .08em; text-transform: uppercase; color: var(--pk-mut); }
+.ppw-bracket-chip, .ppw-place-chip { display: inline-flex; align-items: center; justify-content: center; min-height: 16px; border-radius: 4px; padding: 1px 5px; font-style: normal; font-size: 8px; font-weight: var(--w-black); letter-spacing: .05em; white-space: nowrap; }
+.ppw-bracket-chip-champ { background: rgba(227,185,64,.18); color: var(--gold); }
+.ppw-bracket-chip-conso { background: rgba(63,191,127,.18); color: #7fe3ac; }
+.ppw-place-chip { margin-left: auto; border: 1px solid rgba(227,185,64,.55); background: rgba(227,185,64,.10); color: var(--gold); }
+.ppw-place-chip.is-final { background: rgba(227,185,64,.18); border-color: var(--gold); color: var(--gold); }
 
 /* "Recommended" chip on a preset */
 .ppw-rec { display: inline-block; margin-left: 6px; font-size: 9px; font-weight: var(--w-black); letter-spacing: .04em; text-transform: uppercase; font-style: normal; color: var(--field); background: var(--field-soft); padding: 1px 6px; border-radius: var(--radius-pill); vertical-align: 1px; }
@@ -6505,6 +6515,31 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .ppw-col { justify-content: flex-start; }
 .ppw-col .ppw-rh { flex: 0 0 auto; margin-bottom: 8px; }
 .ppw-col-games { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: space-around; gap: 12px; min-height: 0; }
+.ppw-bracket-scroll { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 2px 0 10px; }
+.bracket-connector-layer.ppw-bracket { position: relative; isolation: isolate; align-items: stretch; width: max-content; min-width: 100%; overflow: visible; padding: 4px 2px 28px; }
+.ppw-col { flex: 0 0 var(--ppw-col-w, 188px); min-width: var(--ppw-col-w, 188px); }
+.ppw-match-wrap { position: relative; z-index: 2; }
+.ppw-match { width: 100%; box-shadow: 0 0 0 1px rgba(0,0,0,.02); }
+.ppw-feed-node, .ppw-cutoff-node { position: relative; z-index: 2; min-height: 54px; width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 10px; border-radius: var(--radius-sm); padding: 10px 12px; overflow: hidden; text-align: center; }
+.ppw-feed-node span, .ppw-cutoff-node span { min-width: 0; font-size: 9px; font-weight: var(--w-black); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ppw-feed-node small, .ppw-cutoff-node small { grid-column: 1 / -1; margin-top: 5px; color: #dfe7e3; font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .08em; text-transform: uppercase; }
+.ppw-feed-node svg { width: 15px; height: 15px; opacity: .85; }
+.ppw-consolation-feed { border: 1px solid rgba(63,191,127,.55); background: linear-gradient(180deg, rgba(17,122,69,.28), rgba(17,122,69,.15)); color: #7fe3ac; }
+.ppw-champ-feed { border: 1px solid rgba(227,185,64,.62); background: linear-gradient(180deg, rgba(227,185,64,.22), rgba(227,185,64,.11)); color: var(--gold); }
+.ppw-cutoff-node { grid-template-columns: 1fr; border: 1px dashed rgba(255,255,255,.16); background: rgba(255,255,255,.025); color: var(--pk-mut); }
+.ppw-championship-bracket, .ppw-consolation-bracket, .ppw-full-bracket { min-height: 455px; }
+.ppw-championship-bracket .ppw-col-games { min-height: 385px; justify-content: flex-start; }
+.ppw-championship-bracket .ppw-feed-node { margin-top: auto; }
+.ppw-consolation-bracket .ppw-col-games, .ppw-full-bracket .ppw-col-games { display: grid; grid-auto-rows: 74px; align-items: center; align-content: start; gap: 12px; min-height: 0; }
+.ppw-full-bracket .ppw-col-games { grid-auto-rows: 82px; }
+.ppw-conso-section-divider, .ppw-elim-section-divider { position: absolute; left: 0; right: 0; display: flex; align-items: center; gap: 10px; z-index: 1; pointer-events: none; color: #7fe3ac; }
+.ppw-conso-section-divider { top: var(--ppw-full-divider-top, calc(100% - 102px)); }
+.ppw-consolation-bracket .ppw-conso-section-divider { top: 70px; }
+.ppw-elim-section-divider { top: var(--ppw-elim-divider-top, calc(100% - 48px)); color: var(--pk-mut); }
+.ppw-conso-section-divider::after, .ppw-elim-section-divider::after { content: ""; flex: 1; min-width: 36px; border-top: 1px dashed currentColor; opacity: .45; }
+.ppw-conso-section-divider span, .ppw-elim-section-divider span { flex: 0 0 auto; max-width: 220px; padding: 2px 8px; border: 1px solid color-mix(in srgb, currentColor 50%, transparent); border-radius: 4px; background: var(--pk); font-size: 8.5px; font-weight: var(--w-black); letter-spacing: .09em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ppw-elim-section-divider span { border-style: dashed; }
+.ppw-full-bracket .ppw-col-games { padding-top: 0; }
 
 /* ===================================================================
    "Stakes" — current-week clinch/elimination scenario panel.
@@ -6626,6 +6661,25 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .ppw-chart-sep { display: flex; align-items: center; gap: 8px; padding: 8px 2px 4px; }
 .ppw-chart-sep::before, .ppw-chart-sep::after { content: ""; flex: 1; height: 1px; background: var(--pk-line, #33403a); }
 .ppw-chart-sep span { flex: 0 0 auto; font-size: 9px; font-weight: var(--w-black); letter-spacing: .09em; text-transform: uppercase; color: var(--pk-mut, #94a49c); }
+.ppw-draft .ppw-chart-row { grid-template-columns: 140px minmax(180px, .72fr) minmax(260px, 1fr); align-items: center; gap: 16px; min-height: 42px; }
+.ppw-draft .ppw-chart-teams strong { color: #eaf1ee; font-weight: var(--w-black); }
+.ppw-chart-note { min-width: 0; color: var(--pk-mut, #94a49c); font-size: var(--text-xs); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; }
+.bracket-expand-modal { width: min(1180px, calc(100vw - 28px)); max-height: min(860px, calc(100vh - 28px)); display: flex; flex-direction: column; background: var(--pk); color: #eaf1ee; }
+.bracket-expand-modal > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 20px 12px; border-bottom: 1px solid var(--pk-line); }
+.bracket-expand-modal > header small { display: block; color: #7fe3ac; font-size: var(--text-2xs); font-weight: var(--w-black); letter-spacing: .12em; text-transform: uppercase; }
+.bracket-expand-modal > header h2 { margin: 4px 0 2px; color: #fff; font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-3xl); font-style: italic; text-transform: uppercase; line-height: .95; }
+.bracket-expand-modal > header p { margin: 0; color: var(--pk-mut); font-size: var(--text-xs); }
+.bracket-expand-modal > header button { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--pk-line); border-radius: var(--radius-sm); background: rgba(255,255,255,.04); color: var(--pk-ink); cursor: pointer; }
+.bracket-expand-tabs { margin: 12px 20px 0; }
+.bracket-expand-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 12px 20px 20px; }
+.bracket-expand-body .ppw-chart { max-height: none; }
+
+@media (max-width: 760px) {
+  .ppw-preview-toggle { width: 100%; overflow-x: auto; }
+  .ppw-preview-toggle button { white-space: nowrap; }
+  .ppw-draft .ppw-chart-row { grid-template-columns: 92px minmax(0, 1fr); gap: 8px 12px; }
+  .ppw-draft .ppw-chart-note { grid-column: 2; }
+}
 
 /* conference assignment section in the Divisions step */
 .conference-stage { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; padding-top: 18px; border-top: 1px solid rgba(0,0,0,.08); }
