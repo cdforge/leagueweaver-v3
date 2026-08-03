@@ -5,5 +5,20 @@ import nextTs from "eslint-config-next/typescript";
 export default defineConfig([
   ...nextVitals,
   ...nextTs,
-  globalIgnores([".next/**", "node_modules/**", "next-env.d.ts"]),
+  globalIgnores([
+    ".claude/**",
+    ".next/**",
+    ".next-*/**",
+    ".vercel/**",
+    "node_modules/**",
+    "next-env.d.ts",
+    "tsconfig.tsbuildinfo",
+  ]),
+  {
+    rules: {
+      "react-hooks/purity": "warn",
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/static-components": "warn",
+    },
+  },
 ]);

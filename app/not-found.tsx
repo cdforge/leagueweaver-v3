@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CalendarX2, House } from "lucide-react";
 import { BrandLockup } from "@/components/AppHeader";
 
@@ -16,10 +17,10 @@ export default function NotFound() {
           <span>404 · Unscheduled</span>
           <h1 id="not-found-title">This page is on a bye.</h1>
           <p>We checked the full slate. This URL never made the schedule.</p>
-          <a href="/">
+          <Link href="/">
             <House aria-hidden="true" />
             Back to the schedule builder
-          </a>
+          </Link>
         </div>
       </section>
     </main>

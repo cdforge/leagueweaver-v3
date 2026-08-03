@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CreditCard, Eye, EyeOff, FolderHeart, History, ImagePlus, LoaderCircle, LogOut, Pencil, RotateCcw, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CreditCard, Eye, EyeOff, FolderHeart, History, ImagePlus, LoaderCircle, LogOut, Pencil, RotateCcw, Sparkles, Trash2 } from "lucide-react";
 import { analyzeIdentityImage } from "@/lib/imageColors";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { Tooltip } from "@/components/ui/Tooltip";

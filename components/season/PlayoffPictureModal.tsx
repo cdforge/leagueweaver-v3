@@ -9,7 +9,7 @@ import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
 import { accessibleTeamColor, readableTextColor, tintColor } from "@/lib/colorContrast";
 import { conferenceOfDivision, hasConferences } from "@/lib/conferences";
 import { useIsMobile } from "@/lib/useIsMobile";
-import type { Division, GeneratedSchedule, Team } from "@/lib/types";
+import type { Division, GeneratedSchedule } from "@/lib/types";
 
 function weekLabel(week?: number) {
   if (week == null) return "";

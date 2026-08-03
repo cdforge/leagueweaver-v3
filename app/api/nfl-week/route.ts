@@ -15,14 +15,21 @@ type NflGameRow = {
   commence_time: string;
   away_abbr: string;
   home_abbr: string;
-  away_team_name: string;
-  home_team_name: string;
   status: "scheduled" | "in_progress" | "final" | "postponed" | "cancelled";
   final_away_score: number | null;
   final_home_score: number | null;
   final_winner_side: "away" | "home" | null;
   last_score_refresh_at: string | null;
   updated_at: string | null;
+};
+
+type NflRecord = {
+  wins: number;
+  losses: number;
+  ties: number;
+  divisionWins: number;
+  divisionLosses: number;
+  divisionTies: number;
 };
 
 type OddsSnapshotRow = {
@@ -32,13 +39,44 @@ type OddsSnapshotRow = {
   snapshot_at: string;
 };
 
+const NFL_DIVISIONS: Record<string, string> = {
+  BUF: "AFC East", MIA: "AFC East", NE: "AFC East", NYJ: "AFC East",
+  BAL: "AFC North", CIN: "AFC North", CLE: "AFC North", PIT: "AFC North",
+  HOU: "AFC South", IND: "AFC South", JAX: "AFC South", TEN: "AFC South",
+  DEN: "AFC West", KC: "AFC West", LV: "AFC West", LAC: "AFC West",
+  DAL: "NFC East", NYG: "NFC East", PHI: "NFC East", WSH: "NFC East",
+  CHI: "NFC North", DET: "NFC North", GB: "NFC North", MIN: "NFC North",
+  ATL: "NFC South", CAR: "NFC South", NO: "NFC South", TB: "NFC South",
+  ARI: "NFC West", LAR: "NFC West", SF: "NFC West", SEA: "NFC West",
+};
+
+function emptyRecord(): NflRecord {
+  return { wins: 0, losses: 0, ties: 0, divisionWins: 0, divisionLosses: 0, divisionTies: 0 };
+}
+
+function formatRecord(record: Pick<NflRecord, "wins" | "losses" | "ties">) {
+  return record.ties ? `${record.wins}-${record.losses}-${record.ties}` : `${record.wins}-${record.losses}`;
+}
+
+function formatDivisionRecord(record: NflRecord) {
+  return record.divisionTies ? `${record.divisionWins}-${record.divisionLosses}-${record.divisionTies}` : `${record.divisionWins}-${record.divisionLosses}`;
+}
+
+function recordFor(records: Map<string, NflRecord>, abbr: string) {
+  const record = records.get(abbr) ?? emptyRecord();
+  return {
+    overall: formatRecord(record),
+    division: formatDivisionRecord(record),
+  };
+}
+
 async function loadGames(seasonYear: number, week: number) {
   const admin = createAdminClient();
   if (!admin) return { games: [], unavailable: true };
 
   const byWeek = await admin
     .from("nfl_games")
-    .select("id,commence_time,away_abbr,home_abbr,away_team_name,home_team_name,status,final_away_score,final_home_score,final_winner_side,last_score_refresh_at,updated_at")
+    .select("id,commence_time,away_abbr,home_abbr,status,final_away_score,final_home_score,final_winner_side,last_score_refresh_at,updated_at")
     .eq("season_year", seasonYear)
     .eq("week", week)
     .order("commence_time", { ascending: true });
@@ -49,7 +87,7 @@ async function loadGames(seasonYear: number, week: number) {
   const window = getNflWeekWindow(seasonYear, week);
   const byDate = await admin
     .from("nfl_games")
-    .select("id,commence_time,away_abbr,home_abbr,away_team_name,home_team_name,status,final_away_score,final_home_score,final_winner_side,last_score_refresh_at,updated_at")
+    .select("id,commence_time,away_abbr,home_abbr,status,final_away_score,final_home_score,final_winner_side,last_score_refresh_at,updated_at")
     .eq("season_year", seasonYear)
     .gte("commence_time", window.startsAt)
     .lt("commence_time", window.endsAt)
@@ -57,6 +95,55 @@ async function loadGames(seasonYear: number, week: number) {
 
   if (byDate.error) return { games: [], unavailable: true };
   return { games: (byDate.data ?? []) as NflGameRow[], unavailable: false };
+}
+
+async function loadRecords(seasonYear: number, week: number) {
+  const records = new Map<string, NflRecord>();
+  const admin = createAdminClient();
+  if (!admin) return records;
+
+  const { data, error } = await admin
+    .from("nfl_games")
+    .select("away_abbr,home_abbr,final_away_score,final_home_score,final_winner_side")
+    .eq("season_year", seasonYear)
+    .lte("week", week)
+    .eq("status", "final");
+
+  if (error) return records;
+
+  for (const game of (data ?? []) as Array<Pick<NflGameRow, "away_abbr" | "home_abbr" | "final_away_score" | "final_home_score" | "final_winner_side">>) {
+    const away = records.get(game.away_abbr) ?? emptyRecord();
+    const home = records.get(game.home_abbr) ?? emptyRecord();
+    const isDivisionGame = NFL_DIVISIONS[game.away_abbr] && NFL_DIVISIONS[game.away_abbr] === NFL_DIVISIONS[game.home_abbr];
+
+    if (game.final_winner_side === "away") {
+      away.wins += 1;
+      home.losses += 1;
+      if (isDivisionGame) {
+        away.divisionWins += 1;
+        home.divisionLosses += 1;
+      }
+    } else if (game.final_winner_side === "home") {
+      home.wins += 1;
+      away.losses += 1;
+      if (isDivisionGame) {
+        home.divisionWins += 1;
+        away.divisionLosses += 1;
+      }
+    } else if (game.final_away_score !== null && game.final_home_score !== null && game.final_away_score === game.final_home_score) {
+      away.ties += 1;
+      home.ties += 1;
+      if (isDivisionGame) {
+        away.divisionTies += 1;
+        home.divisionTies += 1;
+      }
+    }
+
+    records.set(game.away_abbr, away);
+    records.set(game.home_abbr, home);
+  }
+
+  return records;
 }
 
 export async function GET(request: Request) {
@@ -80,6 +167,7 @@ export async function GET(request: Request) {
   }
 
   const admin = createAdminClient();
+  const records = await loadRecords(seasonYear, week);
   const oddsByGame = new Map<string, OddsSnapshotRow>();
   const gameIds = games.map((game) => game.id);
   if (admin && gameIds.length) {
@@ -99,19 +187,24 @@ export async function GET(request: Request) {
     source: "stored-shared-nfl-data",
     games: games.map((game) => {
       const odds = oddsByGame.get(game.id);
+      const awayDivision = NFL_DIVISIONS[game.away_abbr] ?? null;
+      const homeDivision = NFL_DIVISIONS[game.home_abbr] ?? null;
       return {
         id: game.id,
         kickoffAt: game.commence_time,
         awayAbbr: game.away_abbr,
         homeAbbr: game.home_abbr,
-        awayName: game.away_team_name,
-        homeName: game.home_team_name,
         status: game.status,
         awayScore: game.final_away_score,
         homeScore: game.final_home_score,
         winnerSide: game.final_winner_side,
         favoriteSide: odds?.favorite_side ?? null,
         spread: odds?.spread === null || odds?.spread === undefined ? null : Number(odds.spread),
+        awayRecord: recordFor(records, game.away_abbr),
+        homeRecord: recordFor(records, game.home_abbr),
+        awayDivision,
+        homeDivision,
+        divisionalMatchup: Boolean(awayDivision && awayDivision === homeDivision),
         lastUpdatedAt: game.last_score_refresh_at ?? game.updated_at,
       };
     }),

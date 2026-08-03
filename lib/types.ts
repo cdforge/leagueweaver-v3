@@ -1,5 +1,6 @@
 export type PlanKey = "free" | "pro";
 export type PlacementSource = "regular-season" | "playoffs";
+export type DivisionPlacementMode = "manual" | "random" | "rank-snake";
 export type PlayoffFieldSize = number;
 export type PlayoffBracketType = "single-elimination" | "ladder";
 export type PlayoffPlacementMode = "auto" | "division-halves" | "division-leaders" | "overall";
@@ -7,6 +8,7 @@ export type ResolvedPlayoffPlacementMode = Exclude<PlayoffPlacementMode, "auto">
 export type PlayoffReseedMode = "fixed" | "each-round" | "protected";
 export type PlayoffSeedDisplayMode = "reranked" | "standings-finish";
 export type PlayoffChampionshipVenueMode = "higher-seed" | "neutral-site";
+export type PlayoffDraftOrderMode = "placement-reward" | "reverse-standings";
 export type PlayoffTheme = "gold" | "silver" | "bronze" | "custom";
 export type PlayoffFieldStatus = "live" | "locked";
 export type PlayoffConsolationMode = "off" | "standard" | "division-halves";
@@ -100,6 +102,7 @@ export interface LeagueSetupInput {
   divisions: Division[];
   /** Present (exactly two) only for even division counts; empty/undefined otherwise. */
   conferences?: Conference[];
+  divisionPlacementMode: DivisionPlacementMode;
   teams: Team[];
   display: {
     cityNames: boolean;
@@ -125,6 +128,8 @@ export interface LeagueSetupInput {
     reseedMode: PlayoffReseedMode;
     seedDisplayMode: PlayoffSeedDisplayMode;
     championshipVenueMode: PlayoffChampionshipVenueMode;
+    championshipVenueName?: string;
+    draftOrderMode: PlayoffDraftOrderMode;
     theme: PlayoffTheme;
     fieldStatus: PlayoffFieldStatus;
     lockedTeamIds: string[];
@@ -383,6 +388,7 @@ export interface SavedLeagueIdentity {
   league: Pick<LeagueSetupInput, "name" | "abbreviation" | "initials" | "description" | "color" | "logoUrl">;
   divisions: Division[];
   conferences?: Conference[];
+  divisionPlacementMode?: LeagueSetupInput["divisionPlacementMode"];
   teams: Team[];
   display: LeagueSetupInput["display"];
   priorSeason?: LeagueSetupInput["priorSeason"];

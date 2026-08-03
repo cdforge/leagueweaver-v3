@@ -113,6 +113,9 @@ export function ColorField({ value, onChange }: { value: string; onChange: (hex:
         role="slider"
         tabIndex={0}
         aria-label="Saturation and brightness"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(((s + v) / 2) * 100)}
         aria-valuetext={`Saturation ${Math.round(s * 100)}%, brightness ${Math.round(v * 100)}%`}
       >
         <span className="color-field-area-thumb" style={{ left: `${s * 100}%`, top: `${(1 - v) * 100}%`, background: value }} />

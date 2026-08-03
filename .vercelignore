@@ -1,5 +1,6 @@
 tmp/
 qa-artifacts/
 supabase/email-templates/
+reference images/
 .next/
 node_modules/

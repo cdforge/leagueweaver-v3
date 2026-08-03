@@ -77,7 +77,9 @@ export function Modal({
   // Keep the latest close handler without re-registering listeners on every
   // render, so a modal whose onClose closes over changing state stays correct.
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     modalStack.push(id);

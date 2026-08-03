@@ -28,3 +28,13 @@
 - Do not add dependencies unless necessary.
 - Do not inspect generated folders, lockfiles, or SQL migrations unless directly relevant.
 - Verify with `npm run build` after code changes.
+
+## 2026-08-03
+
+- The generated season workspace route exists at `app/season/[id]/page.tsx`; old notes saying it may be missing are stale.
+- Pickems, Pickums, and PV Pickums are on hold for the MVP release.
+- Pickems app routes, APIs, cron routes, components, library code, CSS, and reference images should stay out of the deploy surface.
+- Old Pickems URLs should return plain 404 responses.
+- The MVP release should present League Weaver as free and avoid visible paid-plan upsells or billing teasers.
+- Advanced platform score sync is paused for MVP; manual score entry remains available.
+- Do not deploy until the user explicitly says `deploy`.

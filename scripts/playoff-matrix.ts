@@ -374,7 +374,7 @@ check(() => {
   assert.equal(bracket.admittedTeamIds.length, 8);
   assert.equal(bracket.eliminatedTeamIds.length, 2);
   const chart = projectPlacementChart(blankSchedule(setup));
-  assert.deepEqual(chart.at(-1), { placeStart: 15, placeEnd: 16, label: "15th–16th", source: "Outside the bracket", teamIds: chart.at(-1)?.teamIds ?? [], exact: false });
+  assert.deepEqual(chart.at(-1), { placeStart: 15, placeEnd: 16, label: "15th–16th", tier: "eliminated", source: "Outside the bracket", teamIds: chart.at(-1)?.teamIds ?? [], exact: false });
 });
 
 check(() => {

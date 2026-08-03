@@ -57,7 +57,16 @@ export function recommendedPlayoffFieldSize(teamCount: number, regularSeasonWeek
   return Math.min(6, getMaximumPlayoffFieldSize(teamCount, regularSeasonWeeks));
 }
 
+export function recommendedPlayoffStructure(teamCount: number, regularSeasonWeeks: 13 | 14 = 14) {
+  const playoffWeeks = resolvePlayoffWeeks(regularSeasonWeeks);
+  return {
+    fieldSize: recommendedPlayoffFieldSize(teamCount, regularSeasonWeeks),
+    playoffWeeks,
+  };
+}
+
 export function createDefaultPlayoffSettings(teamCount: number, _leagueColor = "#117A45", regularSeasonWeeks: 13 | 14 = 14): PlayoffSettings {
+  void _leagueColor;
   return {
     fieldSize: recommendedPlayoffFieldSize(teamCount, regularSeasonWeeks),
     bracketType: "single-elimination",
@@ -65,6 +74,8 @@ export function createDefaultPlayoffSettings(teamCount: number, _leagueColor = "
     reseedMode: "fixed",
     seedDisplayMode: "reranked",
     championshipVenueMode: "higher-seed",
+    championshipVenueName: "",
+    draftOrderMode: "placement-reward",
     theme: "gold",
     fieldStatus: "live",
     lockedTeamIds: [],
@@ -105,6 +116,8 @@ export function normalizePlayoffSettings(value: LegacyPlayoffSettings | undefine
     reseedMode,
     seedDisplayMode: value.seedDisplayMode === "standings-finish" ? "standings-finish" : "reranked",
     championshipVenueMode: value.championshipVenueMode === "neutral-site" || value.hostVenueMode === "neutral-site" ? "neutral-site" : "higher-seed",
+    championshipVenueName: typeof value.championshipVenueName === "string" ? value.championshipVenueName.trim().slice(0, 80) : "",
+    draftOrderMode: value.draftOrderMode === "reverse-standings" ? "reverse-standings" : "placement-reward",
     theme,
     fieldStatus: value.fieldStatus === "locked" && lockedTeamIds.length === fieldSize ? "locked" : "live",
     lockedTeamIds,

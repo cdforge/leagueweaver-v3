@@ -271,10 +271,39 @@ export function projectConsolationBracket(schedule: GeneratedSchedule): Projecte
         outcome: "loser",
         label: `Loser of ${round.name} game ${index + 1}`,
         projectedSeed: Math.max(matchup.homeSeed, matchup.awaySeed),
+        bracketSide: matchup.bracketSide,
       }));
       const startPlace = 2 ** (mainRounds.length - round.roundIndex - 1) + 1;
       classify(loserEntrants, startPlace, round.roundIndex + 1);
     });
+    const thirdPlaceExists = gamesByRound.some((games) => games.some((game) => game.placementRange[0] === 3 && game.placementRange[1] === 4));
+    const thirdPlaceRoundIndex = Math.max(1, Math.min(availablePlayoffWeeks - 1, mainRounds.length - 1));
+    if (settings.thirdPlaceGame && settings.fieldSize >= 4 && !thirdPlaceExists && gamesByRound[thirdPlaceRoundIndex]) {
+      const sourceRoundIndex = Math.max(0, thirdPlaceRoundIndex - 1);
+      addGame(
+        thirdPlaceRoundIndex,
+        "3rd Place",
+        [3, 4],
+        [
+          {
+            kind: "result",
+            gameId: `main-r${sourceRoundIndex + 1}-g1`,
+            outcome: "loser",
+            label: `Loser of ${roundNames[sourceRoundIndex] ?? "Semifinal"} game 1`,
+            projectedSeed: 3,
+            bracketSide: mainRounds[sourceRoundIndex]?.matchups[0]?.bracketSide,
+          },
+          {
+            kind: "result",
+            gameId: `main-r${sourceRoundIndex + 1}-g2`,
+            outcome: "loser",
+            label: `Loser of ${roundNames[sourceRoundIndex] ?? "Semifinal"} game 2`,
+            projectedSeed: 4,
+            bracketSide: mainRounds[sourceRoundIndex]?.matchups[1]?.bracketSide,
+          },
+        ],
+      );
+    }
   }
 
   const placementMode = resolvePlayoffPlacementMode(normalizedSchedule.setup);
@@ -421,6 +450,7 @@ export interface ProjectedPlacementSlot {
   placeStart: number;
   placeEnd: number;
   label: string;
+  tier: "championship" | "consolation" | "eliminated";
   /** Structural descriptor of who fills the slot (e.g. "Champion", "Consolation", "Outside the bracket"). */
   source: string;
   teamIds: string[];
@@ -467,6 +497,7 @@ export function projectPlacementChart(schedule: GeneratedSchedule): ProjectedPla
   }
 
   return bands.map(([placeStart, placeEnd]) => {
+    const tier = placeEnd <= field ? "championship" : placeStart > field + cap ? "eliminated" : "consolation";
     const source = placeEnd <= field
       ? (placeStart === 1 ? "Champion" : placeStart === 2 ? "Runner-up" : "Championship bracket")
       : placeStart > field + cap ? "Outside the bracket"
@@ -477,6 +508,7 @@ export function projectPlacementChart(schedule: GeneratedSchedule): ProjectedPla
       placeStart,
       placeEnd,
       label: placeStart === placeEnd ? `${ordinal(placeStart)} Place` : `${ordinal(placeStart)}–${ordinal(placeEnd)}`,
+      tier,
       source,
       teamIds: placements.slice(placeStart - 1, placeEnd).map((entry) => entry.teamId),
       exact: placeStart === placeEnd,

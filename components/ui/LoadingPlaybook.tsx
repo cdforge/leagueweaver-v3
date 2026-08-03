@@ -29,14 +29,20 @@ const TIPS = [
   "Tip: standings tiebreakers can be reviewed from a schedule's Settings page.",
 ];
 
-export function LoadingPlaybook({ label = "Loading fantasy football..." }: { label?: string }) {
+export function LoadingPlaybook({ label = "Loading fantasy football...", expectedSeconds = 8 }: { label?: string; expectedSeconds?: number }) {
   const [showTip, setShowTip] = useState(false);
   const [tipIndex, setTipIndex] = useState(() => Math.floor(Math.random() * TIPS.length));
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const tip = useMemo(() => TIPS[tipIndex], [tipIndex]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setShowTip(true), 700);
     return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setElapsedSeconds((current) => current + 1), 1000);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -52,6 +58,9 @@ export function LoadingPlaybook({ label = "Loading fantasy football..." }: { lab
       <LoaderCircle className="spin" />
       <span>
         <strong>{label}</strong>
+        <em className="loading-playbook-timer">
+          {elapsedSeconds < expectedSeconds ? `Usually ready in under ${expectedSeconds} seconds.` : `Still working. ${elapsedSeconds} seconds elapsed.`}
+        </em>
         {showTip && <small><Sparkles aria-hidden="true" />{tip}</small>}
       </span>
     </div>

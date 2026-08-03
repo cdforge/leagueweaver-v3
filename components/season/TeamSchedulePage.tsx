@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useMemo, type CSSProperties } from "react";
-import { BarChart3, MapPin, MoreHorizontal, Star } from "lucide-react";
+import { BarChart3, MapPin, MoreHorizontal, Star, UsersRound } from "lucide-react";
 import { ClinchBadges } from "@/components/season/ClinchBadges";
 import { GameBadgeChip, MatchupCard, MatchupRatingLegend, MatchupSeriesChip, TeamIdentityBlock } from "@/components/season/MatchupPresentation";
+import { useRouteBase } from "@/components/season/routeBase";
 import { CustomSelect } from "@/components/ui/CustomSelect";
 import { DivisionIdentity } from "@/components/ui/DivisionIdentity";
 import { FloatingPopover } from "@/components/ui/FloatingPopover";
@@ -100,7 +101,6 @@ function teamBrandStyle(color: string) {
 
 function buildTeamScheduleSummaries(schedule: GeneratedSchedule): TeamScheduleSummary[] {
   const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
-  const teamCount = schedule.setup.teams.length;
   const preseasonRanks = getWeekOneRankMap(schedule.setup);
   const currentSnapshot = getWeekRankSnapshot(schedule, schedule.setup.weeks);
   const currentByTeam = new Map(currentSnapshot.rows.map((row) => [row.teamId, row]));
@@ -233,7 +233,7 @@ function TeamScheduleDirectory({ schedule, summaries, clinches, onSelectTeam }: 
   );
 }
 
-export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek, simulationResults = {} }: {
+export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek, simulationResults = {}, readOnly = false }: {
   schedule: GeneratedSchedule;
   teamId: string;
   onSelectTeam: (teamId: string) => void;
@@ -242,7 +242,9 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
     source: "simulated" | "override";
     locked: boolean;
   }>;
+  readOnly?: boolean;
 }) {
+  const routeBase = useRouteBase(`/season/${schedule.id}`);
   const scheduleSignals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
   const summaries = useMemo(() => buildTeamScheduleSummaries(schedule), [schedule]);
   const seasonStatsByTeam = useMemo(() => new Map(calculateTeamSeasonStats(schedule).map((row) => [row.teamId, row])), [schedule]);
@@ -265,6 +267,7 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
   const divisionById = new Map(schedule.setup.divisions.map((division) => [division.id, division]));
   const leagueHasConferences = hasConferences(schedule.setup);
   const divisionConference = (item?: Division) => item && leagueHasConferences ? conferenceOfDivision(schedule.setup, item.id) : undefined;
+  const teamHrefBase = `${routeBase}/team`;
   const planningRatingRange = getMatchupRatingRange(schedule.weeks.flatMap((week) => week.games));
   const currentSnapshot = getWeekRankSnapshot(schedule, schedule.setup.weeks);
   const currentStandingsByTeam = new Map(currentSnapshot.rows.map((row) => [row.teamId, row]));
@@ -475,7 +478,7 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
                         leagueRank={opponentStanding?.rank ?? opponent.overallRank}
                         record={{ overall: "0-0" }}
                         showCity={showCity}
-                        href={`/season/${schedule.id}/team/${opponent.id}`}
+                        href={`${teamHrefBase}/${opponent.id}`}
                       />
                     </div>
                   </td>
@@ -491,9 +494,11 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
                   {display.details && <td className="col-details"><span className="team-game-details">{game.dateTimeOverride && <strong>{formatGameDateTimeOverride(game.dateTimeOverride)}</strong>}{metadata && <small>{metadata}</small>}{!game.dateTimeOverride && !metadata && "—"}</span></td>}
                   <td className="col-actions">
                     <FloatingPopover className="table-actions" label={`Actions for Week ${week.weekNumber}`} trigger={<MoreHorizontal />} menuClassName="table-actions-menu">
+                      {!readOnly && <>
                         <Link href={`/season/${schedule.id}?view=scores&week=${week.weekNumber}`}>Set score</Link>
                         <Link href={`/season/${schedule.id}?week=${week.weekNumber}#${game.id}`}>Game details</Link>
-                        <Link href={`/season/${schedule.id}/team/${opponent.id}`}>Opponent schedule</Link>
+                      </>}
+                        <Link href={`${teamHrefBase}/${opponent.id}`}>Opponent schedule</Link>
                     </FloatingPopover>
                   </td>
                 </tr>
@@ -558,7 +563,7 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
               showCity={showCity}
               showVenue={schedule.setup.display?.venues !== false}
               badges={scheduleSignals.byGameId.get(game.id)?.badges ?? []}
-              teamHrefBase={`/season/${schedule.id}/team`}
+              teamHrefBase={teamHrefBase}
             />
           );
         })}
@@ -569,6 +574,13 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
         <dl className="team-performance-grid">
           {performanceStats.map((stat) => <div key={stat.label}><dt>{stat.label}</dt><dd className={stat.tone}><strong className="team-stat-value">{stat.value}</strong><small className={`team-stat-placement placement-${stat.placement.tone}`}>{stat.placement.label}</small></dd></div>)}
         </dl>
+      </section>
+
+      <section className="team-player-soon public-soon" aria-label={`${teamDisplayName(team, showCity)} player data`}>
+        <span className="public-soon-mark"><UsersRound /></span>
+        <strong>Roster / Players</strong>
+        <p>Player rosters, weekly player points, All-Star selections, and MVT breakdowns will appear here once player-level data is connected for this league.</p>
+        <span className="public-soon-chip">Coming soon</span>
       </section>
 
       <MatchupRatingLegend />

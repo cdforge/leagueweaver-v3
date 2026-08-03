@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { LoaderCircle } from "lucide-react";
 
-// NOTE: Pro checkout is intentionally shelved for the MVP (the pricing page is
+// NOTE: Checkout is intentionally shelved for the MVP (the pricing page is
 // static and does not render this component). Kept ready for re-enable — do not
-// wire it back into /pricing without re-introducing the Pro product decision.
+// wire it back into /pricing without re-introducing a paid-plan product decision.
 export function PricingActions() {
   const [loading, setLoading] = useState<"monthly" | "annual" | null>(null);
   const [message, setMessage] = useState<string | null>(null);

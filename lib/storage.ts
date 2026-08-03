@@ -1,9 +1,10 @@
 import type { GeneratedSchedule, LeagueSetupInput } from "./types";
 import { normalizeScheduleMatchups } from "./matchups";
-import { divisionAcronym, entityMonogram, leagueAcronym, resolveInitials } from "./monograms";
+import { leagueAcronym, resolveInitials } from "./monograms";
 import { normalizePlayoffSettings } from "./playoffs";
 import { getWeekOneRankMap } from "./rankings";
 import { freezeCompletedRankHistory } from "./standings";
+import { teamMonogram } from "./teamIdentity";
 import { normalizeTiebreakerSettings } from "./tiebreakers";
 
 export function normalizeSetup(setup: LeagueSetupInput): LeagueSetupInput {
@@ -14,6 +15,7 @@ export function normalizeSetup(setup: LeagueSetupInput): LeagueSetupInput {
     abbreviation: leagueAcronym(setup.name),
     initials,
     display: setup.display || { cityNames: true, managers: true, venues: true },
+    divisionPlacementMode: setup.divisionPlacementMode ?? "manual",
     priorSeason: { ...setup.priorSeason, hasData: setup.priorSeason.hasData ?? setup.priorSeason.enabled, entryMode: setup.priorSeason.entryMode ?? (setup.priorSeason.enabled ? setup.priorSeason.hasData ? "history" : "manual" : "none") },
     weekOne: setup.weekOne || { rankingSource: "prior-season" },
     tiebreakers: normalizeTiebreakerSettings(setup.tiebreakers),
@@ -32,7 +34,7 @@ export function normalizeSetup(setup: LeagueSetupInput): LeagueSetupInput {
       const teamInitials = Object.prototype.hasOwnProperty.call(team, "initials") ? team.initials : team.shortName || undefined;
       const storedDraftPlace = Number.isInteger(team.draftPlace) && team.draftPlace! >= 1 && team.draftPlace! <= setup.teams.length ? team.draftPlace : undefined;
       const migratedDraftPlace = Number.isInteger(legacyDraftScore) && legacyDraftScore! >= 1 && legacyDraftScore! <= setup.teams.length ? legacyDraftScore : undefined;
-      return { ...teamWithoutLegacyScore, providerId: team.providerId, city, initials: teamInitials, draftPlace: storedDraftPlace ?? migratedDraftPlace, shortName: resolveInitials(teamInitials, entityMonogram(team.name, city)) };
+      return { ...teamWithoutLegacyScore, providerId: team.providerId, city, initials: teamInitials, draftPlace: storedDraftPlace ?? migratedDraftPlace, shortName: resolveInitials(teamInitials, teamMonogram(city, team.name)) };
     }),
   };
 }

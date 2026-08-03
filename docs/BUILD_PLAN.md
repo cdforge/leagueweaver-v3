@@ -6,71 +6,58 @@ Build League Weaver v3 into a polished fantasy football schedule and season work
 
 ## Phase 1: Builder Foundation
 
-Status: In progress / mostly present.
+Status: Present.
 
 Current builder includes:
 
-- League name, abbreviation, description, logo placeholder, color
+- League identity and display controls
 - Import option cards
-- Team count and division count controls
-- Team editor
-- Division editor
-- Season length and NFL season controls
-- Prior season finish toggle
+- Team, division, conference, and season controls
+- Prior-season and draft-day ranking flows
 - Fairness rule controls
+- Playoff setup and preview controls
 - Review and generate step
 - Live preview panel
 
 Keep improving this only when a specific issue is found.
 
-## Phase 2: Schedule Results Route
+## Phase 2: Season Workspace
 
-Status: Likely next.
+Status: Present.
 
-Needed:
+Current workspace includes:
 
-- Add `/season/[id]` route if missing
-- Load the saved season from localStorage
-- Show schedule grouped by week
-- Show league summary
-- Show validation or fairness summary
-- Add page-local action bar above the workspace content
+- `/season/[id]` saved-season loading
+- Clear missing-season state
+- This Week, league schedule, team schedule, standings, playoffs, and share/settings views
+- Local and cloud season loading paths
+- Score entry and regular-season management surfaces
+- CSV, PDF, and sharing actions where available
 
-Required actions:
+Keep QA focused on mobile usability, empty states, export behavior, and public-share privacy toggles.
 
-- Edit teams/settings
-- Reroll schedule
-- Export CSV
-- Export PDF
+## Phase 3: MVP Release Hardening
 
-UX notes:
+Status: In progress.
 
-- Results should feel like the actual app workspace, not a marketing page.
-- Keep the header simple.
-- Use dense but clean schedule rows.
-- Make week groups scannable.
+Needed before deploy:
 
-## Phase 3: Season Management
+- Confirm Pickems/Pickums/PV Pickums stays removed from routes, APIs, copy, CSS, components, libraries, and reference images
+- Run `npm run predeploy:guard` after `npm run build` so stale 10-step builder code, missing required routes, or Pickems routes block deploy
+- Confirm visible product copy stays focused on free MVP access
+- Run lint, build, and tests
+- Browser-check the main public and app routes on desktop and mobile
+- Confirm blocked Pickems URLs return 404
+- Prepare a deploy handoff
 
-Needed later:
+## Phase 4: Later Product Work
 
-- Score entry
-- Standings
-- Playoff projections
-- Import scores
-- Saved leagues
-- Published schedule links
-- Account and billing surfaces
+Deferred until requested:
 
-## Phase 4: Backend And Publishing
-
-Needed later:
-
-- Supabase persistence
-- Public schedule sharing
-- Stripe billing
-- Logo upload bucket
-- Auth and account state
+- Backend persistence expansion
+- Advanced platform score sync
+- Billing relaunch
+- Additional account automation
 
 SQL files already exist under `supabase/sql/`, but do not inspect or edit them unless backend work is requested.
 
@@ -79,6 +66,6 @@ SQL files already exist under `supabase/sql/`, but do not inspect or edit them u
 After code edits:
 
 1. Run `npm run build`
-2. Run `npm run test:engine` only if the schedule engine changed
+2. Run tests only if tests exist for the changed area
 
-Do not run broad extra checks unless the changed code requires them.
+Do not deploy until the user explicitly says `deploy`.

@@ -118,9 +118,9 @@ export function AppHeader() {
       <div className="page-width topbar-row">
         <BrandLockup />
         <nav className="topnav" aria-label="Primary navigation">
+          <ResumeLatestButton />
           <Link href={scheduleHref} className={schedulesActive ? "active" : ""} aria-current={schedulesActive ? "page" : undefined}>{scheduleLabel}</Link>
           <Link href="/fantasy/leagues" className={leaguesActive ? "active" : ""} aria-current={leaguesActive ? "page" : undefined}>Saved Leagues</Link>
-          <ResumeLatestButton />
           <AccountIdentity />
         </nav>
         <button type="button" className="mobile-menu-button" aria-label={mobileMenuOpen ? "Close menu" : "Open menu"} aria-expanded={mobileMenuOpen} aria-controls="mobile-site-menu" onClick={() => setMobileMenuOpen((open) => !open)}>
@@ -135,9 +135,9 @@ export function AppHeader() {
             <button type="button" className="mobile-menu-close" aria-label="Close menu" onClick={() => setMobileMenuOpen(false)}><X aria-hidden="true" /></button>
           </header>
           <nav className="mobile-menu-links" aria-label="Primary mobile navigation">
+            <ResumeLatestButton />
             <Link href={scheduleHref} className={schedulesActive ? "active" : ""} aria-current={schedulesActive ? "page" : undefined}>{scheduleLabel}</Link>
             <Link href="/fantasy/leagues" className={leaguesActive ? "active" : ""} aria-current={leaguesActive ? "page" : undefined}>Saved Leagues</Link>
-            <ResumeLatestButton />
           </nav>
           <nav className="mobile-menu-legal" aria-label="Legal">
             <span>More</span>

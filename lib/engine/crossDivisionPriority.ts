@@ -416,8 +416,6 @@ export function analyzeCrossDivisionPriority<T extends CrossDivisionTeamLike>(
   const repeatedOpponentsByTeam = new Map<string, Set<string>>();
   const repeatedSameSeedOpponentsByTeam = new Map<string, Set<string>>();
   const repeatedOtherOpponentsByTeam = new Map<string, Set<string>>();
-  const teamById = new Map(teams.map((team) => [team.id, team] as const));
-
   teams.forEach((team) => {
     crossOpponentsByTeam.set(team.id, []);
     sameSeedOpponentsByTeam.set(team.id, []);

@@ -41,10 +41,6 @@ function isHomeFor(game: EngineGame, teamId: TeamId): boolean | null {
   return game.homeTeamId === teamId;
 }
 
-function opponentOf(game: EngineGame, teamId: TeamId): TeamId {
-  return game.a === teamId ? game.b : game.a;
-}
-
 // ---- Tier 1: hard structural ----
 
 const oneGamePerWeek: Constraint = {

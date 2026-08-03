@@ -1,12 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import {
   ArrowDown,
   ArrowUp,
-  ArrowUpDown,
-  BarChart3,
   CircleX,
   Flame,
   Gauge,
@@ -65,7 +63,6 @@ import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
 import type { Division, GeneratedSchedule, PlayoffGame, RankedStandingsRow, RankHistorySnapshot, StandingsTieGroup, Team, TiebreakerRule, TiebreakerScope, TiebreakerSettings } from "@/lib/types";
 
 type StatsTab = "standings" | "rank-race" | "team-leaders" | "league-leaders" | "playoffs" | "team-stats";
-type TeamSortKey = "team" | "record" | "winPercentage" | "division" | "pointsFor" | "pointsAgainst" | "difference" | "home" | "away" | "featuredWins" | "sov" | "sos" | "currentStreak" | "bestStreak" | "playoff";
 type RaceMetric = "rank" | "pointsFor" | "pointDifference" | "winPercentage";
 type ActiveRacePoint = { teamId: string; pointIndex: number } | null;
 type LeagueLeaderView = "overall" | "gotw" | "closest" | "scoring" | "divisional";
@@ -210,12 +207,6 @@ function GameHighlightPanel({ title, schedule, items, metric, direction, playoff
     const deepLink = `/season/${schedule.id}?${query.toString()}#${game.id}`;
     return <GameHighlight schedule={schedule} analytics={item} rank={rank} round={playoff ? game.round : undefined} roundLogoUrl={playoff ? game.logoUrl || game.roundLogoUrl : undefined} deepLink={deepLink} key={item.game.id} />;
   })}</div> : <div className="leader-empty">No completed results yet</div>}</article>;
-}
-
-function SortHeader({ label, sortKey, active, direction, onSort }: { label: string; sortKey: TeamSortKey; active: TeamSortKey; direction: "asc" | "desc"; onSort: (key: TeamSortKey) => void }) {
-  const isActive = active === sortKey;
-  const Icon = isActive ? (direction === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
-  return <th scope="col" aria-sort={isActive ? direction === "asc" ? "ascending" : "descending" : "none"}><button type="button" className={isActive ? "is-sorted" : undefined} onClick={() => onSort(sortKey)}>{label}<Icon /></button></th>;
 }
 
 function RankMovement({ row }: { row: RankedStandingsRow }) {
@@ -528,32 +519,11 @@ function SeasonRaceChart({ schedule, history, throughWeek, divisionId }: {
   </section>;
 }
 
-function sortableValue(row: TeamSeasonStats, key: TeamSortKey, teamById: Map<string, Team>) {
-  if (key === "team") return teamDisplayName(teamById.get(row.teamId)!).toLowerCase();
-  if (key === "winPercentage") return row.winPercentage;
-  if (key === "record") return row.wins + row.winPercentage; // #19.3 — wins first, win% breaks ties (so RECORD ≠ WIN% sort)
-  if (key === "division") { const g = row.divisionWins + row.divisionLosses + row.divisionTies; return g ? (row.divisionWins + row.divisionTies * 0.5) / g : -1; } // #36.1 — count ties as half a win
-  if (key === "pointsFor") return row.pointsFor;
-  if (key === "pointsAgainst") return row.pointsAgainst;
-  if (key === "difference") return row.pointsFor - row.pointsAgainst;
-  if (key === "home") return recordPercentage(row.home);
-  if (key === "away") return recordPercentage(row.away);
-  if (key === "featuredWins") return row.featuredWins;
-  if (key === "sov") return row.strengthOfVictory ?? -1;
-  if (key === "sos") return row.strengthOfSchedule ?? -1;
-  if (key === "currentStreak") return row.streak === "—" || row.streak.startsWith("T") ? 0 : (row.streak.startsWith("W") ? 1 : -1) * Number(row.streak.slice(1));
-  if (key === "bestStreak") return row.bestStreak === "—" ? 0 : Number(row.bestStreak.slice(1));
-  return row.playoffOdds;
-}
-
 export function StatsWorkspace({ schedule, onUpdateTiebreakers, readOnly = false }: { schedule: GeneratedSchedule; onUpdateTiebreakers?: (settings: TiebreakerSettings) => void; readOnly?: boolean }) {
   const [tab, setTab] = useState<StatsTab>("standings");
   const statsTabRefs = useRef<(HTMLButtonElement | null)[]>([]); // H8 — roving tabindex focus targets
   const [leagueLeaderView, setLeagueLeaderView] = useState<LeagueLeaderView>("overall");
   const [divisionId, setDivisionId] = useState("all");
-  const [standingsWeek, setStandingsWeek] = useState("current");
-  const [sortKey, setSortKey] = useState<TeamSortKey>("winPercentage");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [activeTieSignature, setActiveTieSignature] = useState<string | null>(null);
   const tiebreakerSettings = useMemo(() => normalizeTiebreakerSettings(schedule.setup.tiebreakers), [schedule.setup.tiebreakers]);
   const odds = useMemo(() => calculateSeasonOdds(schedule, 500), [schedule]);
@@ -562,11 +532,10 @@ export function StatsWorkspace({ schedule, onUpdateTiebreakers, readOnly = false
   const teamStatsByTeam = useMemo(() => new Map(teamStats.map((stat) => [stat.teamId, stat])), [teamStats]);
   const rankHistory = useMemo(() => getLiveRankHistory(schedule), [schedule]);
   const currentRankSnapshot = [...rankHistory].reverse().find((snapshot) => snapshot.playedGames > 0) ?? rankHistory[0];
-  const selectedRankSnapshot = standingsWeek === "current" ? currentRankSnapshot : rankHistory.find((snapshot) => String(snapshot.weekNumber) === standingsWeek) ?? currentRankSnapshot;
+  const selectedRankSnapshot = currentRankSnapshot;
   const selectedScope: TiebreakerScope = divisionId === "all" ? "league" : "division";
   const selectedResolution = useMemo(() => resolveStandings(schedule, { throughWeek: selectedRankSnapshot.weekNumber, scope: selectedScope, divisionId: divisionId === "all" ? undefined : divisionId }), [schedule, selectedRankSnapshot.weekNumber, selectedScope, divisionId]);
   const previousResolution = useMemo(() => resolveStandings(schedule, { throughWeek: Math.max(0, selectedRankSnapshot.weekNumber - 1), scope: selectedScope, divisionId: divisionId === "all" ? undefined : divisionId }), [schedule, selectedRankSnapshot.weekNumber, selectedScope, divisionId]);
-  const currentClinches = useMemo(() => new Map(getTeamClinchTimelines(schedule, currentRankSnapshot.weekNumber).map((timeline) => [timeline.teamId, timeline])), [schedule, currentRankSnapshot.weekNumber]);
   const selectedClinches = useMemo(() => new Map(getTeamClinchTimelines(schedule, selectedRankSnapshot.weekNumber).map((timeline) => [timeline.teamId, timeline])), [schedule, selectedRankSnapshot.weekNumber]);
   const regularSignals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
   const regularGames = useMemo(() => [...regularSignals.byGameId.values()], [regularSignals]);
@@ -575,7 +544,6 @@ export function StatsWorkspace({ schedule, onUpdateTiebreakers, readOnly = false
   const hasPlayoffResults = playoffAnalytics.length > 0;
   const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
   const divisionById = new Map(schedule.setup.divisions.map((division) => [division.id, division]));
-  const selectedDivision = divisionId === "all" ? undefined : divisionById.get(divisionId);
   const preseasonRankByTeam = new Map(selectedRankSnapshot.rows.map((row) => [row.teamId, row.preseasonRank]));
   // `preseasonRankByTeam` is always the league-wide seed (rank history only runs
   // league scope). In a division view a row's live `rank` is its within-division
@@ -606,12 +574,6 @@ export function StatsWorkspace({ schedule, onUpdateTiebreakers, readOnly = false
       : resolveInitials(division.initials, divisionAcronym(division.name));
   };
   const filterOptions = [{ value: "all", label: "League standings", description: `${schedule.setup.teams.length} teams`, swatch: schedule.setup.color, logoUrl: schedule.setup.logoUrl, monogram: resolveInitials(schedule.setup.initials, leagueAcronym(schedule.setup.name)), entityType: "league" as const }, ...schedule.setup.divisions.map((division) => ({ value: division.id, label: division.name, description: `${schedule.setup.teams.filter((team) => team.divisionId === division.id).length} teams`, swatch: division.color, logoUrl: division.logoUrl, monogram: divisionOptionMonogram(division), entityType: "division" as const }))];
-  const rankHistoryOptions = [
-    { value: "current", label: "Current live rank", description: currentRankSnapshot.weekNumber ? `Through Week ${currentRankSnapshot.weekNumber}` : "Preseason order" },
-    { value: "0", label: "Preseason rank", description: "Starting seed before Week 1" },
-    ...rankHistory.filter((snapshot) => snapshot.weekNumber > 0 && snapshot.playedGames > 0).map((snapshot) => ({ value: String(snapshot.weekNumber), label: snapshot.completed ? `After Week ${snapshot.weekNumber}` : `Week ${snapshot.weekNumber} in progress`, description: `${snapshot.playedGames} of ${schedule.weeks.find((week) => week.weekNumber === snapshot.weekNumber)?.games.length ?? 0} games scored` })),
-  ];
-  const selectedHistoryLabel = selectedRankSnapshot.weekNumber === 0 ? "Preseason seed" : selectedRankSnapshot.completed ? `Final table after Week ${selectedRankSnapshot.weekNumber}` : `Live table during Week ${selectedRankSnapshot.weekNumber}`;
   const isPreseason = selectedRankSnapshot.weekNumber === 0; // #19.1
   const rankHeader = divisionId !== "all"
     ? "DIV RK"
@@ -623,13 +585,6 @@ export function StatsWorkspace({ schedule, onUpdateTiebreakers, readOnly = false
   const completedTeams = teamStats.filter((row) => row.wins + row.losses + row.ties > 0);
   const divisionsPlayed = (row: TeamSeasonStats) => row.divisionWins + row.divisionLosses + row.divisionTies > 0;
   const hottest = (row: TeamSeasonStats) => row.streak.startsWith("W") ? Number(row.streak.slice(1)) : null;
-  const sortRows = [...teamStats].sort((left, right) => {
-    const leftValue = sortableValue(left, sortKey, teamById);
-    const rightValue = sortableValue(right, sortKey, teamById);
-    const comparison = typeof leftValue === "string" && typeof rightValue === "string" ? leftValue.localeCompare(rightValue) : Number(leftValue) - Number(rightValue);
-    return (sortDirection === "asc" ? comparison : -comparison) || teamById.get(left.teamId)!.name.localeCompare(teamById.get(right.teamId)!.name);
-  });
-  const onSort = (key: TeamSortKey) => { if (key === sortKey) setSortDirection((current) => current === "asc" ? "desc" : "asc"); else { setSortKey(key); setSortDirection(key === "team" ? "asc" : "desc"); } };
   const updateTiebreakers = (settings: TiebreakerSettings) => onUpdateTiebreakers?.(settings);
   const activeTie = selectedResolution.tieGroups.find((tie) => tie.signature === activeTieSignature);
   const tabs: Array<{ key: StatsTab; label: string; disabled?: boolean }> = [{ key: "standings", label: "Standings" }, { key: "rank-race", label: "Rank race" }, { key: "team-leaders", label: "Team leaders" }, { key: "league-leaders", label: "League leaders" }, { key: "playoffs", label: "Playoff stats", disabled: !hasPlayoffResults }];
