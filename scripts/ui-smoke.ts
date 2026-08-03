@@ -398,8 +398,12 @@ async function screenshotGameDetail(browser: Browser, name: string, schedule: Ge
   assert.ok(response.status() >= 200 && response.status() < 400, `${name}: season route is reachable`);
   await page.locator(".workspace-rail nav").getByRole("button", { name: /league schedule/i }).click();
   assert.equal(await page.locator("button.matchup-box-score-trigger").count(), 0, `${name}: no redundant Box score button is rendered`);
-  await page.locator(".matchup-card.is-openable").first().focus();
-  await page.keyboard.press("Enter");
+  const firstCard = page.locator(".matchup-card.is-openable").first();
+  await firstCard.locator("a.team-identity-block").first().click();
+  await page.waitForURL(new RegExp(`/season/${schedule.id}/team/`));
+  await page.goto(`${baseUrl}/season/${schedule.id}`, { waitUntil: "networkidle" });
+  await page.locator(".workspace-rail nav").getByRole("button", { name: /league schedule/i }).click();
+  await page.locator(".matchup-card.is-openable").first().locator(".matchup-card-badges").click();
   await page.getByRole("dialog", { name: / at /i }).waitFor();
   if (rows?.length) {
     const badges = page.locator(".allstar-badge");
