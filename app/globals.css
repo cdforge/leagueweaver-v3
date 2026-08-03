@@ -1747,6 +1747,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .workspace-rail nav button:hover { background: rgba(255,255,255,.09); color: rgba(255,255,255,0.88); }
 .workspace-rail nav button.active { background: var(--brand, var(--field)); color: var(--brand-on, white); box-shadow: 0 1px 4px color-mix(in srgb, var(--brand, var(--field)) 38%, transparent); }
 .workspace-rail nav svg { width: 16px; }
+.workspace-rail nav button.is-coming-soon small { margin-left: auto; border: 1px solid rgb(255 255 255 / .16); border-radius: var(--radius-chip); color: rgb(255 255 255 / .64); padding: 2px 6px; font-size: 9px; font-weight: var(--w-black); line-height: 1; letter-spacing: .04em; }
+.workspace-rail nav button.is-coming-soon.active small { border-color: color-mix(in srgb, var(--brand-on, white) 36%, transparent); color: var(--brand-on, white); }
 .workspace-rail nav .pro-badge { margin-left: auto; background: rgba(248,231,161,.14); color: #f8dc72; }
 .workspace-rail nav button.active .pro-badge { background: #f8e7a1; color: #5f4900; }
 .rail-bottom { margin-top: auto; border-top: 1px solid rgba(255,255,255,.08); padding: 14px 10px 5px; }
@@ -1926,6 +1928,14 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .draft-rank-panel > footer .button-primary { min-width: 112px; }
 .workspace-content { width: min(1180px, calc(100% - 48px)); min-height: 650px; margin: 24px auto; }
 .workspace-stack { display: grid; gap: 16px; }
+.workspace-coming-soon { min-height: 320px; display: grid; grid-template-columns: 54px minmax(0, 1fr) 88px; align-items: center; gap: 18px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(135deg, white 0%, #f4fbf7 100%); box-shadow: var(--shadow-sm); padding: 28px; }
+.workspace-coming-soon-mark { width: 54px; height: 54px; display: grid; place-items: center; border-radius: var(--radius); background: var(--field-soft); color: var(--field); }
+.workspace-coming-soon-mark svg { width: 25px; }
+.workspace-coming-soon small { display: block; color: var(--field); font-size: var(--text-micro); font-weight: var(--w-black); letter-spacing: .08em; }
+.workspace-coming-soon h2 { margin: 5px 0 6px; color: var(--ink); font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--num-md); line-height: .95; }
+.workspace-coming-soon p { max-width: 560px; margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: 1.45; }
+.workspace-coming-soon-preview { width: 88px; height: 88px; display: grid; place-items: center; justify-self: end; border-radius: var(--radius); border: 1px solid #d5e4dc; background: white; color: var(--field); opacity: .72; }
+.workspace-coming-soon-preview svg { width: 40px; }
 .nfl-week-trail {
   position: relative;
   max-width: 100%;
@@ -4958,6 +4968,7 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .workspace-rail { padding-inline: 8px; }
   .workspace-rail nav button { justify-content: center; padding: 0; }
   .workspace-rail nav button span, .workspace-rail nav button em { display: none; }
+  .workspace-rail nav button.is-coming-soon small { display: none; }
   /* Collapsed rail: keep the switcher reachable, but as an icon-only trigger. */
   .rail-bottom { padding: 10px 4px 4px; }
   .workspace-switcher-face { justify-content: center; gap: 0; padding: 6px; }
@@ -5119,6 +5130,10 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .workspace-rail .rail-bottom { display: none; }
   .workspace-main { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
   .workspace-toolbar { align-items: flex-start; flex-direction: column; padding: 13px 14px; }
+  .workspace-coming-soon { min-height: 260px; grid-template-columns: 42px minmax(0, 1fr); gap: 12px; padding: 18px; }
+  .workspace-coming-soon-mark { width: 42px; height: 42px; }
+  .workspace-coming-soon h2 { font-size: var(--text-3xl); }
+  .workspace-coming-soon-preview { display: none; }
   .draft-rank-reminder { grid-template-columns: 30px minmax(0, 1fr); padding: 11px 14px; }
   .draft-rank-reminder-actions { grid-column: 1 / -1; width: 100%; }
   .draft-rank-reminder-actions > button:first-child { flex: 1; }

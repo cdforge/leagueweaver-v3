@@ -45,9 +45,7 @@ import { GenerationReveal } from "@/components/builder/GenerationReveal";
 import { AccountIdentity } from "@/components/account/AccountIdentity";
 import { useAuthModal } from "@/components/account/AuthModalProvider";
 import { AdUnit } from "@/components/ads/AdUnit";
-import { AllStarsWorkspace } from "@/components/season/AllStarsWorkspace";
 import { GotwWorkspace } from "@/components/season/GotwWorkspace";
-import { MvtWorkspace } from "@/components/season/MvtWorkspace";
 import { BracketConnectorLayer, type BracketConnection } from "@/components/season/BracketConnectorLayer";
 import { ConsolationBracket, FinalPlacementTable } from "@/components/season/ConsolationBracket";
 import { GameBadgeChip, MatchupCard, MatchupRatingLegend, MatchupSeriesChip, TeamIdentityBlock, WeekMatchupRank } from "@/components/season/MatchupPresentation";
@@ -406,7 +404,7 @@ function seasonTimeframeLabel(seasonYear: number, weeks: number) {
   return `${seasonYear} season · NFL Weeks 1–${weeks} · ${monthDay.format(new Date(firstWeek.startsAt))}–${finalDate.format(new Date(finalWeek.endsAt))}`;
 }
 
-const VIEW_ITEMS: Array<{ key: ViewKey; label: string; icon: typeof CalendarDays; pro?: boolean }> = [
+const VIEW_ITEMS: Array<{ key: ViewKey; label: string; icon: typeof CalendarDays; pro?: boolean; comingSoon?: boolean }> = [
   { key: "this-week", label: "This Week", icon: Flame },
   { key: "results", label: "Results", icon: LayoutList },
   { key: "league-schedule", label: "League Schedule", icon: CalendarDays },
@@ -414,13 +412,13 @@ const VIEW_ITEMS: Array<{ key: ViewKey; label: string; icon: typeof CalendarDays
   { key: "gotw", label: "Game of the Week", icon: Star },
   { key: "matchup-ratings", label: "Matchup Ratings", icon: SlidersHorizontal },
   { key: "standings", label: "Standings", icon: BarChart3 },
-  { key: "mvt", label: "MVT", icon: Medal },
-  { key: "all-stars", label: "All-Stars", icon: Sparkles },
+  { key: "mvt", label: "MVT", icon: Medal, comingSoon: true },
+  { key: "all-stars", label: "All-Stars", icon: Sparkles, comingSoon: true },
   { key: "playoffs", label: "Playoffs", icon: Trophy },
   { key: "share", label: "Share", icon: Share2 },
   { key: "settings", label: "Settings", icon: Settings },
 ];
-const HISTORY_COMPATIBLE_VIEWS = new Set<ViewKey>(["league-schedule", "team-schedule", "gotw", "matchup-ratings", "standings", "mvt", "all-stars", "playoffs"]);
+const HISTORY_COMPATIBLE_VIEWS = new Set<ViewKey>(["league-schedule", "team-schedule", "gotw", "matchup-ratings", "standings", "playoffs"]);
 
 function TeamMark({ team, size = "normal" }: { team: Team; size?: "small" | "normal" }) {
   return <EntityLogo className={`team-mark team-mark-${size}`} color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={size === "small" ? 32 : 42} />;
@@ -1774,6 +1772,18 @@ function ShareView({
   </div>;
 }
 
+function ComingSoonWorkspace({ title, description, icon: Icon }: { title: string; description: string; icon: typeof CalendarDays }) {
+  return <section className="workspace-coming-soon" aria-labelledby="workspace-coming-soon-title">
+    <span className="workspace-coming-soon-mark"><LockKeyhole /></span>
+    <div>
+      <small>COMING SOON</small>
+      <h2 id="workspace-coming-soon-title">{title}</h2>
+      <p>{description}</p>
+    </div>
+    <span className="workspace-coming-soon-preview" aria-hidden="true"><Icon /></span>
+  </section>;
+}
+
 function draftPlaceValues(schedule: GeneratedSchedule) {
   return Object.fromEntries(schedule.setup.teams.map((team) => [team.id, Number.isInteger(team.draftPlace) ? team.draftPlace : undefined]));
 }
@@ -2849,7 +2859,7 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
       teamCount={scoreBarSchedule.setup.teams.length}
     />}
     <div className="workspace-shell">
-      <aside className="workspace-rail"><nav aria-label="Season workspace">{visibleViewItems.map((item) => { const Icon = item.icon; return <button type="button" key={item.key} aria-label={item.label} title={item.label} className={view === item.key ? "active" : ""} onClick={() => selectView(item)}><Icon /><span>{item.label}</span></button>; })}</nav><div className="rail-bottom"><WorkspaceSwitcher current={{ id: schedule.id, name: schedule.setup.name, seasonYear: schedule.setup.seasonYear, color: schedule.setup.color, logoUrl: schedule.setup.logoUrl, initials: schedule.setup.initials }} signedIn={Boolean(entitlements.signedIn)} /></div></aside>
+      <aside className="workspace-rail"><nav aria-label="Season workspace">{visibleViewItems.map((item) => { const Icon = item.icon; return <button type="button" key={item.key} aria-label={`${item.label}${item.comingSoon ? " coming soon" : ""}`} title={item.comingSoon ? `${item.label} coming soon` : item.label} className={`${view === item.key ? "active" : ""}${item.comingSoon ? " is-coming-soon" : ""}`} onClick={() => selectView(item)}><Icon /><span>{item.label}{item.comingSoon && <small>SOON</small>}</span></button>; })}</nav><div className="rail-bottom"><WorkspaceSwitcher current={{ id: schedule.id, name: schedule.setup.name, seasonYear: schedule.setup.seasonYear, color: schedule.setup.color, logoUrl: schedule.setup.logoUrl, initials: schedule.setup.initials }} signedIn={Boolean(entitlements.signedIn)} /></div></aside>
       <section className={`workspace-main ${selectedTeamColor ? "team-workspace-branded" : ""}`} style={workspaceMainStyle}>
         <div className="workspace-toolbar">
           <div>
@@ -2927,12 +2937,8 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
           {view === "standings" && historyViewActive && !historySchedule
             ? <HistoryMissingState season={selectedHistorySeason} onSync={syncLeagueHistory} syncing={historySyncing} canSync={canSyncHistory} />
             : view === "standings" && <StandingsView schedule={workspaceSchedule ?? activeSchedule} playerStats={workspacePlayerStats} onUpdateTiebreakers={simulation || historyViewActive ? undefined : onUpdateTiebreakers} readOnly={Boolean(simulation || historyViewActive)} />}
-          {view === "mvt" && historyViewActive && !historySchedule
-            ? <HistoryMissingState season={selectedHistorySeason} onSync={syncLeagueHistory} syncing={historySyncing} canSync={canSyncHistory} />
-            : view === "mvt" && <MvtWorkspace schedule={workspaceSchedule ?? activeSchedule} playerStats={workspacePlayerStats} pastChampions={pastChampions} />}
-          {view === "all-stars" && historyViewActive && !historySchedule
-            ? <HistoryMissingState season={selectedHistorySeason} onSync={syncLeagueHistory} syncing={historySyncing} canSync={canSyncHistory} />
-            : view === "all-stars" && <AllStarsWorkspace schedule={workspaceSchedule ?? activeSchedule} playerStats={workspacePlayerStats} pastChampions={pastChampions} />}
+          {view === "mvt" && <ComingSoonWorkspace title="MVT is coming soon" description="This award workspace is locked while we finish the next version." icon={Medal} />}
+          {view === "all-stars" && <ComingSoonWorkspace title="All-Stars is coming soon" description="This season honors page is locked while we finish the next version." icon={Sparkles} />}
           {view === "playoffs" && historyViewActive && !historySchedule
             ? <HistoryMissingState season={selectedHistorySeason} onSync={syncLeagueHistory} syncing={historySyncing} canSync={canSyncHistory} />
             : view === "playoffs" && <PlayoffsView schedule={workspaceSchedule ?? activeSchedule} onUpdatePlayoffs={simulation || historyViewActive ? () => undefined : onUpdatePlayoffs} onUpdatePlayoffGame={simulation || historyViewActive ? () => undefined : onUpdatePlayoffGame} highlightedGame={highlightedGame} simulationMode={Boolean(simulation || historyViewActive)} playoffTab={playoffTab} onChangePlayoffTab={setPlayoffTab} teamHrefFor={(teamId) => hrefWithHistorySeason(`/season/${schedule.id}/team/${teamId}`)} onOpenGame={openGameDetail} />}
