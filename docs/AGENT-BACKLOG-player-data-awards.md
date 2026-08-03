@@ -646,6 +646,23 @@ seasons open read-only; [ ] missing seasons clearly explain there is no saved sc
 **QA:** §F.1, §F.5; fixture-backed schedule-history rows render ≥2 prior seasons; screenshot saved-schedule,
 provider-history-only, and missing-data states.
 
+### HIST-3 · Historical playoff data browser  ·  issue:#143  ·  `phase:P7 type:ui area:history area:playoffs`  ·  Blocked by: #DEP-4,#HIST-2
+**Goal:** let commissioners browse prior-year playoff brackets/results when LeagueWeaver has real saved playoff
+data or provider postseason matchup history.
+**Build:** add the season selector to the Playoffs view after HIST-2. If a historical LeagueWeaver schedule has
+saved `playoffGames`, render the normal playoff bracket for that season. If only provider history exists, render
+a read-only postseason results view from saved provider matchup rows that are explicitly identified as playoff
+weeks/rounds; do not infer or generate playoff brackets from regular-season standings alone. Surface champion,
+runner-up, round labels, scores, and matchup modal links when saved player rows exist. Missing seasons or leagues
+without saved playoff rows show a clear empty state and safe "sync history" action only for public ESPN/Sleeper
+connections.
+**Acceptance:** [ ] Playoffs season selector; [ ] saved LeagueWeaver playoff brackets open normally; [ ] provider
+postseason history renders read-only when rows are saved; [ ] champion/runner-up and round scores are sourced
+from saved rows only; [ ] no generated playoff brackets or fabricated playoff claims; [ ] current-season default
+remains unchanged.
+**QA:** §F.1, §F.5; fixture-backed playoff-history rows render at least one prior postseason; screenshot saved
+LeagueWeaver bracket, provider-history-only postseason, and missing-data states on desktop + mobile.
+
 ### GDM-2 · Game card opens box score directly  ·  issue:#138  ·  `phase:P7 type:ui area:game-detail`  ·  Blocked by: #GDM-1,#TW-1
 **Goal:** remove duplicate box-score buttons and make the game card itself the click target.
 **Build:** remove the separate "Box score" button from game/team cards where the full card can safely open the
@@ -678,7 +695,7 @@ changes each time, and screenshots desktop + mobile.
 - `CONF-1`+`MVT-1` → `CONF-2`
 - `STD-1`+`MVT-2`+`AS-2` → **`UI-1`** (brand pass also covers GDM-1/TW-1 surfaces)
 - `DATA-3` → `DEP-4` (v2/later)
-- `DEP-4`+`MVT-2`+`AS-2` → **`HIST-1`** → `HIST-2`
+- `DEP-4`+`MVT-2`+`AS-2` → **`HIST-1`** → `HIST-2` → `HIST-3`
 - `GDM-1`+`TW-1` → **`GDM-2`** → `GDM-3`
 
 Full blocked-by: AS-3 ← AS-1, GDM-1 · TW-1 ← GDM-1, DATA-2. Label `agent:build` on ready stories
