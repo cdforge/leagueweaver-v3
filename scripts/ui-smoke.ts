@@ -130,6 +130,25 @@ function conferenceSmokeSetup(): LeagueSetupInput {
   };
 }
 
+function conferenceAwardsSmokeSchedule(id: string): GeneratedSchedule {
+  const conferences = createConferences(2);
+  const divisions = defaultConferenceAssignment(createDivisions(4), conferences);
+  const schedule = generateLeagueSchedule({
+    ...createDefaultSetup(),
+    id,
+    name: "Conference Awards Smoke",
+    weeks: 13,
+    divisions,
+    conferences,
+    teams: createTeams(16, divisions),
+  }, `${id}-seed`);
+  for (const [index, game] of (schedule.weeks[0]?.games ?? []).entries()) {
+    game.awayScore = 126 + index * 2;
+    game.homeScore = 114 + index;
+  }
+  return schedule;
+}
+
 let gameDetailSmokeBase: GeneratedSchedule | undefined;
 
 function cloneSchedule(schedule: GeneratedSchedule): GeneratedSchedule {
@@ -484,11 +503,68 @@ async function screenshotMvt(browser: Browser, name: string, schedule: Generated
   await expectText(page.locator(".mvt-overview"), /Power Ranking/s, `${name}: MVT overview is present`);
   for (const label of ["Positional Awards", "Achievement Awards", "Divisional / League", "Bonus Awards"]) {
     await page.getByRole("tab", { name: label }).click();
-    await expectText(page.locator(".mvt-award-panel"), new RegExp(label.replace("/", "\\/")), `${name}: ${label} table is present`);
+    if (label === "Divisional / League") {
+      await expectText(page.locator(".mvt-award-groups"), /League Awards.*Division Awards/s, `${name}: ${label} grouped tables are present`);
+    } else {
+      await expectText(page.locator(".mvt-award-panel"), new RegExp(label.replace("/", "\\/")), `${name}: ${label} table is present`);
+    }
   }
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(100);
   await page.screenshot({ path: path.join(screenshotDir, `ui-smoke-${name}.png`), fullPage: true });
+  assert.deepEqual(pageErrors, [], `${name}: no page errors`);
+  assert.deepEqual(consoleErrors, [], `${name}: no console errors`);
+  await closePage(page, name);
+}
+
+async function screenshotConferenceAwards(browser: Browser, name: string, schedule: GeneratedSchedule, viewport: { width: number; height: number }, rows: GameDetailPlayerStat[], expectConference: boolean) {
+  const page = await browser.newPage({ viewport });
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => {
+    pageErrors.push(error.message);
+  });
+
+  await page.addInitScript(({ seededSchedule, seededRows, cachePrefix }) => {
+    window.localStorage.setItem("leagueweaver:v3:welcomed", "1");
+    window.localStorage.setItem("leagueweaver:v3:seasons", JSON.stringify({ [seededSchedule.id]: { schedule: seededSchedule, savedAt: Date.now() } }));
+    window.localStorage.setItem(`${cachePrefix}${seededSchedule.id}`, JSON.stringify({ rows: seededRows }));
+  }, { seededSchedule: schedule, seededRows: rows, cachePrefix: GAME_DETAIL_CACHE_PREFIX });
+
+  const mvtResponse = await page.goto(`${baseUrl}/season/${schedule.id}?view=mvt`, { waitUntil: "networkidle" });
+  assert.ok(mvtResponse, `${name}: MVT route returned a response`);
+  assert.ok(mvtResponse.status() >= 200 && mvtResponse.status() < 400, `${name}: MVT route is reachable`);
+  if (expectConference) {
+    await page.getByRole("tab", { name: "Divisional / League" }).click();
+    await expectText(page.locator(".conference-award-group"), /Conference Awards.*\+1\.50/s, `${name}: conference tier is grouped in division/league awards`);
+    await page.getByRole("tab", { name: "Conference Awards" }).click();
+    await expectText(page.locator(".mvt-award-panel"), /Conference Awards/s, `${name}: conference awards sub-view is present`);
+  } else {
+    await assertHidden(page.getByRole("tab", { name: "Conference Awards" }), `${name}: conference awards tab is hidden for non-conference leagues`);
+    await page.getByRole("tab", { name: "Divisional / League" }).click();
+    await assertHidden(page.locator(".conference-award-group"), `${name}: conference awards group is hidden for non-conference leagues`);
+  }
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(100);
+  await page.screenshot({ path: path.join(screenshotDir, `ui-smoke-${name}.png`), fullPage: true });
+
+  const standingsResponse = await page.goto(`${baseUrl}/season/${schedule.id}?view=standings`, { waitUntil: "networkidle" });
+  assert.ok(standingsResponse, `${name}: standings route returned a response`);
+  assert.ok(standingsResponse.status() >= 200 && standingsResponse.status() < 400, `${name}: standings route is reachable`);
+  if (expectConference) {
+    await page.locator(".standings-conference-chip").first().waitFor();
+    await expectText(page.locator(".standings-division-cell").first(), /Conference/i, `${name}: standings rows show conference marks`);
+  } else {
+    await assertHidden(page.locator(".standings-conference-chip"), `${name}: standings conference marks are hidden for non-conference leagues`);
+  }
+
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(100);
+  await page.screenshot({ path: path.join(screenshotDir, `ui-smoke-${name}-standings.png`), fullPage: true });
   assert.deepEqual(pageErrors, [], `${name}: no page errors`);
   assert.deepEqual(consoleErrors, [], `${name}: no console errors`);
   await closePage(page, name);
@@ -585,6 +661,8 @@ async function main() {
     const allStarsMobile = allStarsSmokeSchedule("ui-smoke-as-mobile");
     const recapFinal = recapSmokeSchedule("ui-smoke-rw-final", true);
     const recapNonFinal = recapSmokeSchedule("ui-smoke-rw-non-final", false);
+    const confAwards = conferenceAwardsSmokeSchedule("ui-smoke-conf-2-conference");
+    const nonConfAwards = gameDetailSmokeSchedule("ui-smoke-conf-2-non-conference");
     await runSmokeStep("tw-1-synced-desktop", () => screenshotThisWeek(browser!, "tw-1-synced-desktop", twSynced, { width: 1440, height: 1000 }, gameDetailSmokeRows(twSynced)));
     await runSmokeStep("tw-1-unsynced-mobile", () => screenshotThisWeek(browser!, "tw-1-unsynced-mobile", gameDetailSmokeSchedule("ui-smoke-tw-unsynced"), { width: 390, height: 844 }));
     await runSmokeStep("std-1-synced-desktop", () => screenshotStandingsAwards(browser!, "std-1-synced-desktop", stdSynced, { width: 1440, height: 1000 }, gameDetailSmokeRows(stdSynced)));
@@ -596,6 +674,8 @@ async function main() {
     await runSmokeStep("rw-1-final-desktop", () => screenshotWeekRecap(browser!, "rw-1-final-desktop", recapFinal, { width: 1440, height: 1000 }, recapSmokeRows(recapFinal), true));
     await runSmokeStep("rw-1-final-mobile", () => screenshotWeekRecap(browser!, "rw-1-final-mobile", recapFinal, { width: 390, height: 844 }, recapSmokeRows(recapFinal), true));
     await runSmokeStep("rw-1-non-final-mobile", () => screenshotWeekRecap(browser!, "rw-1-non-final-mobile", recapNonFinal, { width: 390, height: 844 }, recapSmokeRows(recapNonFinal), false));
+    await runSmokeStep("conf-2-conference-desktop", () => screenshotConferenceAwards(browser!, "conf-2-conference-desktop", confAwards, { width: 1440, height: 1000 }, recapSmokeRows(confAwards), true));
+    await runSmokeStep("conf-2-non-conference-mobile", () => screenshotConferenceAwards(browser!, "conf-2-non-conference-mobile", nonConfAwards, { width: 390, height: 844 }, gameDetailSmokeRows(nonConfAwards), false));
     await runSmokeStep("gdm-1-synced-desktop", () => screenshotGameDetail(browser!, "gdm-1-synced-desktop", synced, { width: 1440, height: 1000 }, gameDetailSmokeRows(synced)));
     await runSmokeStep("gdm-1-unsynced-mobile", () => screenshotGameDetail(browser!, "gdm-1-unsynced-mobile", gameDetailSmokeSchedule("ui-smoke-gdm-unsynced"), { width: 390, height: 844 }));
     console.log(`UI smoke passed: screenshots written to ${path.relative(process.cwd(), screenshotDir)}`);
