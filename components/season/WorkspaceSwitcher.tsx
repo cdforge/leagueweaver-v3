@@ -69,7 +69,7 @@ export function WorkspaceSwitcher({ current, signedIn }: { current: WorkspaceSwi
       label="Switch schedule"
       trigger={
         <span className="workspace-switcher-face">
-          <EntityLogo className="mini-league-mark" color={current.color} logoUrl={current.logoUrl} monogram={monogram} size={32} />
+          <EntityLogo className="mini-league-mark" color={current.color} logoUrl={current.logoUrl} monogram={monogram} size={32} entityType="league" />
           <span className="workspace-switcher-copy"><strong>{current.name}</strong><small>{current.seasonYear} season</small></span>
           <ChevronsUpDown aria-hidden="true" />
         </span>
@@ -77,7 +77,7 @@ export function WorkspaceSwitcher({ current, signedIn }: { current: WorkspaceSwi
     >
       <p className="workspace-switcher-heading">Schedules</p>
       <span className="workspace-switcher-item is-current" aria-current="true">
-        <EntityLogo className="mini-league-mark" color={current.color} logoUrl={current.logoUrl} monogram={monogram} size={32} />
+        <EntityLogo className="mini-league-mark" color={current.color} logoUrl={current.logoUrl} monogram={monogram} size={32} entityType="league" />
         <span className="workspace-switcher-copy"><strong>{current.name}</strong><small>{current.seasonYear} season</small></span>
         <Check aria-hidden="true" />
       </span>
@@ -85,7 +85,7 @@ export function WorkspaceSwitcher({ current, signedIn }: { current: WorkspaceSwi
         <div className="workspace-switcher-list">
           {recent.map((entry) => (
             <Link key={entry.id} href={`/season/${entry.id}`} className="workspace-switcher-item">
-              <EntityLogo className="mini-league-mark" color={entry.color || "#117A45"} logoUrl={entry.logoUrl} monogram={resolveInitials(entry.initials, leagueAcronym(entry.name))} size={32} />
+              <EntityLogo className="mini-league-mark" color={entry.color || "#117A45"} logoUrl={entry.logoUrl} monogram={resolveInitials(entry.initials, leagueAcronym(entry.name))} size={32} entityType="league" />
               <span className="workspace-switcher-copy"><strong>{entry.name}</strong><small>{entry.year ? `${entry.year} season` : "Saved schedule"}</small></span>
             </Link>
           ))}

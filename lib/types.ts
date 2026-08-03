@@ -37,6 +37,7 @@ export interface Division {
   name: string;
   initials?: string;
   color: string;
+  colorSource?: "auto" | "manual";
   logoUrl?: string;
   /** Assigned conference id — set only for even division counts; undefined otherwise. */
   conferenceId?: string;
@@ -50,6 +51,7 @@ export interface Team {
   shortName: string;
   initials?: string;
   manager: string;
+  managerEmail?: string;
   color: string;
   logoUrl?: string;
   divisionId: string;
@@ -137,6 +139,10 @@ export interface LeagueSetupInput {
     gameLogoUrls?: Record<string, string>;
   };
   platformConnection?: PlatformConnection;
+  savedLeague?: {
+    id: string;
+    updatedAt: string;
+  };
   fairness: {
     maxHomeAwayStreak: 2 | 3 | 4;
     preventImmediateRematches: boolean;
@@ -281,6 +287,7 @@ export interface ImportTeam {
   city?: string;
   name: string;
   manager?: string;
+  managerEmail?: string;
   division?: string;
   rank?: number;
   /** Last season's regular-season finish (1 = best), from connected-league history. */

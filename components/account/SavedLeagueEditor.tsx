@@ -4,13 +4,12 @@ import { useState } from "react";
 import { AlertCircle, Check, LoaderCircle, Pencil, X } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
-import { CustomSelect } from "@/components/ui/CustomSelect";
-import { divisionAcronym, leagueAcronym, resolveInitials } from "@/lib/monograms";
+import { conferenceAcronym, divisionAcronym, leagueAcronym, resolveInitials } from "@/lib/monograms";
 import { teamInitials } from "@/lib/teamIdentity";
 import { normalizeSavedLeague } from "@/lib/savedLeagues";
-import type { Division, SavedLeagueIdentity, SavedLeaguePreset, Team } from "@/lib/types";
+import type { Conference, Division, SavedLeagueIdentity, SavedLeaguePreset, Team } from "@/lib/types";
 
-type EditTab = "league" | "teams" | "divisions";
+type EditTab = "league" | "teams" | "divisions" | "conferences";
 
 // A focused editor for a saved league: it loads the full saved identity, exposes the content
 // commissioners actually change (league identity, every team, and divisions), and preserves the
@@ -24,8 +23,11 @@ export function SavedLeagueEditor({ preset, onClose, onSaved }: { preset: SavedL
   const updateLeague = (patch: Partial<SavedLeagueIdentity["league"]>) => setData((current) => ({ ...current, league: { ...current.league, ...patch } }));
   const updateTeam = (id: string, patch: Partial<Team>) => setData((current) => ({ ...current, teams: current.teams.map((team) => team.id === id ? { ...team, ...patch } : team) }));
   const updateDivision = (id: string, patch: Partial<Division>) => setData((current) => ({ ...current, divisions: current.divisions.map((division) => division.id === id ? { ...division, ...patch } : division) }));
+  const updateConference = (id: string, patch: Partial<Conference>) => setData((current) => ({ ...current, conferences: (current.conferences ?? []).map((conference) => conference.id === id ? { ...conference, ...patch } : conference) }));
 
-  const divisionOptions = data.divisions.map((division) => ({ value: division.id, label: division.name || "Division", swatch: division.color, logoUrl: division.logoUrl, monogram: resolveInitials(division.initials, divisionAcronym(division.name)) }));
+  const conferences = data.conferences ?? [];
+  const divisionNameById = new Map(data.divisions.map((division) => [division.id, division.name || "Division"]));
+  const conferenceNameById = new Map(conferences.map((conference) => [conference.id, conference.name || "Conference"]));
 
   const save = async () => {
     if (saving) return;
@@ -52,7 +54,7 @@ export function SavedLeagueEditor({ preset, onClose, onSaved }: { preset: SavedL
     <Modal onClose={onClose} className="saved-league-editor" label={`Edit ${preset.name}`} busy={saving}>
       <header className="saved-league-editor-head">
         <span className="saved-league-editor-mark"><Pencil /></span>
-        <div><span className="step-kicker">Edit saved league</span><h2>{data.league.name || preset.name}</h2><p>Update identity, teams, and divisions — changes save back to this saved league.</p></div>
+        <div><span className="step-kicker">Edit saved league</span><h2>{data.league.name || preset.name}</h2><p>Update names, colors, logos, managers, and venues. Team count, division count, and division assignments stay locked.</p></div>
         <button type="button" className="icon-button" aria-label="Close editor" onClick={onClose}><X /></button>
       </header>
 
@@ -60,6 +62,7 @@ export function SavedLeagueEditor({ preset, onClose, onSaved }: { preset: SavedL
         <button type="button" role="tab" aria-selected={tab === "league"} className={tab === "league" ? "active" : ""} onClick={() => setTab("league")}>League</button>
         <button type="button" role="tab" aria-selected={tab === "teams"} className={tab === "teams" ? "active" : ""} onClick={() => setTab("teams")}>Teams<span className="saved-league-editor-count">{data.teams.length}</span></button>
         <button type="button" role="tab" aria-selected={tab === "divisions"} className={tab === "divisions" ? "active" : ""} onClick={() => setTab("divisions")}>Divisions<span className="saved-league-editor-count">{data.divisions.length}</span></button>
+        {conferences.length > 0 && <button type="button" role="tab" aria-selected={tab === "conferences"} className={tab === "conferences" ? "active" : ""} onClick={() => setTab("conferences")}>Conferences<span className="saved-league-editor-count">{conferences.length}</span></button>}
       </div>
 
       <div className="saved-league-editor-body">
@@ -78,7 +81,7 @@ export function SavedLeagueEditor({ preset, onClose, onSaved }: { preset: SavedL
             <label className="editor-field"><span>Team</span><input value={team.name} placeholder="Team name" onChange={(event) => updateTeam(team.id, { name: event.target.value })} /></label>
             <label className="editor-field"><span>Manager</span><input value={team.manager} placeholder="Manager" onChange={(event) => updateTeam(team.id, { manager: event.target.value })} /></label>
             <label className="editor-field"><span>Venue</span><input value={team.stadium} placeholder="Home venue" onChange={(event) => updateTeam(team.id, { stadium: event.target.value })} /></label>
-            <label className="editor-field editor-field-select"><span>Division</span><CustomSelect label={`${team.name || "Team"} division`} value={team.divisionId} onChange={(divisionId) => updateTeam(team.id, { divisionId })} options={divisionOptions} /></label>
+            <label className="editor-field"><span>Division</span><input value={divisionNameById.get(team.divisionId) ?? "Division"} readOnly aria-readonly="true" /></label>
           </div>)}
         </div>}
 
@@ -86,6 +89,16 @@ export function SavedLeagueEditor({ preset, onClose, onSaved }: { preset: SavedL
           {data.divisions.map((division) => <div className="editor-division-row" key={division.id}>
             <IdentityColorPicker compact name={`${division.name || "division"} division`} abbreviation={resolveInitials(division.initials, divisionAcronym(division.name))} color={division.color} logoUrl={division.logoUrl} onChange={(next) => updateDivision(division.id, next)} />
             <label className="editor-field"><span>Division name</span><input value={division.name} placeholder="Division name" onChange={(event) => updateDivision(division.id, { name: event.target.value })} /></label>
+            <label className="editor-field"><span>Initials</span><input value={division.initials ?? ""} maxLength={4} placeholder={`Auto: ${divisionAcronym(division.name)}`} onChange={(event) => updateDivision(division.id, { initials: event.target.value || undefined })} /></label>
+            {conferences.length > 0 && <label className="editor-field"><span>Conference</span><input value={division.conferenceId ? conferenceNameById.get(division.conferenceId) ?? "Conference" : "None"} readOnly aria-readonly="true" /></label>}
+          </div>)}
+        </div>}
+
+        {tab === "conferences" && conferences.length > 0 && <div className="editor-conferences">
+          {conferences.map((conference) => <div className="editor-conference-row" key={conference.id}>
+            <IdentityColorPicker compact name={`${conference.name || "conference"} conference`} abbreviation={resolveInitials(conference.initials, conferenceAcronym(conference.name))} color={conference.color} logoUrl={conference.logoUrl} onChange={(next) => updateConference(conference.id, next)} />
+            <label className="editor-field"><span>Conference name</span><input value={conference.name} placeholder="Conference name" onChange={(event) => updateConference(conference.id, { name: event.target.value })} /></label>
+            <label className="editor-field"><span>Initials</span><input value={conference.initials ?? ""} maxLength={4} placeholder={`Auto: ${conferenceAcronym(conference.name)}`} onChange={(event) => updateConference(conference.id, { initials: event.target.value || undefined })} /></label>
           </div>)}
         </div>}
       </div>

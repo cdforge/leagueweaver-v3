@@ -3,7 +3,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
-import { EntityLogo } from "./EntityLogo";
+import { EntityLogo, type EntityLogoType } from "./EntityLogo";
 
 export interface SelectOption {
   value: string;
@@ -12,12 +12,13 @@ export interface SelectOption {
   swatch?: string;
   logoUrl?: string;
   monogram?: string;
+  entityType?: EntityLogoType;
 }
 
 function OptionIdentity({ option }: { option: SelectOption }) {
   if (!option.logoUrl && !option.swatch && !option.monogram) return null;
   return (
-    <EntityLogo className="select-option-identity" color={option.swatch ?? "#117A45"} logoUrl={option.logoUrl} monogram={option.monogram || option.label.slice(0, 3).toUpperCase()} />
+    <EntityLogo className="select-option-identity" color={option.swatch ?? "#117A45"} logoUrl={option.logoUrl} monogram={option.monogram || option.label.slice(0, 3).toUpperCase()} entityType={option.entityType} />
   );
 }
 

@@ -50,8 +50,15 @@ export function divisionAcronym(name: string) {
 
 export function conferenceAcronym(name: string) {
   const nameWords = words(name);
-  const primary = nameWords.length > 1 ? nameWords.slice(0, 3).map((word) => word[0]).join("") : nameWords[0]?.slice(0, 3) ?? "";
+  const primary = nameWords[0] ? `${nameWords[0][0]}FC` : "";
   return safeCandidate([primary, nameWords.join("").slice(0, 3)], "CONF");
+}
+
+export function conferenceDivisionAcronym(divisionName: string, divisionInitials: string | undefined, conferenceName: string, conferenceInitials: string | undefined, compact = false) {
+  const conference = resolveInitials(conferenceInitials, conferenceAcronym(conferenceName)).replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  const division = resolveInitials(divisionInitials, divisionAcronym(divisionName)).replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  const divisionLetter = words(divisionName)[0]?.[0]?.toUpperCase() || division[0] || "D";
+  return `${compact ? conference.slice(0, 1) || "C" : conference}-${divisionLetter}`;
 }
 
 export function resolveInitials(initials: string | undefined, automatic: string) {

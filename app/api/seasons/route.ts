@@ -17,6 +17,28 @@ function numericSeed(seed: string) {
   return Number.isSafeInteger(value) ? value : null;
 }
 
+function setupFromStoredSchedule(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const record = value as Record<string, unknown>;
+  const setup = record.setup;
+  return setup && typeof setup === "object" && !Array.isArray(setup) ? setup as Record<string, unknown> : record;
+}
+
+function arrayField(setup: Record<string, unknown>, key: string) {
+  const value = setup[key];
+  return Array.isArray(value) ? value : [];
+}
+
+function savedLeagueField(setup: Record<string, unknown>) {
+  const value = setup.savedLeague;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const savedLeague = value as Record<string, unknown>;
+  return typeof savedLeague.id === "string" ? {
+    id: savedLeague.id,
+    updatedAt: typeof savedLeague.updatedAt === "string" ? savedLeague.updatedAt : undefined,
+  } : undefined;
+}
+
 export async function GET() {
   const auth = await getAuthenticatedClient();
   if (!auth) return NextResponse.json({ seasons: [] });
@@ -24,9 +46,12 @@ export async function GET() {
   const { data, error } = await auth.supabase.from("schedules").select("id,title,status,current_revision_id,requires_pro,updated_at,time_frame").order("updated_at", { ascending: false });
   if (error) return NextResponse.json({ error: "Saved seasons could not be loaded." }, { status: 500 });
   const activeSeasons = (data ?? []).filter((season) => season.status !== "archived");
+  if (!activeSeasons.length) return NextResponse.json({ seasons: [], plan: entitlements.plan });
+  const activeSeasonIds = activeSeasons.map((season) => season.id);
   const { data: revisions } = await auth.supabase
     .from("schedule_revisions")
-    .select("id,schedule_id,schedule_json,created_at")
+    .select("id,schedule_id,input_json,schedule_json,created_at")
+    .in("schedule_id", activeSeasonIds)
     .order("created_at", { ascending: false });
   const revisionsBySchedule = new Map<string, number>();
   const revisionById = new Map<string, NonNullable<typeof revisions>[number]>();
@@ -49,6 +74,25 @@ export async function GET() {
     const revision = currentRevision ?? latestRevisionBySchedule.get(season.id);
     return readSavedSeasonBrandingFromSchedule(revision?.schedule_json);
   };
+  const resolvedSetupMarks = (season: typeof activeSeasons[number]) => {
+    const currentRevision = season.current_revision_id ? revisionById.get(season.current_revision_id) : undefined;
+    const revision = currentRevision ?? latestRevisionBySchedule.get(season.id);
+    const scheduleSetup = setupFromStoredSchedule(revision?.schedule_json);
+    const inputSetup = setupFromStoredSchedule(revision?.input_json);
+    const scheduleTeams = arrayField(scheduleSetup, "teams");
+    const inputTeams = arrayField(inputSetup, "teams");
+    const scheduleDivisions = arrayField(scheduleSetup, "divisions");
+    const inputDivisions = arrayField(inputSetup, "divisions");
+    const scheduleConferences = arrayField(scheduleSetup, "conferences");
+    const inputConferences = arrayField(inputSetup, "conferences");
+    const savedLeague = savedLeagueField(scheduleSetup) ?? savedLeagueField(inputSetup);
+    return {
+      teams: scheduleTeams.length >= inputTeams.length ? scheduleTeams : inputTeams,
+      divisions: scheduleDivisions.length >= inputDivisions.length ? scheduleDivisions : inputDivisions,
+      conferences: scheduleConferences.length >= inputConferences.length ? scheduleConferences : inputConferences,
+      savedLeague,
+    };
+  };
 
   const grouped = new Map<string, typeof activeSeasons>();
   for (const season of activeSeasons) {
@@ -61,12 +105,17 @@ export async function GET() {
   const seasons = [...grouped.values()].map((group) => {
     const season = group[0];
     const branding = resolvedBranding(season);
+    const marks = resolvedSetupMarks(season);
     return {
       ...season,
       time_frame: resolvedTimeFrame(season),
       logo_url: branding.logoUrl ?? null,
       color: branding.color ?? null,
       initials: branding.initials ?? null,
+      teams: marks.teams,
+      divisions: marks.divisions,
+      conferences: marks.conferences,
+      savedLeague: marks.savedLeague,
       editable: true,
       revision_count: group.reduce((total, item) => total + (revisionsBySchedule.get(item.id) ?? 0), 0),
     };

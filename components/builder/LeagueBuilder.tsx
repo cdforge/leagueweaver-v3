@@ -46,12 +46,12 @@ import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { createBlankSetup, createConferences, createDefaultSetup, createDivisions, createTeams } from "@/lib/defaults";
-import { defaultConferenceAssignment } from "@/lib/conferences";
+import { conferenceOfDivision, conferencesApply, defaultConferenceAssignment, hasConferences } from "@/lib/conferences";
 import { identityFromSetup, normalizeSavedLeague } from "@/lib/savedLeagues";
 import { getNflWeeks, getNflWeekWindow, getWeekDateLabel } from "@/lib/schedule";
 import { generateScheduleAsync } from "@/lib/generateScheduleAsync";
 import { createLocalSeasonId, listLocalSeasons, loadSetup, saveSeason, saveSetup } from "@/lib/storage";
-import { divisionAcronym, entityMonogram, leagueAcronym, resolveInitials } from "@/lib/monograms";
+import { conferenceAcronym, conferenceDivisionAcronym, divisionAcronym, entityMonogram, leagueAcronym, resolveInitials } from "@/lib/monograms";
 import { accessibleAccentColor, readableTextColor } from "@/lib/colorContrast";
 import { formatDraftPlace, getTeamsMissingDraftPlaces, getWeekOneTeamOrder, hasCompleteDraftRanking } from "@/lib/rankings";
 import {
@@ -73,7 +73,7 @@ const STEPS = [
   { label: "Start", shortLabel: "Start" },
   { label: "League", shortLabel: "League" },
   { label: "Teams", shortLabel: "Teams" },
-  { label: "Divisions", shortLabel: "Divisions" },
+  { label: "Structure", shortLabel: "Divisions" },
   { label: "Season", shortLabel: "Season" },
   { label: "Seeding", shortLabel: "Seeding" },
   { label: "Week 1 Ranking", shortLabel: "Week 1" },
@@ -99,6 +99,30 @@ function setupLogoEntries(setup: LeagueSetupInput) {
     ...(setup.playoffs.roundLogoUrls ?? []).map((logoUrl, index) => [`playoff-round:${index}`, logoUrl]),
     ...Object.entries(setup.playoffs.gameLogoUrls ?? {}).map(([gameId, logoUrl]) => [`playoff-game:${gameId}`, logoUrl]),
   ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+}
+
+function divisionDisplayInitials(setup: Pick<LeagueSetupInput, "divisions" | "conferences">, division: Division) {
+  const conference = hasConferences(setup) ? conferenceOfDivision(setup, division.id) : undefined;
+  return conference
+    ? conferenceDivisionAcronym(division.name, division.initials, conference.name, conference.initials)
+    : resolveInitials(division.initials, divisionAcronym(division.name));
+}
+
+function conferenceDisplayInitials(conference: Conference) {
+  return resolveInitials(conference.initials, conferenceAcronym(conference.name));
+}
+
+function divisionPlacementOption(setup: Pick<LeagueSetupInput, "divisions" | "conferences">, division: Division) {
+  const conference = hasConferences(setup) ? conferenceOfDivision(setup, division.id) : undefined;
+  return {
+    value: division.id,
+    label: conference ? `${conferenceDisplayInitials(conference)} · ${division.name}` : division.name,
+    description: conference ? `${conference.name} conference` : undefined,
+    swatch: division.color,
+    logoUrl: division.logoUrl,
+    monogram: divisionDisplayInitials(setup, division),
+    entityType: "division" as const,
+  };
 }
 
 function savedLogoEntries(identity?: SavedLeagueIdentity) {
@@ -167,7 +191,7 @@ function SavedLeagueRow({ preset, latest, onChoose }: { preset: SavedLeaguePrese
   const updated = formatSavedLeagueDate(preset.updatedAt);
   return (
     <button type="button" className="saved-league-row" style={{ "--row-accent": league.color } as React.CSSProperties} onClick={() => onChoose(preset)}>
-      <EntityLogo size={32} color={league.color} logoUrl={league.logoUrl} monogram={resolveInitials(league.initials, leagueAcronym(league.name))} />
+      <EntityLogo size={32} color={league.color} logoUrl={league.logoUrl} monogram={resolveInitials(league.initials, leagueAcronym(league.name))} entityType="league" />
       <span className="saved-league-row-who">
         <strong><span className="saved-league-row-name">{league.name || preset.name}</span>{latest && <span className="saved-league-recency">Last used</span>}</strong>
         <small>{preset.data.teams.length} teams · {preset.data.divisions.length} divisions{connection ? ` · ${connection}` : ""}</small>
@@ -489,6 +513,52 @@ function minSchedulableDivisions(teamCount: number): number {
   return divisionCountOptions(teamCount).find((count) => divisionCountSchedulable(teamCount, count)) ?? 2;
 }
 
+function divisionRecommendationScore(teamCount: number, divisionCount: number): number {
+  if (!divisionCountSchedulable(teamCount, divisionCount)) return Number.NEGATIVE_INFINITY;
+  const sizes = divisionSizesFor(teamCount, divisionCount);
+  const average = teamCount / divisionCount;
+  let score = 0;
+  if (Math.max(...sizes) <= 5) score += 4;
+  if (Math.min(...sizes) >= 3) score += 2;
+  if (teamCount % divisionCount === 0) score += 1;
+  if (conferencesApply(divisionCount) && teamCount >= 12) score += 3;
+  if (divisionCount === 2 && Math.max(...sizes) >= 7) score -= 6;
+  score -= Math.abs(average - 4);
+  return score;
+}
+
+function recommendedDivisionCounts(teamCount: number): number[] {
+  const scored = divisionCountOptions(teamCount)
+    .filter((count) => divisionCountSchedulable(teamCount, count))
+    .map((count) => ({ count, score: divisionRecommendationScore(teamCount, count) }))
+    .sort((left, right) => right.score - left.score || left.count - right.count);
+  const best = scored[0]?.score ?? Number.NEGATIVE_INFINITY;
+  return scored
+    .filter((entry) => entry.score >= best - 1.5)
+    .slice(0, 2)
+    .map((entry) => entry.count)
+    .sort((left, right) => left - right);
+}
+
+function divisionRecommendationCopy(teamCount: number, divisionCount: number, recommended: number[]) {
+  const sizes = divisionSizesFor(teamCount, divisionCount);
+  const shape = sizes.join(" · ");
+  const isRecommended = recommended.includes(divisionCount);
+  if (isRecommended && conferencesApply(divisionCount)) {
+    return `Recommended: ${shape} teams per division, with two conference halves for more varied seasonal play.`;
+  }
+  if (isRecommended) {
+    return `Recommended: ${shape} teams per division keeps the required division games from taking over the season.`;
+  }
+  if (divisionCount === 2 && Math.max(...sizes) >= 7) {
+    return `Allowed, but division-heavy: ${shape} teams means most or all regular-season games stay inside the division.`;
+  }
+  if (conferencesApply(divisionCount)) {
+    return `Allowed: ${shape} teams per division, with conferences available for bracket halves.`;
+  }
+  return `Allowed: ${shape} teams per division.`;
+}
+
 // Resize the roster WITHOUT discarding what the user already entered: keep every
 // existing team, append fresh defaults only for added slots, trim from the end when
 // shrinking, and repair any divisionId that no longer points at a live division.
@@ -509,6 +579,54 @@ function resizeTeams(existing: Team[], nextCount: number, divisions: Division[])
 function resizeDivisions(existing: Division[], count: number): Division[] {
   const template = createDivisions(count);
   return Array.from({ length: count }, (_, index) => existing[index] ?? template[index]);
+}
+
+function hexToRgb(hex: string): [number, number, number] | null {
+  const clean = hex.trim().replace(/^#/, "");
+  if (!/^[\da-f]{6}$/i.test(clean)) return null;
+  return [0, 2, 4].map((offset) => parseInt(clean.slice(offset, offset + 2), 16)) as [number, number, number];
+}
+
+function mixHex(base: string, target: string, amount: number): string {
+  const baseRgb = hexToRgb(base);
+  const targetRgb = hexToRgb(target);
+  if (!baseRgb || !targetRgb) return base;
+  const mixed = baseRgb.map((channel, index) => Math.round(channel + (targetRgb[index] - channel) * amount));
+  return `#${mixed.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function conferenceDivisionColor(conferenceColor: string, index: number, total: number): string {
+  if (total <= 1) return conferenceColor;
+  const steps = total === 2 ? [0.08, 0.26] : total === 3 ? [0.06, 0.2, 0.34] : [0.04, 0.16, 0.28, 0.4];
+  return mixHex(conferenceColor, "#ffffff", steps[index % steps.length]);
+}
+
+function withConferenceDivisionColors(divisions: Division[], conferences?: Conference[]): Division[] {
+  if (!conferences?.length) return divisions;
+  const counts = new Map<string, number>();
+  return divisions.map((division) => {
+    const conference = conferences.find((entry) => entry.id === division.conferenceId);
+    if (!conference || division.colorSource === "manual" || division.logoUrl) return division;
+    const index = counts.get(conference.id) ?? 0;
+    const total = divisions.filter((entry) => entry.conferenceId === conference.id).length;
+    counts.set(conference.id, index + 1);
+    return { ...division, color: conferenceDivisionColor(conference.color, index, total), colorSource: "auto" };
+  });
+}
+
+function recommendedDivisionCount(teamCount: number): number {
+  return recommendedDivisionCounts(teamCount)[0] ?? minSchedulableDivisions(teamCount);
+}
+
+function structureForDivisionCount(existing: Division[], count: number) {
+  const conferenceReady = conferencesApply(count);
+  const conferences = conferenceReady ? createConferences(2) : undefined;
+  const resized = resizeDivisions(existing, count);
+  const assigned = conferenceReady
+    ? defaultConferenceAssignment(resized, conferences!)
+    : resized.map((division) => ({ ...division, conferenceId: undefined }));
+  const divisions = conferenceReady ? withConferenceDivisionColors(assigned, conferences) : assigned;
+  return { conferences, divisions };
 }
 
 // Split a folded-in name back into city + name when "City names" is turned on again.
@@ -540,16 +658,17 @@ function TeamsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; s
   const setTeamCount = (count: number) => {
     const next = Math.max(8, Math.min(MAX_TEAMS, count + (count % 2)));
     setSetup((current) => {
-      // Keep the roster schedulable: if the new team count can't split into the
-      // current number of divisions (e.g. 32 teams over 2 divisions), fall back to
-      // the smallest division count that fits so generation never hits a dead end.
-      const divisions = divisionCountSchedulable(next, current.divisions.length)
-        ? current.divisions
-        : resizeDivisions(current.divisions, minSchedulableDivisions(next));
+      const recommendedCount = recommendedDivisionCount(next);
+      const divisionCountChanged = current.divisions.length !== recommendedCount;
+      const { conferences, divisions } = structureForDivisionCount(current.divisions, recommendedCount);
+      const resizedTeams = resizeTeams(current.teams, next, divisions);
       return {
         ...current,
+        conferences,
         divisions,
-        teams: resizeTeams(current.teams, next, divisions),
+        teams: divisionCountChanged
+          ? resizedTeams.map((team, index) => ({ ...team, divisionId: divisions[index % recommendedCount].id }))
+          : resizedTeams,
         priorSeason: { ...current.priorSeason, enabled: false, hasData: false, entryMode: "none" },
       };
     });
@@ -606,12 +725,8 @@ function TeamsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; s
 
 function DivisionsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; setSetup: React.Dispatch<React.SetStateAction<LeagueSetupInput>>; showErrors: boolean }) {
   const setDivisionCount = (count: number) => {
-    // Even division counts (4/6/8) split into two conferences; 2 or odd counts have none.
-    const even = count >= 4 && count % 2 === 0;
-    const conferences = even ? createConferences(2) : undefined;
     setSetup((current) => {
-      const resized = resizeDivisions(current.divisions, count);
-      const divisions = even ? defaultConferenceAssignment(resized, conferences!) : resized.map((division) => ({ ...division, conferenceId: undefined }));
+      const { conferences, divisions } = structureForDivisionCount(current.divisions, count);
       return {
         ...current,
         divisions,
@@ -621,28 +736,54 @@ function DivisionsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInpu
       };
     });
   };
-  const updateConference = (id: string, patch: Partial<Conference>) => setSetup((current) => ({ ...current, conferences: current.conferences?.map((conference) => conference.id === id ? { ...conference, ...patch } : conference) }));
-  const assignDivisionConference = (divisionId: string, conferenceId: string) => setSetup((current) => ({ ...current, divisions: current.divisions.map((division) => division.id === divisionId ? { ...division, conferenceId } : division) }));
-  const updateDivision = (id: string, patch: Partial<Division>) => setSetup((current) => ({ ...current, divisions: current.divisions.map((division) => division.id === id ? { ...division, ...patch } : division) }));
+  const updateConference = (id: string, patch: Partial<Conference>) => setSetup((current) => {
+    const conferences = current.conferences?.map((conference) => conference.id === id ? { ...conference, ...patch } : conference);
+    return { ...current, conferences, divisions: withConferenceDivisionColors(current.divisions, conferences) };
+  });
+  const assignDivisionConference = (divisionId: string, conferenceId: string) => setSetup((current) => {
+    const divisions = current.divisions.map((division) => division.id === divisionId ? { ...division, conferenceId } : division);
+    return { ...current, divisions: withConferenceDivisionColors(divisions, current.conferences) };
+  });
+  const updateDivision = (id: string, patch: Partial<Division>) => setSetup((current) => ({
+    ...current,
+    divisions: current.divisions.map((division) => division.id === id ? { ...division, ...patch, colorSource: patch.color ? "manual" : division.colorSource } : division),
+  }));
   const updateTeam = (id: string, divisionId: string) => setSetup((current) => ({ ...current, teams: current.teams.map((team) => team.id === id ? { ...team, divisionId } : team) }));
   const counts = setup.divisions.map((division) => setup.teams.filter((team) => team.divisionId === division.id).length);
   const balanced = Math.max(...counts) - Math.min(...counts) <= 1;
+  const conferenceReady = conferencesApply(setup.divisions.length);
+  const recommendedCounts = recommendedDivisionCounts(setup.teams.length);
+  const recommendationCopy = divisionRecommendationCopy(setup.teams.length, setup.divisions.length, recommendedCounts);
   return <div className="step-stack">
-    <div className="section-heading"><span className="step-kicker">Step 4 of 10</span><h1>Build the divisions.</h1><p>Name each group, keep its color and logo visible, then place every team.</p></div>
+    <div className="section-heading"><span className="step-kicker">Step 4 of 10</span><h1>Choose the league structure.</h1><p>Pick the division count first. If conferences apply, name and balance them before placing teams.</p></div>
     <div className="division-stage">
-      <div className="compact-controls division-controls"><div><FieldLabel>Divisions</FieldLabel><div className="segmented segmented-wrap">{divisionCountOptions(setup.teams.length).map((count) => { const schedulable = divisionCountSchedulable(setup.teams.length, count); return <button key={count} type="button" disabled={!schedulable} title={schedulable ? undefined : `${setup.teams.length} teams can’t split into ${count} balanced divisions within a 14-week season`} className={setup.divisions.length === count ? "active" : ""} onClick={() => setDivisionCount(count)}>{count}</button>; })}</div></div><div className={`roster-status ${balanced ? "" : "warning"}`}>{balanced ? <Check /> : <CircleAlert />}<span><strong>{balanced ? "Balanced divisions" : "Divisions need rebalancing"}</strong><small>{counts.join(" · ")} teams</small></span></div></div>
-      <div className="division-strip">{setup.divisions.map((division) => <div className="division-identity-edit" key={division.id}><IdentityColorPicker compact name={`${division.name} division`} abbreviation={resolveInitials(division.initials, divisionAcronym(division.name))} color={division.color} logoUrl={division.logoUrl} onChange={(next) => updateDivision(division.id, next)} /><div><input aria-label={`${division.name} division name`} aria-invalid={showErrors && !division.name.trim()} value={division.name} onChange={(event) => updateDivision(division.id, { name: event.target.value })} /><input aria-label={`${division.name} division initials override`} maxLength={4} placeholder={`Auto: ${divisionAcronym(division.name)}`} value={division.initials ?? ""} onChange={(event) => updateDivision(division.id, { initials: event.target.value || undefined })} /></div></div>)}</div>
+      <div className="structure-picker">
+        <div className="compact-controls division-controls"><div><FieldLabel>Divisions</FieldLabel><div className="segmented segmented-wrap division-count-options">{divisionCountOptions(setup.teams.length).map((count) => {
+          const schedulable = divisionCountSchedulable(setup.teams.length, count);
+          const recommended = recommendedCounts.includes(count);
+          return <button key={count} type="button" disabled={!schedulable} title={schedulable ? divisionRecommendationCopy(setup.teams.length, count, recommendedCounts) : `${setup.teams.length} teams can’t split into ${count} balanced divisions within a 14-week season`} className={`${setup.divisions.length === count ? "active" : ""} ${recommended ? "recommended" : ""}`} onClick={() => setDivisionCount(count)}><span>{count}</span>{recommended && <em>Best</em>}</button>;
+        })}</div></div><div className={`roster-status ${balanced ? "" : "warning"}`}>{balanced ? <Check /> : <CircleAlert />}<span><strong>{balanced ? "Balanced divisions" : "Divisions need rebalancing"}</strong><small>{counts.join(" · ")} teams</small></span></div></div>
+        <div className="division-recommendation-note"><Sparkles /><span><strong>{recommendedCounts.length ? `Best fit: ${recommendedCounts.join(" or ")} division${recommendedCounts.length === 1 && recommendedCounts[0] === 1 ? "" : "s"}` : "Schedule fit"}</strong><small>{recommendationCopy}</small></span></div>
+        <div className="structure-summary">
+          <strong>{conferenceReady ? "Conference structure enabled" : "Division-only structure"}</strong>
+          <span>{conferenceReady ? `${setup.divisions.length} divisions split into 2 conferences for bracket halves.` : `${setup.divisions.length} division${setup.divisions.length === 1 ? "" : "s"} with no conference layer.`}</span>
+        </div>
+      </div>
       {setup.conferences?.length === 2 && (() => {
         const confCounts = setup.conferences.map((conference) => setup.divisions.filter((division) => division.conferenceId === conference.id).length);
         const confBalanced = confCounts[0] === confCounts[1];
         return <div className="conference-stage">
-          <div className="division-assign-head"><strong>Conferences</strong><span>Split the divisions into two balanced conferences — each becomes half of the playoff bracket.</span></div>
-          <div className="division-strip">{setup.conferences.map((conference) => <div className="division-identity-edit" key={conference.id}><IdentityColorPicker compact name={conference.name} abbreviation={resolveInitials(conference.initials, conference.name.slice(0, 3).toUpperCase())} color={conference.color} logoUrl={conference.logoUrl} onChange={(next) => updateConference(conference.id, next)} /><div><input aria-label={`${conference.name} name`} value={conference.name} onChange={(event) => updateConference(conference.id, { name: event.target.value })} /><input aria-label={`${conference.name} initials override`} maxLength={4} value={conference.initials ?? ""} onChange={(event) => updateConference(conference.id, { initials: event.target.value || undefined })} /></div></div>)}</div>
+          <div className="division-assign-head"><strong>Name conferences</strong><span>These become the parent groups in the preview and the two playoff bracket halves.</span></div>
+          <div className="division-strip">{setup.conferences.map((conference) => <div className="division-identity-edit" key={conference.id}><IdentityColorPicker compact name={conference.name} abbreviation={conferenceDisplayInitials(conference)} color={conference.color} logoUrl={conference.logoUrl} onChange={(next) => updateConference(conference.id, next)} /><div><input aria-label={`${conference.name} name`} value={conference.name} onChange={(event) => updateConference(conference.id, { name: event.target.value })} /><input aria-label={`${conference.name} initials override`} maxLength={4} placeholder={`Auto: ${conferenceAcronym(conference.name)}`} value={conference.initials ?? ""} onChange={(event) => updateConference(conference.id, { initials: event.target.value || undefined })} /></div></div>)}</div>
           <div className={`roster-status ${confBalanced ? "" : "warning"}`}>{confBalanced ? <Check /> : <CircleAlert />}<span><strong>{confBalanced ? "Balanced conferences" : "Conferences need balancing"}</strong><small>{setup.conferences.map((conference, index) => `${conference.name}: ${confCounts[index]}`).join(" · ")}</small></span></div>
-          <div className="division-assignments"><div>{setup.divisions.map((division) => <div className="division-assign-row" key={division.id}><EntityLogo color={division.color} logoUrl={division.logoUrl} monogram={resolveInitials(division.initials, divisionAcronym(division.name))} /><span><strong>{division.name}</strong></span><CustomSelect label={`${division.name} conference`} value={division.conferenceId ?? ""} onChange={(conferenceId) => assignDivisionConference(division.id, conferenceId)} options={setup.conferences!.map((conference) => ({ value: conference.id, label: conference.name, swatch: conference.color, logoUrl: conference.logoUrl, monogram: resolveInitials(conference.initials, conference.name.slice(0, 3).toUpperCase()) }))} /></div>)}</div></div>
+          <div className="division-assignments"><div className="division-assign-head"><strong>Assign divisions to conferences</strong><span>Keep the two conferences even.</span></div><div>{setup.divisions.map((division) => <div className="division-assign-row" key={division.id}><EntityLogo color={division.color} logoUrl={division.logoUrl} monogram={divisionDisplayInitials(setup, division)} entityType="division" /><span><strong>{division.name}</strong></span><CustomSelect label={`${division.name} conference`} value={division.conferenceId ?? ""} onChange={(conferenceId) => assignDivisionConference(division.id, conferenceId)} options={setup.conferences!.map((conference) => ({ value: conference.id, label: conference.name, swatch: conference.color, logoUrl: conference.logoUrl, monogram: conferenceDisplayInitials(conference), entityType: "conference" as const }))} /></div>)}</div></div>
         </div>;
       })()}
-      <div className="division-assignments"><div className="division-assign-head"><strong>Place each team</strong><span>Keep each division within one team of the others.</span></div><div>{setup.teams.map((team) => <div className="division-assign-row" key={team.id}><EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} /><span>{setup.display.cityNames && team.city && <small className="team-city">{team.city}</small>}<strong>{team.name}</strong>{setup.display.managers && <small>{team.manager || "No manager"}</small>}</span><CustomSelect label={`${teamDisplayName(team)} division`} value={team.divisionId} onChange={(divisionId) => updateTeam(team.id, divisionId)} options={setup.divisions.map((division) => ({ value: division.id, label: division.name, swatch: division.color, logoUrl: division.logoUrl, monogram: resolveInitials(division.initials, divisionAcronym(division.name)) }))} /></div>)}</div></div>
+      <div className="division-name-stage">
+        <div className="division-assign-head"><strong>Name divisions</strong><span>{conferenceReady ? "Division marks will include their conference prefix." : "These labels appear anywhere a division identity is shown."}</span></div>
+        <div className="division-strip">{setup.divisions.map((division) => <div className="division-identity-edit" key={division.id}><IdentityColorPicker compact name={`${division.name} division`} abbreviation={divisionDisplayInitials(setup, division)} color={division.color} logoUrl={division.logoUrl} onChange={(next) => updateDivision(division.id, next)} /><div><input aria-label={`${division.name} division name`} aria-invalid={showErrors && !division.name.trim()} value={division.name} onChange={(event) => updateDivision(division.id, { name: event.target.value })} /><input aria-label={`${division.name} division initials override`} maxLength={4} placeholder={`Auto: ${divisionAcronym(division.name)}`} value={division.initials ?? ""} onChange={(event) => updateDivision(division.id, { initials: event.target.value || undefined })} /></div></div>)}</div>
+      </div>
+      <div className="division-assignments"><div className="division-assign-head"><strong>Place each team</strong><span>{conferenceReady ? "Each option shows conference first, then division." : "Keep each division within one team of the others."}</span></div><div>{setup.teams.map((team) => <div className="division-assign-row" key={team.id}><EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} /><span>{setup.display.cityNames && team.city && <small className="team-city">{team.city}</small>}<strong>{team.name}</strong>{setup.display.managers && <small>{team.manager || "No manager"}</small>}</span><CustomSelect label={`${teamDisplayName(team)} division`} value={team.divisionId} onChange={(divisionId) => updateTeam(team.id, divisionId)} options={setup.divisions.map((division) => divisionPlacementOption(setup, division))} /></div>)}</div></div>
     </div>
   </div>;
 }
@@ -845,7 +986,7 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
     const halvesUsable = isPlayoffPlacementUsable("division-halves", divisionCount, fieldSize);
     patch({
       fieldSize,
-      placementMode: p.placementMode === "division-halves" && !halvesUsable ? "overall" : p.placementMode,
+      placementMode: p.placementMode === "division-halves" && !halvesUsable ? isPlayoffPlacementUsable("division-leaders", divisionCount, fieldSize) ? "division-leaders" : "overall" : p.placementMode,
       consolationMode: p.consolationMode === "division-halves" && !halvesUsable ? "standard" : p.consolationMode,
       thirdPlaceGame: p.consolationMode !== "off" && fieldSize >= 4,
       fieldStatus: "live",
@@ -869,7 +1010,8 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
 
   const byeCount = getPlayoffByeCount(p.fieldSize);
   const fieldSizeOptions: number[] = [];
-  for (let n = 2; n <= maxFieldSize; n += 2) fieldSizeOptions.push(n);
+  const fieldStep = divisionCount % 2 === 1 ? 1 : 2;
+  for (let n = 2; n <= maxFieldSize; n += fieldStep) fieldSizeOptions.push(n);
   if (!fieldSizeOptions.includes(maxFieldSize)) fieldSizeOptions.push(maxFieldSize);
 
   const halvesUsable = isPlayoffPlacementUsable("division-halves", divisionCount, p.fieldSize);
@@ -895,19 +1037,21 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
   const roundNames = getPlayoffRoundNames(normalized, divisionCount);
   const gameSlots = getPlayoffGameBrandingSlots(normalized, divisionCount);
   // Consolation slots derive from a stubbed schedule (structure is deterministic from settings).
-  const consolationSlots: Array<{ id: string; label: string; roundName: string; roundIndex: number }> = (() => {
-    if (p.consolationMode === "off") return [];
+  const previewStub = { id: "wizard-preview", seed: "0", createdAt: "", setup: { ...setup, playoffs: normalized }, weeks: [], playoffGames: [], revision: 0, fairness: {} } as unknown as GeneratedSchedule;
+  const consolationProjection = (() => {
+    if (p.consolationMode === "off") return null;
     try {
-      const stub = { id: "wizard-preview", seed: "0", createdAt: "", setup: { ...setup, playoffs: normalized }, weeks: [], playoffGames: [], revision: 0, fairness: {} } as unknown as GeneratedSchedule;
-      const bracket = projectConsolationBracket(stub);
-      return bracket?.rounds.flatMap((round) => round.games.map((game) => ({ id: game.id, label: game.label, roundName: round.name, roundIndex: round.roundIndex }))) ?? [];
-    } catch { return []; }
+      return projectConsolationBracket(previewStub);
+    } catch { return null; }
+  })();
+  const consolationSlots: Array<{ id: string; label: string; roundName: string; roundIndex: number }> = (() => {
+    if (!consolationProjection) return [];
+    return consolationProjection.rounds.flatMap((round) => round.games.map((game) => ({ id: game.id, label: game.label, roundName: round.name, roundIndex: round.roundIndex }))) ?? [];
   })();
   // Projected finishing chart (exact places up top, ranges + tail once the calendar runs out).
   const placementChart = (() => {
     try {
-      const stub = { id: "wizard-preview", seed: "0", createdAt: "", setup: { ...setup, playoffs: normalized }, weeks: [], playoffGames: [], revision: 0, fairness: {} } as unknown as GeneratedSchedule;
-      return projectPlacementChart(stub);
+      return projectPlacementChart(previewStub);
     } catch { return []; }
   })();
   const updateRoundName = (roundIndex: number, name: string) => {
@@ -1072,7 +1216,40 @@ function PlayoffsStep({ setup, setSetup }: { setup: LeagueSetupInput; setSetup: 
     return { rounds, connections: conns, gameNo: numberGames(rounds) };
   };
   const buildChampionship = (): PBracket => buildPool("championship");
-  const buildConsolation = (): PBracket => buildPool("consolation");
+  const buildConsolation = (): PBracket => {
+    if (!consolationProjection) return buildPool("consolation");
+    const rounds: PRound[] = consolationProjection.rounds.map((round) => ({
+      name: round.name,
+      matches: round.games.map((game) => ({
+        id: game.id,
+        accent: game.divisionId ? divById.get(game.divisionId)?.color : "#586761",
+        slots: game.entrants.map((entrant): PSlot => {
+          if (entrant.kind === "team") return { seed: entrant.projectedSeed, division: divById.get(entrant.divisionId) };
+          return {
+            feederId: entrant.gameId,
+            text: `${entrant.outcome === "winner" ? "Winner" : "Loser"} · Game ?`,
+          };
+        }),
+      })),
+    }));
+    const gameNo = numberGames(rounds);
+    rounds.forEach((round) => round.matches.forEach((match) => {
+      match.slots = match.slots.map((slot) => slot.feederId && slot.text?.endsWith("Game ?")
+        ? { ...slot, text: slot.text.replace("Game ?", `Game ${gameNo[slot.feederId] ?? "?"}`) }
+        : slot);
+    }));
+    const connections: BracketConnection[] = rounds.flatMap((round) => round.matches.flatMap((match) =>
+      match.slots
+        .filter((slot) => Boolean(slot.feederId))
+        .map((slot) => ({
+          id: `pv-${slot.feederId}-${match.id}`,
+          sourceGameId: slot.feederId!,
+          targetGameId: match.id,
+          outcome: slot.text?.startsWith("Loser") ? "loser" : "winner",
+          color: slot.division?.color,
+        }))));
+    return { rounds, connections, gameNo };
+  };
 
   const consolationAvailable = consolationSlots.length > 0 && (seeded.length - p.fieldSize) >= 2;
   const showConsolationView = previewView === "consolation" && consolationAvailable;
@@ -1256,7 +1433,7 @@ function ReviewStep({ setup }: { setup: LeagueSetupInput }) {
   return (
     <div className="step-stack">
       <div className="section-heading"><span className="step-kicker">Step 10 of 10</span><h1>Your league is ready to weave.</h1><p>One final check, then we’ll build the complete season.</p></div>
-      <div className="review-banner" style={{ borderColor: setup.color }}><EntityLogo className="review-mark" size={54} color={setup.color} logoUrl={setup.logoUrl} monogram={resolveInitials(setup.initials, leagueAcronym(setup.name))} /><div><span>{setup.seasonYear} FANTASY SEASON</span><h2>{setup.name}</h2><p>{setup.description}</p></div></div>
+      <div className="review-banner" style={{ borderColor: setup.color }}><EntityLogo className="review-mark" size={54} color={setup.color} logoUrl={setup.logoUrl} monogram={resolveInitials(setup.initials, leagueAcronym(setup.name))} entityType="league" /><div><span>{setup.seasonYear} FANTASY SEASON</span><h2>{setup.name}</h2><p>{setup.description}</p></div></div>
       <div className="review-metrics"><div><strong>{setup.teams.length}</strong><span>Teams</span></div><div><strong>{setup.divisions.length}</strong><span>Divisions</span></div><div><strong>{setup.weeks}</strong><span>Weeks</span></div><div><strong>{setup.teams.length * setup.weeks / 2}</strong><span>Matchups</span></div></div>
       <div className="validation-list">{checks.map((check) => <div key={check}><Check />{check}</div>)}</div>
       <div className="generation-note"><WandSparkles /><span><strong>Generation is deterministic and validated.</strong><small>We’ll check team frequency, matchup inventory, divisional balance, and home/away totals before showing the result.</small></span></div>
@@ -1268,18 +1445,56 @@ function previewDivisions(setup: LeagueSetupInput) {
   return setup.divisions.map((division) => ({ ...division, teams: setup.teams.filter((team) => team.divisionId === division.id) }));
 }
 
+function previewConferenceGroups(setup: LeagueSetupInput) {
+  const divisions = previewDivisions(setup);
+  if (!hasConferences(setup)) return null;
+  return setup.conferences!.map((conference) => ({
+    conference,
+    divisions: divisions.filter((division) => division.conferenceId === conference.id),
+  }));
+}
+
 function setupProgress(step: number) {
   return Math.round(((step + 1) / STEPS.length) * 100);
 }
 
 function BlueprintRoster({ setup }: { setup: LeagueSetupInput }) {
   const divisions = previewDivisions(setup);
+  const conferenceGroups = previewConferenceGroups(setup);
   // A sealed (random) seeding must not leak its order — hide the rank badge here too,
   // not just in the seeding editor, or the blueprint becomes the peek-hole.
   const sealed = setup.priorSeason.entryMode === "random";
+  const DivisionPreview = ({ division }: { division: Division & { teams: Team[] } }) => (
+    <div className="preview-division-group" key={division.id}>
+      <div className="preview-division-title">
+        <EntityLogo className="preview-division-mark" color={division.color} logoUrl={division.logoUrl} monogram={divisionDisplayInitials(setup, division)} entityType="division" />
+        <strong>{division.name}</strong>
+        <small>{division.teams.length}</small>
+      </div>
+      {division.teams.map((team) => {
+        const accent = accessibleAccentColor(team.color);
+        return (
+          <div className="preview-team" key={team.id} title={sealed ? `${teamDisplayName(team, setup.display.cityNames)} · Seeding sealed` : `${teamDisplayName(team, setup.display.cityNames)} · Rank ${team.overallRank}`}>
+            <EntityLogo className="preview-team-logo" color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={40} />
+            <span className="preview-team-copy">
+              {setup.display.cityNames && team.city && <small className="team-city">{team.city}</small>}
+              <strong className="preview-team-name" style={setup.display.cityNames ? { color: accent } : undefined}>
+                {!sealed && <b className="preview-team-rank" style={{ color: accent }}>#{team.overallRank}</b>}
+                <span>{team.name}</span>
+              </strong>
+              <small>{[teamInitials(team), setup.display.managers ? team.manager || "No manager" : "", setup.display.venues ? team.stadium || "Venue TBD" : ""].filter(Boolean).join(" · ")}</small>
+            </span>
+            {sealed && <b className="preview-rank-sealed" aria-label="Seeding sealed"><Lock /></b>}
+          </div>
+        );
+      })}
+    </div>
+  );
   return (
     <div className="preview-divisions">
-      {divisions.map((division) => <div key={division.id}><div className="preview-division-title"><EntityLogo className="preview-division-mark" color={division.color} logoUrl={division.logoUrl} monogram={resolveInitials(division.initials, divisionAcronym(division.name))} /><strong>{division.name}</strong><small>{division.teams.length}</small></div>{division.teams.map((team) => { const accent = accessibleAccentColor(team.color); return <div className="preview-team" key={team.id} title={sealed ? `${teamDisplayName(team, setup.display.cityNames)} · Seeding sealed` : `${teamDisplayName(team, setup.display.cityNames)} · Rank ${team.overallRank}`}><EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} /><span>{setup.display.cityNames && team.city && <small className="team-city">{team.city}</small>}<strong style={setup.display.cityNames ? { color: accent } : undefined}>{team.name}</strong><small>{[teamInitials(team), setup.display.managers ? team.manager || "No manager" : "", setup.display.venues ? team.stadium || "Venue TBD" : ""].filter(Boolean).join(" · ")}</small></span>{sealed ? <b className="preview-rank-sealed" aria-label="Seeding sealed"><Lock /></b> : <b style={{ color: accent }}>#{team.overallRank}</b>}</div>; })}</div>)}
+      {conferenceGroups
+        ? conferenceGroups.map(({ conference, divisions: groupedDivisions }) => <div className="preview-conference-group" key={conference.id}><div className="preview-conference-title"><EntityLogo color={conference.color} logoUrl={conference.logoUrl} monogram={conferenceDisplayInitials(conference)} entityType="conference" /><span><strong>{conference.name}</strong><small>{groupedDivisions.length} division{groupedDivisions.length === 1 ? "" : "s"}</small></span></div>{groupedDivisions.map((division) => <DivisionPreview division={division} key={division.id} />)}</div>)
+        : divisions.map((division) => <DivisionPreview division={division} key={division.id} />)}
     </div>
   );
 }
@@ -1305,6 +1520,7 @@ function BuilderActionButtons({ step, generating, skipDraftRankForNow, back, nex
 }
 
 function LivePreview({ setup, step }: { setup: LeagueSetupInput; step: number }) {
+  const leagueHasConferences = hasConferences(setup);
   if (step === 0) {
     return (
       <aside className="builder-preview builder-preview-empty">
@@ -1321,8 +1537,8 @@ function LivePreview({ setup, step }: { setup: LeagueSetupInput; step: number })
   return (
     <aside className="builder-preview">
       <div className="preview-top"><span>LEAGUE BLUEPRINT</span><em>LIVE</em></div>
-      <div className="preview-brand"><EntityLogo className="preview-logo" size={50} color={setup.color} logoUrl={setup.logoUrl} monogram={resolveInitials(setup.initials, leagueAcronym(setup.name))} /><div><h2>{setup.name || "Untitled league"}</h2><p>{setup.seasonYear} · {setup.weeks} weeks</p></div></div>
-      <div className="preview-status"><span><Users />{setup.teams.length} teams</span><span><CalendarDays />{setup.weeks} weeks</span><span><ShieldCheck />Rules on</span></div>
+      <div className="preview-brand"><EntityLogo className="preview-logo" size={50} color={setup.color} logoUrl={setup.logoUrl} monogram={resolveInitials(setup.initials, leagueAcronym(setup.name))} entityType="league" /><div><h2>{setup.name || "Untitled league"}</h2><p>{setup.seasonYear} · {setup.weeks} weeks</p></div></div>
+      <div className="preview-status"><span><Users />{setup.teams.length} teams</span><span><ShieldCheck />{setup.divisions.length} divisions</span>{leagueHasConferences && <span><Trophy />{setup.conferences!.length} conf.</span>}<span><CalendarDays />{setup.weeks} weeks</span></div>
       <BlueprintRoster setup={setup} />
       <div className="preview-footer"><span>Setup progress</span><strong>{setupProgress(step)}%</strong><div><i style={{ width: `${setupProgress(step)}%` }} /></div></div>
     </aside>
@@ -1341,20 +1557,21 @@ function BuilderBlueprintBar({ setup, step, open, onToggle, actions }: {
 }) {
   if (step === 0) return null;
   const progress = setupProgress(step);
+  const leagueHasConferences = hasConferences(setup);
   const sheetId = "blueprint-bar-sheet";
   return (
     <>
       {open && <div className="blueprint-bar-backdrop" role="presentation" onMouseDown={onToggle} />}
       <div className={`builder-blueprint-bar${open ? " open" : ""}`}>
         <div id={sheetId} className="blueprint-bar-sheet" role="region" aria-label="League blueprint" hidden={!open}>
-          <div className="preview-brand"><EntityLogo className="preview-logo" size={44} color={setup.color} logoUrl={setup.logoUrl} monogram={resolveInitials(setup.initials, leagueAcronym(setup.name))} /><div><h2>{setup.name || "Untitled league"}</h2><p>{setup.seasonYear} · {setup.weeks} weeks</p></div></div>
-          <div className="preview-status"><span><Users />{setup.teams.length} teams</span><span><CalendarDays />{setup.weeks} weeks</span><span><ShieldCheck />Rules on</span></div>
+          <div className="preview-brand"><EntityLogo className="preview-logo" size={44} color={setup.color} logoUrl={setup.logoUrl} monogram={resolveInitials(setup.initials, leagueAcronym(setup.name))} entityType="league" /><div><h2>{setup.name || "Untitled league"}</h2><p>{setup.seasonYear} · {setup.weeks} weeks</p></div></div>
+          <div className="preview-status"><span><Users />{setup.teams.length} teams</span><span><ShieldCheck />{setup.divisions.length} divisions</span>{leagueHasConferences && <span><Trophy />{setup.conferences!.length} conf.</span>}<span><CalendarDays />{setup.weeks} weeks</span></div>
           <BlueprintRoster setup={setup} />
         </div>
         <div className="blueprint-bar-progress" aria-hidden="true"><i style={{ width: `${progress}%` }} /></div>
         <div className="blueprint-bar-row">
           <button type="button" className="blueprint-bar-toggle" aria-expanded={open} aria-controls={sheetId} onClick={onToggle}>
-            <EntityLogo size={30} color={setup.color} logoUrl={setup.logoUrl} monogram={resolveInitials(setup.initials, leagueAcronym(setup.name))} />
+            <EntityLogo size={30} color={setup.color} logoUrl={setup.logoUrl} monogram={resolveInitials(setup.initials, leagueAcronym(setup.name))} entityType="league" />
             <span><strong>{setup.name || "Untitled league"}</strong><small>{setup.teams.length} teams · {progress}% set up</small></span>
             <ChevronUp className={`blueprint-bar-chevron${open ? " flip" : ""}`} />
           </button>
@@ -1413,6 +1630,7 @@ export function LeagueBuilder() {
   const [avatarNudge, setAvatarNudge] = useState<string | null>(null);
   const [avatarNudgeState, setAvatarNudgeState] = useState<"idle" | "saving" | "saved">("idle");
   const avatarNudgeDismissed = useRef(false);
+  const [pendingExitHref, setPendingExitHref] = useState<string | null>(null);
 
   const saveDraft = () => {
     saveSetup(setup);
@@ -1421,6 +1639,37 @@ export function LeagueBuilder() {
     draftSavedTimer.current = setTimeout(() => setDraftSaved(false), 2200);
   };
   useEffect(() => () => { if (draftSavedTimer.current) clearTimeout(draftSavedTimer.current); }, []);
+  useEffect(() => {
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (step === 0 || generating || revealSeason) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const guardInternalLinks = (event: MouseEvent) => {
+      if (step === 0 || generating || revealSeason || event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const target = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
+      if (!target || target.target === "_blank" || target.hasAttribute("download")) return;
+      const href = target.getAttribute("href");
+      if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:")) return;
+      const nextUrl = new URL(target.href, window.location.href);
+      if (nextUrl.origin !== window.location.origin || nextUrl.pathname === window.location.pathname) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setPendingExitHref(`${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    document.addEventListener("click", guardInternalLinks, true);
+    return () => {
+      window.removeEventListener("beforeunload", warnBeforeUnload);
+      document.removeEventListener("click", guardInternalLinks, true);
+    };
+  }, [generating, revealSeason, step]);
+  const exitBuilder = (saveFirst: boolean) => {
+    const href = pendingExitHref || "/";
+    if (saveFirst) saveDraft();
+    setPendingExitHref(null);
+    window.location.assign(href);
+  };
 
   // The blueprint bar is fixed to the bottom on tablet/mobile and its collapsed
   // height changes (Back/Continue wrap to a second row on narrow screens). Reserve
@@ -1558,6 +1807,7 @@ export function LeagueBuilder() {
       divisions: preset.data.divisions,
       teams: preset.data.teams,
       platformConnection: includeConnection ? preset.data.platformConnection : undefined,
+      savedLeague: { id: preset.id, updatedAt: preset.updatedAt },
       priorSeason: preset.data.priorSeason ?? { ...current.priorSeason, enabled: false, hasData: false, entryMode: "none" },
       playoffs: preset.data.playoffs ? { ...current.playoffs, ...preset.data.playoffs } : current.playoffs,
     }));
@@ -1698,6 +1948,7 @@ export function LeagueBuilder() {
         name,
         shortName: teamMonogram(team.city || "", name),
         manager: team.manager?.trim() || `Manager ${index + 1}`,
+        managerEmail: team.managerEmail?.trim() || undefined,
         color: team.color || createTeams(preview.teams.length, divisions)[index].color,
         logoUrl: team.logoUrl,
         divisionId: team.division ? divisionByName.get(team.division.trim().toLowerCase()) || divisions[index % divisionCount].id : divisions[index % divisionCount].id,
@@ -1943,6 +2194,22 @@ export function LeagueBuilder() {
         ]}
       >
         <p id="save-league-description">We’ll remember your teams, divisions, colors, and logos — so next year you skip straight to Season. You can edit or delete it any time from your account.</p>
+      </ConfirmDialog>}
+      {pendingExitHref && <ConfirmDialog
+        icon={<BookmarkPlus />}
+        kicker="UNSAVED SETUP"
+        title="Leave the builder?"
+        labelId="leave-builder-work-title"
+        descriptionId="leave-builder-work-description"
+        closeLabel="Stay in the builder"
+        onClose={() => setPendingExitHref(null)}
+        actions={[
+          { label: "Stay here", onClick: () => setPendingExitHref(null), variant: "secondary", autoFocus: true },
+          { label: "Exit without saving", onClick: () => exitBuilder(false), variant: "danger" },
+          { label: "Save draft and exit", onClick: () => exitBuilder(true), variant: "primary", icon: <BookmarkPlus /> },
+        ]}
+      >
+        <p id="leave-builder-work-description">You’re still setting up this schedule. If you leave now, your latest work may only be saved on this device. Save the draft first if you want to come back to it.</p>
       </ConfirmDialog>}
       {revealSeason && <GenerationReveal schedule={revealSeason} onComplete={() => router.push(`/season/${revealSeason.id}${revealSeason.setup.platformConnection || revealSeason.setup.teams.some((team) => team.providerId && !/^(manual|screenshot)-/.test(team.providerId)) ? "" : "?connect=scores"}`)} />}
       {avatarNudge && <div className="avatar-nudge" role="status">

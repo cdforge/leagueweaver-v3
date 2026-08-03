@@ -10,6 +10,7 @@ import { DivisionIdentity } from "@/components/ui/DivisionIdentity";
 import { FloatingPopover } from "@/components/ui/FloatingPopover";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
+import { conferenceOfDivision, hasConferences } from "@/lib/conferences";
 import { getTeamClinchTimelines, type TeamClinchTimeline } from "@/lib/clinch";
 import { isGamePlayed } from "@/lib/game";
 import { calculateMatchupRating, formatGameDateTimeOverride, getMatchupRatingRange, getMatchupSignal, toMatchupScore10 } from "@/lib/matchups";
@@ -18,7 +19,7 @@ import { getNflWeekWindow } from "@/lib/schedule";
 import { formatRecord, getEnteringWeekRankSnapshot, getWeekRankSnapshot } from "@/lib/standings";
 import { calculateTeamSeasonStats, formatDifferential, formatPoints, formatSplitRecord, gameOfWeekStatusLabel, getScheduleGameSignals, recordGames, recordPercentage } from "@/lib/statistics";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
-import type { GeneratedSchedule, RankedStandingsRow, Team } from "@/lib/types";
+import type { Division, GeneratedSchedule, RankedStandingsRow, Team } from "@/lib/types";
 
 type DisplayKey = "cityNames" | "venues" | "matchup" | "rating" | "badges" | "details";
 type PlacementTone = "positive" | "neutral" | "negative";
@@ -148,6 +149,8 @@ function TeamScheduleDirectory({ schedule, summaries, clinches, onSelectTeam }: 
   onSelectTeam: (teamId: string) => void;
 }) {
   const divisionById = new Map(schedule.setup.divisions.map((division) => [division.id, division]));
+  const leagueHasConferences = hasConferences(schedule.setup);
+  const divisionConference = (division?: Division) => division && leagueHasConferences ? conferenceOfDivision(schedule.setup, division.id) : undefined;
   const showCity = schedule.setup.display?.cityNames !== false;
   const sortedSummaries = useMemo(() => [...summaries].sort((left, right) =>
     teamDisplayName(left.team, showCity).localeCompare(teamDisplayName(right.team, showCity)),
@@ -168,6 +171,7 @@ function TeamScheduleDirectory({ schedule, summaries, clinches, onSelectTeam }: 
         <TeamIdentityBlock
           team={summary.team}
           division={division}
+          conference={divisionConference(division)}
           leagueRank={summary.liveRank}
           record={summary.record}
           showCity={showCity}
@@ -175,7 +179,7 @@ function TeamScheduleDirectory({ schedule, summaries, clinches, onSelectTeam }: 
         {/* Dedicated badge row — playoff / division-title / #1-seed / eliminated.
             Collapses to nothing (CSS :empty) when the team has no clinch status. */}
         <div className="team-directory-badges">
-          <ClinchBadges timeline={clinches.get(summary.team.id)} division={division} compact />
+          <ClinchBadges timeline={clinches.get(summary.team.id)} division={division} conference={divisionConference(division)} compact />
         </div>
         <dl className="team-directory-stats">
           <div><dt>H/A</dt><dd>{summary.homeGames}-{summary.awayGames}</dd></div>
@@ -210,7 +214,7 @@ function TeamScheduleDirectory({ schedule, summaries, clinches, onSelectTeam }: 
           {divisionGroups.map((group) => (
             <section className="team-directory-division-group" key={group.division.id}>
               <header className="team-directory-division-head">
-                <DivisionIdentity division={group.division} detail={`${group.teams.length} team${group.teams.length === 1 ? "" : "s"}`} />
+                <DivisionIdentity division={group.division} conference={divisionConference(group.division)} detail={`${group.teams.length} team${group.teams.length === 1 ? "" : "s"}`} />
               </header>
               <div className="team-directory-grid">{group.teams.map(renderCard)}</div>
             </section>
@@ -259,6 +263,8 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
   const teamById = new Map(schedule.setup.teams.map((item) => [item.id, item]));
   const teamCount = schedule.setup.teams.length;
   const divisionById = new Map(schedule.setup.divisions.map((division) => [division.id, division]));
+  const leagueHasConferences = hasConferences(schedule.setup);
+  const divisionConference = (item?: Division) => item && leagueHasConferences ? conferenceOfDivision(schedule.setup, item.id) : undefined;
   const planningRatingRange = getMatchupRatingRange(schedule.weeks.flatMap((week) => week.games));
   const currentSnapshot = getWeekRankSnapshot(schedule, schedule.setup.weeks);
   const currentStandingsByTeam = new Map(currentSnapshot.rows.map((row) => [row.teamId, row]));
@@ -348,6 +354,7 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
               <TeamIdentityBlock
                 team={team}
                 division={division}
+                conference={divisionConference(division)}
                 leagueRank={summary.liveRank}
                 record={recordFor(team.id)}
                 showCity={showCity}
@@ -356,10 +363,10 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
           />
           <span className="team-schedule-facts">
             {division
-              ? <DivisionIdentity division={division} detail={`${divisionTeamCount}-team division`} />
+              ? <DivisionIdentity division={division} conference={divisionConference(division)} detail={`${divisionTeamCount}-team division`} />
               : <strong>Independent</strong>}
             <small className="team-schedule-rankline">Live rank <b>#{summary.liveRank}</b> · Preseason seed #{summary.divisionSeed}</small>
-            <ClinchBadges timeline={currentClinches.get(team.id)} division={division} />
+            <ClinchBadges timeline={currentClinches.get(team.id)} division={division} conference={divisionConference(division)} />
             <small>{[
               schedule.setup.display?.managers !== false ? team.manager || "No manager" : "",
               schedule.setup.display?.venues !== false ? team.stadium : "",
@@ -464,6 +471,7 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
                         showRecord={false}
                         team={opponent}
                         division={opponentDivision}
+                        conference={divisionConference(opponentDivision)}
                         leagueRank={opponentStanding?.rank ?? opponent.overallRank}
                         record={{ overall: "0-0" }}
                         showCity={showCity}

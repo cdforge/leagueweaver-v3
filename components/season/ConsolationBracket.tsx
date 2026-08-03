@@ -4,6 +4,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { Check, Medal, Pencil, RefreshCw, Trophy } from "lucide-react";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { TeamIdentityBlock } from "@/components/season/MatchupPresentation";
+import { conferenceOfDivision, hasConferences } from "@/lib/conferences";
 import { projectConsolationBracket, projectFinalPlacements, type ProjectedConsolationEntrant } from "@/lib/consolation";
 import { getWeekDateLabel } from "@/lib/schedule";
 import { calculateStandings, formatRecord } from "@/lib/standings";
@@ -17,9 +18,10 @@ function ConsolationEntrant({ entrant, schedule, standingsByTeam }: { entrant: P
   const team = schedule.setup.teams.find((item) => item.id === entrant.teamId);
   if (!team) return null;
   const division = schedule.setup.divisions.find((item) => item.id === team.divisionId);
+  const conference = division && hasConferences(schedule.setup) ? conferenceOfDivision(schedule.setup, division.id) : undefined;
   const standing = standingsByTeam.get(team.id);
   return <div className="bracket-slot" style={{ "--slot-spine": team.color } as CSSProperties}>
-    <TeamIdentityBlock variant="stacked" compact team={team} division={division} leagueRank={entrant.seed} record={{ overall: standing ? formatRecord(standing) : "0-0", division: standing ? `${standing.divisionWins}-${standing.divisionLosses}` : undefined }} showCity={schedule.setup.display.cityNames !== false} href={`/season/${schedule.id}/team/${team.id}`} />
+    <TeamIdentityBlock variant="stacked" compact team={team} division={division} conference={conference} leagueRank={entrant.seed} record={{ overall: standing ? formatRecord(standing) : "0-0", division: standing ? `${standing.divisionWins}-${standing.divisionLosses}` : undefined }} showCity={schedule.setup.display.cityNames !== false} href={`/season/${schedule.id}/team/${team.id}`} />
   </div>;
 }
 
