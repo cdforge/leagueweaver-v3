@@ -62,8 +62,14 @@ function waitForServer(url: string, timeoutMs = 45_000) {
   });
 }
 
+async function stubExternalFrames(page: Page) {
+  await page.route("https://www.google.com/**", (route) => route.fulfill({ status: 204, body: "" }));
+  await page.route("https://*.googlesyndication.com/**", (route) => route.fulfill({ status: 204, body: "" }));
+}
+
 async function screenshotPage(browser: Browser, name: string, viewport: { width: number; height: number }) {
   const page = await browser.newPage({ viewport });
+  await stubExternalFrames(page);
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
 
@@ -75,7 +81,6 @@ async function screenshotPage(browser: Browser, name: string, viewport: { width:
   page.on("pageerror", (error) => {
     pageErrors.push(error.message);
   });
-
   const response = await page.goto(baseUrl, { waitUntil: "networkidle" });
   assert.ok(response, `${name}: page returned a response`);
   assert.ok((response.status() >= 200 && response.status() < 400) || response.status() === 404, `${name}: route is reachable or cleanly absent`);
@@ -87,6 +92,7 @@ async function screenshotPage(browser: Browser, name: string, viewport: { width:
 
 async function screenshotBuilderSetup(browser: Browser, name: string, setup: LeagueSetupInput) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  await stubExternalFrames(page);
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
 
@@ -271,6 +277,41 @@ function pastChampionSmokeData(): PastChampion[] {
   ];
 }
 
+function historyBrowserSmokeData(schedule: GeneratedSchedule) {
+  const leagueId = "history-smoke-2025";
+  const historyTeams = schedule.setup.teams.map((team, index) => ({
+    leagueTeamId: `sleeper-${leagueId}-${index + 1}`,
+    providerRosterOrTeamId: String(index + 1),
+    teamName: `${team.city ? `${team.city} ` : ""}${team.name}`.trim(),
+    managerName: team.manager,
+    finalStanding: index + 1,
+    wins: Math.max(0, 12 - index),
+    losses: Math.min(14, index + 2),
+    pointsFor: 1800 - index * 22,
+  }));
+  const games = schedule.weeks.slice(0, 2).flatMap((week) => week.games.map((game, index) => {
+    const homeIndex = schedule.setup.teams.findIndex((team) => team.id === game.homeTeamId);
+    const awayIndex = schedule.setup.teams.findIndex((team) => team.id === game.awayTeamId);
+    return {
+      week: week.weekNumber,
+      providerMatchupId: `sleeper:${leagueId}:week-${week.weekNumber}:matchup-${index + 1}`,
+      homeLeagueTeamId: `sleeper-${leagueId}-${homeIndex + 1}`,
+      awayLeagueTeamId: `sleeper-${leagueId}-${awayIndex + 1}`,
+      homeScore: 116.5 + index,
+      awayScore: 124.2 + index,
+      status: "final",
+      finalLockAt: "2025-12-30T12:00:00.000Z",
+    };
+  }));
+  const playerRows = games.flatMap((game, index) => [
+    { week: game.week, canonicalPlayerId: `hist-qb-away-${index}`, leagueTeamId: game.awayLeagueTeamId, providerPlayerId: `hist-qb-away-${index}`, playerName: "History Away QB", position: "QB", nflTeam: "KC", lineupStatus: "starter", lineupSlot: "QB", fantasyPoints: 27.4 + index },
+    { week: game.week, canonicalPlayerId: `hist-rb-away-${index}`, leagueTeamId: game.awayLeagueTeamId, providerPlayerId: `hist-rb-away-${index}`, playerName: "History Away RB", position: "RB", nflTeam: "DET", lineupStatus: "starter", lineupSlot: "RB", fantasyPoints: 21.2 + index },
+    { week: game.week, canonicalPlayerId: `hist-qb-home-${index}`, leagueTeamId: game.homeLeagueTeamId, providerPlayerId: `hist-qb-home-${index}`, playerName: "History Home QB", position: "QB", nflTeam: "BUF", lineupStatus: "starter", lineupSlot: "QB", fantasyPoints: 31.1 + index },
+    { week: game.week, canonicalPlayerId: `hist-rb-home-${index}`, leagueTeamId: game.homeLeagueTeamId, providerPlayerId: `hist-rb-home-${index}`, playerName: "History Home RB", position: "RB", nflTeam: "MIA", lineupStatus: "starter", lineupSlot: "RB", fantasyPoints: 18.9 + index },
+  ]);
+  return [{ id: "history-season-smoke-2025", season: 2025, provider: "sleeper", providerLeagueId: leagueId, leagueName: "History Smoke", teamCount: historyTeams.length, teams: historyTeams, games, playerRows }];
+}
+
 function recapSmokeSchedule(id: string, finalWeek: boolean): GeneratedSchedule {
   const schedule = gameDetailSmokeSchedule(id);
   const week = schedule.weeks[0];
@@ -335,6 +376,7 @@ function recapSmokeRows(schedule: GeneratedSchedule): GameDetailPlayerStat[] {
 
 async function screenshotGameDetail(browser: Browser, name: string, schedule: GeneratedSchedule, viewport: { width: number; height: number }, rows?: GameDetailPlayerStat[]) {
   const page = await browser.newPage({ viewport });
+  await stubExternalFrames(page);
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
 
@@ -355,7 +397,9 @@ async function screenshotGameDetail(browser: Browser, name: string, schedule: Ge
   assert.ok(response, `${name}: season route returned a response`);
   assert.ok(response.status() >= 200 && response.status() < 400, `${name}: season route is reachable`);
   await page.locator(".workspace-rail nav").getByRole("button", { name: /league schedule/i }).click();
-  await page.locator("button.matchup-box-score-trigger").first().click();
+  assert.equal(await page.locator("button.matchup-box-score-trigger").count(), 0, `${name}: no redundant Box score button is rendered`);
+  await page.locator(".matchup-card.is-openable").first().focus();
+  await page.keyboard.press("Enter");
   await page.getByRole("dialog", { name: / at /i }).waitFor();
   if (rows?.length) {
     const badges = page.locator(".allstar-badge");
@@ -367,6 +411,12 @@ async function screenshotGameDetail(browser: Browser, name: string, schedule: Ge
     await badges.filter({ hasText: "1" }).first().hover();
     await expectText(page.locator(".tooltip-bubble").last(), /Week 1 All-Star .* RB1 .* 22\.60 pts/s, `${name}: All-Star tooltip includes week, slot, and points`);
   }
+  const initialTitle = await page.locator("#game-detail-title").innerText();
+  const nextGame = page.getByRole("button", { name: /Next game:/i }).first();
+  if (await nextGame.isEnabled()) {
+    await nextGame.click();
+    await page.waitForFunction((title) => document.querySelector("#game-detail-title")?.textContent !== title, initialTitle);
+  }
   await page.waitForTimeout(250);
   await page.screenshot({ path: path.join(screenshotDir, `ui-smoke-${name}.png`) });
   assert.deepEqual(pageErrors, [], `${name}: no page errors`);
@@ -376,6 +426,7 @@ async function screenshotGameDetail(browser: Browser, name: string, schedule: Ge
 
 async function screenshotWeekRecap(browser: Browser, name: string, schedule: GeneratedSchedule, viewport: { width: number; height: number }, rows: GameDetailPlayerStat[], expectRecap: boolean) {
   const page = await browser.newPage({ viewport });
+  await stubExternalFrames(page);
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
 
@@ -424,6 +475,7 @@ async function screenshotWeekRecap(browser: Browser, name: string, schedule: Gen
 
 async function screenshotThisWeek(browser: Browser, name: string, schedule: GeneratedSchedule, viewport: { width: number; height: number }, rows?: GameDetailPlayerStat[]) {
   const page = await browser.newPage({ viewport });
+  await stubExternalFrames(page);
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
 
@@ -457,6 +509,7 @@ async function screenshotThisWeek(browser: Browser, name: string, schedule: Gene
 
 async function screenshotStandingsAwards(browser: Browser, name: string, schedule: GeneratedSchedule, viewport: { width: number; height: number }, rows?: GameDetailPlayerStat[]) {
   const page = await browser.newPage({ viewport });
+  await stubExternalFrames(page);
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
 
@@ -487,6 +540,7 @@ async function screenshotStandingsAwards(browser: Browser, name: string, schedul
 
 async function screenshotMvt(browser: Browser, name: string, schedule: GeneratedSchedule, viewport: { width: number; height: number }, rows: GameDetailPlayerStat[], champions?: PastChampion[]) {
   const page = await browser.newPage({ viewport });
+  await stubExternalFrames(page);
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
 
@@ -497,7 +551,8 @@ async function screenshotMvt(browser: Browser, name: string, schedule: Generated
     pageErrors.push(error.message);
   });
   if (champions) {
-    await page.route("**/api/platform/history?**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ events: [], champions }) }));
+    const history = historyBrowserSmokeData(schedule);
+    await page.route("**/api/platform/history?**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ events: [], champions, history }) }));
     await page.route("**/api/publish?**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ published: false }) }));
     await page.route("**/api/seasons/*/player-stats", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ rows }) }));
   }
@@ -515,6 +570,11 @@ async function screenshotMvt(browser: Browser, name: string, schedule: Generated
   await page.getByRole("heading", { name: /Most Valuable Team/i }).waitFor();
   await expectText(page.locator(".mvt-overview"), /Power Ranking/s, `${name}: MVT overview is present`);
   if (champions) await expectText(page.locator(".past-champions-strip"), /Past Champions.*2025.*Harbor Kings/s, `${name}: past champions strip is present`);
+  if (champions) {
+    await page.getByLabel(/Select MVT season/i).click();
+    await page.getByRole("option", { name: /2025/ }).click();
+    await expectText(page.locator(".mvt-hero"), /2025/s, `${name}: MVT switches to historical season`);
+  }
   for (const label of ["Positional Awards", "Achievement Awards", "Divisional / League", "Bonus Awards"]) {
     await page.getByRole("tab", { name: label }).click();
     if (label === "Divisional / League") {
@@ -533,6 +593,7 @@ async function screenshotMvt(browser: Browser, name: string, schedule: Generated
 
 async function screenshotConferenceAwards(browser: Browser, name: string, schedule: GeneratedSchedule, viewport: { width: number; height: number }, rows: GameDetailPlayerStat[], expectConference: boolean) {
   const page = await browser.newPage({ viewport });
+  await stubExternalFrames(page);
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
 
@@ -586,6 +647,7 @@ async function screenshotConferenceAwards(browser: Browser, name: string, schedu
 
 async function screenshotAllStars(browser: Browser, name: string, schedule: GeneratedSchedule, viewport: { width: number; height: number }, rows: GameDetailPlayerStat[], champions?: PastChampion[]) {
   const page = await browser.newPage({ viewport });
+  await stubExternalFrames(page);
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
 
@@ -596,7 +658,8 @@ async function screenshotAllStars(browser: Browser, name: string, schedule: Gene
     pageErrors.push(error.message);
   });
   if (champions) {
-    await page.route("**/api/platform/history?**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ events: [], champions }) }));
+    const history = historyBrowserSmokeData(schedule);
+    await page.route("**/api/platform/history?**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ events: [], champions, history }) }));
     await page.route("**/api/publish?**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ published: false }) }));
     await page.route("**/api/seasons/*/player-stats", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ rows }) }));
   }
@@ -610,10 +673,15 @@ async function screenshotAllStars(browser: Browser, name: string, schedule: Gene
   const response = await page.goto(`${baseUrl}/season/${schedule.id}?view=all-stars`, { waitUntil: "networkidle" });
   assert.ok(response, `${name}: All-Stars route returned a response`);
   assert.ok(response.status() >= 200 && response.status() < 400, `${name}: All-Stars route is reachable`);
-  await page.getByRole("button", { name: /All-Stars/i }).waitFor();
+  await page.locator(".workspace-rail nav").getByRole("button", { name: /^All-Stars$/i }).waitFor();
   await page.getByRole("heading", { name: /All-Star Team of the Week/i }).waitFor();
   await expectText(page.locator(".allstars-board"), /Week 2 Board/s, `${name}: latest week board is present`);
   if (champions) await expectText(page.locator(".past-champions-strip"), /Past Champions.*2025.*Harbor Kings/s, `${name}: past champions strip is present`);
+  if (champions) {
+    await page.getByLabel(/Select All-Stars season/i).click();
+    await page.getByRole("option", { name: /2025/ }).click();
+    await expectText(page.locator(".allstars-hero"), /2025/s, `${name}: All-Stars switches to historical season`);
+  }
   await expectText(page.locator(".allstars-rail"), /All-Stars by Team/s, `${name}: team count rail is present`);
   await expectText(page.locator(".allstar-trend"), /Weekly Total Trend/s, `${name}: trend is present`);
   await page.getByRole("button", { name: /Previous All-Star week/i }).click();
@@ -628,6 +696,7 @@ async function screenshotAllStars(browser: Browser, name: string, schedule: Gene
 
 async function screenshotAwardEmptyState(browser: Browser, name: string, schedule: GeneratedSchedule, view: "mvt" | "all-stars", viewport: { width: number; height: number }) {
   const page = await browser.newPage({ viewport });
+  await stubExternalFrames(page);
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
 

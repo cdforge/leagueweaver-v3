@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ArrowLeft, CircleAlert, MapPin, Shield, Star, X } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, CircleAlert, MapPin, Shield, Star, X } from "lucide-react";
 import { AllStarBadge } from "@/components/season/AllStarBadge";
 import { DivisionMark } from "@/components/ui/DivisionIdentity";
 import { EntityLogo } from "@/components/ui/EntityLogo";
@@ -139,12 +139,18 @@ export function GameDetailSheet({
   gameId,
   playerStats,
   winProbability,
+  navigation,
   onClose,
 }: {
   schedule: GeneratedSchedule;
   gameId: string;
   playerStats: GameDetailPlayerStat[];
   winProbability?: { away: number; home: number };
+  navigation?: {
+    previous?: { id: string; label: string };
+    next?: { id: string; label: string };
+    onSelect: (gameId: string) => void;
+  };
   onClose: () => void;
 }) {
   const allStarBadges = React.useMemo(() => buildAllStarBadges(schedule, playerStats), [schedule, playerStats]);
@@ -167,7 +173,13 @@ export function GameDetailSheet({
         <h2 id="game-detail-title">{teamDisplay(vm.away, showCity)} at {teamDisplay(vm.home, showCity)}</h2>
         <small><MapPin /> {vm.stadium} · {stateLabel} · Rating {vm.ratingScore10.toFixed(1)}/10</small>
       </div>
-      <button type="button" className="gdm-close" aria-label="Close game detail" onClick={onClose}><X /></button>
+      <div className="gdm-header-actions">
+        {navigation && <div className="gdm-game-nav" aria-label="Navigate games in this week">
+          <button type="button" aria-label={navigation.previous ? `Previous game: ${navigation.previous.label}` : "Previous game unavailable"} disabled={!navigation.previous} onClick={() => navigation.previous && navigation.onSelect(navigation.previous.id)}><ChevronLeft /></button>
+          <button type="button" aria-label={navigation.next ? `Next game: ${navigation.next.label}` : "Next game unavailable"} disabled={!navigation.next} onClick={() => navigation.next && navigation.onSelect(navigation.next.id)}><ChevronRight /></button>
+        </div>}
+        <button type="button" className="gdm-close" aria-label="Close game detail" onClick={onClose}><X /></button>
+      </div>
     </header>
     <div className="gdm-scoreline" style={{ "--away": vm.away.team.color, "--home": vm.home.team.color } as React.CSSProperties}>
       <span><small>Away</small><strong>{scoreLabel(vm.away)}</strong></span>

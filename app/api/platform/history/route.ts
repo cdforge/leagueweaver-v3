@@ -38,6 +38,145 @@ function seasonKey(providerLeagueId: string, season: number) {
   return `${providerLeagueId}:${season}`;
 }
 
+type HistoryBrowserSeason = {
+  id: string;
+  season: number;
+  provider: "espn" | "sleeper";
+  providerLeagueId: string;
+  leagueName: string;
+  teamCount: number;
+  teams: Array<{
+    leagueTeamId: string;
+    providerRosterOrTeamId: string;
+    teamName: string;
+    managerName?: string;
+    divisionId?: string;
+    conferenceId?: string;
+    finalStanding?: number;
+    wins?: number;
+    losses?: number;
+    ties?: number;
+    pointsFor?: number;
+    pointsAgainst?: number;
+  }>;
+  games: Array<{
+    week: number;
+    providerMatchupId: string;
+    homeLeagueTeamId: string;
+    awayLeagueTeamId: string;
+    homeScore?: number;
+    awayScore?: number;
+    status: string;
+    finalLockAt?: string;
+  }>;
+  playerRows: Array<{
+    week: number;
+    canonicalPlayerId: string;
+    leagueTeamId: string;
+    providerPlayerId: string;
+    playerName: string;
+    position: string;
+    nflTeam?: string;
+    lineupStatus: string;
+    lineupSlot: string;
+    fantasyPoints: number;
+  }>;
+};
+
+async function readHistoryBrowser(auth: NonNullable<Awaited<ReturnType<typeof getAuthenticatedClient>>>, scheduleId: string): Promise<HistoryBrowserSeason[]> {
+  try {
+    const { data: seasons, error: seasonsError } = await auth.supabase
+      .from("league_seasons")
+      .select("id,provider,provider_league_id,season,league_name,team_count")
+      .eq("schedule_id", scheduleId)
+      .order("season", { ascending: false })
+      .limit(8);
+    if (seasonsError || !seasons?.length) return [];
+    const seasonIds = seasons.map((season) => season.id);
+    const [{ data: teams }, { data: games }, { data: ownership }] = await Promise.all([
+      auth.supabase
+        .from("league_team_history")
+        .select("league_season_id,league_team_id,provider_roster_or_team_id,team_name,manager_name,division_id,conference_id,final_standing,wins,losses,ties,points_for,points_against")
+        .in("league_season_id", seasonIds),
+      auth.supabase
+        .from("league_schedule_history")
+        .select("league_season_id,week,provider_matchup_id,home_league_team_id,away_league_team_id,home_score,away_score,status,final_lock_at")
+        .in("league_season_id", seasonIds)
+        .order("week", { ascending: true }),
+      auth.supabase
+        .from("player_ownership_history")
+        .select("league_season_id,week,canonical_player_id,league_team_id,provider_player_id,nfl_team_at_time,position_at_time,roster_status,lineup_slot,fantasy_points")
+        .in("league_season_id", seasonIds)
+        .order("week", { ascending: true }),
+    ]);
+    const playerIds = [...new Set((ownership ?? []).map((row) => row.canonical_player_id).filter(Boolean))];
+    const catalogById = new Map<string, { canonical_name?: string | null; position?: string | null; nfl_team?: string | null }>();
+    if (playerIds.length) {
+      const { data: catalog } = await auth.supabase
+        .from("player_catalog")
+        .select("id,canonical_name,position,nfl_team")
+        .in("id", playerIds);
+      for (const row of catalog ?? []) catalogById.set(row.id, row);
+    }
+    const teamsBySeason = new Map<string, NonNullable<typeof teams>>();
+    for (const row of teams ?? []) teamsBySeason.set(row.league_season_id, [...(teamsBySeason.get(row.league_season_id) ?? []), row]);
+    const gamesBySeason = new Map<string, NonNullable<typeof games>>();
+    for (const row of games ?? []) gamesBySeason.set(row.league_season_id, [...(gamesBySeason.get(row.league_season_id) ?? []), row]);
+    const ownershipBySeason = new Map<string, NonNullable<typeof ownership>>();
+    for (const row of ownership ?? []) ownershipBySeason.set(row.league_season_id, [...(ownershipBySeason.get(row.league_season_id) ?? []), row]);
+
+    return seasons.map((season): HistoryBrowserSeason => ({
+      id: season.id,
+      season: season.season,
+      provider: season.provider,
+      providerLeagueId: season.provider_league_id,
+      leagueName: season.league_name,
+      teamCount: season.team_count,
+      teams: (teamsBySeason.get(season.id) ?? []).map((team) => ({
+        leagueTeamId: team.league_team_id,
+        providerRosterOrTeamId: team.provider_roster_or_team_id,
+        teamName: team.team_name,
+        managerName: team.manager_name ?? undefined,
+        divisionId: team.division_id ?? undefined,
+        conferenceId: team.conference_id ?? undefined,
+        finalStanding: team.final_standing ?? undefined,
+        wins: team.wins ?? undefined,
+        losses: team.losses ?? undefined,
+        ties: team.ties ?? undefined,
+        pointsFor: team.points_for == null ? undefined : Number(team.points_for),
+        pointsAgainst: team.points_against == null ? undefined : Number(team.points_against),
+      })),
+      games: (gamesBySeason.get(season.id) ?? []).map((game) => ({
+        week: game.week,
+        providerMatchupId: game.provider_matchup_id,
+        homeLeagueTeamId: game.home_league_team_id,
+        awayLeagueTeamId: game.away_league_team_id,
+        homeScore: game.home_score == null ? undefined : Number(game.home_score),
+        awayScore: game.away_score == null ? undefined : Number(game.away_score),
+        status: game.status,
+        finalLockAt: game.final_lock_at ?? undefined,
+      })),
+      playerRows: (ownershipBySeason.get(season.id) ?? []).map((row) => {
+        const catalog = catalogById.get(row.canonical_player_id);
+        return {
+          week: row.week,
+          canonicalPlayerId: row.canonical_player_id,
+          leagueTeamId: row.league_team_id,
+          providerPlayerId: row.provider_player_id,
+          playerName: catalog?.canonical_name || row.provider_player_id,
+          position: row.position_at_time || catalog?.position || "UNKNOWN",
+          nflTeam: row.nfl_team_at_time || catalog?.nfl_team || undefined,
+          lineupStatus: row.roster_status,
+          lineupSlot: row.lineup_slot,
+          fantasyPoints: Number(row.fantasy_points ?? 0),
+        };
+      }),
+    }));
+  } catch {
+    return [];
+  }
+}
+
 async function readPastChampions(auth: NonNullable<Awaited<ReturnType<typeof getAuthenticatedClient>>>, scheduleId: string): Promise<PastChampion[]> {
   const { data: seasons } = await auth.supabase
     .from("league_seasons")
@@ -210,7 +349,9 @@ export async function GET(request: Request) {
 
   events.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
   const champions = await readPastChampions(auth, scheduleId);
-  return NextResponse.json({ events: events.slice(0, 10), champions });
+  const includeBrowser = new URL(request.url).searchParams.get("include") === "browser";
+  const history = includeBrowser ? await readHistoryBrowser(auth, scheduleId) : undefined;
+  return NextResponse.json({ events: events.slice(0, 10), champions, history });
 }
 
 export async function POST(request: Request) {
@@ -228,7 +369,7 @@ export async function POST(request: Request) {
       const auth = await getAuthenticatedClient();
       if (!auth) return NextResponse.json({ error: "Sign in before saving league history." }, { status: 401 });
       if (!(await assertScheduleOwner(auth, parsed.data.scheduleId))) return NextResponse.json({ error: "Choose a saved season you own." }, { status: 403 });
-      const draft = await collectSleeperLeagueHistory(parsed.data.scheduleId, leagueId, { weeks: [1] });
+      const draft = await collectSleeperLeagueHistory(parsed.data.scheduleId, leagueId);
       const persisted = await persistLeagueHistory(parsed.data.scheduleId, draft);
       return NextResponse.json({ ...dataFoundFromDraft(draft), champions: draft.champions, rowsWritten: persisted.rowsWritten, warnings: persisted.warnings });
     }

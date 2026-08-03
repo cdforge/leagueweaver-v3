@@ -84,15 +84,23 @@ export async function scanSleeperHistory(leagueId: string): Promise<ImportDataFo
 
 export async function collectSleeperLeagueHistory(scheduleId: string, leagueId: string, opts?: { maxSeasons?: number; weeks?: number[] }): Promise<LeagueHistoryDraft> {
   const seasons: SleeperHistorySeasonPayload[] = [];
-  const weeks = opts?.weeks ?? [1];
   let current: string | null | undefined = leagueId;
   for (let index = 0; index < (opts?.maxSeasons ?? 8) && current; index += 1) {
     const league: SleeperLeague = await sleeperFetch<SleeperLeague>(`/league/${encodeURIComponent(current)}`);
     const leagueIdForFetch = current;
+    const lastScoredLeg = league.settings?.last_scored_leg ?? league.settings?.leg ?? 18;
+    const weekCount = Math.max(1, Math.min(18, Number.isFinite(lastScoredLeg) ? Number(lastScoredLeg) : 18));
+    const weeks = opts?.weeks ?? Array.from({ length: weekCount }, (_, week) => week + 1);
     const [rosters, users, matchupPairs] = await Promise.all([
       sleeperFetch<SleeperRoster[]>(`/league/${encodeURIComponent(leagueIdForFetch)}/rosters`),
       sleeperFetch<SleeperUser[]>(`/league/${encodeURIComponent(leagueIdForFetch)}/users`),
-      Promise.all(weeks.map(async (week) => [week, await sleeperFetch<SleeperMatchup[]>(`/league/${encodeURIComponent(leagueIdForFetch)}/matchups/${week}`)] as const)),
+      Promise.all(weeks.map(async (week) => {
+        try {
+          return [week, await sleeperFetch<SleeperMatchup[]>(`/league/${encodeURIComponent(leagueIdForFetch)}/matchups/${week}`)] as const;
+        } catch {
+          return [week, []] as const;
+        }
+      })),
     ]);
     seasons.push({ league, rosters, users, matchupsByWeek: Object.fromEntries(matchupPairs) });
     current = league.previous_league_id;

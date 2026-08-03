@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarClock, ChevronDown, CircleAlert, ClipboardList, Gamepad2, LockKeyhole, MapPin, Medal, SlidersHorizontal, Star, StickyNote, TrendingUp, Zap } from "lucide-react";
+import { CalendarClock, ChevronDown, CircleAlert, Gamepad2, LockKeyhole, MapPin, Medal, SlidersHorizontal, Star, StickyNote, TrendingUp, Zap } from "lucide-react";
 import { DivisionIdentity, DivisionMark } from "@/components/ui/DivisionIdentity";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
@@ -205,7 +205,6 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, away
           <small>AWAY {Math.round(winProbability.away * 100)}%</small>
           <small>HOME {Math.round(winProbability.home * 100)}%</small>
         </span>}
-        {onOpenGame && <button type="button" className="matchup-box-score-trigger" aria-label={openLabel} onClick={() => onOpenGame(game.id)}><ClipboardList />Box score</button>}
         {signal && <SignalBars signal={signal} awayRank={awayRank} homeRank={homeRank} />}
       </div>
     </div>
