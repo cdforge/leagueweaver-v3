@@ -127,6 +127,7 @@ interface TeamMeta {
   divisionOf: Map<TeamId, string>;
   crossOpponents: Map<TeamId, TeamId[]>;
   sameSeedOpponents: Map<TeamId, Set<TeamId>>;
+  sameConferenceSameSeedOpponents: Map<TeamId, Set<TeamId>>;
 }
 
 function buildTeamMeta(teams: EngineTeam[]): TeamMeta {
@@ -134,20 +135,28 @@ function buildTeamMeta(teams: EngineTeam[]): TeamMeta {
   for (const t of teams) if (t.divisionId) divisionOf.set(t.id, t.divisionId);
   const crossOpponents = new Map<TeamId, TeamId[]>();
   const sameSeedOpponents = new Map<TeamId, Set<TeamId>>();
+  const sameConferenceSameSeedOpponents = new Map<TeamId, Set<TeamId>>();
   for (const t of teams) {
     const opps: TeamId[] = [];
     const same = new Set<TeamId>();
+    const sameConferenceSame = new Set<TeamId>();
     if (t.divisionId) {
       for (const u of teams) {
         if (u.id === t.id || !u.divisionId || u.divisionId === t.divisionId) continue;
         opps.push(u.id);
-        if (u.divisionSeed === t.divisionSeed) same.add(u.id);
+        if (u.divisionSeed === t.divisionSeed) {
+          same.add(u.id);
+          if (t.conferenceId && u.conferenceId && t.conferenceId === u.conferenceId) {
+            sameConferenceSame.add(u.id);
+          }
+        }
       }
     }
     crossOpponents.set(t.id, opps);
     sameSeedOpponents.set(t.id, same);
+    sameConferenceSameSeedOpponents.set(t.id, sameConferenceSame);
   }
-  return { divisionOf, crossOpponents, sameSeedOpponents };
+  return { divisionOf, crossOpponents, sameSeedOpponents, sameConferenceSameSeedOpponents };
 }
 
 function edgesToPairCounts(edges: RealizedEdge[]): Map<string, number> {
@@ -215,6 +224,8 @@ function teamCost(teamId: TeamId, adj: Map<TeamId, Map<TeamId, number>>, meta: T
   const counts = adj.get(teamId)!;
   const opponents = meta.crossOpponents.get(teamId)!;
   const sameSeed = meta.sameSeedOpponents.get(teamId)!;
+  const sameConferenceSameSeed = meta.sameConferenceSameSeedOpponents.get(teamId)!;
+  let missingSameConferenceSameSeed = 0;
   let missingSameSeed = 0;
   let unplayed = 0;
   let hasRepeat = false;
@@ -226,6 +237,7 @@ function teamCost(teamId: TeamId, adj: Map<TeamId, Map<TeamId, number>>, meta: T
     if (c === 0) {
       unplayed += 1;
       if (isSameSeed) missingSameSeed += 1;
+      if (sameConferenceSameSeed.has(o)) missingSameConferenceSameSeed += 1;
     } else if (c >= 2) {
       hasRepeat = true;
       if (!isSameSeed) otherRepeats += 1;
@@ -233,7 +245,8 @@ function teamCost(teamId: TeamId, adj: Map<TeamId, Map<TeamId, number>>, meta: T
     if (isSameSeed && c === 1) sameSeedAtOne += 1;
   }
   let cost = 0;
-  cost += 100 * missingSameSeed; // tier 1: cover every same-seed opponent
+  cost += 200 * missingSameConferenceSameSeed; // tier 1a: cover in-conference same-seed opponents first
+  cost += 100 * missingSameSeed; // tier 1b: then cover every same-seed opponent
   if (hasRepeat) cost += 10 * unplayed; // tier 2: cover before repeating
   if (otherRepeats > 0) cost += sameSeedAtOne; // tier 3: same-seed repeat first
   return cost;

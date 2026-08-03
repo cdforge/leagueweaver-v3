@@ -18,6 +18,7 @@ export type TeamId = string;
 export interface EngineTeam {
   id: TeamId;
   divisionId: string | null; // null only for single-league round robin
+  conferenceId?: string | null; // present when divisions are split into conferences
   divisionSeed: number; // 1 = best within division (or league for RR)
   overallSeed: number; // 1 = best overall; ties broken by id for determinism
   openingWeekSeed?: number; // Optional draft-day rank used only by the Week 1 marquee scorer

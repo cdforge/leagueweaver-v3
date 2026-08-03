@@ -105,6 +105,9 @@ export function getNflWeeks(seasonYear: number, count: 13 | 14) {
 
 function buildEngineInput(setup: LeagueSetupInput): EngineInput {
   const divisionOrder = new Map(setup.divisions.map((division, index) => [division.id, index]));
+  const conferenceByDivision = new Map(
+    setup.divisions.map((division) => [division.id, division.conferenceId ?? null]),
+  );
   const openingWeekRank = getWeekOneRankMap(setup);
   const divisionTeams = new Map<string, typeof setup.teams>();
   for (const division of setup.divisions) divisionTeams.set(division.id, []);
@@ -130,6 +133,7 @@ function buildEngineInput(setup: LeagueSetupInput): EngineInput {
     teams: setup.teams.map((team) => ({
       id: team.id,
       divisionId: team.divisionId,
+      conferenceId: conferenceByDivision.get(team.divisionId) ?? null,
       divisionSeed: divisionSeedByTeam.get(team.id) ?? team.overallRank,
       overallSeed: team.overallRank,
       openingWeekSeed: openingWeekRank.get(team.id) ?? team.overallRank,

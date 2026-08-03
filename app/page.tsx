@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AppHeader } from "@/components/AppHeader";
 import { StartBuildingButton } from "@/components/welcome/StartBuildingButton";
+import { MySchedulesButton } from "@/components/welcome/MySchedulesButton";
 import { SchedulePreview } from "@/components/welcome/SchedulePreview";
 import { AdUnit } from "@/components/ads/AdUnit";
 import { CalendarDays, Trophy, Users } from "lucide-react";
@@ -79,6 +80,7 @@ export default function HomePage() {
           </p>
           <div className="welcome-actions">
             <StartBuildingButton label="Start building" />
+            <MySchedulesButton />
             <small>Free to start &middot; No account needed &middot; about 5 minutes.</small>
           </div>
           </div>
@@ -130,6 +132,7 @@ export default function HomePage() {
           </ol>
           <div className="welcome-actions welcome-actions--end">
             <StartBuildingButton label="Start building" />
+            <MySchedulesButton />
           </div>
         </div>
       </section>

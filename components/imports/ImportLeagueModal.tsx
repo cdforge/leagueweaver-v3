@@ -16,26 +16,26 @@ const TEAM_COLORS = ["#B91C1C", "#1D4ED8", "#7C3AED", "#C2410C", "#047857", "#BE
 const ESPN_IMPORT_HISTORY_KEY = "leagueweaver:v3:espn-imports";
 const MAX_PASTE_IMPORT_CHARS = 50_000;
 const MAX_IMPORT_TEAMS = 32;
-const CSV_TEMPLATE = "City,Team,Manager,Division,Rank,Venue,Color\n,,,,,,\n,,,,,,";
+const CSV_TEMPLATE = "City,Team,Manager,Manager Email,Division,Rank,Venue,Color\n,,,,,,,\n,,,,,,,";
 const SAMPLE_ROSTER = [
-  "City,Team,Manager,Division,Rank,Venue,Color",
-  "Brooklyn,Sunday Architects,Anthony,North,1,Foundry Field,#B91C1C",
-  "Chicago,Fourth & Forever,Riley,North,2,The Yard,#1D4ED8",
-  "Seattle,Red Zone Society,Morgan,North,3,Victory Grounds,#7C3AED",
-  "Baltimore,Blitz Department,Casey,North,4,The Gridiron,#C2410C",
-  "Denver,Waiver Wire Works,Jordan,North,5,Summit Field,#047857",
-  "Austin,Goal Line Guild,Sam,South,6,Union Stadium,#BE185D",
-  "Phoenix,Gridiron Union,Alex,South,7,Commission Park,#0369A1",
-  "Nashville,Huddle House,Drew,South,8,Music Row,#4D7C0F",
-  "Dallas,Sunday Sailors,Pat,South,9,Star Field,#A16207",
-  "Miami,Tide Turners,Lee,South,10,Palm Bowl,#4338CA",
+  "City,Team,Manager,Manager Email,Division,Rank,Venue,Color",
+  "Brooklyn,Sunday Architects,Anthony,anthony@example.com,North,1,Foundry Field,#B91C1C",
+  "Chicago,Fourth & Forever,Riley,riley@example.com,North,2,The Yard,#1D4ED8",
+  "Seattle,Red Zone Society,Morgan,morgan@example.com,North,3,Victory Grounds,#7C3AED",
+  "Baltimore,Blitz Department,Casey,casey@example.com,North,4,The Gridiron,#C2410C",
+  "Denver,Waiver Wire Works,Jordan,jordan@example.com,North,5,Summit Field,#047857",
+  "Austin,Goal Line Guild,Sam,sam@example.com,South,6,Union Stadium,#BE185D",
+  "Phoenix,Gridiron Union,Alex,alex@example.com,South,7,Commission Park,#0369A1",
+  "Nashville,Huddle House,Drew,drew@example.com,South,8,Music Row,#4D7C0F",
+  "Dallas,Sunday Sailors,Pat,pat@example.com,South,9,Star Field,#A16207",
+  "Miami,Tide Turners,Lee,lee@example.com,South,10,Palm Bowl,#4338CA",
 ].join("\n");
 
 function detectRosterShape(value: string) {
   const lines = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (!lines.length) return { count: 0, hasHeader: false };
   const firstCells = lines[0].split(/\t|,/).map((cell) => cell.trim().toLowerCase());
-  const hasHeader = firstCells.some((cell) => ["city", "team", "team name", "manager", "owner", "division", "rank", "stadium", "venue", "color", "colour", "hex"].includes(cell));
+  const hasHeader = firstCells.some((cell) => ["city", "team", "team name", "manager", "owner", "email", "manager email", "owner email", "division", "rank", "stadium", "venue", "color", "colour", "hex"].includes(cell));
   return { count: Math.min(hasHeader ? lines.length - 1 : lines.length, MAX_IMPORT_TEAMS), hasHeader };
 }
 
@@ -118,7 +118,7 @@ function parsePastedRoster(value: string, provider: "csv" | "paste"): ImportPrev
   }
   const lines = value.slice(0, MAX_PASTE_IMPORT_CHARS).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const firstCells = lines[0]?.split(/\t|,/).map((cell) => cell.trim().toLowerCase()) ?? [];
-  const hasHeader = firstCells.some((cell) => ["city", "team", "team name", "manager", "owner", "division", "rank", "stadium", "venue", "color", "colour", "hex"].includes(cell));
+  const hasHeader = firstCells.some((cell) => ["city", "team", "team name", "manager", "owner", "email", "manager email", "owner email", "division", "rank", "stadium", "venue", "color", "colour", "hex"].includes(cell));
   const headers = hasHeader ? firstCells : [];
   const dataLines = (hasHeader ? lines.slice(1) : lines).slice(0, MAX_IMPORT_TEAMS);
   if ((hasHeader ? lines.slice(1) : lines).length > MAX_IMPORT_TEAMS) {
@@ -143,6 +143,7 @@ function parsePastedRoster(value: string, provider: "csv" | "paste"): ImportPrev
       city: (hasHeader ? at(["city", "location"], -1) : "").slice(0, 60),
       name,
       manager: at(["manager", "owner"], 1).slice(0, 80),
+      managerEmail: at(["email", "manager email", "owner email"], -1).slice(0, 120),
       division: at(["division"], 2).slice(0, 60),
       rank: Number(at(["rank", "overall rank"], 3)) || index + 1,
       stadium: at(["stadium", "venue"], 4).slice(0, 90),
@@ -182,6 +183,7 @@ function TeamPreviewRow({ team, index, source, expanded, duplicate, onToggle, on
         <label><span>City</span><input aria-label={`Imported team ${index + 1} city`} value={team.city ?? ""} placeholder="City" onChange={(event) => onChange({ ...team, city: event.target.value })} /></label>
         <label><span>Team name</span><input aria-label={`Imported team ${index + 1} name`} value={team.name} placeholder="Team name" onChange={(event) => onChange({ ...team, name: event.target.value })} /></label>
         <label><span>Manager</span><input aria-label={`${team.name} manager`} value={team.manager ?? ""} placeholder="Manager" onChange={(event) => onChange({ ...team, manager: event.target.value })} /></label>
+        <label><span>Manager email</span><input type="email" aria-label={`${team.name} manager email`} value={team.managerEmail ?? ""} placeholder="manager@email.com" onChange={(event) => onChange({ ...team, managerEmail: event.target.value })} /></label>
         <label><span>Division</span><input aria-label={`${team.name} division`} value={division} placeholder="Division" onChange={(event) => onChange({ ...team, division: cleanDivisionName(event.target.value) })} /></label>
         {showVenue && <label><span>Home venue</span><input aria-label={`${team.name} venue`} value={team.stadium ?? ""} placeholder="Home venue" onChange={(event) => onChange({ ...team, stadium: event.target.value })} /></label>}
         <button type="button" className="import-review-remove" aria-label={`Remove ${team.name || `team ${index + 1}`}`} title={canRemove ? "Remove team" : "Keep at least 8 teams"} disabled={!canRemove} onClick={onRemove}><Trash2 /></button>

@@ -1,28 +1,30 @@
 import { type CSSProperties } from "react";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
-import { conferenceAcronym, divisionAcronym, resolveInitials } from "@/lib/monograms";
+import { conferenceAcronym, conferenceDivisionAcronym, divisionAcronym, resolveInitials } from "@/lib/monograms";
 import type { Conference, Division } from "@/lib/types";
 
-export function DivisionMark({ division, size = 18, className = "" }: { division: Division; size?: number; className?: string }) {
-  const initials = resolveInitials(division.initials, divisionAcronym(division.name));
+export function divisionMarkText(division: Division, conference?: Conference, compact = false) {
+  return conference
+    ? conferenceDivisionAcronym(division.name, division.initials, conference.name, conference.initials, compact)
+    : resolveInitials(division.initials, divisionAcronym(division.name));
+}
+
+export function DivisionMark({ division, conference, size = 18, className = "" }: { division: Division; conference?: Conference; size?: number; className?: string }) {
+  const initials = divisionMarkText(division, conference, size < 20);
   const hasImage = Boolean(division.logoUrl);
-  // Non-image marks expose their division color as CSS vars; the filled-badge treatment is
-  // painted only on the playoff surfaces (.pp-board / .pp-panel) so shared table/clinch marks
-  // keep their plain colored-text look.
+  const fontScale = initials.length >= 5 ? 0.29 : initials.length > 3 ? 0.34 : 0.5;
   return <span
-    className={`division-mark ${hasImage ? "" : "division-mark-filled"} ${className}`}
+    className={`division-mark ${conference && !hasImage ? "division-mark-qualified" : ""} ${hasImage ? "division-mark-has-image" : "division-mark-filled"} ${className}`}
     style={{
       width: size,
       height: size,
       color: accessibleTeamColor(division.color),
-      ...(hasImage ? {} : { "--dm-bg": division.color, "--dm-ink": readableTextColor(division.color) }),
+      ...(hasImage ? {} : { "--dm-bg": division.color, "--dm-fg": accessibleTeamColor(division.color), "--dm-ink": readableTextColor(division.color) }),
     } as CSSProperties}
     aria-hidden="true"
   >
-    {/* Size the acronym to the box so a 2–3 char monogram keeps a visible margin
-        (a box-filling acronym reads as cramped/off-center) and centers cleanly. */}
-    {hasImage ? <img src={division.logoUrl} alt="" /> : <b style={{ fontSize: `${Math.max(7, Math.round(size * 0.5))}px`, lineHeight: 1 }}>{initials}</b>}
+    {hasImage ? <img src={division.logoUrl} alt="" /> : <b style={{ fontSize: `${Math.max(6, Math.round(size * fontScale))}px`, lineHeight: 1 }}>{initials}</b>}
   </span>;
 }
 
@@ -32,12 +34,12 @@ export function ConferenceMark({ conference, size = 18, className = "" }: { conf
   const initials = resolveInitials(conference.initials, conferenceAcronym(conference.name));
   const hasImage = Boolean(conference.logoUrl);
   return <span
-    className={`division-mark conference-mark ${hasImage ? "" : "division-mark-filled"} ${className}`}
+    className={`division-mark conference-mark ${hasImage ? "division-mark-has-image" : "division-mark-filled"} ${className}`}
     style={{
       width: size,
       height: size,
       color: accessibleTeamColor(conference.color),
-      ...(hasImage ? {} : { "--dm-bg": conference.color, "--dm-ink": readableTextColor(conference.color) }),
+      ...(hasImage ? {} : { "--dm-bg": conference.color, "--dm-fg": accessibleTeamColor(conference.color), "--dm-ink": readableTextColor(conference.color) }),
     } as CSSProperties}
     aria-hidden="true"
   >
@@ -45,8 +47,9 @@ export function ConferenceMark({ conference, size = 18, className = "" }: { conf
   </span>;
 }
 
-export function DivisionIdentity({ division, detail, iconOnly = false, className = "" }: {
+export function DivisionIdentity({ division, conference, detail, iconOnly = false, className = "" }: {
   division: Division;
+  conference?: Conference;
   detail?: string;
   iconOnly?: boolean;
   className?: string;
@@ -58,12 +61,13 @@ export function DivisionIdentity({ division, detail, iconOnly = false, className
       title={iconOnly ? `${division.name} division` : undefined}
     >
       {iconOnly
-        ? <DivisionMark division={division} />
+        ? <DivisionMark division={division} conference={conference} />
         : <EntityLogo
             color={division.color}
             logoUrl={division.logoUrl}
-            monogram={resolveInitials(division.initials, divisionAcronym(division.name))}
+            monogram={divisionMarkText(division, conference)}
             size={32}
+            entityType="division"
           />}
       {!iconOnly && <span>
         <strong>{division.name}</strong>

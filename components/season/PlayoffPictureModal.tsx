@@ -6,7 +6,8 @@ import { EntityLogo } from "@/components/ui/EntityLogo";
 import { DivisionMark } from "@/components/ui/DivisionIdentity";
 import { buildPlayoffPicture, type PlayoffPictureEntry } from "@/lib/playoffPicture";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
-import { accessibleTeamColor, tintColor } from "@/lib/colorContrast";
+import { accessibleTeamColor, readableTextColor, tintColor } from "@/lib/colorContrast";
+import { conferenceOfDivision, hasConferences } from "@/lib/conferences";
 import { useIsMobile } from "@/lib/useIsMobile";
 import type { Division, GeneratedSchedule, Team } from "@/lib/types";
 
@@ -33,6 +34,9 @@ export function PlayoffPicturePanel({ schedule, onClose }: { schedule: Generated
   const showCity = schedule.setup.display?.cityNames !== false && !isMobile;
   const leagueLogo = schedule.setup.logoUrl;
   const leagueColor = schedule.setup.color;
+  const leagueHasConferences = hasConferences(schedule.setup);
+  const divisionConference = (division?: Division) => division && leagueHasConferences ? conferenceOfDivision(schedule.setup, division.id) : undefined;
+  const legendDivision = schedule.setup.divisions[0];
 
   const LeagueBadge = ({ corner = false }: { corner?: boolean }) => (
     <span
@@ -44,19 +48,19 @@ export function PlayoffPicturePanel({ schedule, onClose }: { schedule: Generated
         placeItems: "center",
         overflow: "hidden",
         borderRadius: "50%",
-        background: leagueLogo ? tintColor(leagueColor) : "var(--gold)",
+        background: leagueLogo ? tintColor(leagueColor) : leagueColor,
       }}
       aria-hidden="true"
     >
       {leagueLogo
         ? <img src={leagueLogo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-        : <Trophy style={{ width: corner ? 11 : 9, height: corner ? 11 : 9, color: "#3a2c06" }} />}
+        : <Trophy style={{ width: corner ? 11 : 9, height: corner ? 11 : 9, color: readableTextColor(leagueColor) }} />}
     </span>
   );
 
   const StatusTag = ({ entry, division }: { entry: PlayoffPictureEntry; division?: Division }) => {
     if (entry.status === "top-seed") return <span className="pp-tag is-top"><Medal aria-hidden="true" />#1 Seed</span>;
-    if (entry.status === "division") return <span className="pp-tag">{division && <DivisionMark division={division} size={13} className="pp-dmark" />}Div Champ</span>;
+    if (entry.status === "division") return <span className="pp-tag">{division && <DivisionMark division={division} conference={divisionConference(division)} size={13} className="pp-dmark" />}Div Champ</span>;
     if (entry.status === "clinched") return <span className="pp-tag is-clinched"><ShieldCheck aria-hidden="true" />Clinched</span>;
     return <span className="pp-tag">In</span>;
   };
@@ -81,7 +85,7 @@ export function PlayoffPicturePanel({ schedule, onClose }: { schedule: Generated
           <div className="pp-bar">
             <div className="pp-tm">
               <span className="pp-name">{teamDisplayName(team, showCity)}</span>
-              {division && <span className="pp-div"><DivisionMark division={division} size={13} className="pp-dmark" />{division.name}</span>}
+              {division && <span className="pp-div"><DivisionMark division={division} conference={divisionConference(division)} size={13} className="pp-dmark" />{division.name}</span>}
             </div>
             <span className="pp-sp" />
             <StatusTag entry={entry} division={division} />
@@ -104,7 +108,7 @@ export function PlayoffPicturePanel({ schedule, onClose }: { schedule: Generated
         <EntityLogo className="pp-mlogo" color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={32} />
         <div className="pp-tm2">
           <span className="pp-mnm">{teamDisplayName(team, showCity)}</span>
-          {division && <span className="pp-mdv"><DivisionMark division={division} size={12} className="pp-dmark" />{division.name}</span>}
+          {division && <span className="pp-mdv"><DivisionMark division={division} conference={divisionConference(division)} size={12} className="pp-dmark" />{division.name}</span>}
         </div>
         <span className="pp-sp" />
         <span className="pp-mrecs"><b>{entry.overallRecord}</b><small>{entry.divisionRecord} Div</small></span>
@@ -153,6 +157,7 @@ export function PlayoffPicturePanel({ schedule, onClose }: { schedule: Generated
 
           <div className="pp-foot">
             <span className="pp-lg"><LeagueBadge />#1 seed · league logo</span>
+            {legendDivision && <span className="pp-lg"><DivisionMark division={legendDivision} conference={divisionConference(legendDivision)} size={13} className="pp-dmark" />Division champ</span>}
             <span className="pp-lg"><span className="pp-sw" style={{ background: "#7fe3ac" }} />Clinched berth</span>
             <span className="pp-lg"><span className="pp-sw" style={{ background: "var(--gold)" }} />On the bubble</span>
             <span className="pp-lg"><span className="pp-sw" style={{ background: "var(--live)" }} />Eliminated</span>

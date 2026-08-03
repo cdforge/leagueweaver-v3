@@ -27,6 +27,7 @@ function addPrioritizedCrossPairs(
   input: EngineInput,
   degree: Map<TeamId, number>,
   rng: SeededRng,
+  maxPairCount = 2,
 ): boolean {
   const total = [...degree.values()].reduce((s, v) => s + v, 0);
   if (total === 0) return true;
@@ -38,7 +39,7 @@ function addPrioritizedCrossPairs(
     input.teams,
     degree,
     () => rng.next(),
-    { divisionOrder },
+    { divisionOrder, maxPairCount },
   );
 
   const leftover = [...remainingGamesByTeam.values()].reduce(
@@ -57,7 +58,10 @@ function addPrioritizedCrossPairs(
     // schedule always results. Even-division leagues never hit this path.
     const result = realizePriorityCrossDivisionGraph(input.teams, degree, rng, divisionOrder);
     if (!result) return false;
-    for (const e of result.edges) addPair(map, e.a, e.b, e.count, "cross");
+    for (const e of result.edges) {
+      if (e.count > maxPairCount) return false;
+      addPair(map, e.a, e.b, e.count, "cross");
+    }
     return true;
   }
 
@@ -298,16 +302,6 @@ export function buildInventory(
       }
       intraGroupPairs(map, groupsIds, 2, "div");
 
-      // Complete-cross shortcut. When every team's cross-degree equals its number
-      // of cross-division opponents, each team must play every out-of-division team
-      // exactly once — the cross graph is the complete multipartite graph, with no
-      // allocation freedom at all. Build it directly instead of routing through the
-      // priority allocator (covers e.g. two equal divisions over 13 weeks, or four
-      // 3-team divisions over 13 weeks: 9 cross games = 9 cross opponents).
-      const completeCross = [...groupsIds.values()].every(
-        (members) => weeks - 2 * (members.length - 1) === teamIds.length - members.length,
-      );
-
       // Build the cross-division pairs into a scratch map so a failed attempt rolls
       // back cleanly. The final-week divisional reservation removes specific
       // bottom-vs-bottom cross games up front and hands the priority allocator only
@@ -317,39 +311,112 @@ export function buildInventory(
       // degrees that always realize; the closing week just isn't forced divisional.
       // This mirrors the best-effort rollback placement already does for the same
       // reservation, so a valid schedule is produced instead of a hard failure.
-      const buildCross = (useReservation: boolean): { crossMap: Map<string, InventoryPair>; reserved: Array<{ a: TeamId; b: TeamId }> } | null => {
+      const buildCrossBand = (
+        degree: Map<TeamId, number>,
+        useReservation: boolean,
+        maxPairCount: number,
+      ): { crossMap: Map<string, InventoryPair>; reserved: Array<{ a: TeamId; b: TeamId }> } | null => {
         const crossMap = new Map<string, InventoryPair>();
-        const degree = new Map<TeamId, number>();
-        for (const [, members] of groupsIds) {
-          const cross = weeks - 2 * (members.length - 1);
-          for (const id of members) degree.set(id, cross);
-        }
+        const adjustedDegree = new Map(degree);
         const reserved = useReservation ? computeReservedFinalCrossPairs(input) : [];
         for (const { a, b } of reserved) {
           addPair(crossMap, a, b, 1, "cross");
-          degree.set(a, (degree.get(a) ?? 0) - 1);
-          degree.set(b, (degree.get(b) ?? 0) - 1);
+          adjustedDegree.set(a, (adjustedDegree.get(a) ?? 0) - 1);
+          adjustedDegree.set(b, (adjustedDegree.get(b) ?? 0) - 1);
         }
-        if (completeCross) {
+        if ([...adjustedDegree.values()].some((value) => value < 0)) {
+          return null;
+        }
+
+        const completeCrossRounds = [...groupsIds.values()].every((members) => {
+          const crossOpponentCount = teamIds.length - members.length;
+          const cross = adjustedDegree.get(members[0]) ?? 0;
+          return crossOpponentCount > 0 && cross > 0 && cross % crossOpponentCount === 0;
+        });
+        const completeCrossCount = completeCrossRounds
+          ? Math.max(
+              0,
+              ...[...groupsIds.values()].map((members) => {
+                const crossOpponentCount = teamIds.length - members.length;
+                return Math.floor((adjustedDegree.get(members[0]) ?? 0) / crossOpponentCount);
+              }),
+            )
+          : 0;
+        const canUseCompleteCross =
+          completeCrossRounds &&
+          completeCrossCount > 0 &&
+          completeCrossCount <= maxPairCount &&
+          [...groupsIds.values()].every((members) => {
+            const crossOpponentCount = teamIds.length - members.length;
+            return (adjustedDegree.get(members[0]) ?? 0) === completeCrossCount * crossOpponentCount;
+          });
+
+        if (canUseCompleteCross) {
           for (let i = 0; i < teamIds.length; i += 1) {
             for (let j = i + 1; j < teamIds.length; j += 1) {
               const a = teamIds[i];
               const b = teamIds[j];
               if (groupOf.get(a) === groupOf.get(b)) continue;
               const key = a < b ? `${a}|${b}` : `${b}|${a}`;
-              if (!crossMap.has(key)) addPair(crossMap, a, b, 1, "cross");
+              const existing = crossMap.get(key)?.count ?? 0;
+              const remainingCount = completeCrossCount - existing;
+              if (remainingCount > 0) addPair(crossMap, a, b, remainingCount, "cross");
             }
           }
-        } else if (!addPrioritizedCrossPairs(crossMap, input, degree, rng)) {
+        } else if (!addPrioritizedCrossPairs(crossMap, input, adjustedDegree, rng, maxPairCount)) {
           return null;
         }
+
         return { crossMap, reserved };
       };
 
-      const crossResult = buildCross(true) ?? buildCross(false);
-      if (!crossResult) return null;
-      for (const pair of crossResult.crossMap.values()) addPair(map, pair.a, pair.b, pair.count, pair.kind);
-      reservedFinalCrossPairs = crossResult.reserved;
+      const remainingGamesByTeam = new Map<TeamId, number>();
+      for (const [, members] of groupsIds) {
+        const baseDivisionalGames = 2 * (members.length - 1);
+        const remaining = weeks - baseDivisionalGames;
+        if (remaining < 0) return null;
+        for (const id of members) remainingGamesByTeam.set(id, remaining);
+      }
+
+      let useReservation = true;
+      for (let band = 0; [...remainingGamesByTeam.values()].some((value) => value > 0); band += 1) {
+        if (band > weeks + teamIds.length) return null;
+
+        const crossDegree = new Map<TeamId, number>();
+        for (const [, members] of groupsIds) {
+          const crossOpponentCount = teamIds.length - members.length;
+          for (const id of members) {
+            crossDegree.set(id, Math.min(remainingGamesByTeam.get(id) ?? 0, 2 * crossOpponentCount));
+          }
+        }
+        if ([...crossDegree.values()].some((value) => value > 0)) {
+          const crossResult = buildCrossBand(crossDegree, useReservation, 2) ??
+            buildCrossBand(crossDegree, false, 2);
+          if (!crossResult) return null;
+          for (const pair of crossResult.crossMap.values()) {
+            addPair(map, pair.a, pair.b, pair.count, pair.kind);
+            remainingGamesByTeam.set(pair.a, (remainingGamesByTeam.get(pair.a) ?? 0) - pair.count);
+            remainingGamesByTeam.set(pair.b, (remainingGamesByTeam.get(pair.b) ?? 0) - pair.count);
+          }
+          reservedFinalCrossPairs = crossResult.reserved;
+          useReservation = false;
+        }
+
+        const extraDivisionalGamesByGroup = new Map<string, number>();
+        for (const [groupId, members] of groupsIds) {
+          const extraGames = Math.min(
+            ...members.map((id) => Math.max(0, remainingGamesByTeam.get(id) ?? 0)),
+            2 * (members.length - 1),
+          );
+          extraDivisionalGamesByGroup.set(groupId, extraGames);
+        }
+        for (const [groupId, extraGames] of extraDivisionalGamesByGroup) {
+          if (extraGames <= 0) continue;
+          const members = groupsIds.get(groupId) ?? [];
+          if (!fillRoundRobin(map, members, extraGames, "div", rng)) return null;
+          for (const id of members) remainingGamesByTeam.set(id, (remainingGamesByTeam.get(id) ?? 0) - extraGames);
+        }
+      }
       break;
     }
     case "divisional_league": {

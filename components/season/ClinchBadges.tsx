@@ -3,16 +3,17 @@ import { CircleX, Medal, ShieldCheck, Trophy } from "lucide-react";
 import { DivisionMark } from "@/components/ui/DivisionIdentity";
 import { accessibleTeamColor, tintColor } from "@/lib/colorContrast";
 import type { TeamClinchTimeline } from "@/lib/clinch";
-import type { Division } from "@/lib/types";
+import type { Conference, Division } from "@/lib/types";
 
 function weekLabel(week?: number) {
   if (week == null) return "";
   return week === 0 ? "PRE" : `W${week}`;
 }
 
-export function ClinchBadges({ timeline, division, divisionColor = division?.color ?? "#117A45", compact = false }: {
+export function ClinchBadges({ timeline, division, conference, divisionColor = division?.color ?? "#117A45", compact = false }: {
   timeline?: TeamClinchTimeline;
   division?: Division;
+  conference?: Conference;
   divisionColor?: string;
   compact?: boolean;
 }) {
@@ -33,7 +34,7 @@ export function ClinchBadges({ timeline, division, divisionColor = division?.col
 
   return <span className={`clinch-badges ${compact ? "compact" : ""}`}>
     {timeline.topSeed && <span className="clinch-badge top-seed" title={`Clinched the league's number-one seed after ${timeline.topSeedWeek === 0 ? "the preseason" : `Week ${timeline.topSeedWeek}`}`}><Medal aria-hidden="true" />#1 SEED <b>{weekLabel(timeline.topSeedWeek)}</b></span>}
-    {timeline.divisionTitle && <span className="clinch-badge division-title" style={divisionStyle} title={`Clinched the ${division?.name ?? "division"} championship after ${timeline.divisionTitleWeek === 0 ? "the preseason" : `Week ${timeline.divisionTitleWeek}`}`}>{division ? <DivisionMark division={division} size={16} /> : <Trophy aria-hidden="true" />}DIV CHAMP <b>{weekLabel(timeline.divisionTitleWeek)}</b></span>}
+    {timeline.divisionTitle && <span className="clinch-badge division-title" style={divisionStyle} title={`Clinched the ${division?.name ?? "division"} championship after ${timeline.divisionTitleWeek === 0 ? "the preseason" : `Week ${timeline.divisionTitleWeek}`}`}>{division ? <DivisionMark division={division} conference={conference} size={16} /> : <Trophy aria-hidden="true" />}DIV CHAMP <b>{weekLabel(timeline.divisionTitleWeek)}</b></span>}
     {timeline.playoffBerth && <span className="clinch-badge playoff-berth" title={`Clinched a playoff spot after ${timeline.playoffBerthWeek === 0 ? "the preseason" : `Week ${timeline.playoffBerthWeek}`}`}><ShieldCheck aria-hidden="true" />PLAYOFF <b>{weekLabel(timeline.playoffBerthWeek)}</b></span>}
   </span>;
 }

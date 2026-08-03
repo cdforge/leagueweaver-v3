@@ -75,11 +75,11 @@ export function createDivisions(count = 2): Division[] {
     id: `division-${index + 1}`,
     name,
     color: DIVISION_COLORS[index % DIVISION_COLORS.length],
+    colorSource: "auto",
   }));
 }
 
-const CONFERENCE_NAMES = ["Conference A", "Conference B"];
-const CONFERENCE_INITIALS = ["A", "B"];
+const CONFERENCE_NAMES = ["American", "National"];
 const CONFERENCE_COLORS = ["#1D4ED8", "#B42318"];
 
 /** Two conference identities (name/initials/color), branded further in the wizard. */
@@ -87,7 +87,6 @@ export function createConferences(count = 2): Conference[] {
   return Array.from({ length: count }, (_, index) => ({
     id: `conference-${index + 1}`,
     name: CONFERENCE_NAMES[index] ?? `Conference ${index + 1}`,
-    initials: CONFERENCE_INITIALS[index] ?? String.fromCharCode(65 + index),
     color: CONFERENCE_COLORS[index % CONFERENCE_COLORS.length],
   }));
 }
