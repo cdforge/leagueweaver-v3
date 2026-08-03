@@ -10,6 +10,7 @@ export type SignupProfile = { leagueName: string; avatarUrl: string | null; busy
 export function SignupProfileFields({ onChange }: { onChange: (profile: SignupProfile) => void }) {
   const [leagueName, setLeagueName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarLoading, setAvatarLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [leagueLogo] = useState<string | null>(() => {
@@ -21,6 +22,9 @@ export function SignupProfileFields({ onChange }: { onChange: (profile: SignupPr
   useEffect(() => {
     onChange({ leagueName, avatarUrl, busy });
   }, [leagueName, avatarUrl, busy, onChange]);
+  useEffect(() => {
+    setAvatarLoading(Boolean(avatarUrl));
+  }, [avatarUrl]);
 
   const pickAvatar = async (file?: File) => {
     if (!file) return;
@@ -43,7 +47,7 @@ export function SignupProfileFields({ onChange }: { onChange: (profile: SignupPr
   return (
     <>
       <div className="signup-avatar">
-        <span className={`signup-avatar-preview${avatarUrl ? " has-image" : ""}`} aria-hidden="true">{avatarUrl ? <img src={avatarUrl} alt="" /> : <ImagePlus />}</span>
+        <span className={`signup-avatar-preview${avatarUrl ? " has-image" : ""} ${avatarLoading ? "is-loading" : ""}`} aria-hidden="true">{avatarUrl ? <><img src={avatarUrl} alt="" onLoad={() => setAvatarLoading(false)} onError={() => setAvatarLoading(false)} />{avatarLoading && <LoaderCircle className="avatar-image-spinner spin" />}</> : <ImagePlus />}</span>
         <div className="signup-avatar-actions">
           <span className="signup-avatar-label">Profile image <em>Optional</em></span>
           <div className="signup-avatar-buttons">

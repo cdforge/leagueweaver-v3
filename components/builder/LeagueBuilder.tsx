@@ -549,6 +549,20 @@ function minSchedulableDivisions(teamCount: number): number {
   return divisionCountOptions(teamCount).find((count) => divisionCountSchedulable(teamCount, count)) ?? 2;
 }
 
+function recommendedDivisionCount(teamCount: number): number {
+  const options = divisionCountOptions(teamCount).filter((count) => divisionCountSchedulable(teamCount, count));
+  return options
+    .map((count) => {
+      const averageSize = teamCount / count;
+      const perfectSplit = teamCount % count === 0 ? 1000 : 0;
+      const evenDivisionCount = count % 2 === 0 ? 100 : 0;
+      const healthySize = -Math.abs(averageSize - 5) * 10;
+      const overFragmented = -count;
+      return { count, score: perfectSplit + evenDivisionCount + healthySize + overFragmented };
+    })
+    .sort((left, right) => right.score - left.score || left.count - right.count)[0]?.count ?? minSchedulableDivisions(teamCount);
+}
+
 // Resize the roster WITHOUT discarding what the user already entered: keep every
 // existing team, append fresh defaults only for added slots, trim from the end when
 // shrinking, and repair any divisionId that no longer points at a live division.
@@ -693,10 +707,11 @@ function DivisionsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInpu
   const updateTeam = (id: string, divisionId: string) => setSetup((current) => ({ ...current, teams: applyTeamConferenceIds(current.teams.map((team) => team.id === id ? { ...team, divisionId } : team), current.divisions) }));
   const counts = setup.divisions.map((division) => setup.teams.filter((team) => team.divisionId === division.id).length);
   const balanced = Math.max(...counts) - Math.min(...counts) <= 1;
+  const recommendedCount = recommendedDivisionCount(setup.teams.length);
   return <div className="step-stack">
     <div className="section-heading"><h1>Build the divisions.</h1><p>Name each group, keep its color and logo visible, then place every team.</p></div>
     <div className="division-stage">
-      <div className="compact-controls division-controls"><div><FieldLabel>Divisions</FieldLabel><div className="segmented segmented-wrap">{divisionCountOptions(setup.teams.length).map((count) => { const schedulable = divisionCountSchedulable(setup.teams.length, count); return <button key={count} type="button" disabled={!schedulable} title={schedulable ? undefined : `${setup.teams.length} teams can’t split into ${count} balanced divisions within a 14-week season`} className={setup.divisions.length === count ? "active" : ""} onClick={() => setDivisionCount(count)}>{count}</button>; })}</div></div><div className={`roster-status ${balanced ? "" : "warning"}`}>{balanced ? <Check /> : <CircleAlert />}<span><strong>{balanced ? "Balanced divisions" : "Divisions need rebalancing"}</strong><small>{counts.join(" · ")} teams</small></span></div></div>
+      <div className="compact-controls division-controls"><div><FieldLabel>Divisions</FieldLabel><div className="segmented segmented-wrap">{divisionCountOptions(setup.teams.length).map((count) => { const schedulable = divisionCountSchedulable(setup.teams.length, count); const recommended = schedulable && count === recommendedCount; return <button key={count} type="button" disabled={!schedulable} title={schedulable ? recommended ? `Best fit for ${setup.teams.length} teams` : undefined : `${setup.teams.length} teams can’t split into ${count} balanced divisions within a 14-week season`} className={`${setup.divisions.length === count ? "active" : ""}${recommended ? " recommended" : ""}`.trim()} onClick={() => setDivisionCount(count)}><span>{count}</span>{recommended && <em>Best</em>}</button>; })}</div></div><div className={`roster-status ${balanced ? "" : "warning"}`}>{balanced ? <Check /> : <CircleAlert />}<span><strong>{balanced ? "Balanced divisions" : "Divisions need rebalancing"}</strong><small>{counts.join(" · ")} teams</small></span></div></div>
       <div className="division-strip">{setup.divisions.map((division) => <div className="division-identity-edit" key={division.id}><IdentityColorPicker compact name={`${division.name} division`} abbreviation={resolveInitials(division.initials, divisionAcronym(division.name))} color={division.color} logoUrl={division.logoUrl} onChange={(next) => updateDivision(division.id, next)} /><div><input aria-label={`${division.name} division name`} aria-invalid={showErrors && !division.name.trim()} value={division.name} onChange={(event) => updateDivision(division.id, { name: event.target.value })} /><input aria-label={`${division.name} division initials override`} maxLength={4} placeholder={`Auto: ${divisionAcronym(division.name)}`} value={division.initials ?? ""} onChange={(event) => updateDivision(division.id, { initials: event.target.value || undefined })} /></div></div>)}</div>
       {setup.conferences?.length === 2 && (() => {
         const confCounts = setup.conferences.map((conference) => setup.divisions.filter((division) => division.conferenceId === conference.id).length);

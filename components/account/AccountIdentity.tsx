@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CircleUserRound } from "lucide-react";
+import { CircleUserRound, LoaderCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuthModal } from "@/components/account/AuthModalProvider";
 
@@ -43,6 +43,7 @@ function identityFromUser(user: { email?: string; user_metadata?: Record<string,
 export function AccountIdentity({ identity, plan }: { identity?: AccountIdentityData; plan?: "free" | "pro" }) {
   const [resolved, setResolved] = useState<AccountIdentityData>(identity ?? { signedIn: false });
   const [loading, setLoading] = useState(identity === undefined);
+  const [avatarLoading, setAvatarLoading] = useState(Boolean(identity?.avatarUrl));
   const { openSignIn } = useAuthModal();
 
   useEffect(() => {
@@ -77,11 +78,15 @@ export function AccountIdentity({ identity, plan }: { identity?: AccountIdentity
     };
   }, [identity]);
 
+  useEffect(() => {
+    setAvatarLoading(Boolean(resolved.avatarUrl));
+  }, [resolved.avatarUrl]);
+
   if (!resolved.signedIn) return <button type="button" onClick={() => openSignIn()} className={`account-link account-identity${loading ? " loading" : ""}`} aria-label="Sign in to League Weaver"><CircleUserRound aria-hidden="true" /><span><strong>{loading ? "Account" : "Sign in"}</strong></span></button>;
 
   const name = resolved.displayName || friendlyEmailName(resolved.email);
   return <Link href="/account" className="account-link account-identity" aria-label={`Open account for ${name}`} title={resolved.email}>
-    <span className={`account-avatar${resolved.avatarUrl ? " has-image" : ""}`} aria-hidden="true">{resolved.avatarUrl ? <img src={resolved.avatarUrl} alt="" /> : accountInitials(name)}</span>
+    <span className={`account-avatar${resolved.avatarUrl ? " has-image" : ""} ${avatarLoading ? "is-loading" : ""}`} aria-hidden="true">{resolved.avatarUrl ? <><img src={resolved.avatarUrl} alt="" onLoad={() => setAvatarLoading(false)} onError={() => setAvatarLoading(false)} />{avatarLoading && <LoaderCircle className="avatar-image-spinner spin" />}</> : accountInitials(name)}</span>
     <span className="account-identity-copy"><strong>{name}</strong><small><span>My Account</span></small></span>
   </Link>;
 }

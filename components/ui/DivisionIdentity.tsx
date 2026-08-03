@@ -1,8 +1,24 @@
-import { type CSSProperties } from "react";
+"use client";
+
+import { useEffect, useState, type CSSProperties } from "react";
+import { LoaderCircle } from "lucide-react";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
 import { conferenceAcronym, divisionAcronym, resolveInitials } from "@/lib/monograms";
 import type { Conference, Division } from "@/lib/types";
+
+function LoadingMarkImage({ src }: { src: string }) {
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+  }, [src]);
+
+  return <>
+    <img className={loading ? "is-loading" : ""} src={src} alt="" onLoad={() => setLoading(false)} onError={() => setLoading(false)} />
+    {loading && <LoaderCircle className="division-mark-spinner spin" aria-hidden="true" />}
+  </>;
+}
 
 export function DivisionMark({ division, size = 18, className = "" }: { division: Division; size?: number; className?: string }) {
   const initials = resolveInitials(division.initials, divisionAcronym(division.name));
@@ -22,7 +38,7 @@ export function DivisionMark({ division, size = 18, className = "" }: { division
   >
     {/* Size the acronym to the box so a 2–3 char monogram keeps a visible margin
         (a box-filling acronym reads as cramped/off-center) and centers cleanly. */}
-    {hasImage ? <img src={division.logoUrl} alt="" /> : <b style={{ fontSize: `${Math.max(7, Math.round(size * 0.5))}px`, lineHeight: 1 }}>{initials}</b>}
+    {hasImage ? <LoadingMarkImage src={division.logoUrl!} /> : <b style={{ fontSize: `${Math.max(7, Math.round(size * 0.5))}px`, lineHeight: 1 }}>{initials}</b>}
   </span>;
 }
 
@@ -41,7 +57,7 @@ export function ConferenceMark({ conference, size = 18, className = "" }: { conf
     } as CSSProperties}
     aria-hidden="true"
   >
-    {hasImage ? <img src={conference.logoUrl} alt="" /> : <b style={{ fontSize: `${Math.max(7, Math.round(size * 0.5))}px`, lineHeight: 1 }}>{initials}</b>}
+    {hasImage ? <LoadingMarkImage src={conference.logoUrl!} /> : <b style={{ fontSize: `${Math.max(7, Math.round(size * 0.5))}px`, lineHeight: 1 }}>{initials}</b>}
   </span>;
 }
 

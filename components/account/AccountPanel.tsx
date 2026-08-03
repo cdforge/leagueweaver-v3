@@ -106,6 +106,7 @@ export function AccountPanel() {
   const [editingPreset, setEditingPreset] = useState<SavedLeaguePreset | null>(null);
   const [profileName, setProfileName] = useState("");
   const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
+  const [profileAvatarLoading, setProfileAvatarLoading] = useState(false);
   const [memberSince, setMemberSince] = useState<string | null>(null);
   const [profileBusy, setProfileBusy] = useState(false);
   const [profileNote, setProfileNote] = useState<string | null>(null);
@@ -140,6 +141,9 @@ export function AccountPanel() {
       setMemberSince(user.created_at ?? null);
     });
   }, [supabase]);
+  useEffect(() => {
+    setProfileAvatarLoading(Boolean(profileAvatar));
+  }, [profileAvatar]);
   useEffect(() => {
     if (!signedInEmail) return;
     Promise.all([
@@ -438,7 +442,7 @@ export function AccountPanel() {
       <section className="account-settings-block">
         <div className="account-section-head"><span><strong>Profile</strong><small>Shown across your account.</small></span></div>
         <div className="account-settings-profile">
-          <span className={`account-settings-avatar${profileAvatar ? " has-image" : ""}`} aria-hidden="true">{profileAvatar ? <img src={profileAvatar} alt="" /> : <ImagePlus />}</span>
+          <span className={`account-settings-avatar${profileAvatar ? " has-image" : ""} ${profileAvatarLoading ? "is-loading" : ""}`} aria-hidden="true">{profileAvatar ? <><img src={profileAvatar} alt="" onLoad={() => setProfileAvatarLoading(false)} onError={() => setProfileAvatarLoading(false)} />{profileAvatarLoading && <LoaderCircle className="avatar-image-spinner spin" />}</> : <ImagePlus />}</span>
           <div className="account-settings-avatar-controls">
             <input ref={avatarInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => { pickAvatar(event.target.files?.[0]); event.target.value = ""; }} />
             <button type="button" className="button-secondary" disabled={profileBusy} onClick={() => avatarInputRef.current?.click()}>{profileBusy ? <LoaderCircle className="spin" /> : <ImagePlus />}{profileAvatar ? "Change photo" : "Upload photo"}</button>
