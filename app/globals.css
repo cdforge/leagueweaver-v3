@@ -2373,8 +2373,12 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .mvt-tabs button { min-height: 38px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--pk-mut); padding: 0 12px; font-size: var(--text-2xs); font-weight: var(--w-black); cursor: pointer; }
 .mvt-tabs button:hover { color: var(--pk-ink); }
 .mvt-tabs button.active { background: var(--gold); color: #3d2e00; }
+.mvt-award-groups { display: grid; gap: 12px; }
+.conference-award-group { border-color: color-mix(in srgb, var(--gold) 38%, var(--pk-line)); }
 .mvt-award-panel > header { justify-content: flex-start; }
 .mvt-award-panel > header svg { color: var(--gold); }
+.mvt-conference-marks { margin-left: auto; display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.mvt-conference-marks em { min-height: 24px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--pk-line); border-radius: var(--radius-chip); background: var(--pk-2); color: var(--pk-mut); padding: 0 8px; font-size: var(--text-2xs); font-style: normal; font-weight: var(--w-black); }
 .mvt-award-table-wrap { overflow-x: auto; }
 .mvt-award-table { width: 100%; min-width: 860px; border-collapse: collapse; }
 .mvt-award-table th, .mvt-award-table td { border-bottom: 1px solid var(--pk-line); padding: 10px 12px; text-align: left; vertical-align: top; }
@@ -2544,6 +2548,7 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .standings-division-cell, .standings-status-cell { text-align: left !important; }
 .standings-division-cell { min-width: 154px; }
 .standings-division-cell > .division-identity { max-width: 148px; }
+.standings-conference-chip { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-bold); white-space: nowrap; }
 .standings-preseason-cell { min-width: 68px; }
 .standings-preseason-cell > strong { font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
 .standings-preseason-change { min-width: 88px; }

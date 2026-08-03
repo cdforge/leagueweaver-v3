@@ -33,11 +33,12 @@ import { CustomSelect, type SelectOption } from "@/components/ui/CustomSelect";
 import { Modal, ConfirmDialog } from "@/components/ui/Modal";
 import { ClinchBadges } from "@/components/season/ClinchBadges";
 import { GameBadgeChip } from "@/components/season/MatchupPresentation";
-import { DivisionIdentity } from "@/components/ui/DivisionIdentity";
+import { ConferenceMark, DivisionIdentity } from "@/components/ui/DivisionIdentity";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { buildAllStars } from "@/lib/allStars";
 import { getTeamClinchTimelines, type TeamClinchTimeline } from "@/lib/clinch";
 import { accessibleTeamColor, tintColor } from "@/lib/colorContrast";
+import { conferenceIdForDivision, conferenceOfDivision, hasConferences } from "@/lib/conferences";
 import { isGamePlayed } from "@/lib/game";
 import type { GameDetailPlayerStat } from "@/lib/gameDetail";
 import { divisionAcronym, leagueAcronym, resolveInitials } from "@/lib/monograms";
@@ -359,15 +360,22 @@ function SeasonRaceChart({ schedule, history, throughWeek, divisionId }: {
   const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
   const divisionById = new Map(schedule.setup.divisions.map((item) => [item.id, item]));
   const milestoneByTeam = useMemo(() => new Map(getTeamClinchTimelines(schedule, throughWeek).map((timeline) => [timeline.teamId, timeline])), [schedule, throughWeek]);
-  const division = divisionId === "all" ? undefined : schedule.setup.divisions.find((item) => item.id === divisionId);
-  const scopeTeams = schedule.setup.teams.filter((team) => divisionId === "all" || team.divisionId === divisionId);
+  const selectedConferenceId = divisionId.startsWith("conference:") ? divisionId.replace("conference:", "") : undefined;
+  const division = divisionId === "all" || selectedConferenceId ? undefined : schedule.setup.divisions.find((item) => item.id === divisionId);
+  const teamInScope = (team: Team) => divisionId === "all"
+    || team.divisionId === divisionId
+    || (selectedConferenceId != null && (team.conferenceId ?? conferenceIdForDivision(schedule.setup.divisions, team.divisionId)) === selectedConferenceId);
+  const scopeTeams = schedule.setup.teams.filter(teamInScope);
   const snapshots = history.filter((snapshot) => (
     (snapshot.weekNumber === 0 || snapshot.playedGames > 0)
     && snapshot.weekNumber <= throughWeek
   ));
   const chartSnapshots = snapshots.length ? snapshots : [history[0]];
   const scopedRanks = new Map(chartSnapshots.map((snapshot) => {
-    const rows = snapshot.rows.filter((row) => divisionId === "all" || teamById.get(row.teamId)?.divisionId === divisionId);
+    const rows = snapshot.rows.filter((row) => {
+      const team = teamById.get(row.teamId);
+      return team ? teamInScope(team) : false;
+    });
     return [snapshot.weekNumber, new Map(rows.map((row, index) => [row.teamId, index + 1]))];
   }));
   const series = scopeTeams.map((team) => ({
@@ -613,9 +621,10 @@ export function StatsWorkspace({ schedule, playerStats = [], onUpdateTiebreakers
   const rankHistory = useMemo(() => getLiveRankHistory(schedule), [schedule]);
   const currentRankSnapshot = [...rankHistory].reverse().find((snapshot) => snapshot.playedGames > 0) ?? rankHistory[0];
   const selectedRankSnapshot = standingsWeek === "current" ? currentRankSnapshot : rankHistory.find((snapshot) => String(snapshot.weekNumber) === standingsWeek) ?? currentRankSnapshot;
-  const selectedScope: TiebreakerScope = divisionId === "all" ? "league" : "division";
-  const selectedResolution = useMemo(() => resolveStandings(schedule, { throughWeek: selectedRankSnapshot.weekNumber, scope: selectedScope, divisionId: divisionId === "all" ? undefined : divisionId }), [schedule, selectedRankSnapshot.weekNumber, selectedScope, divisionId]);
-  const previousResolution = useMemo(() => resolveStandings(schedule, { throughWeek: Math.max(0, selectedRankSnapshot.weekNumber - 1), scope: selectedScope, divisionId: divisionId === "all" ? undefined : divisionId }), [schedule, selectedRankSnapshot.weekNumber, selectedScope, divisionId]);
+  const selectedConferenceId = divisionId.startsWith("conference:") ? divisionId.replace("conference:", "") : undefined;
+  const selectedScope: TiebreakerScope = divisionId === "all" || selectedConferenceId ? "league" : "division";
+  const selectedResolution = useMemo(() => resolveStandings(schedule, { throughWeek: selectedRankSnapshot.weekNumber, scope: selectedScope, divisionId: selectedScope === "division" ? divisionId : undefined }), [schedule, selectedRankSnapshot.weekNumber, selectedScope, divisionId]);
+  const previousResolution = useMemo(() => resolveStandings(schedule, { throughWeek: Math.max(0, selectedRankSnapshot.weekNumber - 1), scope: selectedScope, divisionId: selectedScope === "division" ? divisionId : undefined }), [schedule, selectedRankSnapshot.weekNumber, selectedScope, divisionId]);
   const currentClinches = useMemo(() => new Map(getTeamClinchTimelines(schedule, currentRankSnapshot.weekNumber).map((timeline) => [timeline.teamId, timeline])), [schedule, currentRankSnapshot.weekNumber]);
   const selectedClinches = useMemo(() => new Map(getTeamClinchTimelines(schedule, selectedRankSnapshot.weekNumber).map((timeline) => [timeline.teamId, timeline])), [schedule, selectedRankSnapshot.weekNumber]);
   const regularSignals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
@@ -625,29 +634,43 @@ export function StatsWorkspace({ schedule, playerStats = [], onUpdateTiebreakers
   const hasPlayoffResults = playoffAnalytics.length > 0;
   const teamById = useMemo(() => new Map(schedule.setup.teams.map((team) => [team.id, team])), [schedule.setup.teams]);
   const divisionById = new Map(schedule.setup.divisions.map((division) => [division.id, division]));
-  const selectedDivision = divisionId === "all" ? undefined : divisionById.get(divisionId);
+  const conferenceLive = hasConferences(schedule.setup);
+  const teamConferenceId = (team: Team) => team.conferenceId ?? conferenceIdForDivision(schedule.setup.divisions, team.divisionId);
+  const selectedDivision = divisionId === "all" || selectedConferenceId ? undefined : divisionById.get(divisionId);
   const preseasonRankByTeam = new Map(selectedRankSnapshot.rows.map((row) => [row.teamId, row.preseasonRank]));
   // `preseasonRankByTeam` is always the league-wide seed (rank history only runs
   // league scope). In a division view a row's live `rank` is its within-division
   // rank, so comparing it to a league seed makes the PRE RK cell and FROM-PRE
   // movement nonsense (an eliminated last-place team could show a green ↑). Re-rank
   // the division's teams by their league preseason seed so both are division-relative. (H10)
+  const selectedScopeTeamIds = selectedConferenceId
+    ? new Set(schedule.setup.teams.filter((team) => teamConferenceId(team) === selectedConferenceId).map((team) => team.id))
+    : undefined;
   const scopedPreseasonRankByTeam = divisionId === "all"
     ? preseasonRankByTeam
     : new Map(
         selectedResolution.rows
+          .filter((row) => !selectedScopeTeamIds || selectedScopeTeamIds.has(row.teamId))
           .map((row) => ({ teamId: row.teamId, seed: preseasonRankByTeam.get(row.teamId) ?? Number.POSITIVE_INFINITY }))
           .sort((left, right) => left.seed - right.seed)
           .map((entry, index) => [entry.teamId, index + 1] as [string, number]),
       );
-  const previousRankByTeam = new Map(previousResolution.rows.map((row, index) => [row.teamId, index + 1]));
-  const visibleStandings: RankedStandingsRow[] = selectedResolution.rows.map((row, index) => {
+  const previousRankByTeam = new Map(previousResolution.rows
+    .filter((row) => !selectedScopeTeamIds || selectedScopeTeamIds.has(row.teamId))
+    .map((row, index) => [row.teamId, index + 1]));
+  const scopedRows = selectedScopeTeamIds ? selectedResolution.rows.filter((row) => selectedScopeTeamIds.has(row.teamId)) : selectedResolution.rows;
+  const visibleStandings: RankedStandingsRow[] = scopedRows.map((row, index) => {
     const rank = index + 1;
     const previousRank = previousRankByTeam.get(row.teamId) ?? rank;
     return { ...row, rank, previousRank, rankChange: previousRank - rank, preseasonRank: scopedPreseasonRankByTeam.get(row.teamId) ?? rank, tiebreaker: selectedResolution.explanationsByTeam[row.teamId] };
   });
-  const visibleOdds = divisionId === "all" ? odds : odds.filter((row) => teamById.get(row.teamId)?.divisionId === divisionId);
-  const filterOptions = [{ value: "all", label: "League standings", description: `${schedule.setup.teams.length} teams`, swatch: schedule.setup.color, logoUrl: schedule.setup.logoUrl, monogram: resolveInitials(schedule.setup.initials, leagueAcronym(schedule.setup.name)) }, ...schedule.setup.divisions.map((division) => ({ value: division.id, label: division.name, description: `${schedule.setup.teams.filter((team) => team.divisionId === division.id).length} teams`, swatch: division.color, logoUrl: division.logoUrl, monogram: resolveInitials(division.initials, divisionAcronym(division.name)) }))];
+  const visibleOdds = selectedConferenceId
+    ? odds.filter((row) => {
+        const team = teamById.get(row.teamId);
+        return team ? teamConferenceId(team) === selectedConferenceId : false;
+      })
+    : divisionId === "all" ? odds : odds.filter((row) => teamById.get(row.teamId)?.divisionId === divisionId);
+  const filterOptions = [{ value: "all", label: "League standings", description: `${schedule.setup.teams.length} teams`, swatch: schedule.setup.color, logoUrl: schedule.setup.logoUrl, monogram: resolveInitials(schedule.setup.initials, leagueAcronym(schedule.setup.name)) }, ...(conferenceLive ? (schedule.setup.conferences ?? []).map((conference) => ({ value: `conference:${conference.id}`, label: conference.name, description: `${schedule.setup.teams.filter((team) => teamConferenceId(team) === conference.id).length} teams`, swatch: conference.color, logoUrl: conference.logoUrl, monogram: resolveInitials(conference.initials, conference.name.slice(0, 3).toUpperCase()) })) : []), ...schedule.setup.divisions.map((division) => ({ value: division.id, label: division.name, description: `${schedule.setup.teams.filter((team) => team.divisionId === division.id).length} teams`, swatch: division.color, logoUrl: division.logoUrl, monogram: resolveInitials(division.initials, divisionAcronym(division.name)) }))];
   const rankHistoryOptions = [
     { value: "current", label: "Current live rank", description: currentRankSnapshot.weekNumber ? `Through Week ${currentRankSnapshot.weekNumber}` : "Preseason order" },
     { value: "0", label: "Preseason rank", description: "Starting seed before Week 1" },
@@ -655,7 +678,9 @@ export function StatsWorkspace({ schedule, playerStats = [], onUpdateTiebreakers
   ];
   const selectedHistoryLabel = selectedRankSnapshot.weekNumber === 0 ? "Preseason seed" : selectedRankSnapshot.completed ? `Final table after Week ${selectedRankSnapshot.weekNumber}` : `Live table during Week ${selectedRankSnapshot.weekNumber}`;
   const isPreseason = selectedRankSnapshot.weekNumber === 0; // #19.1
-  const rankHeader = divisionId !== "all"
+  const rankHeader = selectedConferenceId
+    ? "CONF RK"
+    : divisionId !== "all"
     ? "DIV RK"
     : isPreseason
     ? "SEED"
@@ -724,7 +749,7 @@ export function StatsWorkspace({ schedule, playerStats = [], onUpdateTiebreakers
     {tab === "standings" && <div className="stats-tab-panel" role="tabpanel" id="stats-panel-standings" aria-labelledby="stats-tab-standings" tabIndex={0}>
       <div className="stats-filter-bar controls-only"><div className="stats-filter-controls"><CustomSelect label="Standings scope" value={divisionId} onChange={setDivisionId} options={filterOptions} /></div></div>
       <div className="stats-standings-layout">
-        <div className="data-table-wrap"><table className="data-table standings-table"><thead><tr><th>{rankHeader}</th><th>TEAM</th><th>DIVISION</th>{!isPreseason && <><th>PRE RK</th><th>FROM PRE</th></>}<th>STATUS</th><SortHeader label="MVT" sortKey="mvt" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="★" sortKey="allStars" active={sortKey} direction={sortDirection} onSort={onSort} /><th>REC</th><th>DIV REC</th><th>PCT</th><th>PF</th><th>PA</th><th>DIFF</th><th>STRK</th><th>HOME</th><th>AWAY</th><th>GOTW</th><th>SOV</th><th>SOS</th><th>BEST</th><th>PO %</th></tr></thead><tbody>{displayedStandings.map((row) => { const team = teamById.get(row.teamId)!; const division = divisionById.get(team.divisionId)!; const clinch = selectedClinches.get(team.id); const diff = formatDifferential(row.pointsFor - row.pointsAgainst); const played = row.wins + row.losses + row.ties > 0; const stat = teamStatsByTeam.get(row.teamId)!; const rankReason = row.tiebreaker?.rule ? TIEBREAKER_RULE_LABELS[row.tiebreaker.rule] : row.tiebreaker?.resolution === "manual" ? "Manual tie order" : row.tiebreaker?.resolution === "fallback" ? "Fallback order" : ""; return <tr className={clinch?.eliminated ? "is-eliminated" : undefined} key={row.teamId}><td className="standings-rank-cell" title={row.tiebreaker?.label}><RankMovement row={row} />{rankReason && <small className="standings-rank-reason">{rankReason}</small>}</td><td><Link className="standings-team-link" href={`${teamHrefBase}/${team.id}`}><EntityLogo className="team-mark standings-team-logo" color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={50} /><span className="standings-team-copy">{team.city && <small className="standings-team-city team-city">{team.city}</small>}<strong>{team.name}</strong></span></Link></td><td className="standings-division-cell"><DivisionIdentity division={division} /></td>{!isPreseason && <><td className="standings-preseason-cell"><strong>#{row.preseasonRank}</strong></td><td className="standings-preseason-change"><PreseasonMovement row={row} /></td></>}<td className="standings-status-cell"><ClinchBadges timeline={clinch} division={division} compact /><span className="standings-no-status">—</span></td><td><span className="award-chip"><strong>{formatPoints(stat.mvtScore)}</strong>{stat.mvtRank ? <small>#{stat.mvtRank}</small> : <small>—</small>}</span></td><td><span className="award-chip"><strong>{stat.allStarCount}</strong>{stat.allStarRank ? <small>#{stat.allStarRank}</small> : <small>—</small>}</span></td><td>{formatRecord(row)}</td><td>{formatDivisionRecord(row)}</td><td>{played ? row.winPercentage.toFixed(3).replace(/^0/, "") : "—"}</td><td>{formatPoints(row.pointsFor)}</td><td>{formatPoints(row.pointsAgainst)}</td><td className={diff.tone}>{diff.text}</td><td>{row.streak}</td><td>{formatSplitRecord(stat.home)}</td><td>{formatSplitRecord(stat.away)}</td><td>{stat.featuredWins + stat.featuredLosses + stat.featuredTies === 0 ? "—" : `${stat.featuredWins}-${stat.featuredLosses}${stat.featuredTies ? `-${stat.featuredTies}` : ""}`}</td><td>{decimal(stat.strengthOfVictory)}</td><td>{decimal(stat.strengthOfSchedule)}</td><td>{stat.bestStreak}</td><td>{percentage(stat.playoffOdds)}</td></tr>; })}</tbody></table></div><dl className="stats-abbr-legend" aria-label="Column key"><div><dt>MVT</dt><dd>Most Valuable Team score</dd></div><div><dt>★</dt><dd>Season All-Star count</dd></div><div><dt>PF / PA</dt><dd>Points for / against</dd></div><div><dt>DIFF</dt><dd>Point differential</dd></div><div><dt>GOTW</dt><dd>Game-of-the-week record</dd></div><div><dt>SOV</dt><dd>Strength of victory</dd></div><div><dt>SOS</dt><dd>Strength of schedule</dd></div><div><dt>STRK / BEST</dt><dd>Current / best win streak</dd></div><div><dt>PO %</dt><dd>Projected playoff odds</dd></div></dl>
+        <div className="data-table-wrap"><table className="data-table standings-table"><thead><tr><th>{rankHeader}</th><th>TEAM</th><th>DIVISION</th>{!isPreseason && <><th>PRE RK</th><th>FROM PRE</th></>}<th>STATUS</th><SortHeader label="MVT" sortKey="mvt" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="★" sortKey="allStars" active={sortKey} direction={sortDirection} onSort={onSort} /><th>REC</th><th>DIV REC</th><th>PCT</th><th>PF</th><th>PA</th><th>DIFF</th><th>STRK</th><th>HOME</th><th>AWAY</th><th>GOTW</th><th>SOV</th><th>SOS</th><th>BEST</th><th>PO %</th></tr></thead><tbody>{displayedStandings.map((row) => { const team = teamById.get(row.teamId)!; const division = divisionById.get(team.divisionId)!; const conference = conferenceOfDivision(schedule.setup, division.id); const clinch = selectedClinches.get(team.id); const diff = formatDifferential(row.pointsFor - row.pointsAgainst); const played = row.wins + row.losses + row.ties > 0; const stat = teamStatsByTeam.get(row.teamId)!; const rankReason = row.tiebreaker?.rule ? TIEBREAKER_RULE_LABELS[row.tiebreaker.rule] : row.tiebreaker?.resolution === "manual" ? "Manual tie order" : row.tiebreaker?.resolution === "fallback" ? "Fallback order" : ""; return <tr className={clinch?.eliminated ? "is-eliminated" : undefined} key={row.teamId}><td className="standings-rank-cell" title={row.tiebreaker?.label}><RankMovement row={row} />{rankReason && <small className="standings-rank-reason">{rankReason}</small>}</td><td><Link className="standings-team-link" href={`${teamHrefBase}/${team.id}`}><EntityLogo className="team-mark standings-team-logo" color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={50} /><span className="standings-team-copy">{team.city && <small className="standings-team-city team-city">{team.city}</small>}<strong>{team.name}</strong></span></Link></td><td className="standings-division-cell"><DivisionIdentity division={division} />{conference && <span className="standings-conference-chip"><ConferenceMark conference={conference} size={14} />{conference.name}</span>}</td>{!isPreseason && <><td className="standings-preseason-cell"><strong>#{row.preseasonRank}</strong></td><td className="standings-preseason-change"><PreseasonMovement row={row} /></td></>}<td className="standings-status-cell"><ClinchBadges timeline={clinch} division={division} compact /><span className="standings-no-status">—</span></td><td><span className="award-chip"><strong>{formatPoints(stat.mvtScore)}</strong>{stat.mvtRank ? <small>#{stat.mvtRank}</small> : <small>—</small>}</span></td><td><span className="award-chip"><strong>{stat.allStarCount}</strong>{stat.allStarRank ? <small>#{stat.allStarRank}</small> : <small>—</small>}</span></td><td>{formatRecord(row)}</td><td>{formatDivisionRecord(row)}</td><td>{played ? row.winPercentage.toFixed(3).replace(/^0/, "") : "—"}</td><td>{formatPoints(row.pointsFor)}</td><td>{formatPoints(row.pointsAgainst)}</td><td className={diff.tone}>{diff.text}</td><td>{row.streak}</td><td>{formatSplitRecord(stat.home)}</td><td>{formatSplitRecord(stat.away)}</td><td>{stat.featuredWins + stat.featuredLosses + stat.featuredTies === 0 ? "—" : `${stat.featuredWins}-${stat.featuredLosses}${stat.featuredTies ? `-${stat.featuredTies}` : ""}`}</td><td>{decimal(stat.strengthOfVictory)}</td><td>{decimal(stat.strengthOfSchedule)}</td><td>{stat.bestStreak}</td><td>{percentage(stat.playoffOdds)}</td></tr>; })}</tbody></table></div><dl className="stats-abbr-legend" aria-label="Column key"><div><dt>MVT</dt><dd>Most Valuable Team score</dd></div><div><dt>★</dt><dd>Season All-Star count</dd></div><div><dt>PF / PA</dt><dd>Points for / against</dd></div><div><dt>DIFF</dt><dd>Point differential</dd></div><div><dt>GOTW</dt><dd>Game-of-the-week record</dd></div><div><dt>SOV</dt><dd>Strength of victory</dd></div><div><dt>SOS</dt><dd>Strength of schedule</dd></div><div><dt>STRK / BEST</dt><dd>Current / best win streak</dd></div><div><dt>PO %</dt><dd>Projected playoff odds</dd></div></dl>
         {schedule.weeks.length > 0 && schedule.weeks.every((week) => week.games.every(isGamePlayed)) && selectedResolution.tieGroups.length > 0 && <section className="standings-tie-groups" aria-label="Standings tie groups"><header><Swords /><span><strong>{selectedResolution.tieGroups.length} tied group{selectedResolution.tieGroups.length === 1 ? "" : "s"}</strong><small>These teams reached the end of the configured field rules.</small></span></header>{selectedResolution.tieGroups.map((tie) => <article key={tie.signature}><div className="tie-group-teams">{tie.orderedTeamIds.map((teamId, index) => { const team = teamById.get(teamId)!; return <span key={teamId}><b>{index + 1}</b><EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={32} /><strong>{teamDisplayName(team)}</strong></span>; })}</div><span><strong>{tie.resolution === "manual" ? "Manual order applied" : "Deterministic fallback applied"}</strong><small>{tie.explanation}</small><em>{tie.appliedRules.map((rule) => TIEBREAKER_RULE_LABELS[rule]).join(" → ") || "No configured rules"}</em></span><button type="button" disabled={readOnly || !onUpdateTiebreakers} onClick={() => setActiveTieSignature(tie.signature)}>{tie.resolution === "manual" ? "Edit order" : "Resolve tie"}</button></article>)}</section>}
         <section className="season-odds-table-panel">
           <header><Gauge /><span><strong>Season odds</strong><small>500 deterministic simulations</small></span></header>

@@ -2,14 +2,18 @@
 
 import * as React from "react";
 import { ArrowDown, ArrowUp, Medal, Minus, Sparkles, Trophy } from "lucide-react";
+import { ConferenceMark } from "@/components/ui/DivisionIdentity";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { buildAllStars } from "@/lib/allStars";
 import { type GameDetailPlayerStat } from "@/lib/gameDetail";
+import { hasConferences } from "@/lib/conferences";
 import { buildMvt, type MvtAwardResult, type MvtBucket, type MvtMovement, type MvtTeamResult } from "@/lib/mvt";
 import { type LineupTemplate, type SlotKey } from "@/lib/playerData";
 import { formatPoints } from "@/lib/statistics";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
 import type { GeneratedSchedule, Team } from "@/lib/types";
+
+type MvtPanelKey = MvtBucket | "conference";
 
 const BUCKETS: Array<{ key: MvtBucket; label: string; short: string }> = [
   { key: "positional", label: "Positional Awards", short: "POS" },
@@ -105,15 +109,47 @@ function AwardTable({ title, awards, teamById }: { title: string; awards: MvtAwa
   </section>;
 }
 
+function groupKind(id: string) {
+  if (id.includes(":conference:")) return "conference";
+  if (id.includes(":division:")) return "division";
+  return "league";
+}
+
+function DivisionLeagueAwards({ awards, teamById, schedule }: { awards: MvtAwardResult[]; teamById: Map<string, Team>; schedule: GeneratedSchedule }) {
+  const conferenceLive = hasConferences(schedule.setup);
+  const leagueAwards = awards.filter((award) => groupKind(award.id) === "league");
+  const conferenceAwards = awards.filter((award) => groupKind(award.id) === "conference");
+  const divisionAwards = awards.filter((award) => groupKind(award.id) === "division");
+  return <div className="mvt-award-groups">
+    <AwardTable title="League Awards" awards={leagueAwards} teamById={teamById} />
+    {conferenceLive && <section className="mvt-award-panel conference-award-group">
+      <header><Medal /><span><strong>Conference Awards</strong><small>{conferenceAwards.length} scored awards at +1.50 each</small></span><span className="mvt-conference-marks">{schedule.setup.conferences?.map((conference) => <em key={conference.id}><ConferenceMark conference={conference} size={16} />{conference.name}</em>)}</span></header>
+      <div className="mvt-award-table-wrap">
+        <table className="mvt-award-table">
+          <thead><tr><th>Award</th><th>1st</th><th>2nd</th><th>3rd</th></tr></thead>
+          <tbody>{conferenceAwards.map((award) => <tr key={award.id}>
+            <th scope="row">{award.label}</th>
+            <WinnerCell award={award} place={1} teamById={teamById} />
+            <WinnerCell award={award} place={2} teamById={teamById} />
+            <WinnerCell award={award} place={3} teamById={teamById} />
+          </tr>)}</tbody>
+        </table>
+      </div>
+    </section>}
+    <AwardTable title="Division Awards" awards={divisionAwards} teamById={teamById} />
+  </div>;
+}
+
 export function MvtWorkspace({ schedule, playerStats }: { schedule: GeneratedSchedule; playerStats: GameDetailPlayerStat[] }) {
-  const [activeBucket, setActiveBucket] = React.useState<MvtBucket>("positional");
+  const [activeBucket, setActiveBucket] = React.useState<MvtPanelKey>("positional");
   const teamById = React.useMemo(() => new Map(schedule.setup.teams.map((team) => [team.id, team])), [schedule.setup.teams]);
+  const conferenceLive = hasConferences(schedule.setup);
   const lineupTemplate = React.useMemo(() => inferLineupTemplate(schedule, playerStats), [schedule, playerStats]);
   const allStars = React.useMemo(() => lineupTemplate ? buildAllStars({ lineupTemplate, stats: playerStats }) : null, [lineupTemplate, playerStats]);
   const mvt = React.useMemo(() => lineupTemplate ? buildMvt({ schedule, lineupTemplate, playerStats, allStars: allStars ?? undefined }) : null, [schedule, lineupTemplate, playerStats, allStars]);
   const maxTotal = Math.max(0, ...(mvt?.teams.map((row) => row.total) ?? []));
   const awardsByBucket = React.useMemo(() => new Map(BUCKETS.map((bucket) => [bucket.key, (mvt?.awards ?? []).filter((award) => award.bucket === bucket.key)])), [mvt]);
-  const activeBucketLabel = BUCKETS.find((bucket) => bucket.key === activeBucket)?.label ?? "Awards";
+  const activeBucketLabel = activeBucket === "conference" ? "Conference Awards" : BUCKETS.find((bucket) => bucket.key === activeBucket)?.label ?? "Awards";
 
   if (!mvt || !mvt.teams.length) {
     return <section className="mvt-workspace mvt-empty">
@@ -163,7 +199,7 @@ export function MvtWorkspace({ schedule, playerStats }: { schedule: GeneratedSch
     </section>
 
     <div className="mvt-tabs" role="tablist" aria-label="MVT award tables">
-      {BUCKETS.map((bucket) => <button
+      {[...BUCKETS, ...(conferenceLive ? [{ key: "conference" as const, label: "Conference Awards", short: "CONF" }] : [])].map((bucket) => <button
         type="button"
         role="tab"
         aria-selected={activeBucket === bucket.key}
@@ -173,6 +209,10 @@ export function MvtWorkspace({ schedule, playerStats }: { schedule: GeneratedSch
       >{bucket.label}</button>)}
     </div>
 
-    <AwardTable title={activeBucketLabel} awards={awardsByBucket.get(activeBucket) ?? []} teamById={teamById} />
+    {activeBucket === "divisionLeague"
+      ? <DivisionLeagueAwards awards={awardsByBucket.get("divisionLeague") ?? []} teamById={teamById} schedule={schedule} />
+      : activeBucket === "conference"
+        ? <AwardTable title={activeBucketLabel} awards={(awardsByBucket.get("divisionLeague") ?? []).filter((award) => groupKind(award.id) === "conference")} teamById={teamById} />
+        : <AwardTable title={activeBucketLabel} awards={awardsByBucket.get(activeBucket) ?? []} teamById={teamById} />}
   </div>;
 }
