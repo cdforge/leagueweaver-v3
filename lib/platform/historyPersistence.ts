@@ -9,16 +9,33 @@ function seasonKey(providerLeagueId: string, season: number) {
   return `${providerLeagueId}:${season}`;
 }
 
+const HISTORY_UPSERT_CHUNK_SIZE = 500;
+
 export type HistoryPersistenceResult = {
   dataFound: ImportDataFound;
   rowsWritten: number;
   warnings: string[];
 };
 
+async function upsertChunks<T>(
+  table: string,
+  rows: T[],
+  onConflict: string,
+) {
+  for (let index = 0; index < rows.length; index += HISTORY_UPSERT_CHUNK_SIZE) {
+    const chunk = rows.slice(index, index + HISTORY_UPSERT_CHUNK_SIZE);
+    const admin = createAdminClient();
+    if (!admin) throw new Error("History scanned, but server Supabase admin access is not configured for table population.");
+    const { error } = await admin.from(table).upsert(chunk as never[], { onConflict });
+    if (error) throw error;
+  }
+}
+
 export async function persistLeagueHistory(scheduleId: string, draft: LeagueHistoryDraft) {
   const admin = createAdminClient();
   if (!admin) return { rowsWritten: 0, warnings: ["History scanned, but server Supabase admin access is not configured for table population."] };
   if (!draft.leagueSeasons.length) return { rowsWritten: 0, warnings: draft.warnings };
+  const warnings = [...draft.warnings];
 
   const { data: seasonRows, error: seasonError } = await admin
     .from("league_seasons")
@@ -43,25 +60,31 @@ export async function persistLeagueHistory(scheduleId: string, draft: LeagueHist
     return leagueSeasonId ? { league_season_id: leagueSeasonId, ...rest } : null;
   }).filter((row): row is NonNullable<typeof row> => Boolean(row));
 
-  if (draft.playerCatalog.length) {
-    const { error } = await admin.from("player_catalog").upsert(draft.playerCatalog, { onConflict: "id" });
-    if (error) throw error;
-  }
   if (teamRows.length) {
-    const { error } = await admin.from("league_team_history").upsert(teamRows, { onConflict: "league_season_id,league_team_id" });
-    if (error) throw error;
+    await upsertChunks("league_team_history", teamRows, "league_season_id,league_team_id");
   }
   if (scheduleRows.length) {
-    const { error } = await admin.from("league_schedule_history").upsert(scheduleRows, { onConflict: "league_season_id,week,provider_matchup_id" });
-    if (error) throw error;
+    await upsertChunks("league_schedule_history", scheduleRows, "league_season_id,week,provider_matchup_id");
   }
-  if (ownershipRows.length) {
-    const { error } = await admin.from("player_ownership_history").upsert(ownershipRows, { onConflict: "league_season_id,week,canonical_player_id" });
-    if (error) throw error;
+  let ownershipRowsWritten = 0;
+  try {
+    if (draft.playerCatalog.length) {
+      await upsertChunks("player_catalog", draft.playerCatalog, "id");
+    }
+    if (ownershipRows.length) {
+      await upsertChunks("player_ownership_history", ownershipRows, "league_season_id,week,canonical_player_id");
+      ownershipRowsWritten = ownershipRows.length;
+    }
+  } catch (caught) {
+    warnings.push(
+      caught instanceof Error
+        ? `Historical player rows could not be saved yet: ${caught.message}`
+        : "Historical player rows could not be saved yet.",
+    );
   }
   return {
-    rowsWritten: draft.leagueSeasons.length + teamRows.length + scheduleRows.length + ownershipRows.length,
-    warnings: draft.warnings,
+    rowsWritten: draft.leagueSeasons.length + teamRows.length + scheduleRows.length + ownershipRowsWritten,
+    warnings,
   };
 }
 
