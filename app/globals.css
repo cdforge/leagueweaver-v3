@@ -3473,8 +3473,14 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .is-broadcast .gdm-player-main small, .is-broadcast .gdm-player-points small { color: var(--pk-mut); }
 .gdm-player-points { min-width: 0; display: grid; text-align: right; }
 .gdm-player-points strong { font-variant-numeric: tabular-nums; font-size: var(--text-sm); line-height: 1.1; }
-.gdm-allstar-slot { width: 18px; height: 18px; border: 1px dashed var(--line-strong); border-radius: var(--radius-pill); }
+.gdm-allstar-slot { width: 18px; height: 18px; display: grid; place-items: center; border: 1px dashed var(--line-strong); border-radius: var(--radius-pill); }
 .is-broadcast .gdm-allstar-slot { border-color: var(--pk-line); }
+.gdm-allstar-slot .tooltip-wrap { display: grid; width: 18px; height: 18px; place-items: center; }
+.allstar-badge { position: relative; width: 18px; height: 18px; display: inline-grid; place-items: center; border: 1px solid rgba(77, 59, 0, .22); border-radius: var(--radius-pill); background: var(--gold); color: #4d3b00; box-shadow: 0 1px 0 rgb(255 255 255 / .5) inset; }
+.allstar-badge:focus-visible { outline: 2px solid var(--field); outline-offset: 2px; }
+.allstar-badge svg { width: 13px; height: 13px; }
+.allstar-badge b { position: absolute; right: -3px; bottom: -3px; min-width: 10px; height: 10px; display: grid; place-items: center; border: 1px solid rgb(255 255 255 / .9); border-radius: var(--radius-pill); background: var(--field); color: white; font-size: 7px; font-weight: var(--w-black); line-height: 1; }
+.is-broadcast .allstar-badge:focus-visible { outline-color: var(--gold); }
 .gdm-team-fallback { min-height: 96px; display: flex; align-items: center; gap: 10px; border: 1px dashed var(--line-strong); border-radius: var(--radius); background: var(--canvas); padding: 14px; }
 .is-broadcast .gdm-team-fallback { border-color: var(--pk-line); background: rgb(255 255 255 / .04); }
 .gdm-team-fallback svg { width: 20px; height: 20px; color: var(--field); }
