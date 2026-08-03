@@ -102,11 +102,10 @@ export function AccountPanel() {
   const [message, setMessage] = useState<string | null>(null);
   const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
   const [plan, setPlan] = useState<"free" | "pro">("free");
-  const [dashboardTab, setDashboardTab] = useState<"schedules" | "leagues" | "settings">("schedules");
+  const [dashboardTab, setDashboardTab] = useState<"account" | "profile" | "password" | "delete">("account");
   const [editingPreset, setEditingPreset] = useState<SavedLeaguePreset | null>(null);
   const [profileName, setProfileName] = useState("");
   const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
-  const [profileAvatarLoading, setProfileAvatarLoading] = useState(false);
   const [memberSince, setMemberSince] = useState<string | null>(null);
   const [profileBusy, setProfileBusy] = useState(false);
   const [profileNote, setProfileNote] = useState<string | null>(null);
@@ -141,9 +140,6 @@ export function AccountPanel() {
       setMemberSince(user.created_at ?? null);
     });
   }, [supabase]);
-  useEffect(() => {
-    setProfileAvatarLoading(Boolean(profileAvatar));
-  }, [profileAvatar]);
   useEffect(() => {
     if (!signedInEmail) return;
     Promise.all([
@@ -343,14 +339,14 @@ export function AccountPanel() {
   };
 
   if (signedInEmail) return <div className="account-dashboard">
-    <header><div><p className="eyebrow">Commissioner account</p><h1>Your league office.</h1><p>{signedInEmail}</p></div></header>
-    <div className="account-stat-row"><div><CalendarDays /><span><strong>{seasons.length}</strong><small>Saved seasons</small></span></div><div><FolderHeart /><span><strong>{savedLeagues.length}</strong><small>Saved leagues</small></span></div><div><ShieldCheck /><span><strong>Unlimited</strong><small>Editable seasons</small></span></div></div>
+    <header><div><p className="eyebrow">Commissioner account</p><h1>Your account settings.</h1><p>{signedInEmail}</p></div></header>
     <div className="account-tabs account-dashboard-tabs" role="tablist" aria-label="Account sections">
-      <button type="button" role="tab" aria-selected={dashboardTab === "schedules"} className={dashboardTab === "schedules" ? "active" : ""} onClick={() => setDashboardTab("schedules")}>Schedules</button>
-      <button type="button" role="tab" aria-selected={dashboardTab === "leagues"} className={dashboardTab === "leagues" ? "active" : ""} onClick={() => setDashboardTab("leagues")}>Saved leagues</button>
-      <button type="button" role="tab" aria-selected={dashboardTab === "settings"} className={dashboardTab === "settings" ? "active" : ""} onClick={() => setDashboardTab("settings")}>Settings</button>
+      <button type="button" role="tab" aria-selected={dashboardTab === "account"} className={dashboardTab === "account" ? "active" : ""} onClick={() => setDashboardTab("account")}>Account</button>
+      <button type="button" role="tab" aria-selected={dashboardTab === "profile"} className={dashboardTab === "profile" ? "active" : ""} onClick={() => setDashboardTab("profile")}>Profile</button>
+      <button type="button" role="tab" aria-selected={dashboardTab === "password"} className={dashboardTab === "password" ? "active" : ""} onClick={() => setDashboardTab("password")}>Password</button>
+      <button type="button" role="tab" aria-selected={dashboardTab === "delete"} className={dashboardTab === "delete" ? "active account-danger-tab" : "account-danger-tab"} onClick={() => setDashboardTab("delete")}>Delete</button>
     </div>
-    {dashboardTab === "leagues" && <section className="account-saved-leagues">
+    {false && <section className="account-saved-leagues">
       <div className="account-section-head"><span><strong>Saved leagues</strong><small>Reuse league, division, team, color, and logo details.</small></span><Link href="/build" className="button-secondary">Start new</Link></div>
       {savedLeagues.length ? <><div className="account-saved-league-rows">{savedLeagues.slice(leaguePage * ACCOUNT_PAGE_SIZE, (leaguePage + 1) * ACCOUNT_PAGE_SIZE).map((preset) => {
         const league = preset.data.league;
@@ -369,7 +365,7 @@ export function AccountPanel() {
         </article>;
       })}</div>{renderPagination(leaguePage, savedLeagues.length, setLeaguePage)}</> : <div className="account-empty"><FolderHeart /><span><strong>No saved leagues yet.</strong><small>Save one from the builder after confirming its teams and divisions.</small></span></div>}
     </section>}
-    {dashboardTab === "schedules" && <section className="account-season-list">
+    {false && <section className="account-season-list">
       <div className="account-section-head"><span><strong>Schedules</strong><small>Open a schedule or restore an earlier revision.</small></span><Link href="/build" className="button-primary">New schedule</Link></div>
       {seasons.length ? <>{seasons.slice(seasonPage * ACCOUNT_PAGE_SIZE, (seasonPage + 1) * ACCOUNT_PAGE_SIZE).map((season) => {
         const isExpanded = expandedSeasonId === season.id;
@@ -425,8 +421,8 @@ export function AccountPanel() {
         </article>;
       })}{renderPagination(seasonPage, seasons.length, setSeasonPage)}</> : <div className="account-empty"><CalendarDays /><span><strong>No cloud seasons yet.</strong><small>Generated seasons save automatically after you sign in.</small></span></div>}
     </section>}
-    {dashboardTab === "settings" && <div className="account-settings">
-      <section className="account-settings-block">
+    <div className="account-settings">
+      {dashboardTab === "account" && <section className="account-settings-block">
         <div className="account-section-head"><span><strong>Account</strong><small>Your sign-in and plan.</small></span></div>
         <dl className="account-settings-facts">
           <div><dt>Email</dt><dd>{signedInEmail}</dd></div>
@@ -437,12 +433,12 @@ export function AccountPanel() {
           {plan === "pro" ? <button type="button" className="button-secondary" onClick={openBilling} disabled={loading}><CreditCard />Manage billing</button> : <Link href="/build" className="button-secondary"><CalendarDays />Open builder</Link>}
           <button type="button" className="button-secondary account-signout" onClick={signOut}><LogOut />Sign out</button>
         </div>
-      </section>
+      </section>}
 
-      <section className="account-settings-block">
+      {dashboardTab === "profile" && <section className="account-settings-block">
         <div className="account-section-head"><span><strong>Profile</strong><small>Shown across your account.</small></span></div>
         <div className="account-settings-profile">
-          <span className={`account-settings-avatar${profileAvatar ? " has-image" : ""} ${profileAvatarLoading ? "is-loading" : ""}`} aria-hidden="true">{profileAvatar ? <><img src={profileAvatar} alt="" onLoad={() => setProfileAvatarLoading(false)} onError={() => setProfileAvatarLoading(false)} />{profileAvatarLoading && <LoaderCircle className="avatar-image-spinner spin" />}</> : <ImagePlus />}</span>
+          <span className={`account-settings-avatar${profileAvatar ? " has-image" : ""}`} aria-hidden="true">{profileAvatar ? <img src={profileAvatar} alt="" /> : <ImagePlus />}</span>
           <div className="account-settings-avatar-controls">
             <input ref={avatarInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => { pickAvatar(event.target.files?.[0]); event.target.value = ""; }} />
             <button type="button" className="button-secondary" disabled={profileBusy} onClick={() => avatarInputRef.current?.click()}>{profileBusy ? <LoaderCircle className="spin" /> : <ImagePlus />}{profileAvatar ? "Change photo" : "Upload photo"}</button>
@@ -451,16 +447,16 @@ export function AccountPanel() {
         </div>
         <label className="editor-field"><span>Display name</span><input value={profileName} maxLength={80} placeholder="Your name or league name" onChange={(event) => setProfileName(event.target.value)} /></label>
         <div className="account-settings-save">{profileNote && <small role="status">{profileNote}</small>}<button type="button" className="button-primary" onClick={saveProfile} disabled={profileBusy}><Check />Save profile</button></div>
-      </section>
+      </section>}
 
-      <section className="account-settings-block">
+      {dashboardTab === "password" && <section className="account-settings-block">
         <div className="account-section-head"><span><strong>Password</strong><small>Set a new sign-in password.</small></span></div>
         <label className="editor-field"><span>New password</span><input type="password" value={newPassword} autoComplete="new-password" placeholder="At least 8 characters" onChange={(event) => setNewPassword(event.target.value)} /></label>
         <label className="editor-field"><span>Confirm password</span><input type="password" value={confirmPassword} autoComplete="new-password" onChange={(event) => setConfirmPassword(event.target.value)} /></label>
         <div className="account-settings-save">{passwordNote && <small role="status">{passwordNote}</small>}<button type="button" className="button-primary" onClick={changePassword} disabled={passwordBusy || !newPassword}>{passwordBusy ? <><LoaderCircle className="spin" />Updating…</> : <><Check />Update password</>}</button></div>
-      </section>
+      </section>}
 
-      <section className="account-settings-block account-settings-danger">
+      {dashboardTab === "delete" && <section className="account-settings-block account-settings-danger">
         <div className="account-section-head"><span><strong>Danger zone</strong><small>These actions can’t be undone.</small></span></div>
         <div className="account-danger-row">
           <span><strong>Delete all saved leagues</strong><small>Removes your {savedLeagues.length} saved league{savedLeagues.length === 1 ? "" : "s"}. Seasons are kept.</small></span>
@@ -473,8 +469,8 @@ export function AccountPanel() {
             <button type="button" className="button-secondary account-danger-btn" onClick={deleteAccount} disabled={dangerBusy !== null || !confirmDelete}>{dangerBusy === "account" ? <LoaderCircle className="spin" /> : <Trash2 />}Delete account</button>
           </div>
         </div>
-      </section>
-    </div>}
+      </section>}
+    </div>
     {message && <div className="account-message" role="status">{message}</div>}
     {editingPreset && <SavedLeagueEditor preset={editingPreset} onClose={() => setEditingPreset(null)} onSaved={(updated) => { setSavedLeagues((current) => current.map((existing) => existing.id === updated.id ? updated : existing)); setEditingPreset(null); }} />}
     <footer>{plan === "pro" ? <button type="button" className="button-secondary" onClick={openBilling} disabled={loading}><CreditCard />Manage billing</button> : <Link href="/build" className="button-primary"><CalendarDays />Open builder</Link>}<button type="button" className="account-signout" onClick={signOut}><LogOut />Sign out</button></footer>

@@ -120,7 +120,7 @@ import { GAME_DETAIL_CACHE_PREFIX, type GameDetailPlayerStat } from "@/lib/gameD
 import { espnSlotKey, lineupSlotSortRank, sleeperSlotKey, type LineupStatus } from "@/lib/playerData";
 import type { GeneratedSchedule, ImportHistoryEvent, ImportPreview, LeagueSetupInput, PastChampion, PlatformConnection, PlatformSyncMode, PlayoffFieldSize, PlayoffGame, ScheduledGame, Team, TiebreakerSettings } from "@/lib/types";
 
-type ViewKey = "this-week" | "results" | "league-schedule" | "team-schedule" | "gotw" | "matchup-ratings" | "standings" | "mvt" | "all-stars" | "playoffs" | "simulator" | "settings";
+type ViewKey = "this-week" | "results" | "league-schedule" | "team-schedule" | "gotw" | "matchup-ratings" | "standings" | "mvt" | "all-stars" | "playoffs" | "share" | "simulator" | "settings";
 const CLOUD_SCHEDULE_ID = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
 
 type ExistingSeasonConflict = {
@@ -149,6 +149,9 @@ type CloudRetryState = {
   reason: string;
   retrying: boolean;
 };
+
+type PublicDisplaySettings = { cityNames: boolean; managers: boolean; venues: boolean };
+type PublishStatus = { published: boolean; url: string | null; slug: string | null; publicDisplay?: Partial<PublicDisplaySettings> };
 
 function formatHistoryTime(value: string) {
   const date = new Date(value);
@@ -414,6 +417,7 @@ const VIEW_ITEMS: Array<{ key: ViewKey; label: string; icon: typeof CalendarDays
   { key: "mvt", label: "MVT", icon: Medal },
   { key: "all-stars", label: "All-Stars", icon: Sparkles },
   { key: "playoffs", label: "Playoffs", icon: Trophy },
+  { key: "share", label: "Share", icon: Share2 },
   { key: "settings", label: "Settings", icon: Settings },
 ];
 const HISTORY_COMPATIBLE_VIEWS = new Set<ViewKey>(["league-schedule", "team-schedule", "gotw", "matchup-ratings", "standings", "mvt", "all-stars", "playoffs"]);
@@ -1646,26 +1650,127 @@ function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, onUpdatePlay
   importHistoryError: string | null;
   onRefreshImportHistory: () => void;
 }) {
+  const [tab, setTab] = useState<"overview" | "connections" | "rules" | "playoffs">("overview");
   const seeding = schedule.setup.priorSeason.entryMode === "manual" ? "Manual order" : schedule.setup.priorSeason.entryMode === "random" ? "Randomized order" : schedule.setup.priorSeason.entryMode === "history" ? schedule.setup.priorSeason.source === "playoffs" ? "Last year’s playoff finish" : "Last year’s regular-season finish" : "Not used";
   const draftRankingPending = schedule.setup.weekOne.rankingSource === "draft-day" && getTeamsMissingDraftPlaces(schedule.setup).length > 0;
   return <div className="workspace-stack">
-    <div className="settings-band"><div><Pencil /><span><strong>Schedule setup</strong><small>Changing league structure regenerates the complete matchup slate as a new revision.</small></span></div><button type="button" className="button-secondary" onClick={onRegenerate}><Pencil />Edit and regenerate</button></div>
-    <PlatformSyncCard schedule={schedule} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshScores={onRefreshPlatformScores} onSaveConnection={onSavePlatformConnection} onDisconnect={onDisconnectPlatform} onConnect={onConnectPlatform} />
-    <ImportHistoryPanel events={importHistory} loading={importHistoryLoading} error={importHistoryError} onRefresh={onRefreshImportHistory} scheduleId={schedule.id} />
-    <div className="settings-list">
-      <div><span>League</span><strong>{schedule.setup.name}</strong></div>
-      <div><span>Season format</span><strong>{schedule.setup.teams.length} teams · {schedule.setup.divisions.length} divisions · {schedule.setup.weeks} weeks</strong></div>
-      <div><span>Seeding source</span><strong>{seeding}</strong></div>
-      <div className="settings-action-row"><span>Week 1 ranking</span><span><strong>{schedule.setup.weekOne.rankingSource === "draft-day" ? draftRankingPending ? "Draft-day place · not set" : "Draft-day place · complete" : "Last season’s finish"}</strong>{draftRankingPending && <button type="button" onClick={onOpenDraftRanking}><FileSpreadsheet />Set draft ranking</button>}</span></div>
-      <div><span>Revision</span><strong>Version {schedule.revision}</strong></div>
-      <div><span>Generation seed</span><code>{schedule.seed}</code></div>
+    <div className="settings-tabbar" role="tablist" aria-label="Schedule settings sections">
+      {[
+        ["overview", "Overview"],
+        ["connections", "ESPN/Sleeper"],
+        ["rules", "Rules"],
+        ["playoffs", "Playoffs"],
+      ].map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={tab === key} className={tab === key ? "active" : ""} onClick={() => setTab(key as typeof tab)}>{label}</button>)}
     </div>
-    {onUpdateTiebreakers && (() => { const tb = normalizeTiebreakerSettings(schedule.setup.tiebreakers); return <>
+    {tab === "overview" && <>
+      <div className="settings-band"><div><Pencil /><span><strong>Schedule setup</strong><small>Changing league structure regenerates the complete matchup slate as a new revision.</small></span></div><button type="button" className="button-secondary" onClick={onRegenerate}><Pencil />Edit and regenerate</button></div>
+      <div className="settings-list">
+        <div><span>League</span><strong>{schedule.setup.name}</strong></div>
+        <div><span>Season format</span><strong>{schedule.setup.teams.length} teams · {schedule.setup.divisions.length} divisions · {schedule.setup.weeks} weeks</strong></div>
+        <div><span>Seeding source</span><strong>{seeding}</strong></div>
+        <div className="settings-action-row"><span>Week 1 ranking</span><span><strong>{schedule.setup.weekOne.rankingSource === "draft-day" ? draftRankingPending ? "Draft-day place · not set" : "Draft-day place · complete" : "Last season’s finish"}</strong>{draftRankingPending && <button type="button" onClick={onOpenDraftRanking}><FileSpreadsheet />Set draft ranking</button>}</span></div>
+        <div><span>Revision</span><strong>Version {schedule.revision}</strong></div>
+        <div><span>Generation seed</span><code>{schedule.seed}</code></div>
+      </div>
+    </>}
+    {tab === "connections" && <>
+      <PlatformSyncCard schedule={schedule} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshScores={onRefreshPlatformScores} onSaveConnection={onSavePlatformConnection} onDisconnect={onDisconnectPlatform} onConnect={onConnectPlatform} />
+      <ImportHistoryPanel events={importHistory} loading={importHistoryLoading} error={importHistoryError} onRefresh={onRefreshImportHistory} scheduleId={schedule.id} />
+    </>}
+    {tab === "rules" && onUpdateTiebreakers && (() => { const tb = normalizeTiebreakerSettings(schedule.setup.tiebreakers); return <>
       <div className="settings-band"><div><SlidersHorizontal /><span><strong>Standings tiebreakers</strong><small>{tb.league.map((rule) => TIEBREAKER_RULE_LABELS[rule]).join(" → ") || "No field rules; deterministic fallback only"}</small></span></div></div>
       <TiebreakerEditor settings={tb} onChange={onUpdateTiebreakers} disabled={readOnly} />
     </>; })()}
-    <div className="settings-band"><div><Trophy /><span><strong>Playoffs</strong><small>Field size, bracket format, and postseason presentation for this league.</small></span></div></div>
-    <PlayoffsView schedule={schedule} onUpdatePlayoffs={onUpdatePlayoffs} onUpdatePlayoffGame={() => undefined} mode="settings" />
+    {tab === "rules" && !onUpdateTiebreakers && <div className="settings-band"><div><SlidersHorizontal /><span><strong>Standings tiebreakers</strong><small>Tiebreaker settings are locked while this view is read-only.</small></span></div></div>}
+    {tab === "playoffs" && <>
+      <div className="settings-band"><div><Trophy /><span><strong>Playoffs</strong><small>Field size, bracket format, and postseason presentation for this league.</small></span></div></div>
+      <PlayoffsView schedule={schedule} onUpdatePlayoffs={onUpdatePlayoffs} onUpdatePlayoffGame={() => undefined} mode="settings" />
+    </>}
+  </div>;
+}
+
+function ShareView({
+  schedule,
+  publishStatus,
+  publicDisplay,
+  isCloudSchedule,
+  publishBusy,
+  unpublishBusy,
+  copiedPublishLink,
+  simulationActive,
+  onPublish,
+  onCopyLink,
+  onUnpublish,
+  onShowRecap,
+  onUpdatePublicDisplay,
+}: {
+  schedule: GeneratedSchedule;
+  publishStatus: PublishStatus | null;
+  publicDisplay: PublicDisplaySettings;
+  isCloudSchedule: boolean;
+  publishBusy: boolean;
+  unpublishBusy: boolean;
+  copiedPublishLink: boolean;
+  simulationActive: boolean;
+  onPublish: () => void;
+  onCopyLink: () => void;
+  onUnpublish: () => void;
+  onShowRecap: () => void;
+  onUpdatePublicDisplay: (display: PublicDisplaySettings) => void;
+}) {
+  const published = Boolean(publishStatus?.published && publishStatus.url);
+  const updateDisplay = (patch: Partial<PublicDisplaySettings>) => onUpdatePublicDisplay({ ...publicDisplay, ...patch });
+  return <div className="workspace-stack">
+    <section className={`share-page-hero ${published ? "is-live" : "is-idle"}`} aria-labelledby="share-page-title">
+      <div className="share-page-status">
+        <span className={`publish-status-dot${published ? "" : " is-off"}`} aria-hidden="true" />
+        <span>
+          <small>{published ? "PUBLIC PAGE LIVE" : "NOT PUBLISHED"}</small>
+          <h2 id="share-page-title">{published ? "Share link ready" : "Publish your schedule"}</h2>
+          <p>{published ? "Anyone with this link can open the latest public schedule page." : "Create one public page for this season, then copy the link for your league."}</p>
+        </span>
+      </div>
+      <div className="share-page-actions">
+        {published ? <>
+          <button type="button" className="button-secondary" onClick={onCopyLink}>{copiedPublishLink ? <Check /> : <Copy />}{copiedPublishLink ? "Copied" : "Copy link"}</button>
+          <a className="button-secondary" href={publishStatus?.url ?? "#"} target="_blank" rel="noreferrer"><ExternalLink />Open page</a>
+          <button type="button" className="button-danger" disabled={unpublishBusy} onClick={onUnpublish}>{unpublishBusy ? <LoaderCircle className="spin" /> : <X />}Unpublish</button>
+        </> : <button type="button" className="button-primary" disabled={publishBusy} onClick={onPublish}>{publishBusy ? <LoaderCircle className="spin" /> : <Share2 />}{publishBusy ? "Publishing..." : "Publish & copy link"}</button>}
+      </div>
+      {published && <label className="share-link-field">
+        <span>Public schedule link</span>
+        <input type="text" readOnly value={publishStatus?.url ?? ""} onFocus={(event) => event.currentTarget.select()} aria-label="Public schedule link" />
+      </label>}
+    </section>
+
+    <div className="share-page-grid">
+      <section className="share-info-panel">
+        <header><ShieldCheck /><span><strong>What goes public</strong><small>Review this before sending the link.</small></span></header>
+        <div className="share-info-list">
+          <span><Check /><strong>Full schedule</strong><small>Weeks, matchups, scores, standings, and playoff view when available.</small></span>
+          <span><Check /><strong>League details</strong><small>League name, team names, logos, and colors. Private fields follow the settings below.</small></span>
+          <span><CircleAlert /><strong>Link access</strong><small>Anyone with the link can open it until you unpublish.</small></span>
+        </div>
+      </section>
+      <section className="share-info-panel share-privacy-panel">
+        <header><ShieldCheck /><span><strong>Public privacy</strong><small>Turn off anything you do not want on the public page.</small></span></header>
+        <div className="share-privacy-options">
+          <label><input type="checkbox" checked={publicDisplay.managers} onChange={(event) => updateDisplay({ managers: event.target.checked })} /><span><strong>Show manager names</strong><small>Turn this off to remove manager names and emails from the published copy.</small></span></label>
+          <label><input type="checkbox" checked={publicDisplay.cityNames} onChange={(event) => updateDisplay({ cityNames: event.target.checked })} /><span><strong>Show team cities</strong><small>Turn this off if city/location names should stay private.</small></span></label>
+          <label><input type="checkbox" checked={publicDisplay.venues} onChange={(event) => updateDisplay({ venues: event.target.checked })} /><span><strong>Show venues</strong><small>Turn this off to hide stadium or home-field details.</small></span></label>
+        </div>
+      </section>
+      <section className="share-info-panel">
+        <header><Sparkles /><span><strong>Share card</strong><small>Replay the reveal to share the branded season card.</small></span></header>
+        <p className="share-card-summary"><span><strong>{schedule.setup.name}</strong><small>{schedule.setup.seasonYear} · {schedule.setup.teams.length} teams · {schedule.setup.weeks} weeks</small></span></p>
+        <button type="button" className="button-secondary" onClick={onShowRecap}><Sparkles />Open recap reveal</button>
+      </section>
+    </div>
+
+    {!isCloudSchedule && <section className="share-save-note" role="note">
+      <Cloud />
+      <span><strong>Publishing saves this season to your account first.</strong><small>{simulationActive ? "The public page uses the real schedule, not the simulator run." : "That keeps the public link stable across devices."}</small></span>
+    </section>}
   </div>;
 }
 
@@ -1811,7 +1916,8 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
   // H2: publish status persists across reloads (fetched from /api/publish for
   // cloud schedules) so the public URL and Unpublish control are always
   // recoverable, not just visible for the few seconds the toast is on screen.
-  const [publishStatus, setPublishStatus] = useState<{ published: boolean; url: string | null; slug: string | null } | null>(null);
+  const [publishStatus, setPublishStatus] = useState<PublishStatus | null>(null);
+  const [publicDisplay, setPublicDisplay] = useState<PublicDisplaySettings>({ cityNames: true, managers: false, venues: true });
   const [unpublishBusy, setUnpublishBusy] = useState(false);
   const [copiedPublishLink, setCopiedPublishLink] = useState(false);
   const [scorebarCollapsed, setScorebarCollapsed] = useState(false);
@@ -1942,8 +2048,12 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
     }
     let cancelled = false;
     fetch(`/api/publish?scheduleId=${encodeURIComponent(schedule.id)}`)
-      .then((response) => response.json().catch(() => ({})) as Promise<{ published?: boolean; url?: string; slug?: string }>)
-      .then((payload) => { if (!cancelled) setPublishStatus({ published: Boolean(payload.published), url: payload.url ?? null, slug: payload.slug ?? null }); })
+      .then((response) => response.json().catch(() => ({})) as Promise<{ published?: boolean; url?: string; slug?: string; publicDisplay?: Partial<PublicDisplaySettings> }>)
+      .then((payload) => {
+        if (cancelled) return;
+        setPublishStatus({ published: Boolean(payload.published), url: payload.url ?? null, slug: payload.slug ?? null, publicDisplay: payload.publicDisplay });
+        if (payload.publicDisplay) setPublicDisplay((current) => ({ ...current, ...payload.publicDisplay }));
+      })
       .catch(() => { if (!cancelled) setPublishStatus({ published: false, url: null, slug: null }); });
     return () => { cancelled = true; };
   }, [schedule?.id]);
@@ -2551,16 +2661,30 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
         if (!saved) return;
         cloudSchedule = saved;
       }
-      const response = await fetch("/api/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: cloudSchedule.id }) });
+      const response = await fetch("/api/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: cloudSchedule.id, publicDisplay }) });
       const payload = await response.json().catch(() => ({})) as { url?: string; slug?: string; error?: string };
       if (!response.ok || !payload.url) return setNotice(apiErrorMessage(response.status, payload.error, "This schedule could not be published."));
-      setPublishStatus({ published: true, url: payload.url, slug: payload.slug ?? null });
+      setPublishStatus({ published: true, url: payload.url, slug: payload.slug ?? null, publicDisplay });
       try { await navigator.clipboard.writeText(payload.url); setNotice("Public schedule link copied."); }
       catch { setNotice(`Public schedule ready: ${payload.url}`); }
       window.setTimeout(() => setNotice(null), 5200);
     } finally {
       setActionBusy(null);
     }
+  };
+  const copyPublishLink = async () => {
+    if (!publishStatus?.url) return;
+    try {
+      await navigator.clipboard.writeText(publishStatus.url);
+      setCopiedPublishLink(true);
+      window.setTimeout(() => setCopiedPublishLink(false), 2400);
+    } catch {
+      setNotice(`Public schedule ready: ${publishStatus.url}`);
+    }
+  };
+  const onUpdatePublicDisplay = (display: PublicDisplaySettings) => {
+    setPublicDisplay(display);
+    setPublishStatus((current) => current ? { ...current, publicDisplay: display } : current);
   };
   // Unpublish a live public page (H2). Reversible: publishing again reuses the
   // same slug (see the upsert in /api/publish), so this only toggles visibility.
@@ -2588,10 +2712,10 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
         if (!saved) return { error: "Sign in and save this schedule to share it." };
         cloudSchedule = saved;
       }
-      const response = await fetch("/api/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: cloudSchedule.id }) });
+      const response = await fetch("/api/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: cloudSchedule.id, publicDisplay }) });
       const payload = await response.json().catch(() => ({})) as { url?: string; slug?: string; error?: string };
       if (!response.ok || !payload.url) return { error: apiErrorMessage(response.status, payload.error, "This schedule could not be published.") };
-      setPublishStatus({ published: true, url: payload.url, slug: payload.slug ?? null });
+      setPublishStatus({ published: true, url: payload.url, slug: payload.slug ?? null, publicDisplay });
       return { url: payload.url, slug: payload.slug };
     } catch {
       return { error: "Something went wrong publishing your schedule." };
@@ -2749,26 +2873,6 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
           </div>
         </div>
         <div className="workspace-notice" role="status" aria-live="polite">{notice && <><Cloud />{notice}</>}</div>
-        {publishStatus && CLOUD_SCHEDULE_ID.test(schedule.id) && (publishStatus.published ? (
-          <section className="publish-panel is-live" role="status" aria-label="Public schedule status">
-            <span className="publish-status-dot" aria-hidden="true" />
-            <span className="publish-panel-copy">
-              <strong>Public page is live</strong>
-              <input type="text" readOnly value={publishStatus.url ?? ""} onFocus={(event) => event.currentTarget.select()} aria-label="Public schedule link" />
-            </span>
-            <div className="publish-panel-actions">
-              <button type="button" className="button-secondary" onClick={async () => { if (!publishStatus.url) return; try { await navigator.clipboard.writeText(publishStatus.url); setCopiedPublishLink(true); window.setTimeout(() => setCopiedPublishLink(false), 2400); } catch { setNotice(`Public schedule ready: ${publishStatus.url}`); } }}>{copiedPublishLink ? <Check /> : <Copy />}{copiedPublishLink ? "Copied" : "Copy link"}</button>
-              <a className="button-secondary" href={publishStatus.url ?? "#"} target="_blank" rel="noreferrer"><ExternalLink />Open</a>
-              <button type="button" className="button-danger publish-panel-unpublish" disabled={unpublishBusy} onClick={() => void unpublish()}>{unpublishBusy ? <LoaderCircle className="spin" /> : <X />}Unpublish</button>
-            </div>
-          </section>
-        ) : (
-          <section className="publish-panel is-idle" role="status" aria-label="Public schedule status">
-            <span className="publish-status-dot is-off" aria-hidden="true" />
-            <span className="publish-panel-copy"><strong>Not published</strong><small>Publish to share a public schedule page with anyone.</small></span>
-            <button type="button" className="button-secondary" disabled={actionBusy !== null} onClick={() => setConfirmAction("share")}>{actionBusy === "share" ? <LoaderCircle className="spin" /> : <Share2 />}Publish</button>
-          </section>
-        ))}
         {!entitlements.signedIn && !CLOUD_SCHEDULE_ID.test(schedule.id) && !saveNudgeDismissed && <section className="cloud-retry-banner save-nudge-banner" role="status" aria-label="Save this schedule to an account">
           <ShieldCheck />
           <span><strong>This schedule is saved on this device only.</strong><small>Create a free account so you never lose it and can open it on any device.</small></span>
@@ -2832,6 +2936,7 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
           {view === "playoffs" && historyViewActive && !historySchedule
             ? <HistoryMissingState season={selectedHistorySeason} onSync={syncLeagueHistory} syncing={historySyncing} canSync={canSyncHistory} />
             : view === "playoffs" && <PlayoffsView schedule={workspaceSchedule ?? activeSchedule} onUpdatePlayoffs={simulation || historyViewActive ? () => undefined : onUpdatePlayoffs} onUpdatePlayoffGame={simulation || historyViewActive ? () => undefined : onUpdatePlayoffGame} highlightedGame={highlightedGame} simulationMode={Boolean(simulation || historyViewActive)} playoffTab={playoffTab} onChangePlayoffTab={setPlayoffTab} teamHrefFor={(teamId) => hrefWithHistorySeason(`/season/${schedule.id}/team/${teamId}`)} onOpenGame={openGameDetail} />}
+          {view === "share" && <ShareView schedule={activeSchedule} publishStatus={publishStatus} publicDisplay={publicDisplay} isCloudSchedule={CLOUD_SCHEDULE_ID.test(schedule.id)} publishBusy={actionBusy === "share"} unpublishBusy={unpublishBusy} copiedPublishLink={copiedPublishLink} simulationActive={Boolean(simulation)} onPublish={() => setConfirmAction("share")} onCopyLink={() => void copyPublishLink()} onUnpublish={() => void unpublish()} onShowRecap={() => setShowRecap(true)} onUpdatePublicDisplay={onUpdatePublicDisplay} />}
           {view === "simulator" && !simulation && simulationLoaded && <SimulatorLaunch hasSavedRun={Boolean(savedSimulation)} onPlay={playSimulation} onStartFromReal={startSimulationFromReal} />}
           {view === "simulator" && simulation && <SimulatorWorkspace
             schedule={activeSchedule}
@@ -2868,7 +2973,7 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
         share: {
           icon: <Share2 />, kicker: "Publish publicly",
           title: "Publish this schedule to a public page?",
-          body: <p>This publishes your full schedule <strong>and manager names</strong> to a public web page anyone with the link can open.</p>,
+          body: <p>This publishes your schedule to a public web page anyone with the link can open. Private fields follow your Share page privacy settings.</p>,
           confirmLabel: "Publish & copy link", confirmIcon: <Share2 />,
           run: () => { void share(); },
         },
