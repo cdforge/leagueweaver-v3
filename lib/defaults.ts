@@ -2,6 +2,7 @@ import type { Conference, Division, LeagueSetupInput, Team } from "./types";
 import { applyTeamConferenceIds } from "./conferences";
 import { entityMonogram, leagueAcronym } from "./monograms";
 import { createDefaultPlayoffSettings } from "./playoffs";
+import { teamMonogram } from "./teamIdentity";
 import { normalizeTiebreakerSettings } from "./tiebreakers";
 
 const TEAM_NAMES = [
@@ -98,7 +99,7 @@ export function createTeams(teamCount: number, divisions: Division[]): Team[] {
     id: `team-${index + 1}`,
     city: TEAM_CITIES[index],
     name: TEAM_NAMES[index],
-    shortName: entityMonogram(TEAM_NAMES[index], TEAM_CITIES[index]),
+    shortName: teamMonogram(TEAM_CITIES[index], TEAM_NAMES[index]),
     manager: `Manager ${index + 1}`,
     color: TEAM_COLORS[index],
     divisionId: divisions[index % divisions.length].id,

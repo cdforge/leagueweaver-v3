@@ -1,10 +1,11 @@
 import type { GeneratedSchedule, LeagueSetupInput } from "./types";
 import { applyTeamConferenceIds } from "./conferences";
 import { normalizeScheduleMatchups } from "./matchups";
-import { divisionAcronym, entityMonogram, leagueAcronym, resolveInitials } from "./monograms";
+import { divisionAcronym, leagueAcronym, resolveInitials } from "./monograms";
 import { normalizePlayoffSettings } from "./playoffs";
 import { getWeekOneRankMap } from "./rankings";
 import { freezeCompletedRankHistory } from "./standings";
+import { teamMonogram } from "./teamIdentity";
 import { normalizeTiebreakerSettings } from "./tiebreakers";
 
 export function normalizeSetup(setup: LeagueSetupInput): LeagueSetupInput {
@@ -35,7 +36,7 @@ export function normalizeSetup(setup: LeagueSetupInput): LeagueSetupInput {
       const teamInitials = Object.prototype.hasOwnProperty.call(team, "initials") ? team.initials : team.shortName || undefined;
       const storedDraftPlace = Number.isInteger(team.draftPlace) && team.draftPlace! >= 1 && team.draftPlace! <= setup.teams.length ? team.draftPlace : undefined;
       const migratedDraftPlace = Number.isInteger(legacyDraftScore) && legacyDraftScore! >= 1 && legacyDraftScore! <= setup.teams.length ? legacyDraftScore : undefined;
-      return { ...teamWithoutLegacyScore, providerId: team.providerId, city, initials: teamInitials, draftPlace: storedDraftPlace ?? migratedDraftPlace, shortName: resolveInitials(teamInitials, entityMonogram(team.name, city)) };
+      return { ...teamWithoutLegacyScore, providerId: team.providerId, city, initials: teamInitials, draftPlace: storedDraftPlace ?? migratedDraftPlace, shortName: resolveInitials(teamInitials, teamMonogram(city, team.name)) };
     }), divisions),
   };
 }

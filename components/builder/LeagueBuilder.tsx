@@ -54,7 +54,7 @@ import { identityFromSetup, normalizeSavedLeague } from "@/lib/savedLeagues";
 import { getNflWeeks, getNflWeekWindow, getWeekDateLabel } from "@/lib/schedule";
 import { generateScheduleAsync } from "@/lib/generateScheduleAsync";
 import { createLocalSeasonId, listLocalSeasons, loadSetup, saveSeason, saveSetup } from "@/lib/storage";
-import { divisionAcronym, entityMonogram, leagueAcronym, resolveInitials } from "@/lib/monograms";
+import { divisionAcronym, leagueAcronym, resolveInitials } from "@/lib/monograms";
 import { accessibleAccentColor, readableTextColor } from "@/lib/colorContrast";
 import { formatDraftPlace, getTeamsMissingDraftPlaces, getWeekOneTeamOrder, hasCompleteDraftRanking } from "@/lib/rankings";
 import {
@@ -594,7 +594,7 @@ function TeamsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; s
     teams: current.teams.map((team) => {
       if (team.id !== id) return team;
       const next = { ...team, ...patch };
-      return { ...next, shortName: resolveInitials(next.initials, entityMonogram(next.name, next.city)) };
+      return { ...next, shortName: resolveInitials(next.initials, teamMonogram(next.city, next.name)) };
     }),
   }));
   const setTeamCount = (count: number) => {
@@ -634,12 +634,12 @@ function TeamsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; s
         if (!next) {
           if (!team.city.trim()) return team;
           const name = `${team.city.trim()} ${team.name.trim()}`.trim();
-          return { ...team, city: "", name, shortName: resolveInitials(team.initials, entityMonogram(name, "")) };
+          return { ...team, city: "", name, shortName: resolveInitials(team.initials, teamMonogram("", name)) };
         }
         const stashed = snapshot.get(team.id);
         if (stashed === undefined) return team;
         const { city, name } = splitCityFromName(team.name, stashed);
-        return { ...team, city, name, shortName: resolveInitials(team.initials, entityMonogram(name, city)) };
+        return { ...team, city, name, shortName: resolveInitials(team.initials, teamMonogram(city, name)) };
       }),
     }));
   };
@@ -656,7 +656,7 @@ function TeamsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; s
             <IdentityColorPicker compact showAbbreviation={false} name={teamDisplayName(team, setup.display.cityNames)} abbreviation={teamInitials(team)} color={team.color} logoUrl={team.logoUrl} onChange={(next) => updateTeam(team.id, next)} />
             {setup.display.cityNames && <label className="team-editor-field"><span>City</span><input aria-label={`Team ${team.overallRank} city`} placeholder="City" value={team.city} onChange={(event) => updateTeam(team.id, { city: event.target.value })} /></label>}
             <label className="team-editor-field"><span>Team name</span><input aria-label={`Team ${team.overallRank} name`} aria-invalid={showErrors && !team.name.trim()} placeholder="Team name" value={team.name} onChange={(event) => updateTeam(team.id, { name: event.target.value })} /></label>
-            <label className="team-editor-field"><span>Initials</span><input aria-label={`${teamDisplayName(team)} initials override`} maxLength={4} placeholder={`Auto: ${entityMonogram(team.name, team.city)}`} value={team.initials ?? ""} onChange={(event) => updateTeam(team.id, { initials: event.target.value || undefined })} /></label>
+            <label className="team-editor-field"><span>Initials</span><input aria-label={`${teamDisplayName(team)} initials override`} maxLength={4} placeholder={`Auto: ${teamInitials({ ...team, initials: undefined })}`} value={team.initials ?? ""} onChange={(event) => updateTeam(team.id, { initials: event.target.value || undefined })} /></label>
             {setup.display.managers && <label className="team-editor-field"><span>Manager</span><input aria-label={`${teamDisplayName(team)} manager`} placeholder="Manager" value={team.manager} onChange={(event) => updateTeam(team.id, { manager: event.target.value })} /></label>}
             {setup.display.venues && <label className="team-editor-field"><span>Home venue</span><input aria-label={`${teamDisplayName(team)} venue`} placeholder="Home venue" value={team.stadium} onChange={(event) => updateTeam(team.id, { stadium: event.target.value })} /></label>}
           </div>)}</div>
@@ -1512,14 +1512,52 @@ function setupProgress(step: number) {
   return Math.round(((step + 1) / STEPS.length) * 100);
 }
 
+function previewStepLabel(step: number) {
+  return `Step ${step + 1} of ${STEPS.length} · ${STEPS[step]?.label ?? "Setup"}`;
+}
+
 function BlueprintRoster({ setup }: { setup: LeagueSetupInput }) {
   const divisions = previewDivisions(setup);
-  // A sealed (random) seeding must not leak its order — hide the rank badge here too,
-  // not just in the seeding editor, or the blueprint becomes the peek-hole.
-  const sealed = setup.priorSeason.entryMode === "random";
+  const renderTeamChip = (team: Team) => {
+    const monogram = teamInitials(team);
+    const showRank = setup.priorSeason.enabled && (setup.priorSeason.entryMode === "manual" || setup.priorSeason.entryMode === "history");
+    return (
+      <span className="preview-team-chip" key={team.id} tabIndex={0} aria-label={`${teamDisplayName(team, true)} details`}>
+        <EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={monogram} />
+        <span className="preview-team-card" role="tooltip">
+          <span className="preview-team-card-head">
+            <EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={monogram} />
+            <span>
+              {team.city.trim() && <small>{team.city}</small>}
+              <strong>{team.name || "Untitled team"}</strong>
+            </span>
+          </span>
+          <span className="preview-team-card-grid">
+            <span><b>Initials</b><em>{monogram}</em></span>
+            {team.manager.trim() && <span><b>Manager</b><em>{team.manager}</em></span>}
+            {team.stadium.trim() && <span><b>Venue</b><em>{team.stadium}</em></span>}
+            {showRank && <span><b>Overall rank</b><em>#{team.overallRank}</em></span>}
+          </span>
+        </span>
+      </span>
+    );
+  };
   return (
     <div className="preview-divisions">
-      {divisions.map((division) => <div key={division.id}><div className="preview-division-title"><EntityLogo className="preview-division-mark" color={division.color} logoUrl={division.logoUrl} monogram={resolveInitials(division.initials, divisionAcronym(division.name))} /><strong>{division.name}</strong><small>{division.teams.length}</small></div>{division.teams.map((team) => { const accent = accessibleAccentColor(team.color); return <div className="preview-team" key={team.id} title={sealed ? `${teamDisplayName(team, setup.display.cityNames)} · Seeding sealed` : `${teamDisplayName(team, setup.display.cityNames)} · Rank ${team.overallRank}`}><EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} /><span>{setup.display.cityNames && team.city && <small className="team-city">{team.city}</small>}<strong style={setup.display.cityNames ? { color: accent } : undefined}>{team.name}</strong><small>{[teamInitials(team), setup.display.managers ? team.manager || "No manager" : "", setup.display.venues ? team.stadium || "Venue TBD" : ""].filter(Boolean).join(" · ")}</small></span>{sealed ? <b className="preview-rank-sealed" aria-label="Seeding sealed"><Lock /></b> : <b style={{ color: accent }}>#{team.overallRank}</b>}</div>; })}</div>)}
+      <div className="preview-section-head"><span>Division preview</span><small>Full edit in Step 3</small></div>
+      {divisions.map((division) => (
+        <div className="preview-division-group" key={division.id}>
+          <div className="preview-division-title">
+            <EntityLogo className="preview-division-mark" color={division.color} logoUrl={division.logoUrl} monogram={resolveInitials(division.initials, divisionAcronym(division.name))} />
+            <strong>{division.name}</strong>
+            <small>{division.teams.length} teams</small>
+          </div>
+          <div className="preview-team-chips" aria-label={`${division.name} teams`}>
+            {division.teams.map(renderTeamChip)}
+          </div>
+        </div>
+      ))}
+      <div className="preview-summary-note"><Check /><span>League identity, teams, divisions, colors, and logos are loaded.</span></div>
     </div>
   );
 }
@@ -1567,10 +1605,10 @@ function LivePreview({ setup, step }: { setup: LeagueSetupInput; step: number })
   return (
     <aside className="builder-preview">
       <div className="preview-top"><span>LEAGUE BLUEPRINT</span><em>LIVE</em></div>
+      <div className="preview-progress"><div><span>{previewStepLabel(step)}</span><strong>{setupProgress(step)}%</strong></div><i><b style={{ width: `${setupProgress(step)}%` }} /></i></div>
       <div className="preview-brand"><EntityLogo className="preview-logo" size={50} color={setup.color} logoUrl={setup.logoUrl} monogram={resolveInitials(setup.initials, leagueAcronym(setup.name))} /><div><h2>{setup.name || "Untitled league"}</h2><p>{setup.seasonYear} · {setup.weeks} weeks</p></div></div>
-      <div className="preview-status"><span><Users />{setup.teams.length} teams</span><span><CalendarDays />{setup.weeks} weeks</span><span><ShieldCheck />Rules on</span></div>
+      <div className="preview-status"><span><Users />{setup.teams.length} teams</span><span><ShieldCheck />{setup.divisions.length} div.</span><span><CalendarDays />{setup.weeks} weeks</span></div>
       <BlueprintRoster setup={setup} />
-      <div className="preview-footer"><span>Setup progress</span><strong>{setupProgress(step)}%</strong><div><i style={{ width: `${setupProgress(step)}%` }} /></div></div>
     </aside>
   );
 }
@@ -1593,8 +1631,9 @@ function BuilderBlueprintBar({ setup, step, open, onToggle, actions }: {
       {open && <div className="blueprint-bar-backdrop" role="presentation" onMouseDown={onToggle} />}
       <div className={`builder-blueprint-bar${open ? " open" : ""}`}>
         <div id={sheetId} className="blueprint-bar-sheet" role="region" aria-label="League blueprint" hidden={!open}>
+          <div className="preview-progress"><div><span>{previewStepLabel(step)}</span><strong>{progress}%</strong></div><i><b style={{ width: `${progress}%` }} /></i></div>
           <div className="preview-brand"><EntityLogo className="preview-logo" size={44} color={setup.color} logoUrl={setup.logoUrl} monogram={resolveInitials(setup.initials, leagueAcronym(setup.name))} /><div><h2>{setup.name || "Untitled league"}</h2><p>{setup.seasonYear} · {setup.weeks} weeks</p></div></div>
-          <div className="preview-status"><span><Users />{setup.teams.length} teams</span><span><CalendarDays />{setup.weeks} weeks</span><span><ShieldCheck />Rules on</span></div>
+          <div className="preview-status"><span><Users />{setup.teams.length} teams</span><span><ShieldCheck />{setup.divisions.length} div.</span><span><CalendarDays />{setup.weeks} weeks</span></div>
           <BlueprintRoster setup={setup} />
         </div>
         <div className="blueprint-bar-progress" aria-hidden="true"><i style={{ width: `${progress}%` }} /></div>
