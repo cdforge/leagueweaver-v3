@@ -6,6 +6,7 @@ import { AllStarBadge } from "@/components/season/AllStarBadge";
 import { DivisionMark } from "@/components/ui/DivisionIdentity";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { Modal } from "@/components/ui/Modal";
+import { PointChip } from "@/components/ui/PointChip";
 import { buildAllStars } from "@/lib/allStars";
 import { accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
 import { buildGameDetailVM, type GameDetailPlayerStat, type GameDetailSideVM, type GameDetailSlotVM } from "@/lib/gameDetail";
@@ -87,19 +88,19 @@ function buildAllStarBadges(schedule: GeneratedSchedule, playerStats: GameDetail
 }
 
 function PlayerRow({ row, badge }: { row: GameDetailSlotVM; badge?: PlayerAllStarBadge }) {
-  const badgeColor = row.nflTeam ? NFL_TEAM_COLORS[row.nflTeam.toUpperCase()] ?? "#eef1f0" : "#eef1f0";
-  const badgeInk = row.nflTeam ? readableTextColor(badgeColor) : "var(--ink)";
+  const knownColor = row.nflTeam ? NFL_TEAM_COLORS[row.nflTeam.toUpperCase()] : undefined;
+  const badgeColor = knownColor ?? "var(--strength-bg)";
+  const badgeInk = knownColor ? readableTextColor(knownColor) : "var(--ink)";
+  const confidenceLabel = row.confidence === "inferred" ? "Inferred slot" : row.confidence === "ambiguous" ? "Ambiguous slot" : "";
   return <li className={`gdm-player-row status-${row.lineupStatus}`}>
     <span className="gdm-slot-badge">{row.slot}</span>
     <span className="gdm-player-main">
       <strong>{row.name}</strong>
       <small>{row.position}{row.nflTeam ? ` · ${row.nflTeam}` : ""}</small>
+      {(row.isProvisional || confidenceLabel) && <span className="gdm-row-flags">{row.isProvisional && <em>Provisional</em>}{confidenceLabel && <em>{confidenceLabel}</em>}</span>}
     </span>
     <span className="gdm-nfl-badge" style={{ background: badgeColor, color: badgeInk }}>{row.nflTeam || row.position}</span>
-    <span className="gdm-player-points">
-      <strong>{formatPoints(row.points)}</strong>
-      {row.projected != null && <small>Proj {formatPoints(row.projected)}</small>}
-    </span>
+    <PointChip value={row.points} detail={row.projected != null ? `Proj ${row.projected.toFixed(2)}` : undefined} />
     <span className="gdm-allstar-slot" aria-label="All-Star badge slot">{badge && <AllStarBadge {...badge} />}</span>
   </li>;
 }
@@ -174,7 +175,7 @@ export function GameDetailSheet({
       <span><small>Home</small><strong>{scoreLabel(vm.home)}</strong></span>
       {winProbability && vm.status !== "final" && <em>{Math.round(winProbability.away * 100)}% / {Math.round(winProbability.home * 100)}%</em>}
     </div>
-    {vm.unsynced && <div className="gdm-unsynced" role="status"><Shield /><span><strong>Player data has not synced for this game.</strong><small>The modal falls back to real team-level schedule data until player rows exist.</small></span></div>}
+    {vm.unsynced && <div className="gdm-unsynced" role="status"><Shield /><span><strong>Connect a public ESPN/Sleeper league for player data.</strong><small>The modal falls back to real team-level schedule data until player rows exist.</small></span></div>}
     <div className="gdm-rosters">
       <TeamPanel side={vm.away} showCity={showCity} allStarBadges={allStarBadges} />
       <TeamPanel side={vm.home} showCity={showCity} allStarBadges={allStarBadges} />

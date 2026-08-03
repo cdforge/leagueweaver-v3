@@ -24,6 +24,7 @@ export interface GameDetailSlotVM {
   lineupStatus: LineupStatus;
   starterIndex?: number;
   confidence: PlayerWeekStat["slotConfidence"];
+  isProvisional: boolean;
 }
 
 export interface GameDetailSideVM {
@@ -87,6 +88,7 @@ function toSlotVM(row: GameDetailPlayerStat): GameDetailSlotVM {
     lineupStatus: row.lineupStatus,
     starterIndex: row.starterIndex,
     confidence: row.slotConfidence,
+    isProvisional: row.isProvisional,
   };
 }
 
