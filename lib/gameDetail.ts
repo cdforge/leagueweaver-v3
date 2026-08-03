@@ -11,7 +11,10 @@ export interface GameDetailPlayerStat extends PlayerWeekStat {
 
 export interface GameDetailSlotVM {
   key: string;
+  teamId: string;
+  week: number;
   playerId: string;
+  canonicalPlayerId: string;
   name: string;
   slot: SlotKey | string;
   position: string;
@@ -71,7 +74,10 @@ function slotRank(row: GameDetailPlayerStat) {
 function toSlotVM(row: GameDetailPlayerStat): GameDetailSlotVM {
   return {
     key: `${row.teamId}:${row.week}:${row.providerPlayerId}`,
+    teamId: row.teamId,
+    week: row.week,
     playerId: row.providerPlayerId,
+    canonicalPlayerId: row.canonicalPlayerId,
     name: row.displayName || row.providerPlayerId,
     slot: row.inferredSlot,
     position: row.position || row.inferredSlot,
