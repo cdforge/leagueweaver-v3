@@ -158,6 +158,7 @@ export function GameDetailSheet({
   if (!vm) return null;
   const showCity = schedule.setup.display?.cityNames !== false;
   const stateLabel = vm.status === "final" ? "Final" : "Upcoming";
+  const contextLabel = vm.isPlayoff ? vm.playoffLabel || "Playoffs" : `Week ${vm.weekNumber}`;
   const isBroadcast = vm.featured;
 
   return <Modal
@@ -169,7 +170,7 @@ export function GameDetailSheet({
     <header className="gdm-header">
       <button type="button" className="gdm-back" aria-label="Back to schedule" onClick={onClose}><ArrowLeft /></button>
       <div className="gdm-title-lockup">
-        <span>{isBroadcast ? <><Star fill="currentColor" /> Game of the Week</> : `Week ${vm.weekNumber}`}</span>
+        <span>{isBroadcast ? <><Star fill="currentColor" /> Game of the Week</> : contextLabel}</span>
         <h2 id="game-detail-title">{teamDisplay(vm.away, showCity)} at {teamDisplay(vm.home, showCity)}</h2>
         <small><MapPin /> {vm.stadium} · {stateLabel} · Rating {vm.ratingScore10.toFixed(1)}/10</small>
       </div>

@@ -40,6 +40,9 @@ type HistoryBrowserSeason = {
   providerLeagueId: string;
   leagueName: string;
   teamCount: number;
+  rosterPositions: string[];
+  regularSeasonWeekCount?: number;
+  playoffSettings: Record<string, unknown>;
   teams: Array<{
     leagueTeamId: string;
     providerRosterOrTeamId: string;
@@ -82,7 +85,7 @@ async function readHistoryBrowser(auth: NonNullable<Awaited<ReturnType<typeof ge
   try {
     const { data: seasons, error: seasonsError } = await auth.supabase
       .from("league_seasons")
-      .select("id,provider,provider_league_id,season,league_name,team_count")
+      .select("id,provider,provider_league_id,season,league_name,team_count,roster_positions,regular_season_week_count,playoff_settings")
       .eq("schedule_id", scheduleId)
       .order("season", { ascending: false })
       .limit(8);
@@ -127,6 +130,9 @@ async function readHistoryBrowser(auth: NonNullable<Awaited<ReturnType<typeof ge
       providerLeagueId: season.provider_league_id,
       leagueName: season.league_name,
       teamCount: season.team_count,
+      rosterPositions: season.roster_positions ?? [],
+      regularSeasonWeekCount: season.regular_season_week_count ?? undefined,
+      playoffSettings: season.playoff_settings ?? {},
       teams: (teamsBySeason.get(season.id) ?? []).map((team) => ({
         leagueTeamId: team.league_team_id,
         providerRosterOrTeamId: team.provider_roster_or_team_id,

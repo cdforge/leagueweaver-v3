@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createDefaultSetup, createDivisions, createTeams } from "../lib/defaults";
 import { buildGameDetailVM, type GameDetailPlayerStat } from "../lib/gameDetail";
 import { generateLeagueSchedule } from "../lib/schedule";
-import type { LeagueSetupInput } from "../lib/types";
+import type { LeagueSetupInput, PlayoffGame } from "../lib/types";
 
 let checks = 0;
 function check(value: unknown, message: string) {
@@ -25,24 +25,24 @@ game.awayScore = 44.44;
 game.homeScore = 66.66;
 const now = new Date("2026-08-02T12:00:00.000Z").toISOString();
 
-function row(teamId: string, providerPlayerId: string, points: number, lineupStatus: GameDetailPlayerStat["lineupStatus"], starterIndex?: number): GameDetailPlayerStat {
+function row(teamId: string, providerPlayerId: string, points: number, lineupStatus: GameDetailPlayerStat["lineupStatus"], starterIndex?: number, slot: GameDetailPlayerStat["inferredSlot"] = starterIndex === 0 ? "QB" : "RB", week = game.week): GameDetailPlayerStat {
   return {
     scheduleId: schedule.id,
     provider: "sleeper",
     providerLeagueId: "gdm-matrix",
     season: schedule.setup.seasonYear,
-    week: game.week,
+    week,
     teamId,
     providerRosterId: teamId,
     providerPlayerId,
     canonicalPlayerId: `sleeper:${providerPlayerId}`,
     displayName: `Player ${providerPlayerId}`,
-    position: starterIndex === 0 ? "QB" : "RB",
+    position: slot,
     nflTeam: starterIndex === 0 ? "KC" : "DET",
     points,
     lineupStatus,
     starterIndex,
-    inferredSlot: starterIndex === 0 ? "QB" : "RB",
+    inferredSlot: slot,
     rawSlot: starterIndex ?? "BN",
     slotConfidence: lineupStatus === "starter" ? "confirmed" : "bench",
     isProvisional: false,
@@ -73,6 +73,44 @@ assert.equal(synced.away.platformTotal, 44.44, "platform team score remains avai
 check(synced.ratingScore10 >= 0.1 && synced.ratingScore10 <= 10, "rating is score10");
 check(!synced.unsynced, "synced data is detected");
 check(synced.stadium === game.stadium, "stadium is the real scheduled stadium");
+const orderedRows = [
+  row(game.awayTeamId, "away-flex", 8.1, "starter", 4, "FLEX"),
+  row(game.awayTeamId, "away-wr", 9.2, "starter", 2, "WR"),
+  row(game.awayTeamId, "away-qb-sort", 17.3, "starter", 0, "QB"),
+  row(game.awayTeamId, "away-te", 7.4, "starter", 3, "TE"),
+  row(game.awayTeamId, "away-rb-sort", 11.5, "starter", 1, "RB"),
+];
+const ordered = buildGameDetailVM(schedule, game.id, orderedRows);
+assert.deepEqual(ordered?.away.starters.map((item) => item.slot), ["QB", "RB", "WR", "TE", "FLEX"], "starters render in standard slot order");
+checks += 1;
+
+const playoffGame: PlayoffGame = {
+  id: "main-r1-g1",
+  week: 14,
+  gameNumber: 1,
+  homeTeamId: game.homeTeamId,
+  awayTeamId: game.awayTeamId,
+  matchupType: "cross-division",
+  seriesGame: 1,
+  seriesLength: 1,
+  dateLabel: "Playoff Week",
+  stadium: "Historic Playoff Field",
+  homeScore: 101.1,
+  awayScore: 99.9,
+  round: "Semifinal",
+  roundIndex: 0,
+  bracket: "main",
+};
+const playoffSchedule = { ...schedule, playoffGames: [playoffGame] };
+const playoffRows = [
+  row(playoffGame.awayTeamId, "away-playoff-qb", 25, "starter", 0, "QB", playoffGame.week),
+  row(playoffGame.homeTeamId, "home-playoff-qb", 28, "starter", 0, "QB", playoffGame.week),
+];
+const playoff = buildGameDetailVM(playoffSchedule, playoffGame.id, playoffRows);
+assert.equal(playoff?.isPlayoff, true, "playoff game detail is recognized");
+assert.equal(playoff?.playoffLabel, "Semifinal", "playoff round label is carried into the modal VM");
+assert.equal(playoff?.home.starterTotal, 28, "playoff roster rows populate from the playoff week");
+checks += 3;
 
 const unsynced = buildGameDetailVM(schedule, game.id, []);
 check(unsynced, "unsynced game detail builds");
@@ -82,4 +120,4 @@ assert.equal(unsynced.away.starterTotal, null, "unsynced away has no starter tot
 assert.equal(unsynced.away.platformTotal, 44.44, "unsynced away falls back to team score");
 assert.equal(unsynced.home.platformTotal, 66.66, "unsynced home falls back to team score");
 
-console.log(`Game detail matrix passed (${checks} checks): starters count, bench/IR excluded, fallback available, rating score10.`);
+console.log(`Game detail matrix passed (${checks} checks): starters count, bench/IR excluded, fallback available, rating score10, standard slot order, and playoff game details.`);

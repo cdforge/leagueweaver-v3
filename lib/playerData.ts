@@ -36,6 +36,43 @@ export type SlotConfidence = "confirmed" | "inferred" | "ambiguous" | "bench";
 export type LineupStatus = "starter" | "bench" | "ir" | "taxi" | "reserve" | "unknown";
 export type TemplateSlotGroup = LineupStatus;
 
+const SLOT_SORT_ORDER: SlotKey[] = [
+  "QB",
+  "TQB",
+  "RB",
+  "WR",
+  "TE",
+  "FLEX",
+  "RB_WR_FLEX",
+  "WR_TE_FLEX",
+  "SUPERFLEX",
+  "DST",
+  "K",
+  "P",
+  "HC",
+  "DT",
+  "DE",
+  "DL",
+  "LB",
+  "CB",
+  "S",
+  "DB",
+  "DP",
+  "IDP",
+  "IDP_FLEX",
+  "BENCH",
+  "IR",
+  "TAXI",
+  "RESERVE",
+  "UNKNOWN",
+];
+
+const SLOT_SORT_RANK = new Map<SlotKey, number>(SLOT_SORT_ORDER.map((slot, index) => [slot, index]));
+
+export function lineupSlotSortRank(slot: SlotKey | string) {
+  return SLOT_SORT_RANK.get(slot as SlotKey) ?? SLOT_SORT_ORDER.length;
+}
+
 export interface PlayerIdentity {
   /** Internal canonical id, also stored as player_catalog.id. */
   id: string;

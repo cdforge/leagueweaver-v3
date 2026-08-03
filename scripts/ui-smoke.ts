@@ -303,13 +303,29 @@ function historyBrowserSmokeData(schedule: GeneratedSchedule) {
       finalLockAt: "2025-12-30T12:00:00.000Z",
     };
   }));
+  const playoffSource = schedule.weeks[0].games[0];
+  const playoffHomeIndex = schedule.setup.teams.findIndex((team) => team.id === playoffSource.homeTeamId);
+  const playoffAwayIndex = schedule.setup.teams.findIndex((team) => team.id === playoffSource.awayTeamId);
+  games.push({
+    week: 15,
+    providerMatchupId: `sleeper:${leagueId}:week-15:playoff-1`,
+    homeLeagueTeamId: `sleeper-${leagueId}-${playoffHomeIndex + 1}`,
+    awayLeagueTeamId: `sleeper-${leagueId}-${playoffAwayIndex + 1}`,
+    homeScore: 155.5,
+    awayScore: 148.4,
+    status: "final",
+    finalLockAt: "2025-12-30T12:00:00.000Z",
+  });
   const playerRows = games.flatMap((game, index) => [
+    { week: game.week, canonicalPlayerId: `hist-wr-away-${index}`, leagueTeamId: game.awayLeagueTeamId, providerPlayerId: `hist-wr-away-${index}`, playerName: "History Away WR", position: "WR", nflTeam: "PHI", lineupStatus: "starter", lineupSlot: "WR", fantasyPoints: 14.8 + index },
     { week: game.week, canonicalPlayerId: `hist-qb-away-${index}`, leagueTeamId: game.awayLeagueTeamId, providerPlayerId: `hist-qb-away-${index}`, playerName: "History Away QB", position: "QB", nflTeam: "KC", lineupStatus: "starter", lineupSlot: "QB", fantasyPoints: 27.4 + index },
+    { week: game.week, canonicalPlayerId: `hist-flex-away-${index}`, leagueTeamId: game.awayLeagueTeamId, providerPlayerId: `hist-flex-away-${index}`, playerName: "History Away FLEX", position: "RB", nflTeam: "SF", lineupStatus: "starter", lineupSlot: "FLEX", fantasyPoints: 17.6 + index },
     { week: game.week, canonicalPlayerId: `hist-rb-away-${index}`, leagueTeamId: game.awayLeagueTeamId, providerPlayerId: `hist-rb-away-${index}`, playerName: "History Away RB", position: "RB", nflTeam: "DET", lineupStatus: "starter", lineupSlot: "RB", fantasyPoints: 21.2 + index },
+    { week: game.week, canonicalPlayerId: `hist-te-away-${index}`, leagueTeamId: game.awayLeagueTeamId, providerPlayerId: `hist-te-away-${index}`, playerName: "History Away TE", position: "TE", nflTeam: "LV", lineupStatus: "starter", lineupSlot: "TE", fantasyPoints: 10.1 + index },
     { week: game.week, canonicalPlayerId: `hist-qb-home-${index}`, leagueTeamId: game.homeLeagueTeamId, providerPlayerId: `hist-qb-home-${index}`, playerName: "History Home QB", position: "QB", nflTeam: "BUF", lineupStatus: "starter", lineupSlot: "QB", fantasyPoints: 31.1 + index },
     { week: game.week, canonicalPlayerId: `hist-rb-home-${index}`, leagueTeamId: game.homeLeagueTeamId, providerPlayerId: `hist-rb-home-${index}`, playerName: "History Home RB", position: "RB", nflTeam: "MIA", lineupStatus: "starter", lineupSlot: "RB", fantasyPoints: 18.9 + index },
   ]);
-  return [{ id: "history-season-smoke-2025", season: 2025, provider: "sleeper", providerLeagueId: leagueId, leagueName: "History Smoke", teamCount: historyTeams.length, teams: historyTeams, games, playerRows }];
+  return [{ id: "history-season-smoke-2025", season: 2025, provider: "sleeper", providerLeagueId: leagueId, leagueName: "History Smoke", teamCount: historyTeams.length, rosterPositions: ["QB", "RB", "WR", "TE", "FLEX"], regularSeasonWeekCount: 14, playoffSettings: { playoff_teams: 4, playoff_week_start: 15 }, teams: historyTeams, games, playerRows }];
 }
 
 function recapSmokeSchedule(id: string, finalWeek: boolean): GeneratedSchedule {
@@ -617,7 +633,11 @@ async function screenshotMvt(browser: Browser, name: string, schedule: Generated
     await expectText(page.locator(".matchup-ratings-view"), /Games shown.*10/s, `${name}: matchup ratings uses historical game count`);
     await page.locator(".workspace-rail nav").getByRole("button", { name: /playoffs/i }).click();
     await expectText(page.locator(".workspace-breadcrumb"), /2025/s, `${name}: historical season carries into playoffs`);
-    await expectText(page.locator(".workspace-content"), /Projected|Live|Playoffs/s, `${name}: playoffs renders for historical season`);
+    await expectText(page.locator(".workspace-content"), /Final|Live|Playoffs/s, `${name}: playoffs renders recorded historical games`);
+    await page.locator(".main-playoff-game.is-openable header").first().click();
+    await expectText(page.locator(".game-detail-modal"), /Semifinal|Championship|Round/s, `${name}: historical playoff game opens in the modal`);
+    await expectText(page.locator(".game-detail-modal"), /History Away QB.*History Away RB.*History Away WR.*History Away TE.*History Away FLEX/s, `${name}: historical playoff roster follows standard slot order`);
+    await page.getByRole("button", { name: /close game detail/i }).click();
     await page.locator(".workspace-rail nav").getByRole("button", { name: /team schedule/i }).click();
     await expectText(page.locator(".workspace-breadcrumb"), /2025/s, `${name}: historical season carries into team schedule`);
     await expectText(page.locator(".workspace-content"), /245\.70|Harbor|Phoenix|Baltimore/s, `${name}: team schedule uses historical season data`);
@@ -626,6 +646,7 @@ async function screenshotMvt(browser: Browser, name: string, schedule: Generated
     await expectText(page.locator(".history-readonly-pill"), /Provider history/s, `${name}: historical schedule is read-only provider history`);
     await page.locator(".matchup-card.is-openable").first().locator(".matchup-score").click();
     await expectText(page.locator(".game-detail-modal"), /History Away QB.*History Home QB/s, `${name}: historical game opens its saved roster detail`);
+    await expectText(page.locator(".game-detail-modal"), /History Away QB.*History Away RB.*History Away WR.*History Away TE.*History Away FLEX/s, `${name}: historical regular roster follows standard slot order`);
     await page.getByRole("button", { name: /next game/i }).click();
     await expectText(page.locator(".game-detail-modal"), /History Away QB.*History Home QB/s, `${name}: historical game modal can navigate the week`);
     await page.getByRole("button", { name: /close game detail/i }).click();
