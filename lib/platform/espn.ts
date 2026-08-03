@@ -15,6 +15,18 @@ export interface EspnAuthInput {
 export interface EspnMember { id: string; displayName?: string; firstName?: string; lastName?: string }
 interface EspnTeamRecord { overall?: { wins?: number; losses?: number; ties?: number; pointsFor?: number } }
 export interface EspnTeam { id: number; name?: string; location?: string; nickname?: string; abbrev?: string; logo?: string; primaryOwner?: string; owners?: string[]; divisionId?: number; playoffSeed?: number; rankCalculatedFinal?: number; rankFinal?: number; record?: EspnTeamRecord }
+export interface EspnScheduleSettings {
+  divisions?: Array<{ id: number; name?: string; size?: number }>;
+  matchupPeriodCount?: number;
+  matchupPeriodLength?: number;
+  playoffMatchupPeriodLength?: number;
+  playoffReseed?: boolean;
+  playoffSeedingRule?: string;
+  playoffSeedingRuleBy?: number;
+  playoffTeamCount?: number;
+  variablePlayoffMatchupPeriodLength?: boolean;
+}
+
 export interface EspnLeague {
   id: number;
   seasonId?: number;
@@ -22,7 +34,7 @@ export interface EspnLeague {
   teams?: EspnTeam[];
   schedule?: EspnMatchup[];
   draftDetail?: { drafted?: boolean; inProgress?: boolean; picks?: unknown[] };
-  settings?: { name?: string; scheduleSettings?: { divisions?: Array<{ id: number; name?: string }> }; rosterSettings?: { lineupSlotCounts?: Record<string, number> } };
+  settings?: { name?: string; scheduleSettings?: EspnScheduleSettings; rosterSettings?: { lineupSlotCounts?: Record<string, number> } };
   transactions?: EspnTransactionPayload[];
 }
 

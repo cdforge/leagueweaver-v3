@@ -6400,6 +6400,12 @@ export function SeasonWorkspace({
           ),
         );
       await loadImportHistory();
+      if (
+        selectedHistorySeason &&
+        !payload.availableHistoryYears?.includes(selectedHistorySeason.season)
+      ) {
+        setHistorySeasonKey(String(selectedHistorySeason.season));
+      }
       const years = payload.availableHistoryYears?.length
         ? ` ${payload.availableHistoryYears.join(", ")}.`
         : ".";
@@ -7037,7 +7043,7 @@ export function SeasonWorkspace({
     window.history.replaceState(
       null,
       "",
-      `/season/${schedule.id}${query ? `?${query}` : ""}${window.location.hash}`,
+      `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
     );
   };
   const historySeasonParam =

@@ -319,8 +319,31 @@ function espnMemberName(league: EspnLeague, team: NonNullable<EspnLeague["teams"
 }
 
 function espnRegularSeasonWeeks(league: EspnLeague) {
-  const setting = (league.settings?.scheduleSettings as { matchupPeriodCount?: unknown; playoffMatchupPeriodLength?: unknown } | undefined)?.matchupPeriodCount;
+  const setting = league.settings?.scheduleSettings?.matchupPeriodCount;
   return boundedWeek(setting) ?? Math.max(0, ...(league.schedule ?? []).map((matchup) => matchup.matchupPeriodId).filter((week) => week >= 1 && week <= 18));
+}
+
+function espnPlayoffSettings(league: EspnLeague) {
+  const settings = league.settings?.scheduleSettings;
+  const regularWeeks = espnRegularSeasonWeeks(league);
+  const maxWeek = Math.max(0, ...(league.schedule ?? []).map((matchup) => matchup.matchupPeriodId).filter((week) => week >= 1 && week <= 18));
+  const playoffWeekStart = regularWeeks ? regularWeeks + 1 : null;
+  return {
+    playoff_teams: numberValue(settings?.playoffTeamCount),
+    playoff_week_start: playoffWeekStart && playoffWeekStart <= 18 ? playoffWeekStart : null,
+    playoff_weeks: regularWeeks && maxWeek > regularWeeks ? maxWeek - regularWeeks : null,
+    playoff_matchup_period_length: numberValue(settings?.playoffMatchupPeriodLength),
+    playoff_reseed: settings?.playoffReseed ?? null,
+    playoff_seeding_rule: settings?.playoffSeedingRule ?? null,
+    playoff_seeding_rule_by: numberValue(settings?.playoffSeedingRuleBy),
+    matchup_period_length: numberValue(settings?.matchupPeriodLength),
+    variable_playoff_matchup_period_length: settings?.variablePlayoffMatchupPeriodLength ?? null,
+    divisions: (settings?.divisions ?? []).map((division) => ({
+      id: division.id,
+      name: division.name ?? null,
+      size: numberValue(division.size),
+    })),
+  };
 }
 
 export function buildEspnLeagueHistoryDraft(scheduleId: string, seasons: EspnHistorySeasonPayload[]): LeagueHistoryDraft {
@@ -351,7 +374,7 @@ export function buildEspnLeagueHistoryDraft(scheduleId: string, seasons: EspnHis
       league_name: league.settings?.name || `ESPN ${season}`,
       scoring_type: "head_to_head",
       roster_positions: Object.entries(league.settings?.rosterSettings?.lineupSlotCounts ?? {}).flatMap(([slot, count]) => Array.from({ length: Number(count) || 0 }, () => slot)),
-      playoff_settings: {},
+      playoff_settings: espnPlayoffSettings(league),
       regular_season_week_count: regularWeeks || null,
       team_count: teams.length,
     });

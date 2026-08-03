@@ -36,6 +36,8 @@ assert.ok(draft.playerCatalog.length > 120, "player_catalog rows generated for o
 assert.deepEqual(draft.champions.map((champion) => `${champion.season}:${champion.wins}-${champion.losses}`), ["2022:14-4", "2021:17-1"], "past champions derived from final standings");
 assert.deepEqual(espnDraft.leagueSeasons.map((season) => `${season.provider}:${season.provider_league_id}:${season.season}`), ["espn:11593953:2025"], "ESPN history captures the Prodigies vs Esteemed league season");
 assert.ok(espnDraft.leagueSeasons[0].regular_season_week_count != null, "ESPN history stores regular-season matchup count");
+assert.equal(espnDraft.leagueSeasons[0].playoff_settings.playoff_teams, 6, "ESPN history stores playoff field size");
+assert.equal(espnDraft.leagueSeasons[0].playoff_settings.playoff_week_start, 15, "ESPN history stores playoff start week");
 assert.equal(espnDraft.teamHistory.length, 10, "ESPN history captures 10 league teams");
 assert.ok(espnDraft.scheduleHistory.length > 0, "ESPN history captures matchup rows");
 assert.ok(espnDraft.ownershipHistory.length > 100, "ESPN history captures player ownership rows from platform-scored entries");
