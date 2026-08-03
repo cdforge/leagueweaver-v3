@@ -1,0 +1,47 @@
+name: CI
+
+# Authoritative gate for auto-merge. Branch protection on the integration branch
+# must REQUIRE this "ci" check to pass. Nothing merges unless typecheck + build + tests are green.
+
+on:
+  pull_request:
+  push:
+    branches: [feat/player-data-awards]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
+      - name: Tests (engine/stats/awards matrices — golden fixtures)
+        run: npm test
+      - name: Install Playwright browser
+        run: npx playwright install chromium
+      # UI issues add a Playwright smoke that renders the page and uploads a screenshot artifact.
+      # Guarded so it no-ops until TEST-0 adds the script.
+      - name: UI smoke (optional)
+        run: npm run test:ui --if-present
+      - name: Upload UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots
+          path: artifacts/screenshots/
+          if-no-files-found: ignore

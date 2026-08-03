@@ -141,12 +141,14 @@ export function SimulatorWorkspace({
 
   useEffect(() => {
     if (focusGameId && findGame(schedule, focusGameId)) return;
-    setFocusGameId(firstUnplayed?.id || lastSandboxGameId || "");
+    queueMicrotask(() => setFocusGameId(firstUnplayed?.id || lastSandboxGameId || ""));
   }, [firstUnplayed?.id, focusGameId, lastSandboxGameId, schedule]);
   useEffect(() => {
     if (!focusGame) return;
-    setHomeScore(focusGame.homeScore ?? 120);
-    setAwayScore(focusGame.awayScore ?? 110);
+    queueMicrotask(() => {
+      setHomeScore(focusGame.homeScore ?? 120);
+      setAwayScore(focusGame.awayScore ?? 110);
+    });
   }, [focusGame?.id, focusGame?.homeScore, focusGame?.awayScore]);
 
   const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));

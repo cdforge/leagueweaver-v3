@@ -1,4 +1,8 @@
 import "server-only";
+import { buildEspnLeagueHistoryDraft, espnPublicUnreliableHistoryYears, type LeagueHistoryDraft } from "@/lib/platform/history";
+import { deriveEspnTemplates, mapEspnPlayerWeekStats, type EspnMatchupPayload, type EspnPlayerEntryPayload, type LineupTemplate, type PlayerWeekStat, type RosterTemplate } from "@/lib/playerData";
+import { mapEspnTransactions, type EspnTransactionPayload, type NormalizedTransaction } from "@/lib/transactions";
+import { fetchProviderJson } from "./request";
 import type { GeneratedSchedule, ImportDataFound, PlatformSyncResult, PlatformSyncScoreRow, PriorSeasonFinishEntry } from "@/lib/types";
 
 const ESPN_BASE = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl";
@@ -18,11 +22,13 @@ export interface EspnLeague {
   teams?: EspnTeam[];
   schedule?: EspnMatchup[];
   draftDetail?: { drafted?: boolean; inProgress?: boolean; picks?: unknown[] };
-  settings?: { name?: string; scheduleSettings?: { divisions?: Array<{ id: number; name?: string }> } };
+  settings?: { name?: string; scheduleSettings?: { divisions?: Array<{ id: number; name?: string }> }; rosterSettings?: { lineupSlotCounts?: Record<string, number> } };
+  transactions?: EspnTransactionPayload[];
 }
 
 interface EspnMatchupTeam { teamId?: number; totalPoints?: number }
-interface EspnMatchup { id: number; matchupPeriodId: number; home?: EspnMatchupTeam; away?: EspnMatchupTeam }
+interface EspnMatchupSide extends EspnMatchupTeam { rosterForCurrentScoringPeriod?: { entries?: EspnPlayerEntryPayload[] } }
+interface EspnMatchup { id: number; matchupPeriodId: number; home?: EspnMatchupSide; away?: EspnMatchupSide }
 
 export function parseEspnLeagueId(identifier: string) {
   if (/^\d{4,}$/.test(identifier)) return identifier;
@@ -40,13 +46,14 @@ function espnHeaders(auth?: EspnAuthInput) {
   return headers;
 }
 
-export async function fetchEspnLeague(leagueId: string, seasonYear: number, views: string[], auth?: EspnAuthInput) {
-  const viewQuery = views.map((view) => `view=${encodeURIComponent(view)}`).join("&");
-  const response = await fetch(`${ESPN_BASE}/seasons/${seasonYear}/segments/0/leagues/${leagueId}?${viewQuery}`, {
-    headers: espnHeaders(auth),
-    cache: "no-store",
-  });
-  const league = await response.json().catch(() => null) as (EspnLeague & { messages?: string[]; details?: { message?: string }[] }) | null;
+export async function fetchEspnLeague(leagueId: string, seasonYear: number, views: string[], auth?: EspnAuthInput, params?: Record<string, string | number>) {
+  const searchParams = new URLSearchParams();
+  for (const view of views) searchParams.append("view", view);
+  for (const [key, value] of Object.entries(params ?? {})) searchParams.set(key, String(value));
+  const { response, json: league } = await fetchProviderJson<EspnLeague & { messages?: string[]; details?: { message?: string }[] }>(
+    `${ESPN_BASE}/seasons/${seasonYear}/segments/0/leagues/${leagueId}?${searchParams}`,
+    { headers: espnHeaders(auth) },
+  );
   if (!response.ok || league?.messages?.length || league?.details?.length) {
     const message = league?.messages?.[0] || league?.details?.[0]?.message || "We couldn't load that ESPN league.";
     throw new Error(message);
@@ -57,15 +64,17 @@ export async function fetchEspnLeague(leagueId: string, seasonYear: number, view
 export async function scanEspnHistory(leagueId: string, seasonYear: number, auth?: EspnAuthInput): Promise<ImportDataFound> {
   const startYear = Math.max(2017, seasonYear - 8);
   const years = Array.from({ length: seasonYear - startYear + 1 }, (_, index) => startYear + index);
-  const results = await Promise.allSettled(years.map(async (year) => {
+  const publicUnreliableYears = auth ? [] : espnPublicUnreliableHistoryYears(seasonYear);
+  const queryYears = years.filter((year) => !publicUnreliableYears.includes(year));
+  const results = await Promise.allSettled(queryYears.map(async (year) => {
     const league = await fetchEspnLeague(leagueId, year, ["mTeam", "mStandings", "mDraftDetail"], auth);
     return { year, league };
   }));
   const availableHistoryYears: number[] = [];
-  const blockedHistoryYears: number[] = [];
+  const blockedHistoryYears: number[] = [...publicUnreliableYears];
   let hasDraftData = false;
   for (const result of results) {
-    const year = years[results.indexOf(result)];
+    const year = queryYears[results.indexOf(result)];
     if (result.status === "fulfilled") {
       availableHistoryYears.push(result.value.year);
       hasDraftData ||= Boolean(result.value.league.draftDetail?.picks?.length);
@@ -78,9 +87,28 @@ export async function scanEspnHistory(leagueId: string, seasonYear: number, auth
     blockedHistoryYears,
     hasDraftData,
     hasRosterData: false,
-    hasPlayerData: false,
+    hasPlayerData: true,
     hasScoreSync: true,
   };
+}
+
+export async function collectEspnLeagueHistory(scheduleId: string, leagueId: string, seasonYear: number, auth?: EspnAuthInput): Promise<LeagueHistoryDraft> {
+  const dataFound = await scanEspnHistory(leagueId, seasonYear, auth);
+  const years = dataFound.availableHistoryYears.filter((year) => year <= seasonYear);
+  const results = await Promise.allSettled(years.map(async (year) => {
+    const league = await fetchEspnLeague(leagueId, year, ["mTeam", "mStandings", "mSettings", "mMatchup", "mScoreboard"], auth);
+    const weeks = [...new Set((league.schedule ?? []).map((matchup) => matchup.matchupPeriodId).filter((week) => week >= 1 && week <= 18))];
+    const playerWeekResults = await Promise.allSettled(weeks.map((week) => fetchEspnLeague(leagueId, year, ["mMatchup", "mRoster", "mBoxscore"], auth, { scoringPeriodId: week })));
+    return {
+      league,
+      playerWeeks: playerWeekResults.flatMap((result) => result.status === "fulfilled" ? [result.value] : []),
+      playerWarnings: playerWeekResults.flatMap((result, index) => result.status === "rejected" ? [`ESPN ${year} Week ${weeks[index]} player rows could not be loaded.`] : []),
+    };
+  }));
+  const seasons = results.flatMap((result) => result.status === "fulfilled" ? [{ league: result.value.league, playerWeeks: result.value.playerWeeks }] : []);
+  const warnings = results.flatMap((result, index) => result.status === "fulfilled" ? result.value.playerWarnings : [`ESPN ${years[index]} history rows could not be loaded.`]);
+  const draft = buildEspnLeagueHistoryDraft(scheduleId, seasons);
+  return { ...draft, warnings: [...draft.warnings, ...warnings] };
 }
 
 function positiveRank(value?: number) {
@@ -157,4 +185,36 @@ export function mapEspnScores(schedule: GeneratedSchedule, league: EspnLeague): 
     }
   }
   return { rows, unmatched, warnings: unmatched.length ? ["Some weeks had no ESPN scores yet — refresh once those fantasy weeks are final."] : [], syncedAt: new Date().toISOString() };
+}
+
+export function mapEspnPlayers(schedule: GeneratedSchedule, league: EspnLeague, opts?: { weeks?: number[] }): PlayerWeekStat[] {
+  const connection = schedule.setup.platformConnection;
+  const leagueId = connection?.providerLeagueId || String(league.id);
+  return mapEspnPlayerWeekStats({
+    scheduleId: schedule.id,
+    providerLeagueId: leagueId,
+    season: league.seasonId ?? connection?.seasonYear ?? new Date().getFullYear(),
+    teams: schedule.setup.teams,
+    schedule: (league.schedule ?? []) as EspnMatchupPayload[],
+    weeks: opts?.weeks,
+  });
+}
+
+export function mapEspnTemplates(league: EspnLeague): { lineupTemplate: LineupTemplate; rosterTemplate: RosterTemplate } {
+  return deriveEspnTemplates({
+    season: league.seasonId ?? new Date().getFullYear(),
+    lineupSlotCounts: league.settings?.rosterSettings?.lineupSlotCounts ?? {},
+  });
+}
+
+export async function fetchEspnTransactions(schedule: GeneratedSchedule, week: number): Promise<{ rows: NormalizedTransaction[]; warnings: string[] }> {
+  const connection = schedule.setup.platformConnection;
+  if (!connection?.providerLeagueId) throw new Error("This season is not connected to ESPN.");
+  const league = await fetchEspnLeague(connection.providerLeagueId, connection.seasonYear, ["mTransactions2"], undefined, { scoringPeriodId: week });
+  return mapEspnTransactions({
+    providerLeagueId: connection.providerLeagueId,
+    week,
+    teams: schedule.setup.teams,
+    transactions: league.transactions,
+  });
 }

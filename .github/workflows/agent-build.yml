@@ -1,0 +1,95 @@
+name: Agent Build
+
+# Autonomous issue-driven build. Label an issue `agent:build` → Claude implements it on a
+# branch off feat/player-data-awards, self-verifies, opens a PR, and enables auto-merge.
+# The PR only merges when the required "ci" check (ci.yml) is green — CI is the definition of done.
+#
+# PREREQS (repo owner, one-time): install the Claude GitHub App, add ANTHROPIC_API_KEY secret,
+# create branch protection on feat/player-data-awards requiring the "ci" check.
+# NOTE: verify claude-code-action input names against its current README before enabling.
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  gate:
+    # only run for the trigger label, and only when every blocker is closed
+    if: github.event.label.name == 'agent:build'
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.deps.outputs.ready }}
+    steps:
+      - name: Check blockers (label-gated dependency queue)
+        id: deps
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          body=$(gh issue view ${{ github.event.issue.number }} --repo ${{ github.repository }} --json body -q '.body')
+          # blockers are written as "blocked by:#NN" / "blocked-by:#NN" in the issue body
+          blockers=$(echo "$body" | grep -oiE 'blocked[- ]by:#[0-9]+' | grep -oE '[0-9]+' | sort -u)
+          ready=true
+          for n in $blockers; do
+            state=$(gh issue view "$n" --repo ${{ github.repository }} --json state -q '.state')
+            echo "blocker #$n = $state"
+            [ "$state" = "CLOSED" ] || ready=false
+          done
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+          if [ "$ready" != "true" ]; then
+            gh issue comment ${{ github.event.issue.number }} --repo ${{ github.repository }} \
+              --body "⏸️ Held: an open \`blocked-by\` issue must close first. Re-add \`agent:build\` when unblocked."
+            gh issue edit ${{ github.event.issue.number }} --repo ${{ github.repository }} --remove-label agent:build
+          fi
+
+  build:
+    needs: gate
+    if: needs.gate.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/player-data-awards
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+
+      - name: Implement issue with Claude (Sonnet)
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Sonnet by default to save tokens; add label `agent:opus` to escalate a hard issue.
+          claude_args: >-
+            --model ${{ contains(github.event.issue.labels.*.name, 'agent:opus') && 'claude-opus-4-8' || 'claude-sonnet-5' }}
+            --max-turns 40
+          prompt: |
+            Implement GitHub issue #${{ github.event.issue.number }} in this repo.
+            Read the issue body for the goal, acceptance checklist (with golden numbers), and the
+            "Insertion points" that name the exact files/symbols. **docs/AGENT-BACKLOG-player-data-awards.md
+            is the single self-contained source of truth** — its §B–§F Canon, Codebase Map, golden fixtures,
+            and QA protocol are law. Do not consult other docs to build a story.
+
+            RULES (non-negotiable):
+            - Branch off feat/player-data-awards named agent/issue-${{ github.event.issue.number }}.
+            - Do the SMALLEST change that satisfies the acceptance checklist. Do not expand scope.
+            - NO fake data. Do not hardcode PVE's roster/divisions/team count.
+            - Public ESPN/Sleeper only; platform-scored points only (no scoring engine).
+            - Do NOT weaken, skip, or delete existing tests to make things pass.
+            - Before opening the PR you MUST run and pass: `npm run typecheck && npm run build && npm test`.
+              If anything is red, fix it; if you cannot, open a DRAFT PR and comment what failed.
+            - Open a PR into feat/player-data-awards titled "<ISSUE-ID>: <goal>", body "Closes #${{ github.event.issue.number }}",
+              listing which acceptance boxes are met and the command output proving the golden numbers.
+
+      - name: Enable auto-merge (merges when required "ci" check is green)
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pr=$(gh pr list --repo ${{ github.repository }} --head agent/issue-${{ github.event.issue.number }} --json number -q '.[0].number')
+          if [ -n "$pr" ]; then gh pr merge "$pr" --repo ${{ github.repository }} --auto --squash; fi

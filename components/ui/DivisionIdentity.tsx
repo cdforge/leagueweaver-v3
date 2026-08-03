@@ -72,3 +72,31 @@ export function DivisionIdentity({ division, detail, iconOnly = false, className
     </span>
   );
 }
+
+export function ConferenceIdentity({ conference, detail, iconOnly = false, className = "" }: {
+  conference: Conference;
+  detail?: string;
+  iconOnly?: boolean;
+  className?: string;
+}) {
+  return (
+    <span
+      className={`division-identity conference-identity ${iconOnly ? "division-identity-icon" : ""} ${className}`}
+      aria-label={iconOnly ? `${conference.name} conference` : undefined}
+      title={iconOnly ? `${conference.name} conference` : undefined}
+    >
+      {iconOnly
+        ? <ConferenceMark conference={conference} />
+        : <EntityLogo
+            color={conference.color}
+            logoUrl={conference.logoUrl}
+            monogram={resolveInitials(conference.initials, conferenceAcronym(conference.name))}
+            size={32}
+          />}
+      {!iconOnly && <span>
+        <strong>{conference.name}</strong>
+        {detail && <small>{detail}</small>}
+      </span>}
+    </span>
+  );
+}

@@ -1,6 +1,7 @@
-import type { Conference, Division, LeagueSetupInput } from "./types";
+import type { Conference, Division, LeagueSetupInput, Team } from "./types";
 
 type SetupLike = Pick<LeagueSetupInput, "divisions"> & { conferences?: Conference[] };
+type SetupWithTeams = SetupLike & { teams: Team[] };
 
 /**
  * Conferences apply only to EVEN division counts (4/6/8): the divisions split evenly into
@@ -47,6 +48,32 @@ export function conferenceOfDivision(setup: SetupLike, divisionId: string): Conf
   return setup.conferences?.find((conference) => conference.id === division.conferenceId);
 }
 
+/** The conference id for a division, if conferences are active for this setup. */
+export function conferenceIdForDivision(divisions: Division[], divisionId: string): string | undefined {
+  return divisions.find((division) => division.id === divisionId)?.conferenceId;
+}
+
+/** Keep Team.conferenceId derived from Team.divisionId; remove it for non-conference leagues. */
+export function applyTeamConferenceIds<T extends Pick<Team, "divisionId"> & { conferenceId?: string }>(teams: T[], divisions: Division[]): T[] {
+  return teams.map((team) => {
+    const conferenceId = conferenceIdForDivision(divisions, team.divisionId);
+    if (conferenceId) return { ...team, conferenceId };
+    if (!("conferenceId" in team)) return team;
+    const teamWithoutConference = { ...team };
+    delete teamWithoutConference.conferenceId;
+    return teamWithoutConference;
+  });
+}
+
+/** Conference-first team groups for standings and awards surfaces. Empty when no conferences exist. */
+export function conferenceTeamGroups(setup: SetupWithTeams): Array<{ conference: Conference; teams: Team[] }> {
+  if (!hasConferences(setup)) return [];
+  return setup.conferences!.map((conference) => ({
+    conference,
+    teams: setup.teams.filter((team) => (team.conferenceId ?? conferenceIdForDivision(setup.divisions, team.divisionId)) === conference.id),
+  }));
+}
+
 /**
  * Default balanced assignment: the first half of the divisions go to conference A, the second
  * half to conference B (4→2+2, 6→3+3, 8→4+4). Used to seed the wizard step; the commissioner
@@ -56,6 +83,22 @@ export function defaultConferenceAssignment(divisions: Division[], conferences: 
   if (conferences.length !== 2) return divisions.map((division) => ({ ...division, conferenceId: undefined }));
   const half = Math.ceil(divisions.length / 2);
   return divisions.map((division, index) => ({ ...division, conferenceId: conferences[index < half ? 0 : 1].id }));
+}
+
+/** Preserve a valid assignment, create a balanced one when needed, and clear it otherwise. */
+export function reconcileConferenceSetup(divisions: Division[], conferences?: Conference[]): { divisions: Division[]; conferences?: Conference[] } {
+  if (!conferencesApply(divisions.length)) {
+    return { divisions: divisions.map((division) => ({ ...division, conferenceId: undefined })), conferences: undefined };
+  }
+  if (conferences?.length === 2) {
+    const assigned = divisions.every((division) => division.conferenceId && conferences.some((conference) => conference.id === division.conferenceId));
+    return { divisions: assigned ? divisions : defaultConferenceAssignment(divisions, conferences), conferences };
+  }
+  const nextConferences: Conference[] = [
+    { id: "conference-1", name: "Conference A", initials: "A", color: "#1D4ED8" },
+    { id: "conference-2", name: "Conference B", initials: "B", color: "#B42318" },
+  ];
+  return { divisions: defaultConferenceAssignment(divisions, nextConferences), conferences: nextConferences };
 }
 
 /** Whether a division→conference assignment is present and splits the divisions exactly in half. */

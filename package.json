@@ -8,14 +8,23 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "npm run test:engine && npm run test:playoffs && npm run test:stats && npm run test:mapping && npm run test:clinch && npm run test:scenarios",
+    "test": "npm run test:engine && npm run test:playoffs && npm run test:stats && npm run test:mapping && npm run test:clinch && npm run test:scenarios && npm run test:conference && npm run test:player-data && npm run test:player-parser && npm run test:lineup-template && npm run test:player-sync && npm run test:transactions && npm run test:awards && npm run test:game-detail && npm run test:history",
     "test:engine": "tsx scripts/engine-matrix.ts",
     "test:playoffs": "tsx scripts/playoff-matrix.ts",
     "test:stats": "tsx scripts/statistics-matrix.ts",
     "test:mapping": "tsx scripts/team-mapping-matrix.ts",
     "test:clinch": "tsx scripts/clinch-matrix.ts",
     "test:scenarios": "tsx scripts/scenarios-matrix.ts",
-    "test:mapping": "tsx scripts/team-mapping-matrix.ts"
+    "test:conference": "tsx scripts/conference-matrix.ts",
+    "test:player-data": "tsx scripts/player-data-matrix.ts",
+    "test:player-parser": "tsx scripts/player-parser-matrix.ts",
+    "test:lineup-template": "tsx scripts/lineup-template-matrix.ts",
+    "test:player-sync": "tsx scripts/player-sync-matrix.ts",
+    "test:transactions": "tsx scripts/transactions-matrix.ts",
+    "test:awards": "tsx scripts/awards-matrix.ts",
+    "test:game-detail": "tsx scripts/game-detail-matrix.ts",
+    "test:history": "tsx scripts/history-matrix.ts",
+    "test:ui": "tsx scripts/ui-smoke.ts"
   },
   "dependencies": {
     "@ai-sdk/gateway": "4.0.32",
@@ -41,6 +50,7 @@
     "@types/react-dom": "19.2.3",
     "eslint": "9.39.1",
     "eslint-config-next": "16.1.6",
+    "playwright": "^1.62.1",
     "tailwindcss": "4.1.18",
     "tsx": "4.21.0",
     "typescript": "5.9.3"

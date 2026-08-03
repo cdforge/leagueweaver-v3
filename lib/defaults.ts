@@ -1,4 +1,5 @@
 import type { Conference, Division, LeagueSetupInput, Team } from "./types";
+import { applyTeamConferenceIds } from "./conferences";
 import { entityMonogram, leagueAcronym } from "./monograms";
 import { createDefaultPlayoffSettings } from "./playoffs";
 import { normalizeTiebreakerSettings } from "./tiebreakers";
@@ -93,7 +94,7 @@ export function createConferences(count = 2): Conference[] {
 }
 
 export function createTeams(teamCount: number, divisions: Division[]): Team[] {
-  return Array.from({ length: teamCount }, (_, index) => ({
+  return applyTeamConferenceIds(Array.from({ length: teamCount }, (_, index) => ({
     id: `team-${index + 1}`,
     city: TEAM_CITIES[index],
     name: TEAM_NAMES[index],
@@ -103,7 +104,7 @@ export function createTeams(teamCount: number, divisions: Division[]): Team[] {
     divisionId: divisions[index % divisions.length].id,
     overallRank: index + 1,
     stadium: STADIUMS[index % STADIUMS.length],
-  }));
+  })), divisions);
 }
 
 export function createDefaultSetup(): LeagueSetupInput {

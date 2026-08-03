@@ -53,6 +53,8 @@ export interface Team {
   color: string;
   logoUrl?: string;
   divisionId: string;
+  /** Derived from the team's current division when conferences are present. */
+  conferenceId?: string;
   overallRank: number;
   draftPlace?: number;
   /** Last season's regular-season finish (1 = best), when imported from a connected league. */
@@ -360,6 +362,19 @@ export interface ImportHistoryEvent {
   seasonYear?: number;
   message?: string;
   revisionId?: string;
+}
+
+export interface PastChampion {
+  season: number;
+  provider: PlatformProvider;
+  providerLeagueId: string;
+  leagueName: string;
+  teamName: string;
+  managerName?: string;
+  wins?: number;
+  losses?: number;
+  ties?: number;
+  pointsFor?: number;
 }
 
 export interface SavedSeasonSummary {

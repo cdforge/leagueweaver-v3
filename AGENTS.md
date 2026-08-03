@@ -59,6 +59,14 @@ UX priorities:
 - Run `npm run build` after code changes.
 - Run focused tests only when they exist for the changed area.
 
+## Active Build — Player Data + Awards (Codex owns this)
+
+If the task is any of: player data collection, All-Stars, MVT, the Conference entity, standings award
+columns, or the game-detail roster body — **read `docs/CODEX-HANDOFF-player-data-awards.md` first**, then
+work the backlog `docs/AGENT-BACKLOG-player-data-awards.md` (the single self-contained spec: canon, data
+model, seams, golden fixtures, visual references, QA protocol, 17 stories, run order). Build one story at a
+time on `feat/player-data-awards`; done = the story's QA passes, never a typecheck alone.
+
 ## Known Missing Handoff Docs
 
 These docs were created because the user asked to establish them in this current folder:

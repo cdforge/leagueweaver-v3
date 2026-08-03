@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Award, Bell, BarChart3, CalendarDays, Check, Crown, LoaderCircle, ShieldCheck, SlidersHorizontal, Star, Trophy } from "lucide-react";
 import { BrandLockup } from "@/components/AppHeader";
 import { AdUnit } from "@/components/ads/AdUnit";
@@ -48,12 +49,17 @@ export function PublicScheduleView({ schedule, slug }: { schedule: GeneratedSche
 
   // Deep-link support: read/write the active tab from the URL without a full navigation.
   useEffect(() => {
+    let cancelled = false;
     const params = new URLSearchParams(window.location.search);
     const requested = params.get("view") as ShareTab | null;
     const requestedWeek = Number(params.get("week"));
-    if (requested && TABS.some((item) => item.key === requested)) setTab(requested);
-    if (Number.isInteger(requestedWeek) && schedule.weeks.some((item) => item.weekNumber === requestedWeek)) setWeekNumber(requestedWeek);
-  }, []);
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (requested && TABS.some((item) => item.key === requested)) setTab(requested);
+      if (Number.isInteger(requestedWeek) && schedule.weeks.some((item) => item.weekNumber === requestedWeek)) setWeekNumber(requestedWeek);
+    });
+    return () => { cancelled = true; };
+  }, [schedule.weeks]);
   const selectTab = (next: ShareTab) => {
     setTab(next);
     const url = new URL(window.location.href);
@@ -86,7 +92,7 @@ export function PublicScheduleView({ schedule, slug }: { schedule: GeneratedSche
   const leagueBand = <section className="public-league-band" style={{ borderColor: schedule.setup.color }}><EntityLogo size={58} color={schedule.setup.color} logoUrl={schedule.setup.logoUrl} monogram={resolveInitials(schedule.setup.initials, leagueAcronym(schedule.setup.name))} /><div><p>{schedule.setup.seasonYear} FANTASY SEASON</p><h1>{schedule.setup.name}</h1><span>{schedule.setup.description}</span></div></section>;
 
   const topbar = <header className="public-topbar"><BrandLockup /><span><ShieldCheck />Published by the commissioner</span></header>;
-  const footer = <footer className="public-footer">Powered by <a href="/">League Weaver</a></footer>;
+  const footer = <footer className="public-footer">Powered by <Link href="/">League Weaver</Link></footer>;
 
   if (!week) {
     return <main className="public-page">

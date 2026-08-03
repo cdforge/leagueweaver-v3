@@ -43,12 +43,13 @@ import { ImportLeagueModal, type ImportSource } from "@/components/imports/Impor
 import { useAuthModal } from "@/components/account/AuthModalProvider";
 import { createClient } from "@/lib/supabase/client";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { ConferenceMark } from "@/components/ui/DivisionIdentity";
 import { ConfirmDialog, Modal } from "@/components/ui/Modal";
 import { IdentityColorPicker } from "@/components/ui/IdentityColorPicker";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { createBlankSetup, createConferences, createDefaultSetup, createDivisions, createTeams } from "@/lib/defaults";
-import { conferencesApply, defaultConferenceAssignment, hasConferences } from "@/lib/conferences";
+import { applyTeamConferenceIds, conferencesApply, hasConferences, reconcileConferenceSetup } from "@/lib/conferences";
 import { identityFromSetup, normalizeSavedLeague } from "@/lib/savedLeagues";
 import { getNflWeeks, getNflWeekWindow, getWeekDateLabel } from "@/lib/schedule";
 import { generateScheduleAsync } from "@/lib/generateScheduleAsync";
@@ -553,14 +554,14 @@ function minSchedulableDivisions(teamCount: number): number {
 // shrinking, and repair any divisionId that no longer points at a live division.
 function resizeTeams(existing: Team[], nextCount: number, divisions: Division[]): Team[] {
   const template = createTeams(nextCount, divisions);
-  return Array.from({ length: nextCount }, (_, index) => {
+  return applyTeamConferenceIds(Array.from({ length: nextCount }, (_, index) => {
     const kept = existing[index];
     if (!kept) return template[index];
     const divisionId = divisions.some((division) => division.id === kept.divisionId)
       ? kept.divisionId
       : divisions[index % divisions.length].id;
     return { ...kept, overallRank: index + 1, divisionId };
-  });
+  }), divisions);
 }
 
 // Resize divisions WITHOUT discarding the user's named/colored/logo'd divisions:
@@ -605,10 +606,12 @@ function TeamsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInput; s
       const divisions = divisionCountSchedulable(next, current.divisions.length)
         ? current.divisions
         : resizeDivisions(current.divisions, minSchedulableDivisions(next));
+      const conferenceSetup = reconcileConferenceSetup(divisions, current.conferences);
       return {
         ...current,
-        divisions,
-        teams: resizeTeams(current.teams, next, divisions),
+        divisions: conferenceSetup.divisions,
+        conferences: conferenceSetup.conferences,
+        teams: resizeTeams(current.teams, next, conferenceSetup.divisions),
         priorSeason: { ...current.priorSeason, enabled: false, hasData: false, entryMode: "none" },
       };
     });
@@ -670,18 +673,24 @@ function DivisionsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInpu
     const conferences = even ? createConferences(2) : undefined;
     setSetup((current) => {
       const resized = resizeDivisions(current.divisions, count);
-      const divisions = even ? defaultConferenceAssignment(resized, conferences!) : resized.map((division) => ({ ...division, conferenceId: undefined }));
+      const conferenceSetup = reconcileConferenceSetup(resized, conferences);
+      const divisions = conferenceSetup.divisions;
       return {
         ...current,
         divisions,
-        conferences,
-        teams: current.teams.map((team, index) => ({ ...team, divisionId: divisions[index % count].id })),
+        conferences: conferenceSetup.conferences,
+        teams: applyTeamConferenceIds(current.teams.map((team, index) => ({ ...team, divisionId: divisions[index % count].id })), divisions),
         playoffs: { ...current.playoffs, placementMode: "auto", fieldStatus: "live", lockedTeamIds: [] },
       };
     });
   };
+  const updateConference = (id: string, patch: Partial<Conference>) => setSetup((current) => ({ ...current, conferences: current.conferences?.map((conference) => conference.id === id ? { ...conference, ...patch } : conference) }));
+  const assignDivisionConference = (divisionId: string, conferenceId: string) => setSetup((current) => {
+    const divisions = current.divisions.map((division) => division.id === divisionId ? { ...division, conferenceId } : division);
+    return { ...current, divisions, teams: applyTeamConferenceIds(current.teams, divisions) };
+  });
   const updateDivision = (id: string, patch: Partial<Division>) => setSetup((current) => ({ ...current, divisions: current.divisions.map((division) => division.id === id ? { ...division, ...patch } : division) }));
-  const updateTeam = (id: string, divisionId: string) => setSetup((current) => ({ ...current, teams: current.teams.map((team) => team.id === id ? { ...team, divisionId } : team) }));
+  const updateTeam = (id: string, divisionId: string) => setSetup((current) => ({ ...current, teams: applyTeamConferenceIds(current.teams.map((team) => team.id === id ? { ...team, divisionId } : team), current.divisions) }));
   const counts = setup.divisions.map((division) => setup.teams.filter((team) => team.divisionId === division.id).length);
   const balanced = Math.max(...counts) - Math.min(...counts) <= 1;
   return <div className="step-stack">
@@ -689,6 +698,16 @@ function DivisionsStep({ setup, setSetup, showErrors }: { setup: LeagueSetupInpu
     <div className="division-stage">
       <div className="compact-controls division-controls"><div><FieldLabel>Divisions</FieldLabel><div className="segmented segmented-wrap">{divisionCountOptions(setup.teams.length).map((count) => { const schedulable = divisionCountSchedulable(setup.teams.length, count); return <button key={count} type="button" disabled={!schedulable} title={schedulable ? undefined : `${setup.teams.length} teams can’t split into ${count} balanced divisions within a 14-week season`} className={setup.divisions.length === count ? "active" : ""} onClick={() => setDivisionCount(count)}>{count}</button>; })}</div></div><div className={`roster-status ${balanced ? "" : "warning"}`}>{balanced ? <Check /> : <CircleAlert />}<span><strong>{balanced ? "Balanced divisions" : "Divisions need rebalancing"}</strong><small>{counts.join(" · ")} teams</small></span></div></div>
       <div className="division-strip">{setup.divisions.map((division) => <div className="division-identity-edit" key={division.id}><IdentityColorPicker compact name={`${division.name} division`} abbreviation={resolveInitials(division.initials, divisionAcronym(division.name))} color={division.color} logoUrl={division.logoUrl} onChange={(next) => updateDivision(division.id, next)} /><div><input aria-label={`${division.name} division name`} aria-invalid={showErrors && !division.name.trim()} value={division.name} onChange={(event) => updateDivision(division.id, { name: event.target.value })} /><input aria-label={`${division.name} division initials override`} maxLength={4} placeholder={`Auto: ${divisionAcronym(division.name)}`} value={division.initials ?? ""} onChange={(event) => updateDivision(division.id, { initials: event.target.value || undefined })} /></div></div>)}</div>
+      {setup.conferences?.length === 2 && (() => {
+        const confCounts = setup.conferences.map((conference) => setup.divisions.filter((division) => division.conferenceId === conference.id).length);
+        const confBalanced = confCounts[0] === confCounts[1];
+        return <div className="conference-stage">
+          <div className="division-assign-head"><strong>Conferences</strong><span>Split the divisions into two balanced conferences — each becomes half of the playoff bracket.</span></div>
+          <div className="division-strip">{setup.conferences.map((conference) => <div className="division-identity-edit" key={conference.id}><IdentityColorPicker compact name={conference.name} abbreviation={resolveInitials(conference.initials, conference.name.slice(0, 3).toUpperCase())} color={conference.color} logoUrl={conference.logoUrl} onChange={(next) => updateConference(conference.id, next)} /><div><input aria-label={`${conference.name} name`} value={conference.name} onChange={(event) => updateConference(conference.id, { name: event.target.value })} /><input aria-label={`${conference.name} initials override`} maxLength={4} value={conference.initials ?? ""} onChange={(event) => updateConference(conference.id, { initials: event.target.value || undefined })} /></div></div>)}</div>
+          <div className={`roster-status ${confBalanced ? "" : "warning"}`}>{confBalanced ? <Check /> : <CircleAlert />}<span><strong>{confBalanced ? "Balanced conferences" : "Conferences need balancing"}</strong><small>{setup.conferences.map((conference, index) => <span className="conference-count-pill" key={conference.id}><ConferenceMark conference={conference} size={14} />{conference.name}: {confCounts[index]}</span>)}</small></span></div>
+          <div className="division-assignments"><div>{setup.divisions.map((division) => <div className="division-assign-row" key={division.id}><EntityLogo color={division.color} logoUrl={division.logoUrl} monogram={resolveInitials(division.initials, divisionAcronym(division.name))} /><span><strong>{division.name}</strong></span><CustomSelect label={`${division.name} conference`} value={division.conferenceId ?? ""} onChange={(conferenceId) => assignDivisionConference(division.id, conferenceId)} options={setup.conferences!.map((conference) => ({ value: conference.id, label: conference.name, swatch: conference.color, logoUrl: conference.logoUrl, monogram: resolveInitials(conference.initials, conference.name.slice(0, 3).toUpperCase()) }))} /></div>)}</div></div>
+        </div>;
+      })()}
       <div className="division-assignments"><div className="division-assign-head"><strong>Place each team</strong><span>Keep each division within one team of the others.</span></div><div>{setup.teams.map((team) => <div className="division-assign-row" key={team.id}><EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} /><span>{setup.display.cityNames && team.city && <small className="team-city">{team.city}</small>}<strong>{team.name}</strong>{setup.display.managers && <small>{team.manager || "No manager"}</small>}</span><CustomSelect label={`${teamDisplayName(team)} division`} value={team.divisionId} onChange={(divisionId) => updateTeam(team.id, divisionId)} options={setup.divisions.map((division) => ({ value: division.id, label: division.name, swatch: division.color, logoUrl: division.logoUrl, monogram: resolveInitials(division.initials, divisionAcronym(division.name)) }))} /></div>)}</div></div>
     </div>
   </div>;
@@ -1724,15 +1743,23 @@ export function LeagueBuilder() {
   };
 
   useEffect(() => {
+    let cancelled = false;
     if (new URLSearchParams(window.location.search).get("start") === "new") {
-      startNewLeague();
+      queueMicrotask(() => {
+        if (!cancelled) startNewLeague();
+      });
       const url = new URL(window.location.href);
       url.searchParams.delete("start");
       window.history.replaceState({}, "", url);
-      return;
+      return () => { cancelled = true; };
     }
     const stored = loadSetup();
-    if (stored) setSetup(stored);
+    if (stored) {
+      queueMicrotask(() => {
+        if (!cancelled) setSetup(stored);
+      });
+    }
+    return () => { cancelled = true; };
   }, []);
   useEffect(() => saveSetup(setup), [setup]);
   useEffect(() => {
@@ -1742,7 +1769,7 @@ export function LeagueBuilder() {
     track.scrollTo({ left: activeStep.offsetLeft - (track.clientWidth - activeStep.offsetWidth) / 2, behavior: "smooth" });
   }, [step]);
   useEffect(() => {
-    setShowFieldErrors(false);
+    queueMicrotask(() => setShowFieldErrors(false));
     if (!stepMountedRef.current) { stepMountedRef.current = true; return; }
     builderContentRef.current?.focus({ preventScroll: true });
   }, [step]);
@@ -1768,7 +1795,7 @@ export function LeagueBuilder() {
   useEffect(() => {
     const importParam = new URLSearchParams(window.location.search).get("import");
     if (importParam !== "espn" && importParam !== "sleeper" && importParam !== "csv") return;
-    setImportSource(importParam);
+    queueMicrotask(() => setImportSource(importParam));
     const url = new URL(window.location.href);
     url.searchParams.delete("import");
     window.history.replaceState({}, "", url);
@@ -2045,12 +2072,14 @@ export function LeagueBuilder() {
     const divisionCount = divisionCountSchedulable(preview.teams.length, importedDivisionCount)
       ? importedDivisionCount
       : minSchedulableDivisions(preview.teams.length);
-    const divisions = createDivisions(divisionCount).map((division, index) => ({
+    const baseDivisions = createDivisions(divisionCount).map((division, index) => ({
       ...division,
       name: importedDivisionNames[index] || division.name,
     }));
+    const conferenceSetup = reconcileConferenceSetup(baseDivisions, divisionCount >= 4 && divisionCount % 2 === 0 ? createConferences(2) : undefined);
+    const divisions = conferenceSetup.divisions;
     const divisionByName = new Map(divisions.map((division) => [division.name.toLowerCase(), division.id]));
-    const teams = preview.teams.map((team, index): Team => {
+    const teams = applyTeamConferenceIds(preview.teams.map((team, index): Team => {
       const name = team.name.trim() || `Team ${index + 1}`;
       return {
         id: `team-${index + 1}`,
@@ -2067,7 +2096,7 @@ export function LeagueBuilder() {
         priorPlayoffRank: team.playoffRank,
         stadium: team.stadium?.trim() || `${name} Stadium`,
       };
-    });
+    }), divisions);
     setSetup((current) => {
       const leagueName = preview.leagueName?.trim() || current.name.trim() || "Imported league";
       return {
@@ -2079,6 +2108,7 @@ export function LeagueBuilder() {
         logoUrl: preview.leagueLogoUrl || current.logoUrl,
         seasonYear: preview.seasonYear || current.seasonYear,
         divisions,
+        conferences: conferenceSetup.conferences,
         teams,
         platformConnection: preview.provider === "espn" || preview.provider === "sleeper" ? {
           provider: preview.provider,

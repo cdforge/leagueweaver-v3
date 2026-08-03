@@ -47,7 +47,7 @@ export function PublicTeamScheduleView({ schedule, slug, teamId }: { schedule: G
           <TeamScheduleView
             schedule={schedule}
             teamId={teamId}
-            readOnly
+            readOnlyHistory
             onSelectTeam={(nextTeamId) => {
               if (nextTeamId) router.push(`${base}/team/${nextTeamId}`);
               else router.push(`${base}?view=standings`);
@@ -55,7 +55,7 @@ export function PublicTeamScheduleView({ schedule, slug, teamId }: { schedule: G
             onSelectWeek={(week) => router.push(`${base}?view=week&week=${week}`)}
           />
         </div>
-        <footer className="public-footer">Powered by <a href="/">League Weaver</a></footer>
+        <footer className="public-footer">Powered by <Link href="/">League Weaver</Link></footer>
       </main>
     </RouteBaseProvider>
   );

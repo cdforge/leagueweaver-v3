@@ -50,7 +50,16 @@ export function TeamIdentityBlock({ team, division, leagueRank, record, showCity
   </>;
   const className = `team-identity-block ${compact ? "compact" : ""} ${mirrored ? "mirrored" : ""} ${showRecord ? "" : "without-record"} ${stacked ? "variant-stacked" : ""} result-${result}`;
   const style = { "--team-text": teamText, ...(stacked ? { "--team-raw": team.color } : {}) } as React.CSSProperties;
-  return href ? <Link className={`${className} is-link`} style={style} href={href} aria-label={`Open ${team.city ? `${team.city} ` : ""}${team.name} schedule`}>{content}</Link> : <div className={className} style={style}>{content}</div>;
+  return href
+    ? <Link
+      className={`${className} is-link`}
+      style={style}
+      href={href}
+      aria-label={`Open ${team.city ? `${team.city} ` : ""}${team.name} schedule`}
+      title={`Open ${team.name} schedule`}
+      onClick={(event) => event.stopPropagation()}
+    >{content}</Link>
+    : <div className={className} style={style}>{content}</div>;
 }
 
 export function MatchupRatingLegend() {
@@ -158,7 +167,11 @@ function GameDetails({ game }: { game: ScheduledGame }) {
   </div>;
 }
 
-export function MatchupCard({ game, away, home, awayDivision, homeDivision, setup, awayRank, homeRank, awayRecord, homeRecord, signal, featured, featuredLabel = "GOTW", gameLabel, dateLabel, showCity, showVenue, variant = "standard", teamHrefBase, badges = [], medalRank, medalLabel, highlighted = false, simulationSource, simulationLocked = false, winProbability, projected = false }: {
+function isInteractiveTarget(target: EventTarget | null) {
+  return target instanceof HTMLElement && Boolean(target.closest("a, button, input, select, textarea, summary"));
+}
+
+export function MatchupCard({ game, away, home, awayDivision, homeDivision, setup, awayRank, homeRank, awayRecord, homeRecord, signal, featured, featuredLabel = "GOTW", gameLabel, dateLabel, showCity, showVenue, variant = "standard", teamHrefBase, teamHrefFor, badges = [], medalRank, medalLabel, highlighted = false, simulationSource, simulationLocked = false, winProbability, projected = false, onOpenGame }: {
   game: ScheduledGame;
   away: Team;
   home: Team;
@@ -179,6 +192,7 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, setu
   showVenue: boolean;
   variant?: "standard" | "gotw";
   teamHrefBase?: string;
+  teamHrefFor?: (teamId: string) => string;
   badges?: GameBadge[];
   medalRank?: number;
   medalLabel?: string;
@@ -187,6 +201,7 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, setu
   simulationLocked?: boolean;
   winProbability?: { away: number; home: number };
   projected?: boolean;
+  onOpenGame?: (gameId: string) => void;
 }) {
   // A 0-0 "score" is never a real fantasy result — treat it as not-yet-played so an
   // unstarted season reads as scheduled/projected instead of a fake FINAL 0-0.
@@ -197,7 +212,23 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, setu
   const hasAdditionalDetails = Boolean(game.dateTimeOverride || game.rescheduleStatus || game.specialEvent || game.notes?.length || game.tbdReason);
   const awayResult = !played ? "open" : game.awayScore! > game.homeScore! ? "winner" : game.awayScore! < game.homeScore! ? "loser" : "open";
   const homeResult = !played ? "open" : game.homeScore! > game.awayScore! ? "winner" : game.homeScore! < game.awayScore! ? "loser" : "open";
-  return <article id={game.id} className={`matchup-card ${featured ? "is-gotw" : ""} ${highlighted ? "is-stat-highlight" : ""} ${showProjected ? "is-projected" : ""} ${simulationSource ? `is-simulated simulation-${simulationSource}` : ""} matchup-card-${variant}`}>
+  const openLabel = `Open box score for ${away.name} at ${home.name}`;
+  const teamHref = (teamId: string) => teamHrefFor ? teamHrefFor(teamId) : teamHrefBase ? `${teamHrefBase}/${teamId}` : undefined;
+  return <article
+    id={game.id}
+    className={`matchup-card ${onOpenGame ? "is-openable" : ""} ${featured ? "is-gotw" : ""} ${highlighted ? "is-stat-highlight" : ""} ${showProjected ? "is-projected" : ""} ${simulationSource ? `is-simulated simulation-${simulationSource}` : ""} matchup-card-${variant}`}
+    role={onOpenGame ? "button" : undefined}
+    tabIndex={onOpenGame ? 0 : undefined}
+    aria-label={onOpenGame ? openLabel : undefined}
+    onClick={(event) => { if (onOpenGame && !isInteractiveTarget(event.target)) onOpenGame(game.id); }}
+    onKeyDown={(event) => {
+      if (!onOpenGame || isInteractiveTarget(event.target)) return;
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onOpenGame(game.id);
+      }
+    }}
+  >
     <div className="matchup-card-badges">
       <div className="matchup-card-chips">
         {featured && <span className="gotw-chip"><Star fill="currentColor" /><strong>{featuredLabel}</strong></span>}
@@ -222,7 +253,7 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, setu
       {/* Each team wraps with an inline score (ESPN-style, shown ≤560px); the
           center score stays for desktop. Both read from the same game data. */}
       <div className="matchup-team-row">
-        <TeamIdentityBlock team={away} division={awayDivision} leagueRank={awayRank} record={awayRecord} showCity={showCity} result={awayResult} href={teamHrefBase ? `${teamHrefBase}/${away.id}` : undefined} />
+        <TeamIdentityBlock team={away} division={awayDivision} leagueRank={awayRank} record={awayRecord} showCity={showCity} result={awayResult} href={teamHref(away.id)} />
         {!showProjected && <span className="matchup-row-score"><strong className={awayResult === "loser" ? "loser" : ""}>{played ? formatPoints(game.awayScore ?? 0) : "—"}</strong></span>}
       </div>
       {showProjected ? (
@@ -242,7 +273,7 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, setu
         </div>
       )}
       <div className="matchup-team-row">
-        <TeamIdentityBlock mirrored team={home} division={homeDivision} leagueRank={homeRank} record={homeRecord} showCity={showCity} result={homeResult} href={teamHrefBase ? `${teamHrefBase}/${home.id}` : undefined} />
+        <TeamIdentityBlock mirrored team={home} division={homeDivision} leagueRank={homeRank} record={homeRecord} showCity={showCity} result={homeResult} href={teamHref(home.id)} />
         {!showProjected && <span className="matchup-row-score"><strong className={homeResult === "loser" ? "loser" : ""}>{played ? formatPoints(game.homeScore ?? 0) : "—"}</strong></span>}
       </div>
     </div>
