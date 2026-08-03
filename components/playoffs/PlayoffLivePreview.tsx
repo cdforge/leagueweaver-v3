@@ -1170,12 +1170,12 @@ export function PlayoffLivePreview({
           const cutoffRow = round.matches
             .slice(0, matchIndex + 1)
             .filter((item) => item.kind === "cutoff").length;
-          return { gridRow: fullChampRows + fullConsoRows + cutoffRow + 1 };
+          return { gridRow: fullChampRows + fullConsoRows + cutoffRow + 2 };
         }
         const consoRow = round.matches
           .slice(0, matchIndex + 1)
           .filter((item) => item.bracketContext === "conso").length;
-        return { gridRow: fullChampRows + consoRow };
+        return { gridRow: fullChampRows + consoRow + 1 };
       }
       return undefined;
     };
@@ -1214,8 +1214,8 @@ export function PlayoffLivePreview({
     const bracketStyle = isFullBracket
       ? ({
           "--ppw-full-champ-rows": fullChampRows,
-          "--ppw-full-divider-top": `${7 + fullChampRows * 94}px`,
-          "--ppw-elim-divider-top": `${82 + (fullChampRows + fullConsoRows) * 94}px`,
+          "--ppw-full-divider-top": `${22 + fullChampRows * 94}px`,
+          "--ppw-elim-divider-top": `${82 + (fullChampRows + fullConsoRows + 1) * 94}px`,
         } as CSSProperties)
       : isConsolationBracket
         ? ({
