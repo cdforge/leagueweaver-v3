@@ -1,4 +1,5 @@
 import "server-only";
+import { espnPublicUnreliableHistoryYears } from "@/lib/platform/history";
 import { deriveEspnTemplates, mapEspnPlayerWeekStats, type EspnMatchupPayload, type EspnPlayerEntryPayload, type LineupTemplate, type PlayerWeekStat, type RosterTemplate } from "@/lib/playerData";
 import { mapEspnTransactions, type EspnTransactionPayload, type NormalizedTransaction } from "@/lib/transactions";
 import { fetchProviderJson } from "./request";
@@ -62,15 +63,17 @@ export async function fetchEspnLeague(leagueId: string, seasonYear: number, view
 export async function scanEspnHistory(leagueId: string, seasonYear: number, auth?: EspnAuthInput): Promise<ImportDataFound> {
   const startYear = Math.max(2017, seasonYear - 8);
   const years = Array.from({ length: seasonYear - startYear + 1 }, (_, index) => startYear + index);
-  const results = await Promise.allSettled(years.map(async (year) => {
+  const publicUnreliableYears = auth ? [] : espnPublicUnreliableHistoryYears(seasonYear);
+  const queryYears = years.filter((year) => !publicUnreliableYears.includes(year));
+  const results = await Promise.allSettled(queryYears.map(async (year) => {
     const league = await fetchEspnLeague(leagueId, year, ["mTeam", "mStandings", "mDraftDetail"], auth);
     return { year, league };
   }));
   const availableHistoryYears: number[] = [];
-  const blockedHistoryYears: number[] = [];
+  const blockedHistoryYears: number[] = [...publicUnreliableYears];
   let hasDraftData = false;
   for (const result of results) {
-    const year = years[results.indexOf(result)];
+    const year = queryYears[results.indexOf(result)];
     if (result.status === "fulfilled") {
       availableHistoryYears.push(result.value.year);
       hasDraftData ||= Boolean(result.value.league.draftDetail?.picks?.length);

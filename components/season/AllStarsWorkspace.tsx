@@ -10,7 +10,7 @@ import { type GameDetailPlayerStat } from "@/lib/gameDetail";
 import { type LineupTemplate, type SlotKey } from "@/lib/playerData";
 import { accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
-import type { GeneratedSchedule, Team } from "@/lib/types";
+import type { GeneratedSchedule, PastChampion, Team } from "@/lib/types";
 
 const NFL_TEAM_COLORS: Record<string, string> = {
   ARI: "#97233f", ATL: "#a71930", BAL: "#241773", BUF: "#00338d", CAR: "#0085ca", CHI: "#0b162a", CIN: "#fb4f14",
@@ -124,7 +124,20 @@ function TrendChart({ weeks }: { weeks: Array<{ week: number; total: number }> }
   </section>;
 }
 
-export function AllStarsWorkspace({ schedule, playerStats }: { schedule: GeneratedSchedule; playerStats: GameDetailPlayerStat[] }) {
+function PastChampionsStrip({ champions }: { champions: PastChampion[] }) {
+  if (!champions.length) return null;
+  return <section className="past-champions-strip" aria-label="Past champions">
+    <header><Shield /><span><strong>Past Champions</strong><small>Saved league history</small></span></header>
+    <div>{champions.slice(0, 5).map((champion) => <article key={`${champion.provider}:${champion.providerLeagueId}:${champion.season}`}>
+      <small>{champion.season}</small>
+      <strong>{champion.teamName}</strong>
+      <span>{champion.managerName || champion.leagueName}</span>
+      {champion.wins != null && champion.losses != null && <em>{champion.wins}-{champion.losses}{champion.ties ? `-${champion.ties}` : ""}</em>}
+    </article>)}</div>
+  </section>;
+}
+
+export function AllStarsWorkspace({ schedule, playerStats, pastChampions = [] }: { schedule: GeneratedSchedule; playerStats: GameDetailPlayerStat[]; pastChampions?: PastChampion[] }) {
   const teamById = React.useMemo(() => new Map(schedule.setup.teams.map((team) => [team.id, team])), [schedule.setup.teams]);
   const lineupTemplate = React.useMemo(() => inferLineupTemplate(schedule, playerStats), [schedule, playerStats]);
   const completed = React.useMemo(() => completedWeeks(schedule), [schedule]);
@@ -134,12 +147,15 @@ export function AllStarsWorkspace({ schedule, playerStats }: { schedule: Generat
   const activeWeek = weeks.find((week) => week.week === selectedWeek) ?? weeks.at(-1) ?? null;
 
   if (!allStars || !activeWeek) {
-    return <section className="allstars-workspace allstars-empty">
-      <div className="allstars-empty-panel">
-        <Shield />
-        <span><strong>Connect a public ESPN/Sleeper league to unlock All-Stars.</strong><small>The board waits for a completed week with real platform-scored starter rows so weekly awards are never filled with fake data.</small></span>
-      </div>
-    </section>;
+    return <div className="allstars-workspace">
+      <PastChampionsStrip champions={pastChampions} />
+      <section className="allstars-empty">
+        <div className="allstars-empty-panel">
+          <Shield />
+          <span><strong>Connect a public ESPN/Sleeper league to unlock All-Stars.</strong><small>The board waits for a completed week with real platform-scored starter rows so weekly awards are never filled with fake data.</small></span>
+        </div>
+      </section>
+    </div>;
   }
 
   const activeIndex = weeks.findIndex((week) => week.week === activeWeek.week);
@@ -162,6 +178,7 @@ export function AllStarsWorkspace({ schedule, playerStats }: { schedule: Generat
         <button type="button" aria-label="Next All-Star week" disabled={activeIndex >= weeks.length - 1} onClick={() => setSelectedWeek(weeks[Math.min(weeks.length - 1, activeIndex + 1)]?.week ?? activeWeek.week)}><ChevronRight /></button>
       </div>
     </section>
+    <PastChampionsStrip champions={pastChampions} />
 
     <section className="allstars-summary">
       <span><Star fill="currentColor" /><small>Weekly total</small><PointChip value={activeWeek.total} /></span>

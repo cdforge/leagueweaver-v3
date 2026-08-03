@@ -343,6 +343,19 @@ export interface ImportHistoryEvent {
   revisionId?: string;
 }
 
+export interface PastChampion {
+  season: number;
+  provider: PlatformProvider;
+  providerLeagueId: string;
+  leagueName: string;
+  teamName: string;
+  managerName?: string;
+  wins?: number;
+  losses?: number;
+  ties?: number;
+  pointsFor?: number;
+}
+
 export interface SavedSeasonSummary {
   id: string;
   title: string;
