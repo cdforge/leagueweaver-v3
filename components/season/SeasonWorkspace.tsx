@@ -7376,14 +7376,28 @@ export function SeasonWorkspace({
           style={workspaceMainStyle}
         >
           <div className="workspace-toolbar">
-            <div>
-              <span className="workspace-breadcrumb">
-                {schedule.setup.abbreviation} /{" "}
-                {historyViewActive && selectedHistorySeason
-                  ? selectedHistorySeason.season
-                  : schedule.setup.seasonYear}
+            <div
+              className="workspace-toolbar-identity"
+              aria-label={`${currentTitle} for ${schedule.setup.name}`}
+            >
+              <EntityLogo
+                color={schedule.setup.color}
+                logoUrl={schedule.setup.logoUrl}
+                monogram={
+                  schedule.setup.initials || schedule.setup.abbreviation || "LW"
+                }
+                size={52}
+              />
+              <span className="workspace-title-stack">
+                <span className="workspace-breadcrumb">
+                  {schedule.setup.name} - NFL{" "}
+                  {historyViewActive && selectedHistorySeason
+                    ? selectedHistorySeason.season
+                    : schedule.setup.seasonYear}{" "}
+                  season
+                </span>
+                <h1>{currentTitle}</h1>
               </span>
-              <h1>{currentTitle}</h1>
             </div>
             <div className="toolbar-actions">
               {showHistoryPicker && (
