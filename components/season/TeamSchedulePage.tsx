@@ -270,7 +270,7 @@ function TeamScheduleDirectory({ schedule, summaries, clinches, onSelectTeam }: 
   );
 }
 
-export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectTeam, onSelectWeek, onOpenGame, simulationResults = {} }: {
+export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectTeam, onSelectWeek, onOpenGame, simulationResults = {}, teamHrefFor, leagueWeekHrefFor, readOnlyHistory = false }: {
   schedule: GeneratedSchedule;
   teamId: string;
   playerStats?: GameDetailPlayerStat[];
@@ -281,6 +281,9 @@ export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectT
     source: "simulated" | "override";
     locked: boolean;
   }>;
+  teamHrefFor?: (teamId: string) => string;
+  leagueWeekHrefFor?: (week: number) => string;
+  readOnlyHistory?: boolean;
 }) {
   const scheduleSignals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
   const summaries = useMemo(() => buildTeamScheduleSummaries(schedule), [schedule]);
@@ -540,7 +543,7 @@ export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectT
                         leagueRank={opponentStanding?.rank ?? opponent.overallRank}
                         record={{ overall: "0-0" }}
                         showCity={showCity}
-                        href={`/season/${schedule.id}/team/${opponent.id}`}
+                        href={teamHrefFor ? teamHrefFor(opponent.id) : `/season/${schedule.id}/team/${opponent.id}`}
                       />
                     </div>
                   </td>
@@ -556,9 +559,9 @@ export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectT
                   {display.details && <td className="col-details"><span className="team-game-details">{game.dateTimeOverride && <strong>{formatGameDateTimeOverride(game.dateTimeOverride)}</strong>}{metadata && <small>{metadata}</small>}{!game.dateTimeOverride && !metadata && "—"}</span></td>}
                   <td className="col-actions">
                     <FloatingPopover className="table-actions" label={`Actions for Week ${week.weekNumber}`} trigger={<MoreHorizontal />} menuClassName="table-actions-menu">
-                        <Link href={`/season/${schedule.id}?view=scores&week=${week.weekNumber}`}>Set score</Link>
-                        <Link href={`/season/${schedule.id}?week=${week.weekNumber}#${game.id}`}>Game details</Link>
-                        <Link href={`/season/${schedule.id}/team/${opponent.id}`}>Opponent schedule</Link>
+                        {!readOnlyHistory && <Link href={`/season/${schedule.id}?view=scores&week=${week.weekNumber}`}>Set score</Link>}
+                        <Link href={`${leagueWeekHrefFor ? leagueWeekHrefFor(week.weekNumber) : `/season/${schedule.id}?week=${week.weekNumber}`}#${game.id}`}>Game details</Link>
+                        <Link href={teamHrefFor ? teamHrefFor(opponent.id) : `/season/${schedule.id}/team/${opponent.id}`}>Opponent schedule</Link>
                     </FloatingPopover>
                   </td>
                 </tr>
@@ -622,6 +625,7 @@ export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectT
               showCity={showCity}
               showVenue={schedule.setup.display?.venues !== false}
               badges={scheduleSignals.byGameId.get(game.id)?.badges ?? []}
+              teamHrefFor={teamHrefFor}
               teamHrefBase={`/season/${schedule.id}/team`}
               onOpenGame={onOpenGame}
             />

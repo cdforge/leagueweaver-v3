@@ -609,6 +609,18 @@ async function screenshotMvt(browser: Browser, name: string, schedule: Generated
     await page.locator(".workspace-rail nav").getByRole("button", { name: /standings/i }).click();
     await expectText(page.locator(".workspace-breadcrumb"), /2025/s, `${name}: historical season carries into standings`);
     await expectText(page.locator(".standings-table"), /245\.70|255\.40/s, `${name}: standings uses historical schedule totals`);
+    await page.locator(".workspace-rail nav").getByRole("button", { name: /game of the week/i }).click();
+    await expectText(page.locator(".workspace-breadcrumb"), /2025/s, `${name}: historical season carries into GOTW`);
+    await expectText(page.locator(".gotw-view"), /GOTW.*124\.20|GOTW.*116\.50/s, `${name}: GOTW uses historical games`);
+    await page.locator(".workspace-rail nav").getByRole("button", { name: /matchup ratings/i }).click();
+    await expectText(page.locator(".workspace-breadcrumb"), /2025/s, `${name}: historical season carries into matchup ratings`);
+    await expectText(page.locator(".matchup-ratings-view"), /Games shown.*10/s, `${name}: matchup ratings uses historical game count`);
+    await page.locator(".workspace-rail nav").getByRole("button", { name: /playoffs/i }).click();
+    await expectText(page.locator(".workspace-breadcrumb"), /2025/s, `${name}: historical season carries into playoffs`);
+    await expectText(page.locator(".workspace-content"), /Projected|Live|Playoffs/s, `${name}: playoffs renders for historical season`);
+    await page.locator(".workspace-rail nav").getByRole("button", { name: /team schedule/i }).click();
+    await expectText(page.locator(".workspace-breadcrumb"), /2025/s, `${name}: historical season carries into team schedule`);
+    await expectText(page.locator(".workspace-content"), /245\.70|Harbor|Phoenix|Baltimore/s, `${name}: team schedule uses historical season data`);
     await page.locator(".workspace-rail nav").getByRole("button", { name: /league schedule/i }).click();
     await expectText(page.locator(".workspace-breadcrumb"), /2025/s, `${name}: historical season carries back to schedule`);
     await expectText(page.locator(".history-readonly-pill"), /Provider history/s, `${name}: historical schedule is read-only provider history`);
@@ -620,6 +632,8 @@ async function screenshotMvt(browser: Browser, name: string, schedule: Generated
     await page.locator(".matchup-card.is-openable").first().locator("a.team-identity-block").first().click();
     await page.waitForURL(new RegExp(`/season/${schedule.id}/team/`));
     assert.ok(!page.url().includes("-history-"), `${name}: historical schedule team links use the real season route`);
+    assert.ok(page.url().includes("season=2025"), `${name}: historical schedule team links preserve the selected year`);
+    await expectText(page.locator(".workspace-breadcrumb"), /2025/s, `${name}: historical team route keeps selected year`);
   }
   assert.deepEqual(pageErrors, [], `${name}: no page errors`);
   assert.deepEqual(consoleErrors, [], `${name}: no console errors`);
