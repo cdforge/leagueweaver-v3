@@ -1541,7 +1541,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .wp-teampick-hint { color: var(--muted); font-size: var(--text-2xs); font-weight: var(--w-bold); }
 /* The cards read as their own objects — drop the inset gray fill/box the shared
    list uses in the workspace so the preview cards sit cleanly on the section. */
-.welcome-preview .matchup-card-list { background: transparent; padding: 0; }
+.welcome-preview .matchup-list.matchup-card-list {
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
 .wp-weekhead { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; border-radius: var(--radius); background: var(--ink); color: white; padding: 9px 13px; }
 .wp-weekhead > b { flex: 0 0 auto; color: var(--gold); font-family: var(--font-barlow-condensed), sans-serif; font-size: var(--text-xl); line-height: 1; }
 .wp-weekhead > span { display: flex; flex-direction: column; gap: 1px; }
