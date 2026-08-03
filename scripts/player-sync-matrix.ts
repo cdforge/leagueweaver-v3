@@ -75,7 +75,10 @@ assert.match(cronRoute, /persistPlayerRows\(admin, link, schedule\)/, "cron atte
 assert.match(cronRoute, /PLAYER_SYNC_DISABLED/, "cron has a player sync kill switch");
 const manualRoute = readFileSync("app/api/platform/sync/scores/route.ts", "utf8");
 assert.match(manualRoute, /await persistScores\(schedule, result\)/, "manual refresh persists scores before player sync");
+assert.match(manualRoute, /from\("external_league_links"\)\.upsert/, "manual refresh creates or repairs the saved platform connection row");
 assert.match(manualRoute, /playerSync: \{ rowsWritten: 0, failed: true \}/, "manual player failure returns warning without failing scores");
+const connectionsRoute = readFileSync("app/api/platform/connections/route.ts", "utf8");
+assert.doesNotMatch(connectionsRoute, /Deep platform sync is included with Pro/, "public platform connections are not Pro-gated");
 const catalogRoute = readFileSync("app/api/cron/sync-player-catalog/route.ts", "utf8");
 assert.match(catalogRoute, /X-Fantasy-Filter/, "catalog route sends ESPN X-Fantasy-Filter");
 assert.match(catalogRoute, /players: \{ limit: 2000 \}/, "catalog route limits ESPN catalog");

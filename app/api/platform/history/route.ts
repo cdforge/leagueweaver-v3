@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { parseEspnLeagueId, scanEspnHistory } from "@/lib/platform/espn";
+import { collectEspnLeagueHistory, parseEspnLeagueId, scanEspnHistory } from "@/lib/platform/espn";
 import { collectSleeperLeagueHistory, resolveSleeperLeagueId, scanSleeperHistory } from "@/lib/platform/sleeper";
-import type { LeagueHistoryDraft } from "@/lib/platform/history";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { dataFoundFromDraft, persistLeagueHistory } from "@/lib/platform/historyPersistence";
 import { getAuthenticatedClient } from "@/lib/supabase/auth";
-import type { ImportDataFound, ImportHistoryEvent, PastChampion } from "@/lib/types";
+import type { ImportHistoryEvent, PastChampion } from "@/lib/types";
 
 const schema = z.object({
   provider: z.enum(["espn", "sleeper"]),
@@ -18,6 +17,8 @@ const schema = z.object({
 });
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const HISTORY_PAGE_SIZE = 1000;
+const CATALOG_LOOKUP_SIZE = 500;
 
 function readSummary(value: unknown) {
   return value && typeof value === "object" ? value as Record<string, unknown> : {};
@@ -34,8 +35,179 @@ function revisionAction(source?: string | null) {
   return "Saved revision";
 }
 
-function seasonKey(providerLeagueId: string, season: number) {
-  return `${providerLeagueId}:${season}`;
+type HistoryBrowserSeason = {
+  id: string;
+  season: number;
+  provider: "espn" | "sleeper";
+  providerLeagueId: string;
+  leagueName: string;
+  teamCount: number;
+  rosterPositions: string[];
+  regularSeasonWeekCount?: number;
+  playoffSettings: Record<string, unknown>;
+  teams: Array<{
+    leagueTeamId: string;
+    providerRosterOrTeamId: string;
+    teamName: string;
+    managerName?: string;
+    divisionId?: string;
+    conferenceId?: string;
+    finalStanding?: number;
+    wins?: number;
+    losses?: number;
+    ties?: number;
+    pointsFor?: number;
+    pointsAgainst?: number;
+  }>;
+  games: Array<{
+    week: number;
+    providerMatchupId: string;
+    homeLeagueTeamId: string;
+    awayLeagueTeamId: string;
+    homeScore?: number;
+    awayScore?: number;
+    status: string;
+    finalLockAt?: string;
+  }>;
+  playerRows: Array<{
+    week: number;
+    canonicalPlayerId: string;
+    leagueTeamId: string;
+    providerPlayerId: string;
+    playerName: string;
+    position: string;
+    nflTeam?: string;
+    lineupStatus: string;
+    lineupSlot: string;
+    fantasyPoints: number;
+  }>;
+};
+
+type OwnershipHistoryRow = {
+  league_season_id: string;
+  week: number;
+  canonical_player_id: string;
+  league_team_id: string;
+  provider_player_id: string;
+  nfl_team_at_time?: string | null;
+  position_at_time?: string | null;
+  roster_status: string;
+  lineup_slot: string;
+  fantasy_points?: number | string | null;
+};
+
+async function readOwnershipRows(auth: NonNullable<Awaited<ReturnType<typeof getAuthenticatedClient>>>, seasonIds: string[]) {
+  const rows: OwnershipHistoryRow[] = [];
+  for (let from = 0; ; from += HISTORY_PAGE_SIZE) {
+    const { data, error } = await auth.supabase
+      .from("player_ownership_history")
+      .select("league_season_id,week,canonical_player_id,league_team_id,provider_player_id,nfl_team_at_time,position_at_time,roster_status,lineup_slot,fantasy_points")
+      .in("league_season_id", seasonIds)
+      .order("week", { ascending: true })
+      .range(from, from + HISTORY_PAGE_SIZE - 1);
+    if (error) throw error;
+    rows.push(...((data ?? []) as OwnershipHistoryRow[]));
+    if (!data || data.length < HISTORY_PAGE_SIZE) break;
+  }
+  return rows;
+}
+
+async function readCatalogRows(auth: NonNullable<Awaited<ReturnType<typeof getAuthenticatedClient>>>, playerIds: string[]) {
+  const catalogById = new Map<string, { canonical_name?: string | null; position?: string | null; nfl_team?: string | null }>();
+  for (let index = 0; index < playerIds.length; index += CATALOG_LOOKUP_SIZE) {
+    const { data } = await auth.supabase
+      .from("player_catalog")
+      .select("id,canonical_name,position,nfl_team")
+      .in("id", playerIds.slice(index, index + CATALOG_LOOKUP_SIZE));
+    for (const row of data ?? []) catalogById.set(row.id, row);
+  }
+  return catalogById;
+}
+
+async function readHistoryBrowser(auth: NonNullable<Awaited<ReturnType<typeof getAuthenticatedClient>>>, scheduleId: string): Promise<HistoryBrowserSeason[]> {
+  try {
+    const { data: seasons, error: seasonsError } = await auth.supabase
+      .from("league_seasons")
+      .select("id,provider,provider_league_id,season,league_name,team_count,roster_positions,regular_season_week_count,playoff_settings")
+      .eq("schedule_id", scheduleId)
+      .order("season", { ascending: false })
+      .limit(8);
+    if (seasonsError || !seasons?.length) return [];
+    const seasonIds = seasons.map((season) => season.id);
+    const [{ data: teams }, { data: games }, ownership] = await Promise.all([
+      auth.supabase
+        .from("league_team_history")
+        .select("league_season_id,league_team_id,provider_roster_or_team_id,team_name,manager_name,division_id,conference_id,final_standing,wins,losses,ties,points_for,points_against")
+        .in("league_season_id", seasonIds),
+      auth.supabase
+        .from("league_schedule_history")
+        .select("league_season_id,week,provider_matchup_id,home_league_team_id,away_league_team_id,home_score,away_score,status,final_lock_at")
+        .in("league_season_id", seasonIds)
+        .order("week", { ascending: true }),
+      readOwnershipRows(auth, seasonIds),
+    ]);
+    const playerIds = [...new Set((ownership ?? []).map((row) => row.canonical_player_id).filter(Boolean))];
+    const catalogById = playerIds.length ? await readCatalogRows(auth, playerIds) : new Map<string, { canonical_name?: string | null; position?: string | null; nfl_team?: string | null }>();
+    const teamsBySeason = new Map<string, NonNullable<typeof teams>>();
+    for (const row of teams ?? []) teamsBySeason.set(row.league_season_id, [...(teamsBySeason.get(row.league_season_id) ?? []), row]);
+    const gamesBySeason = new Map<string, NonNullable<typeof games>>();
+    for (const row of games ?? []) gamesBySeason.set(row.league_season_id, [...(gamesBySeason.get(row.league_season_id) ?? []), row]);
+    const ownershipBySeason = new Map<string, NonNullable<typeof ownership>>();
+    for (const row of ownership ?? []) ownershipBySeason.set(row.league_season_id, [...(ownershipBySeason.get(row.league_season_id) ?? []), row]);
+
+    return seasons.map((season): HistoryBrowserSeason => ({
+      id: season.id,
+      season: season.season,
+      provider: season.provider,
+      providerLeagueId: season.provider_league_id,
+      leagueName: season.league_name,
+      teamCount: season.team_count,
+      rosterPositions: season.roster_positions ?? [],
+      regularSeasonWeekCount: season.regular_season_week_count ?? undefined,
+      playoffSettings: season.playoff_settings ?? {},
+      teams: (teamsBySeason.get(season.id) ?? []).map((team) => ({
+        leagueTeamId: team.league_team_id,
+        providerRosterOrTeamId: team.provider_roster_or_team_id,
+        teamName: team.team_name,
+        managerName: team.manager_name ?? undefined,
+        divisionId: team.division_id ?? undefined,
+        conferenceId: team.conference_id ?? undefined,
+        finalStanding: team.final_standing ?? undefined,
+        wins: team.wins ?? undefined,
+        losses: team.losses ?? undefined,
+        ties: team.ties ?? undefined,
+        pointsFor: team.points_for == null ? undefined : Number(team.points_for),
+        pointsAgainst: team.points_against == null ? undefined : Number(team.points_against),
+      })),
+      games: (gamesBySeason.get(season.id) ?? []).map((game) => ({
+        week: game.week,
+        providerMatchupId: game.provider_matchup_id,
+        homeLeagueTeamId: game.home_league_team_id,
+        awayLeagueTeamId: game.away_league_team_id,
+        homeScore: game.home_score == null ? undefined : Number(game.home_score),
+        awayScore: game.away_score == null ? undefined : Number(game.away_score),
+        status: game.status,
+        finalLockAt: game.final_lock_at ?? undefined,
+      })),
+      playerRows: (ownershipBySeason.get(season.id) ?? []).map((row) => {
+        const catalog = catalogById.get(row.canonical_player_id);
+        return {
+          week: row.week,
+          canonicalPlayerId: row.canonical_player_id,
+          leagueTeamId: row.league_team_id,
+          providerPlayerId: row.provider_player_id,
+          playerName: catalog?.canonical_name || row.provider_player_id,
+          position: row.position_at_time || catalog?.position || "UNKNOWN",
+          nflTeam: row.nfl_team_at_time || catalog?.nfl_team || undefined,
+          lineupStatus: row.roster_status,
+          lineupSlot: row.lineup_slot,
+          fantasyPoints: Number(row.fantasy_points ?? 0),
+        };
+      }),
+    }));
+  } catch {
+    return [];
+  }
 }
 
 async function readPastChampions(auth: NonNullable<Awaited<ReturnType<typeof getAuthenticatedClient>>>, scheduleId: string): Promise<PastChampion[]> {
@@ -76,67 +248,6 @@ async function readPastChampions(auth: NonNullable<Awaited<ReturnType<typeof get
 async function assertScheduleOwner(auth: NonNullable<Awaited<ReturnType<typeof getAuthenticatedClient>>>, scheduleId: string) {
   const { data } = await auth.supabase.from("schedules").select("id").eq("id", scheduleId).maybeSingle();
   return Boolean(data?.id);
-}
-
-async function persistLeagueHistory(scheduleId: string, draft: LeagueHistoryDraft) {
-  const admin = createAdminClient();
-  if (!admin) return { rowsWritten: 0, warnings: ["History scanned, but server Supabase admin access is not configured for table population."] };
-  if (!draft.leagueSeasons.length) return { rowsWritten: 0, warnings: draft.warnings };
-
-  const { data: seasonRows, error: seasonError } = await admin
-    .from("league_seasons")
-    .upsert(draft.leagueSeasons, { onConflict: "schedule_id,provider,provider_league_id,season" })
-    .select("id,provider_league_id,season");
-  if (seasonError) throw seasonError;
-  const idBySeason = new Map((seasonRows ?? []).map((season) => [seasonKey(season.provider_league_id, season.season), season.id]));
-
-  const teamRows = draft.teamHistory.map((row) => {
-    const { providerLeagueId, season, ...rest } = row;
-    const leagueSeasonId = idBySeason.get(seasonKey(providerLeagueId, season));
-    return leagueSeasonId ? { league_season_id: leagueSeasonId, ...rest } : null;
-  }).filter((row): row is NonNullable<typeof row> => Boolean(row));
-  const scheduleRows = draft.scheduleHistory.map((row) => {
-    const { providerLeagueId, season, ...rest } = row;
-    const leagueSeasonId = idBySeason.get(seasonKey(providerLeagueId, season));
-    return leagueSeasonId ? { league_season_id: leagueSeasonId, ...rest } : null;
-  }).filter((row): row is NonNullable<typeof row> => Boolean(row));
-  const ownershipRows = draft.ownershipHistory.map((row) => {
-    const { providerLeagueId, season, ...rest } = row;
-    const leagueSeasonId = idBySeason.get(seasonKey(providerLeagueId, season));
-    return leagueSeasonId ? { league_season_id: leagueSeasonId, ...rest } : null;
-  }).filter((row): row is NonNullable<typeof row> => Boolean(row));
-
-  if (draft.playerCatalog.length) {
-    const { error } = await admin.from("player_catalog").upsert(draft.playerCatalog, { onConflict: "id" });
-    if (error) throw error;
-  }
-  if (teamRows.length) {
-    const { error } = await admin.from("league_team_history").upsert(teamRows, { onConflict: "league_season_id,league_team_id" });
-    if (error) throw error;
-  }
-  if (scheduleRows.length) {
-    const { error } = await admin.from("league_schedule_history").upsert(scheduleRows, { onConflict: "league_season_id,week,provider_matchup_id" });
-    if (error) throw error;
-  }
-  if (ownershipRows.length) {
-    const { error } = await admin.from("player_ownership_history").upsert(ownershipRows, { onConflict: "league_season_id,week,canonical_player_id" });
-    if (error) throw error;
-  }
-  return {
-    rowsWritten: draft.leagueSeasons.length + teamRows.length + scheduleRows.length + ownershipRows.length,
-    warnings: draft.warnings,
-  };
-}
-
-function dataFoundFromDraft(draft: LeagueHistoryDraft): ImportDataFound {
-  return {
-    availableHistoryYears: draft.leagueSeasons.map((season) => season.season).sort((left, right) => right - left),
-    blockedHistoryYears: [],
-    hasDraftData: true,
-    hasRosterData: draft.teamHistory.length > 0,
-    hasPlayerData: draft.ownershipHistory.length > 0,
-    hasScoreSync: draft.scheduleHistory.length > 0,
-  };
 }
 
 export async function GET(request: Request) {
@@ -210,7 +321,9 @@ export async function GET(request: Request) {
 
   events.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
   const champions = await readPastChampions(auth, scheduleId);
-  return NextResponse.json({ events: events.slice(0, 10), champions });
+  const includeBrowser = new URL(request.url).searchParams.get("include") === "browser";
+  const history = includeBrowser ? await readHistoryBrowser(auth, scheduleId) : undefined;
+  return NextResponse.json({ events: events.slice(0, 10), champions, history });
 }
 
 export async function POST(request: Request) {
@@ -221,6 +334,14 @@ export async function POST(request: Request) {
       const leagueId = parseEspnLeagueId(parsed.data.identifier);
       if (!leagueId) return NextResponse.json({ error: "Enter an ESPN league URL or ID." }, { status: 400 });
       const auth = parsed.data.swid && parsed.data.espnS2 ? { swid: parsed.data.swid, espnS2: parsed.data.espnS2 } : undefined;
+      if (parsed.data.populate && parsed.data.scheduleId) {
+        const userAuth = await getAuthenticatedClient();
+        if (!userAuth) return NextResponse.json({ error: "Sign in before saving league history." }, { status: 401 });
+        if (!(await assertScheduleOwner(userAuth, parsed.data.scheduleId))) return NextResponse.json({ error: "Choose a saved season you own." }, { status: 403 });
+        const draft = await collectEspnLeagueHistory(parsed.data.scheduleId, leagueId, parsed.data.seasonYear, auth);
+        const persisted = await persistLeagueHistory(parsed.data.scheduleId, draft);
+        return NextResponse.json({ ...dataFoundFromDraft(draft), champions: draft.champions, rowsWritten: persisted.rowsWritten, warnings: persisted.warnings });
+      }
       return NextResponse.json(await scanEspnHistory(leagueId, parsed.data.seasonYear, auth));
     }
     const { leagueId } = await resolveSleeperLeagueId(parsed.data.identifier, parsed.data.seasonYear);
@@ -228,7 +349,7 @@ export async function POST(request: Request) {
       const auth = await getAuthenticatedClient();
       if (!auth) return NextResponse.json({ error: "Sign in before saving league history." }, { status: 401 });
       if (!(await assertScheduleOwner(auth, parsed.data.scheduleId))) return NextResponse.json({ error: "Choose a saved season you own." }, { status: 403 });
-      const draft = await collectSleeperLeagueHistory(parsed.data.scheduleId, leagueId, { weeks: [1] });
+      const draft = await collectSleeperLeagueHistory(parsed.data.scheduleId, leagueId);
       const persisted = await persistLeagueHistory(parsed.data.scheduleId, draft);
       return NextResponse.json({ ...dataFoundFromDraft(draft), champions: draft.champions, rowsWritten: persisted.rowsWritten, warnings: persisted.warnings });
     }

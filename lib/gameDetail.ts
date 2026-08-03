@@ -1,6 +1,6 @@
 import { getMatchupRatingRange, getMatchupSignal } from "@/lib/matchups";
 import { getEnteringWeekRankSnapshot } from "@/lib/standings";
-import type { LineupStatus, PlayerWeekStat, SlotKey } from "@/lib/playerData";
+import { lineupSlotSortRank, type LineupStatus, type PlayerWeekStat, type SlotKey } from "@/lib/playerData";
 import type { Division, GeneratedSchedule, ScheduledGame, Team } from "@/lib/types";
 
 export interface GameDetailPlayerStat extends PlayerWeekStat {
@@ -46,6 +46,8 @@ export interface GameDetailVM {
   dateLabel: string;
   game: ScheduledGame;
   status: "upcoming" | "final";
+  isPlayoff: boolean;
+  playoffLabel?: string;
   featured: boolean;
   ratingScore10: number;
   stadium: string;
@@ -63,13 +65,13 @@ function isStarter(row: Pick<GameDetailPlayerStat, "lineupStatus">) {
 }
 
 function slotRank(row: GameDetailPlayerStat) {
-  if (typeof row.starterIndex === "number") return row.starterIndex;
-  if (row.lineupStatus === "starter") return 0;
-  if (row.lineupStatus === "bench") return 1000;
-  if (row.lineupStatus === "ir") return 2000;
-  if (row.lineupStatus === "taxi") return 2100;
-  if (row.lineupStatus === "reserve") return 2200;
-  return 3000;
+  const slotOrder = lineupSlotSortRank(row.inferredSlot);
+  if (row.lineupStatus === "starter") return slotOrder * 10 + (row.starterIndex ?? 0) / 1000;
+  if (row.lineupStatus === "bench") return 1000 + slotOrder;
+  if (row.lineupStatus === "ir") return 2000 + slotOrder;
+  if (row.lineupStatus === "taxi") return 2100 + slotOrder;
+  if (row.lineupStatus === "reserve") return 2200 + slotOrder;
+  return 3000 + slotOrder;
 }
 
 function toSlotVM(row: GameDetailPlayerStat): GameDetailSlotVM {
@@ -134,8 +136,11 @@ function sideVM({
 
 export function buildGameDetailVM(schedule: GeneratedSchedule, gameId: string, playerStats: GameDetailPlayerStat[] = []): GameDetailVM | null {
   const week = schedule.weeks.find((item) => item.games.some((game) => game.id === gameId));
-  const game = week?.games.find((item) => item.id === gameId);
-  if (!week || !game) return null;
+  const regularGame = week?.games.find((item) => item.id === gameId);
+  const playoffGame = regularGame ? undefined : (schedule.playoffGames ?? []).find((item) => item.id === gameId);
+  const game = regularGame ?? playoffGame;
+  if (!game) return null;
+  const weekNumber = week?.weekNumber ?? game.week;
 
   const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
   const divisionById = new Map(schedule.setup.divisions.map((division) => [division.id, division]));
@@ -143,17 +148,18 @@ export function buildGameDetailVM(schedule: GeneratedSchedule, gameId: string, p
   const home = teamById.get(game.homeTeamId);
   if (!away || !home) return null;
 
-  const rankRows = getEnteringWeekRankSnapshot(schedule, week.weekNumber).rows;
+  const rankWeek = week?.weekNumber ?? schedule.weeks.at(-1)?.weekNumber ?? game.week;
+  const rankRows = getEnteringWeekRankSnapshot(schedule, rankWeek).rows;
   const rankByTeam = new Map(rankRows.map((row) => [row.teamId, row.rank]));
-  const ratingRange = getMatchupRatingRange(week.games, rankByTeam);
+  const ratingRange = getMatchupRatingRange(week?.games ?? [game], rankByTeam);
   const signal = getMatchupSignal(game, rankByTeam, ratingRange, schedule.setup.teams.length);
-  const featured = week.games.some((candidate) => candidate.id === game.id && candidate.gameNumber === 1);
+  const featured = Boolean(week?.games.some((candidate) => candidate.id === game.id && candidate.gameNumber === 1));
 
   const awaySide = sideVM({
     rows: playerStats,
     team: away,
     division: divisionById.get(away.divisionId),
-    weekNumber: week.weekNumber,
+    weekNumber,
     rank: rankByTeam.get(away.id) ?? away.overallRank,
     platformTotal: scoreValue(game.awayScore),
   });
@@ -161,7 +167,7 @@ export function buildGameDetailVM(schedule: GeneratedSchedule, gameId: string, p
     rows: playerStats,
     team: home,
     division: divisionById.get(home.divisionId),
-    weekNumber: week.weekNumber,
+    weekNumber,
     rank: rankByTeam.get(home.id) ?? home.overallRank,
     platformTotal: scoreValue(game.homeScore),
   });
@@ -169,10 +175,12 @@ export function buildGameDetailVM(schedule: GeneratedSchedule, gameId: string, p
   return {
     scheduleId: schedule.id,
     season: schedule.setup.seasonYear,
-    weekNumber: week.weekNumber,
-    dateLabel: week.dateLabel,
+    weekNumber,
+    dateLabel: week?.dateLabel ?? game.dateLabel,
     game,
     status: game.awayScore != null && game.homeScore != null ? "final" : "upcoming",
+    isPlayoff: Boolean(playoffGame),
+    playoffLabel: playoffGame?.round,
     featured,
     ratingScore10: signal.score10,
     stadium: game.stadium || home.stadium,

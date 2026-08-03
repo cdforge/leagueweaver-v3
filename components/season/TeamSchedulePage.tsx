@@ -134,6 +134,10 @@ function teamBrandStyle(color: string) {
   } as CSSProperties;
 }
 
+function isInteractiveTarget(target: EventTarget | null) {
+  return target instanceof HTMLElement && Boolean(target.closest("a, button, input, select, textarea, summary"));
+}
+
 function buildTeamScheduleSummaries(schedule: GeneratedSchedule): TeamScheduleSummary[] {
   const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
   const teamCount = schedule.setup.teams.length;
@@ -266,16 +270,20 @@ function TeamScheduleDirectory({ schedule, summaries, clinches, onSelectTeam }: 
   );
 }
 
-export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectTeam, onSelectWeek, simulationResults = {} }: {
+export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectTeam, onSelectWeek, onOpenGame, simulationResults = {}, teamHrefFor, leagueWeekHrefFor, readOnlyHistory = false }: {
   schedule: GeneratedSchedule;
   teamId: string;
   playerStats?: GameDetailPlayerStat[];
   onSelectTeam: (teamId: string) => void;
   onSelectWeek: (week: number) => void;
+  onOpenGame?: (gameId: string) => void;
   simulationResults?: Record<string, {
     source: "simulated" | "override";
     locked: boolean;
   }>;
+  teamHrefFor?: (teamId: string) => string;
+  leagueWeekHrefFor?: (week: number) => string;
+  readOnlyHistory?: boolean;
 }) {
   const scheduleSignals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
   const summaries = useMemo(() => buildTeamScheduleSummaries(schedule), [schedule]);
@@ -508,7 +516,21 @@ export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectT
               const badges = (scheduleSignals.byGameId.get(game.id)?.badges ?? []).filter((badge) => badge !== "GOTW");
 
               return (
-                <tr className={[isGameOfWeek ? "is-gotw" : "", simulationResult ? `is-simulated simulation-${simulationResult.source}` : ""].filter(Boolean).join(" ")} key={week.weekNumber}>
+                <tr
+                  className={[onOpenGame ? "is-openable" : "", isGameOfWeek ? "is-gotw" : "", simulationResult ? `is-simulated simulation-${simulationResult.source}` : ""].filter(Boolean).join(" ")}
+                  key={week.weekNumber}
+                  role={onOpenGame ? "button" : undefined}
+                  tabIndex={onOpenGame ? 0 : undefined}
+                  aria-label={onOpenGame ? `Open game details for Week ${week.weekNumber}, ${away.name} at ${home.name}` : undefined}
+                  onClick={(event) => { if (onOpenGame && !isInteractiveTarget(event.target)) onOpenGame(game.id); }}
+                  onKeyDown={(event) => {
+                    if (!onOpenGame || isInteractiveTarget(event.target)) return;
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onOpenGame(game.id);
+                    }
+                  }}
+                >
                   <td className="col-week">{renderWeekLink(week.weekNumber, week.dateLabel, holidays)}</td>
                   <td className="col-location"><span className="location-chip"><span aria-hidden="true">{isHome ? "vs" : "@"}</span><span className="sr-only">{isHome ? "Home versus" : "Away at"}</span></span></td>
                   <td className="col-opponent">
@@ -521,7 +543,7 @@ export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectT
                         leagueRank={opponentStanding?.rank ?? opponent.overallRank}
                         record={{ overall: "0-0" }}
                         showCity={showCity}
-                        href={`/season/${schedule.id}/team/${opponent.id}`}
+                        href={teamHrefFor ? teamHrefFor(opponent.id) : `/season/${schedule.id}/team/${opponent.id}`}
                       />
                     </div>
                   </td>
@@ -537,9 +559,9 @@ export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectT
                   {display.details && <td className="col-details"><span className="team-game-details">{game.dateTimeOverride && <strong>{formatGameDateTimeOverride(game.dateTimeOverride)}</strong>}{metadata && <small>{metadata}</small>}{!game.dateTimeOverride && !metadata && "—"}</span></td>}
                   <td className="col-actions">
                     <FloatingPopover className="table-actions" label={`Actions for Week ${week.weekNumber}`} trigger={<MoreHorizontal />} menuClassName="table-actions-menu">
-                        <Link href={`/season/${schedule.id}?view=scores&week=${week.weekNumber}`}>Set score</Link>
-                        <Link href={`/season/${schedule.id}?week=${week.weekNumber}#${game.id}`}>Game details</Link>
-                        <Link href={`/season/${schedule.id}/team/${opponent.id}`}>Opponent schedule</Link>
+                        {!readOnlyHistory && <Link href={`/season/${schedule.id}?view=scores&week=${week.weekNumber}`}>Set score</Link>}
+                        <Link href={`${leagueWeekHrefFor ? leagueWeekHrefFor(week.weekNumber) : `/season/${schedule.id}?week=${week.weekNumber}`}#${game.id}`}>Game details</Link>
+                        <Link href={teamHrefFor ? teamHrefFor(opponent.id) : `/season/${schedule.id}/team/${opponent.id}`}>Opponent schedule</Link>
                     </FloatingPopover>
                   </td>
                 </tr>
@@ -603,7 +625,9 @@ export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectT
               showCity={showCity}
               showVenue={schedule.setup.display?.venues !== false}
               badges={scheduleSignals.byGameId.get(game.id)?.badges ?? []}
+              teamHrefFor={teamHrefFor}
               teamHrefBase={`/season/${schedule.id}/team`}
+              onOpenGame={onOpenGame}
             />
           );
         })}

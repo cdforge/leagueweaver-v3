@@ -8,10 +8,11 @@ import { formatRecord, getEnteringWeekRankSnapshot } from "@/lib/standings";
 import { gameOfWeekStatusLabel, getScheduleGameSignals } from "@/lib/statistics";
 import type { GeneratedSchedule } from "@/lib/types";
 
-export function GotwWorkspace({ schedule, simulationResults = {}, simulationProbabilities = {} }: {
+export function GotwWorkspace({ schedule, simulationResults = {}, simulationProbabilities = {}, teamHrefFor }: {
   schedule: GeneratedSchedule;
   simulationResults?: Record<string, { source: "simulated" | "override"; locked: boolean }>;
   simulationProbabilities?: Record<string, { away: number; home: number }>;
+  teamHrefFor?: (teamId: string) => string;
 }) {
   const signals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
   const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
@@ -75,6 +76,7 @@ export function GotwWorkspace({ schedule, simulationResults = {}, simulationProb
             simulationLocked={simulationResult?.locked}
             winProbability={simulationProbabilities[entry.game.id]}
             teamHrefBase={`/season/${schedule.id}/team`}
+            teamHrefFor={teamHrefFor}
           />
         </section>;
       })}

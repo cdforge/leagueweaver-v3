@@ -646,6 +646,46 @@ seasons open read-only; [ ] missing seasons clearly explain there is no saved sc
 **QA:** §F.1, §F.5; fixture-backed schedule-history rows render ≥2 prior seasons; screenshot saved-schedule,
 provider-history-only, and missing-data states.
 
+### HIST-3 · Historical playoff data browser  ·  issue:#143  ·  `phase:P7 type:ui area:history area:playoffs`  ·  Blocked by: #DEP-4,#HIST-2
+**Goal:** let commissioners browse prior-year playoff brackets/results when LeagueWeaver has real saved playoff
+data or provider postseason matchup history.
+**Build:** add the season selector to the Playoffs view after HIST-2. If a historical LeagueWeaver schedule has
+saved `playoffGames`, render the normal playoff bracket for that season. If only provider history exists, render
+a read-only postseason results view from saved provider matchup rows that are explicitly identified as playoff
+weeks/rounds; do not infer or generate playoff brackets from regular-season standings alone. Surface champion,
+runner-up, round labels, scores, and matchup modal links when saved player rows exist. Missing seasons or leagues
+without saved playoff rows show a clear empty state and safe "sync history" action only for public ESPN/Sleeper
+connections.
+**Acceptance:** [ ] Playoffs season selector; [ ] saved LeagueWeaver playoff brackets open normally; [ ] provider
+postseason history renders read-only when rows are saved; [ ] champion/runner-up and round scores are sourced
+from saved rows only; [ ] no generated playoff brackets or fabricated playoff claims; [ ] current-season default
+remains unchanged.
+**QA:** §F.1, §F.5; fixture-backed playoff-history rows render at least one prior postseason; screenshot saved
+LeagueWeaver bracket, provider-history-only postseason, and missing-data states on desktop + mobile.
+
+### HIST-4 · Historical team/franchise registry + filters  ·  issue:#144  ·  `phase:P7 type:data type:ui area:history area:teams`  ·  Blocked by: #DEP-4,#HIST-2
+**Goal:** preserve every historical fantasy team/franchise even when that team no longer exists in the current
+league, so multi-year stats, schedules, awards, and playoffs can include or filter inactive teams without
+polluting the current-season setup.
+**Feature shape:** treat this as a smart historical save system. Current `Team` records remain the active league
+structure. Historical provider teams are saved as season-scoped team snapshots with a stable historical/franchise
+identity, an active/inactive status, aliases/renames, manager history, provider roster/team ids, colors/logos when
+known, and the exact seasons/weeks they appeared. If an old team cannot be confidently linked to a current team,
+keep it as an inactive historical team instead of dropping it or remapping by name only.
+**Build:** add a history-team registry/read model over saved `league_team_history` rows. Add filters to historical
+surfaces: Current teams only, Include inactive teams, Inactive teams only, Manager/franchise search, and season
+range. Historical team detail pages should be able to show multi-year records, points, awards, schedules, playoff
+results, and player ownership for active and inactive teams. Team identity matching must prefer provider ids and
+reviewed aliases; ambiguous matches require an explicit review state, not silent merging. Exports should preserve
+historical teams with an inactive marker.
+**Acceptance:** [ ] inactive historical teams are retained and visible in history views; [ ] current-season setup
+is not changed by old teams; [ ] filters can include/exclude inactive teams; [ ] multi-year team stats include
+active + inactive teams when requested; [ ] ambiguous team/franchise matches are flagged for review; [ ] no
+name-only silent merges; [ ] deleted/renamed teams still populate old schedules, awards, playoffs, and team pages.
+**QA:** §F.1, §F.5; fixture with a prior-year team that does not exist in the current league renders in historical
+schedule, awards, playoffs, and multi-year stats when inactive teams are included; verify the same team is hidden
+when Current teams only is selected; screenshot desktop + mobile filter states.
+
 ### GDM-2 · Game card opens box score directly  ·  issue:#138  ·  `phase:P7 type:ui area:game-detail`  ·  Blocked by: #GDM-1,#TW-1
 **Goal:** remove duplicate box-score buttons and make the game card itself the click target.
 **Build:** remove the separate "Box score" button from game/team cards where the full card can safely open the
@@ -678,7 +718,7 @@ changes each time, and screenshots desktop + mobile.
 - `CONF-1`+`MVT-1` → `CONF-2`
 - `STD-1`+`MVT-2`+`AS-2` → **`UI-1`** (brand pass also covers GDM-1/TW-1 surfaces)
 - `DATA-3` → `DEP-4` (v2/later)
-- `DEP-4`+`MVT-2`+`AS-2` → **`HIST-1`** → `HIST-2`
+- `DEP-4`+`MVT-2`+`AS-2` → **`HIST-1`** → `HIST-2` → `HIST-3` · `HIST-4`
 - `GDM-1`+`TW-1` → **`GDM-2`** → `GDM-3`
 
 Full blocked-by: AS-3 ← AS-1, GDM-1 · TW-1 ← GDM-1, DATA-2. Label `agent:build` on ready stories

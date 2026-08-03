@@ -1,5 +1,6 @@
-import { canonicalProviderPlayerId, sleeperSlotKey, type LineupStatus, type SlotKey } from "@/lib/playerData";
+import { canonicalProviderPlayerId, espnSlotKey, mapEspnPlayerWeekStats, sleeperSlotKey, type EspnMatchupPayload, type LineupStatus, type SlotKey } from "@/lib/playerData";
 import type { PastChampion, PlatformProvider } from "@/lib/types";
+import type { EspnLeague } from "./espn";
 import type { SleeperLeague, SleeperMatchup, SleeperRoster, SleeperUser } from "./sleeper";
 
 export interface LeagueSeasonHistoryRow {
@@ -88,6 +89,11 @@ export interface SleeperHistorySeasonPayload {
   matchupsByWeek: Record<number, SleeperMatchup[]>;
 }
 
+export interface EspnHistorySeasonPayload {
+  league: EspnLeague;
+  playerWeeks?: EspnLeague[];
+}
+
 export function espnPublicUnreliableHistoryYears(seasonYear: number, lookback = 8) {
   const startYear = Math.max(2017, seasonYear - lookback);
   return Array.from({ length: seasonYear - startYear + 1 }, (_, index) => startYear + index).filter((year) => year < 2018);
@@ -113,6 +119,10 @@ function sleeperLeagueTeamId(providerLeagueId: string, rosterId: string | number
   return `sleeper-${providerLeagueId}-${rosterId}`;
 }
 
+function espnLeagueTeamId(providerLeagueId: string, teamId: string | number) {
+  return `espn-${providerLeagueId}-${teamId}`;
+}
+
 function normalizeName(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -131,6 +141,16 @@ function sleeperStandings(rosters: SleeperRoster[]) {
 
 function sleeperTeamName(roster: SleeperRoster, user?: SleeperUser) {
   return roster.metadata?.team_name || user?.metadata?.team_name || user?.display_name || `Roster ${roster.roster_id}`;
+}
+
+function espnTeamName(team: NonNullable<EspnLeague["teams"]>[number]) {
+  return [team.location, team.nickname].filter(Boolean).join(" ").trim() || team.name || `Team ${team.id}`;
+}
+
+function espnRecordValue(record: unknown, key: "wins" | "losses" | "ties" | "pointsFor" | "pointsAgainst") {
+  const root = record && typeof record === "object" ? record as Record<string, unknown> : {};
+  const overall = root.overall && typeof root.overall === "object" ? root.overall as Record<string, unknown> : root;
+  return numberValue(overall[key]);
 }
 
 function matchupStatus(left?: SleeperMatchup, right?: SleeperMatchup): LeagueScheduleHistoryDraftRow["status"] {
@@ -280,6 +300,176 @@ export function buildSleeperLeagueHistoryDraft(scheduleId: string, seasons: Slee
           final_lock_at: matchupStatus(away, home) === "final" ? new Date().toISOString() : null,
         });
       }
+    }
+  }
+
+  champions.sort((left, right) => right.season - left.season);
+  return { leagueSeasons, teamHistory, scheduleHistory, playerCatalog: [...catalog.values()], ownershipHistory, champions, warnings };
+}
+
+function espnMatchupStatus(left?: { totalPoints?: number }, right?: { totalPoints?: number }): LeagueScheduleHistoryDraftRow["status"] {
+  if (!left || !right) return "unknown";
+  return typeof left.totalPoints === "number" && typeof right.totalPoints === "number" ? "final" : "scheduled";
+}
+
+function espnMemberName(league: EspnLeague, team: NonNullable<EspnLeague["teams"]>[number]) {
+  const ownerId = team.primaryOwner ?? team.owners?.[0];
+  const member = ownerId ? league.members?.find((item) => item.id === ownerId) : undefined;
+  return member?.displayName || [member?.firstName, member?.lastName].filter(Boolean).join(" ").trim() || null;
+}
+
+function espnRegularSeasonWeeks(league: EspnLeague) {
+  const setting = (league.settings?.scheduleSettings as { matchupPeriodCount?: unknown; playoffMatchupPeriodLength?: unknown } | undefined)?.matchupPeriodCount;
+  return boundedWeek(setting) ?? Math.max(0, ...(league.schedule ?? []).map((matchup) => matchup.matchupPeriodId).filter((week) => week >= 1 && week <= 18));
+}
+
+export function buildEspnLeagueHistoryDraft(scheduleId: string, seasons: EspnHistorySeasonPayload[]): LeagueHistoryDraft {
+  const leagueSeasons: LeagueSeasonHistoryRow[] = [];
+  const teamHistory: LeagueTeamHistoryDraftRow[] = [];
+  const scheduleHistory: LeagueScheduleHistoryDraftRow[] = [];
+  const ownershipHistory: PlayerOwnershipHistoryDraftRow[] = [];
+  const catalog = new Map<string, PlayerCatalogDraftRow>();
+  const champions: PastChampion[] = [];
+  const warnings: string[] = [];
+
+  for (const seasonPayload of seasons) {
+    const { league } = seasonPayload;
+    const providerLeagueId = String(league.id);
+    const season = Number(league.seasonId);
+    if (!Number.isInteger(season)) {
+      warnings.push(`ESPN league ${providerLeagueId} did not include a valid season.`);
+      continue;
+    }
+    const teams = league.teams ?? [];
+    const regularWeeks = espnRegularSeasonWeeks(league);
+    leagueSeasons.push({
+      schedule_id: scheduleId,
+      provider: "espn",
+      provider_league_id: providerLeagueId,
+      previous_provider_league_id: null,
+      season,
+      league_name: league.settings?.name || `ESPN ${season}`,
+      scoring_type: "head_to_head",
+      roster_positions: Object.entries(league.settings?.rosterSettings?.lineupSlotCounts ?? {}).flatMap(([slot, count]) => Array.from({ length: Number(count) || 0 }, () => slot)),
+      playoff_settings: {},
+      regular_season_week_count: regularWeeks || null,
+      team_count: teams.length,
+    });
+
+    for (const team of teams) {
+      const teamName = espnTeamName(team);
+      const finalStanding = numberValue(team.rankCalculatedFinal);
+      const wins = espnRecordValue(team.record, "wins");
+      const losses = espnRecordValue(team.record, "losses");
+      const ties = espnRecordValue(team.record, "ties");
+      const pointsFor = espnRecordValue(team.record, "pointsFor");
+      teamHistory.push({
+        providerLeagueId,
+        season,
+        league_team_id: espnLeagueTeamId(providerLeagueId, team.id),
+        provider_roster_or_team_id: String(team.id),
+        team_name: teamName,
+        manager_name: espnMemberName(league, team),
+        division_id: team.divisionId == null ? null : String(team.divisionId),
+        conference_id: null,
+        final_standing: finalStanding,
+        wins,
+        losses,
+        ties,
+        points_for: pointsFor,
+        points_against: espnRecordValue(team.record, "pointsAgainst"),
+      });
+      if (finalStanding === 1) {
+        champions.push({
+          season,
+          provider: "espn",
+          providerLeagueId,
+          leagueName: league.settings?.name || `ESPN ${season}`,
+          teamName,
+          managerName: espnMemberName(league, team) ?? undefined,
+          wins: wins ?? undefined,
+          losses: losses ?? undefined,
+          ties: ties ?? undefined,
+          pointsFor: pointsFor ?? undefined,
+        });
+      }
+    }
+
+    const virtualTeams = teams.map((team) => ({
+      id: espnLeagueTeamId(providerLeagueId, team.id),
+      city: "",
+      name: espnTeamName(team),
+      shortName: team.abbrev || espnTeamName(team).slice(0, 12),
+      manager: espnMemberName(league, team) ?? "",
+      color: "#117a45",
+      divisionId: team.divisionId == null ? "0" : String(team.divisionId),
+      overallRank: numberValue(team.rankCalculatedFinal) ?? team.id,
+      stadium: "",
+      providerId: espnLeagueTeamId(providerLeagueId, team.id),
+    }));
+    const playerPayloads = seasonPayload.playerWeeks?.length ? seasonPayload.playerWeeks : [league];
+    const playerRows = playerPayloads.flatMap((payload) => mapEspnPlayerWeekStats({
+      scheduleId,
+      providerLeagueId,
+      season,
+      teams: virtualTeams,
+      schedule: (payload.schedule ?? []) as EspnMatchupPayload[],
+    }));
+    for (const row of playerRows) {
+      ownershipHistory.push({
+        providerLeagueId,
+        season,
+        week: row.week,
+        canonical_player_id: row.canonicalPlayerId,
+        league_team_id: row.teamId,
+        provider_player_id: row.providerPlayerId,
+        nfl_team_at_time: null,
+        position_at_time: row.inferredSlot,
+        roster_status: row.lineupStatus,
+        lineup_slot: String(row.rawSlot ?? row.inferredSlot),
+        fantasy_points: row.points,
+      });
+    }
+    for (const payload of playerPayloads) {
+        for (const playerMatchup of payload.schedule ?? []) {
+          for (const side of [playerMatchup.home, playerMatchup.away]) {
+            for (const entry of side?.rosterForCurrentScoringPeriod?.entries ?? []) {
+              const providerPlayerId = String(entry.playerId ?? entry.playerPoolEntry?.player?.id ?? "");
+              if (!providerPlayerId) continue;
+              const player = entry.playerPoolEntry?.player;
+              const canonicalId = canonicalProviderPlayerId("espn", providerPlayerId);
+              const position = espnSlotKey(entry.lineupSlotId ?? -1);
+              const name = player?.fullName || [player?.firstName, player?.lastName].filter(Boolean).join(" ").trim() || providerPlayerId;
+              catalog.set(canonicalId, {
+                id: canonicalId,
+                canonical_name: name,
+                normalized_name: normalizeName(name),
+                position,
+                nfl_team: player?.proTeamId == null ? null : String(player.proTeamId),
+                sleeper_id: null,
+                espn_id: providerPlayerId,
+                status: "unknown",
+              });
+            }
+          }
+        }
+      }
+
+    for (const matchup of league.schedule ?? []) {
+      if (!matchup.home?.teamId || !matchup.away?.teamId) continue;
+      const status = espnMatchupStatus(matchup.away, matchup.home);
+      scheduleHistory.push({
+        providerLeagueId,
+        season,
+        week: matchup.matchupPeriodId,
+        provider_matchup_id: `espn:${providerLeagueId}:week-${matchup.matchupPeriodId}:matchup-${matchup.id}`,
+        home_league_team_id: espnLeagueTeamId(providerLeagueId, matchup.home.teamId),
+        away_league_team_id: espnLeagueTeamId(providerLeagueId, matchup.away.teamId),
+        home_score: numberValue(matchup.home.totalPoints),
+        away_score: numberValue(matchup.away.totalPoints),
+        status,
+        final_lock_at: status === "final" ? new Date(season, 11, 31).toISOString() : null,
+      });
     }
   }
 

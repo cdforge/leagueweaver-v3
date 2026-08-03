@@ -10,6 +10,7 @@ import {
   CircleAlert,
   Cloud,
   Copy,
+  ChevronDown,
   Download,
   ExternalLink,
   FileDown,
@@ -24,6 +25,7 @@ import {
   LogIn,
   MapPin,
   Medal,
+  MoreHorizontal,
   Pencil,
   Play,
   RefreshCw,
@@ -61,6 +63,7 @@ import { PlayoffPicturePanel } from "@/components/season/PlayoffPictureModal";
 import { StakesButton } from "@/components/season/StakesPanel";
 import { getLiveWeek } from "@/lib/scenarios";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import { FloatingPopover } from "@/components/ui/FloatingPopover";
 import { Modal, ConfirmDialog } from "@/components/ui/Modal";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { ConnectScoresModal } from "@/components/platform/ConnectScoresModal";
@@ -113,7 +116,8 @@ import { getNflWeekWindow, getWeekDateLabel, updateGameScore } from "@/lib/sched
 import { getWeekPhase } from "@/lib/weekPhase";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
 import { GAME_DETAIL_CACHE_PREFIX, type GameDetailPlayerStat } from "@/lib/gameDetail";
-import type { GeneratedSchedule, ImportHistoryEvent, ImportPreview, LeagueSetupInput, PastChampion, PlatformConnection, PlatformSyncMode, PlayoffGame, ScheduledGame, Team, TiebreakerSettings } from "@/lib/types";
+import { espnSlotKey, lineupSlotSortRank, sleeperSlotKey, type LineupStatus } from "@/lib/playerData";
+import type { GeneratedSchedule, ImportHistoryEvent, ImportPreview, LeagueSetupInput, PastChampion, PlatformConnection, PlatformSyncMode, PlayoffFieldSize, PlayoffGame, ScheduledGame, Team, TiebreakerSettings } from "@/lib/types";
 
 type ViewKey = "this-week" | "results" | "league-schedule" | "team-schedule" | "gotw" | "matchup-ratings" | "standings" | "mvt" | "all-stars" | "playoffs" | "simulator" | "settings";
 const CLOUD_SCHEDULE_ID = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
@@ -166,6 +170,229 @@ function historyStatusLabel(status: ImportHistoryEvent["status"]) {
 
 type HighlightedGame = { id: string; medalRank?: number; medalCategory?: string } | null;
 type ImportedScoreRow = { gameId: string; awayTeamId: string; homeTeamId: string; awayName: string; homeName: string; awayScore?: number; homeScore?: number };
+type HistoryBrowserSeason = {
+  id: string;
+  season: number;
+  provider: "espn" | "sleeper";
+  providerLeagueId: string;
+  leagueName: string;
+  teamCount: number;
+  rosterPositions?: string[];
+  regularSeasonWeekCount?: number;
+  playoffSettings?: Record<string, unknown>;
+  teams: Array<{ leagueTeamId: string; providerRosterOrTeamId: string; teamName: string; managerName?: string; divisionId?: string; conferenceId?: string; finalStanding?: number; wins?: number; losses?: number; ties?: number; pointsFor?: number; pointsAgainst?: number }>;
+  games: Array<{ week: number; providerMatchupId: string; homeLeagueTeamId: string; awayLeagueTeamId: string; homeScore?: number; awayScore?: number; status: string; finalLockAt?: string }>;
+  playerRows: Array<{ week: number; canonicalPlayerId: string; leagueTeamId: string; providerPlayerId: string; playerName: string; position: string; nflTeam?: string; lineupStatus: string; lineupSlot: string; fantasyPoints: number }>;
+};
+
+type HistorySyncResponse = {
+  rowsWritten?: number;
+  warnings?: string[];
+  dataFound?: {
+    availableHistoryYears?: number[];
+    blockedHistoryYears?: number[];
+  };
+};
+
+function historySyncNotice(historySync?: HistorySyncResponse) {
+  if (!historySync) return "";
+  const years = historySync.dataFound?.availableHistoryYears;
+  const yearText = years?.length ? ` Previous years found: ${years.join(", ")}.` : "";
+  const warningText = historySync.warnings?.[0] ? ` ${historySync.warnings[0]}` : "";
+  if ((historySync.rowsWritten ?? 0) > 0) return ` Historical data saved.${yearText}${warningText}`;
+  return yearText || warningText ? ` Historical data checked.${yearText}${warningText}` : " Historical data checked.";
+}
+
+function normalizeHistoryName(value?: string) {
+  return (value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function providerTail(value?: string) {
+  return value?.split("-").at(-1) ?? "";
+}
+
+function buildHistoryTeamMap(schedule: GeneratedSchedule, season: HistoryBrowserSeason) {
+  const byLeagueTeamId = new Map<string, string>();
+  const currentProviderId = new Map<string, string>(schedule.setup.teams.map((team) => [team.providerId ?? "", team.id]));
+  const currentProviderTail = new Map<string, string>(schedule.setup.teams
+    .map((team): [string, string] => [providerTail(team.providerId), team.id])
+    .filter(([tail]) => Boolean(tail)));
+  const currentName = new Map<string, string>(schedule.setup.teams.map((team) => [normalizeHistoryName(`${team.city ?? ""} ${team.name}`), team.id]));
+  for (const team of season.teams) {
+    const exactProviderId = `${season.provider}-${season.providerLeagueId}-${team.providerRosterOrTeamId}`;
+    const match = currentProviderId.get(exactProviderId)
+      ?? currentProviderTail.get(team.providerRosterOrTeamId)
+      ?? currentName.get(normalizeHistoryName(team.teamName));
+    if (match) byLeagueTeamId.set(team.leagueTeamId, match);
+  }
+  return byLeagueTeamId;
+}
+
+function historyLineupStatus(value: string): LineupStatus {
+  return value === "starter" || value === "bench" || value === "ir" || value === "taxi" || value === "reserve" ? value : "unknown";
+}
+
+function historySlot(provider: HistoryBrowserSeason["provider"], rawSlot: string) {
+  const parsed = Number(rawSlot);
+  if (provider === "espn" && Number.isInteger(parsed)) return espnSlotKey(parsed);
+  return sleeperSlotKey(rawSlot);
+}
+
+function numberFromHistorySetting(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function historicalRegularSeasonWeeks(season: HistoryBrowserSeason) {
+  const direct = numberFromHistorySetting(season.regularSeasonWeekCount);
+  if (direct && direct >= 1 && direct <= 18) return direct;
+  const sleeperStart = numberFromHistorySetting(season.playoffSettings?.playoff_week_start);
+  if (sleeperStart && sleeperStart > 1 && sleeperStart <= 18) return sleeperStart - 1;
+  return undefined;
+}
+
+function historicalFieldSize(season: HistoryBrowserSeason, fallback: PlayoffFieldSize) {
+  const providerValue = numberFromHistorySetting(season.playoffSettings?.playoff_teams);
+  if (!providerValue) return fallback;
+  const normalized = Math.max(2, Math.min(season.teamCount || providerValue, Math.round(providerValue)));
+  return normalized as PlayoffFieldSize;
+}
+
+function compareHistoryPlayerRows(provider: HistoryBrowserSeason["provider"], left: HistoryBrowserSeason["playerRows"][number], right: HistoryBrowserSeason["playerRows"][number]) {
+  const leftSlot = historySlot(provider, left.lineupSlot);
+  const rightSlot = historySlot(provider, right.lineupSlot);
+  return left.week - right.week
+    || left.leagueTeamId.localeCompare(right.leagueTeamId)
+    || lineupSlotSortRank(leftSlot) - lineupSlotSortRank(rightSlot)
+    || left.lineupSlot.localeCompare(right.lineupSlot, undefined, { numeric: true })
+    || left.providerPlayerId.localeCompare(right.providerPlayerId, undefined, { numeric: true });
+}
+
+function buildHistoricalSchedule(schedule: GeneratedSchedule, season?: HistoryBrowserSeason): GeneratedSchedule | null {
+  if (!season) return null;
+  const teamIdByHistoryTeam = buildHistoryTeamMap(schedule, season);
+  const gamesByWeek = new Map<number, ScheduledGame[]>();
+  const playoffGamesByRound = new Map<number, PlayoffGame[]>();
+  const regularWeeks = historicalRegularSeasonWeeks(season);
+  const playoffWeeks = regularWeeks ? Math.max(3, Math.min(4, Math.max(0, ...season.games.map((game) => game.week - regularWeeks)))) : undefined;
+  const setupWeeks = regularWeeks === 13 || regularWeeks === 14 ? regularWeeks : schedule.setup.weeks;
+  const setup = {
+    ...schedule.setup,
+    seasonYear: season.season,
+    name: `${schedule.setup.name} ${season.season}`,
+    abbreviation: schedule.setup.abbreviation,
+    weeks: setupWeeks,
+    playoffs: {
+      ...schedule.setup.playoffs,
+      fieldSize: historicalFieldSize(season, schedule.setup.playoffs.fieldSize),
+      playoffWeeks: playoffWeeks === 3 || playoffWeeks === 4 ? playoffWeeks : schedule.setup.playoffs.playoffWeeks,
+      fieldStatus: "locked" as const,
+      lockedTeamIds: season.teams
+        .filter((team) => team.finalStanding != null)
+        .sort((left, right) => (left.finalStanding ?? 999) - (right.finalStanding ?? 999))
+        .flatMap((team) => teamIdByHistoryTeam.get(team.leagueTeamId) ?? [])
+        .slice(0, historicalFieldSize(season, schedule.setup.playoffs.fieldSize)),
+    },
+  };
+  const roundNames = getPlayoffRoundNames(setup.playoffs, setup.divisions.length);
+  for (const game of season.games) {
+    const homeTeamId = teamIdByHistoryTeam.get(game.homeLeagueTeamId);
+    const awayTeamId = teamIdByHistoryTeam.get(game.awayLeagueTeamId);
+    const home = homeTeamId ? schedule.setup.teams.find((team) => team.id === homeTeamId) : undefined;
+    const away = awayTeamId ? schedule.setup.teams.find((team) => team.id === awayTeamId) : undefined;
+    if (!homeTeamId || !awayTeamId || !home || !away) continue;
+    const isPlayoff = Boolean(regularWeeks && game.week > regularWeeks);
+    const roundIndex = isPlayoff && regularWeeks ? game.week - regularWeeks - 1 : -1;
+    const gameNumber = isPlayoff ? (playoffGamesByRound.get(roundIndex)?.length ?? 0) + 1 : (gamesByWeek.get(game.week)?.length ?? 0) + 1;
+    const baseGame = {
+      id: isPlayoff ? `main-r${roundIndex + 1}-g${gameNumber}` : `history-${season.season}-${game.providerMatchupId}`,
+      week: game.week,
+      gameNumber,
+      homeTeamId,
+      awayTeamId,
+      matchupType: home.divisionId === away.divisionId ? "division" : "cross-division",
+      seriesGame: 1,
+      seriesLength: 1,
+      dateLabel: getWeekDateLabel(season.season, game.week),
+      stadium: home.stadium,
+      homeScore: game.homeScore,
+      awayScore: game.awayScore,
+      notes: [`${season.provider.toUpperCase()} history`, isPlayoff ? "Historical playoff game" : "Historical regular-season game"],
+    } satisfies ScheduledGame;
+    if (isPlayoff) {
+      const existing = playoffGamesByRound.get(roundIndex) ?? [];
+      existing.push({
+        ...baseGame,
+        round: roundNames[roundIndex] ?? `Round ${roundIndex + 1}`,
+        roundIndex,
+        bracket: "main",
+      });
+      playoffGamesByRound.set(roundIndex, existing);
+    } else {
+      const existing = gamesByWeek.get(game.week) ?? [];
+      existing.push(baseGame);
+      gamesByWeek.set(game.week, existing);
+    }
+  }
+  const weeks = [...gamesByWeek.entries()].sort(([left], [right]) => left - right).map(([weekNumber, games]) => ({
+    weekNumber,
+    dateLabel: getWeekDateLabel(season.season, weekNumber),
+    games,
+    averageMatchupRating: 0,
+    bestMatchupRating: 0,
+  }));
+  const playoffGames = [...playoffGamesByRound.entries()]
+    .sort(([left], [right]) => left - right)
+    .flatMap(([, games]) => games);
+  if (!weeks.length && !playoffGames.length) return null;
+  return normalizeSeason({
+    ...schedule,
+    id: `${schedule.id}-history-${season.season}`,
+    createdAt: schedule.createdAt,
+    setup,
+    weeks,
+    playoffGames,
+    rankHistory: undefined,
+  });
+}
+
+function buildHistoricalPlayerRows(schedule: GeneratedSchedule, season?: HistoryBrowserSeason): GameDetailPlayerStat[] {
+  if (!season) return [];
+  const teamIdByHistoryTeam = buildHistoryTeamMap(schedule, season);
+  const starterCounts = new Map<string, number>();
+  const sortedRows = [...season.playerRows].sort((left, right) => compareHistoryPlayerRows(season.provider, left, right));
+  return sortedRows.flatMap((row) => {
+    const teamId = teamIdByHistoryTeam.get(row.leagueTeamId);
+    if (!teamId) return [];
+    const lineupStatus = historyLineupStatus(row.lineupStatus);
+    const inferredSlot = historySlot(season.provider, row.lineupSlot);
+    const starterKey = `${row.week}:${teamId}`;
+    const starterIndex = lineupStatus === "starter" ? (starterCounts.set(starterKey, (starterCounts.get(starterKey) ?? 0) + 1), (starterCounts.get(starterKey) ?? 1) - 1) : undefined;
+    return [{
+      scheduleId: schedule.id,
+      provider: season.provider,
+      providerLeagueId: season.providerLeagueId,
+      season: season.season,
+      week: row.week,
+      teamId,
+      providerRosterId: row.leagueTeamId,
+      providerPlayerId: row.providerPlayerId,
+      canonicalPlayerId: row.canonicalPlayerId,
+      displayName: row.playerName,
+      position: row.position,
+      nflTeam: row.nflTeam,
+      points: row.fantasyPoints,
+      lineupStatus,
+      starterIndex,
+      inferredSlot,
+      rawSlot: row.lineupSlot,
+      slotConfidence: lineupStatus === "starter" ? "inferred" : "bench",
+      isProvisional: false,
+      finalLockAt: undefined,
+      syncedAt: new Date(season.season, 0, 1).toISOString(),
+      sourcePayloadHash: `history:${season.id}:${row.week}:${row.canonicalPlayerId}`,
+    }];
+  });
+}
 
 function seasonTimeframeLabel(seasonYear: number, weeks: number) {
   const firstWeek = getNflWeekWindow(seasonYear, 1);
@@ -188,6 +415,7 @@ const VIEW_ITEMS: Array<{ key: ViewKey; label: string; icon: typeof CalendarDays
   { key: "playoffs", label: "Playoffs", icon: Trophy },
   { key: "settings", label: "Settings", icon: Settings },
 ];
+const HISTORY_COMPATIBLE_VIEWS = new Set<ViewKey>(["league-schedule", "team-schedule", "gotw", "matchup-ratings", "standings", "mvt", "all-stars", "playoffs"]);
 
 function TeamMark({ team, size = "normal" }: { team: Team; size?: "small" | "normal" }) {
   return <EntityLogo className={`team-mark team-mark-${size}`} color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={size === "small" ? 32 : 42} />;
@@ -212,7 +440,7 @@ function playoffRoundShortLabel(name: string) {
   return name.replace("Round ", "Rd ");
 }
 
-function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores }: { schedule: GeneratedSchedule; roundIndex: number; onEnterScores: () => void }) {
+function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores, onOpenGame }: { schedule: GeneratedSchedule; roundIndex: number; onEnterScores: () => void; onOpenGame?: (gameId: string) => void }) {
   const settings = normalizePlayoffSettings(schedule.setup.playoffs, schedule.setup.teams.length, schedule.setup.color, schedule.setup.weeks);
   const normalizedSchedule = { ...schedule, setup: { ...schedule.setup, playoffs: settings } };
   const projectedRounds = projectPlayoffRounds(normalizedSchedule);
@@ -288,6 +516,7 @@ function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores }: { schedule
       awayRecord={recordFor(awayTeamId)} homeRecord={recordFor(homeTeamId)}
       featured={false} gameLabel={gameLabel} showCity={showCity} showVenue projected={projected}
       teamHrefBase={`/season/${schedule.id}/team`}
+      onOpenGame={onOpenGame}
     />;
   };
 
@@ -417,7 +646,7 @@ function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores }: { schedule
   </div>;
 }
 
-function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayoffs, onOpenScores, onOpenPlayoffs, onOpenGame, highlightedGame, simulationResults = {}, simulationProbabilities = {} }: {
+function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayoffs, onOpenScores, onOpenPlayoffs, onOpenGame, highlightedGame, simulationResults = {}, simulationProbabilities = {}, readOnlyHistory = false, teamHrefBase, teamHrefFor }: {
   schedule: GeneratedSchedule;
   selectedWeek: number;
   setSelectedWeek: (week: number) => void;
@@ -428,6 +657,9 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
   highlightedGame?: HighlightedGame;
   simulationResults?: Record<string, SimulatorResultView>;
   simulationProbabilities?: Record<string, { away: number; home: number }>;
+  readOnlyHistory?: boolean;
+  teamHrefBase?: string;
+  teamHrefFor?: (teamId: string) => string;
 }) {
   const weekStripRef = useRef<HTMLDivElement>(null);
   const scheduleSignals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
@@ -536,7 +768,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
   if (selectedPlayoffIndex >= 0) {
     return <div className="workspace-stack">
       {weekSelector}
-      <PlayoffWeekSchedule schedule={schedule} roundIndex={selectedPlayoffIndex} onEnterScores={onOpenPlayoffs} />
+      <PlayoffWeekSchedule schedule={schedule} roundIndex={selectedPlayoffIndex} onEnterScores={onOpenPlayoffs} onOpenGame={onOpenGame} />
     </div>;
   }
   return (
@@ -561,13 +793,13 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
             {(secondaryHolidays.length > 0 || byeTeams.length > 0) && <span className="week-markers">{secondaryHolidays.map((holiday) => <em className="holiday-marker" key={holiday}>{holiday}</em>)}{byeTeams.length > 0 && <em className="bye-marker">{byeTeams.length} BYE</em>}</span>}
           </div>
           <div className="section-bar-actions">
-            {week.weekNumber === liveWeekNumber && <StakesButton schedule={schedule} weekNumber={week.weekNumber} onGoToGame={goToGame} />}
-            <button type="button" className={`score-entry-trigger${scoreEntryDue ? " needs-attention" : ""}`} onClick={() => onOpenScores(week.weekNumber)}>
+            {!readOnlyHistory && week.weekNumber === liveWeekNumber && <StakesButton schedule={schedule} weekNumber={week.weekNumber} onGoToGame={goToGame} />}
+            {!readOnlyHistory ? <button type="button" className={`score-entry-trigger${scoreEntryDue ? " needs-attention" : ""}`} onClick={() => onOpenScores(week.weekNumber)}>
               {scoreEntryDue && <i className="due-dot" aria-hidden="true" />}
               <LayoutList />
               <span>{scoreEntryDue ? "Enter scores" : hasEnteredScores ? "Edit scores" : "Add scores"}</span>
               {week.games.length > 0 && <small className="score-progress" aria-label={`${scoredCount} of ${week.games.length} scored`}>{scoredCount}/{week.games.length}</small>}
-            </button>
+            </button> : <span className="history-readonly-pill"><History />Provider history</span>}
           </div>
         </div>
         {gotwOverrideDetails && gotwEntry && visibleGames.some((game) => game.id === gameOfWeekId) && <section className="gotw-selection-reason" aria-label="Why this matchup is Game of the Week">
@@ -581,7 +813,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
           const simulationResult = simulationResults[game.id];
           const isHighlighted = highlightedGame?.id === game.id;
           const highlightedMedalLabel = isHighlighted && highlightedGame?.medalRank ? ["Gold", "Silver", "Bronze"][highlightedGame.medalRank - 1] : undefined;
-          return <MatchupCard key={game.id} {...presentationFor(game, week.weekNumber)} featured={featured} featuredLabel={featured && gotwEntry ? gameOfWeekStatusLabel(gotwEntry.status) : undefined} gameLabel={featured ? undefined : `Game ${game.gameNumber}`} badges={analytics?.badges} medalRank={isHighlighted ? highlightedGame?.medalRank : analytics?.qualityRank} medalLabel={highlightedMedalLabel ? `${highlightedMedalLabel} · ${highlightedGame?.medalCategory || "League leader"}` : undefined} highlighted={isHighlighted} simulationSource={simulationResult?.source} simulationLocked={simulationResult?.locked} winProbability={simulationProbabilities[game.id]} teamHrefBase={`/season/${schedule.id}/team`} onOpenGame={onOpenGame} />;
+          return <MatchupCard key={game.id} {...presentationFor(game, week.weekNumber)} featured={featured} featuredLabel={featured && gotwEntry ? gameOfWeekStatusLabel(gotwEntry.status) : undefined} gameLabel={featured ? undefined : `Game ${game.gameNumber}`} badges={analytics?.badges} medalRank={isHighlighted ? highlightedGame?.medalRank : analytics?.qualityRank} medalLabel={highlightedMedalLabel ? `${highlightedMedalLabel} · ${highlightedGame?.medalCategory || "League leader"}` : undefined} highlighted={isHighlighted} simulationSource={simulationResult?.source} simulationLocked={simulationResult?.locked} winProbability={simulationProbabilities[game.id]} teamHrefBase={teamHrefBase ?? `/season/${schedule.id}/team`} teamHrefFor={teamHrefFor} onOpenGame={onOpenGame} />;
         })}{visibleGames.length === 0 && <div className="rating-filter-empty"><strong>No games scheduled this week.</strong>{byeTeams.length > 0 && <span>Every team is on a bye this week.</span>}</div>}</div>
       </div>
       <MatchupRatingLegend />
@@ -590,7 +822,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
   );
 }
 
-function MatchupRatingsView({ schedule }: { schedule: GeneratedSchedule }) {
+function MatchupRatingsView({ schedule, teamHrefFor, leagueWeekHrefFor }: { schedule: GeneratedSchedule; teamHrefFor?: (teamId: string) => string; leagueWeekHrefFor?: (week: number) => string }) {
   // Fixed presentation: all matchups, strongest first, weekly-standings lens.
   const lens: "live" | "preseason" = "live";
   const scheduleSignals = getScheduleGameSignals(schedule);
@@ -642,11 +874,11 @@ function MatchupRatingsView({ schedule }: { schedule: GeneratedSchedule }) {
           const homeWon = played && game.homeScore! > game.awayScore!;
           const isGameOfWeek = scheduleSignals.gotwIds.has(game.id);
           return <tr className={isGameOfWeek ? "is-gotw" : undefined} key={game.id}>
-            <td><Link href={`/season/${schedule.id}?week=${game.week}#${game.id}`}>W{game.week}</Link></td>
+            <td><Link href={`${leagueWeekHrefFor ? leagueWeekHrefFor(game.week) : `/season/${schedule.id}?week=${game.week}`}#${game.id}`}>W{game.week}</Link></td>
             <td>{isGameOfWeek ? <GameBadgeChip badge="GOTW" /> : <span className="matchup-table-game-label">Game {game.gameNumber ?? "—"}</span>}</td>
-            <td><TeamIdentityBlock compact showRecord={false} team={away} division={divisionById.get(away.divisionId)} leagueRank={rowRanks.get(away.id) ?? away.overallRank} record={{ overall: "0-0" }} showCity={schedule.setup.display.cityNames} href={`/season/${schedule.id}/team/${away.id}`} /></td>
+            <td><TeamIdentityBlock compact showRecord={false} team={away} division={divisionById.get(away.divisionId)} leagueRank={rowRanks.get(away.id) ?? away.overallRank} record={{ overall: "0-0" }} showCity={schedule.setup.display.cityNames} href={teamHrefFor ? teamHrefFor(away.id) : `/season/${schedule.id}/team/${away.id}`} /></td>
             <td>{played ? <span className="matchup-table-result" aria-label={`Final score: ${away.name} ${game.awayScore}, ${home.name} ${game.homeScore}`}><span><strong className={awayWon ? "winner" : homeWon ? "loser" : ""}>{formatPoints(game.awayScore!)}</strong><b aria-label="at">@</b><strong className={homeWon ? "winner" : awayWon ? "loser" : ""}>{formatPoints(game.homeScore!)}</strong></span><small>FINAL</small></span> : <span className="matchup-table-result pending">—<small>NOT PLAYED</small></span>}</td>
-            <td><TeamIdentityBlock mirrored compact showRecord={false} team={home} division={divisionById.get(home.divisionId)} leagueRank={rowRanks.get(home.id) ?? home.overallRank} record={{ overall: "0-0" }} showCity={schedule.setup.display.cityNames} href={`/season/${schedule.id}/team/${home.id}`} /></td>
+            <td><TeamIdentityBlock mirrored compact showRecord={false} team={home} division={divisionById.get(home.divisionId)} leagueRank={rowRanks.get(home.id) ?? home.overallRank} record={{ overall: "0-0" }} showCity={schedule.setup.display.cityNames} href={teamHrefFor ? teamHrefFor(home.id) : `/season/${schedule.id}/team/${home.id}`} /></td>
             <td><MatchupSeriesChip game={game} division={divisionById.get(home.divisionId)} /></td>
             <td><span className="table-rating-cell"><span className={`table-signal signal-${signal.label.toLowerCase()}`} aria-label={`${signal.label} matchup, rated ${signal.score10.toFixed(1)} out of 10`}>{[1, 2, 3].map((bar) => <i className={bar <= signal.bars ? "active" : ""} key={bar} />)}<strong>{signal.score10.toFixed(1)}</strong></span><small className="table-rating-ranks">W{game.week} ranks · #{rowRanks.get(away.id) ?? away.overallRank} vs #{rowRanks.get(home.id) ?? home.overallRank}</small></span></td>
           </tr>;
@@ -664,7 +896,7 @@ function MatchupRatingsView({ schedule }: { schedule: GeneratedSchedule }) {
         signal={getMatchupSignal(game, lens === "live" ? rowRanks : undefined, ratingRange, teamCount)}
         featured={scheduleSignals.gotwIds.has(game.id)} featuredLabel="GOTW"
         dateLabel={`Week ${game.week}`} showCity={schedule.setup.display.cityNames} showVenue={false}
-        teamHrefBase={`/season/${schedule.id}/team`} />;
+        teamHrefBase={`/season/${schedule.id}/team`} teamHrefFor={teamHrefFor} />;
     })}</div>
   </div>;
 }
@@ -883,6 +1115,8 @@ function PlayoffsView({
   mode = "board",
   playoffTab = "board",
   onChangePlayoffTab,
+  teamHrefFor,
+  onOpenGame,
 }: {
   schedule: GeneratedSchedule;
   onUpdatePlayoffs: (patch: Partial<LeagueSetupInput["playoffs"]>) => void;
@@ -893,6 +1127,8 @@ function PlayoffsView({
   mode?: "board" | "settings";
   playoffTab?: "board" | "picture";
   onChangePlayoffTab?: (tab: "board" | "picture") => void;
+  teamHrefFor?: (teamId: string) => string;
+  onOpenGame?: (gameId: string) => void;
 }) {
   const [roundBrandingOpen, setRoundBrandingOpen] = useState(false);
   const [boardSection, setBoardSection] = useState<"championship" | "consolation" | "placement">("championship");
@@ -921,7 +1157,7 @@ function PlayoffsView({
     const item = seed(number);
     const team = item ? teamById.get(item.teamId) : undefined;
     const standing = item ? playoffStandingsByTeam.get(item.teamId) : undefined;
-    return <div className={`bracket-slot ${host ? "host" : ""}${team ? "" : " placeholder"}`} style={team ? { "--slot-spine": team.color } as React.CSSProperties : undefined}>{team && item ? <TeamIdentityBlock variant="stacked" compact team={team} division={divisionById.get(team.divisionId)} leagueRank={displayedSeed(item)} record={{ overall: item.record, division: standing ? `${standing.divisionWins}-${standing.divisionLosses}` : undefined }} showCity={showCity} href={`/season/${schedule.id}/team/${team.id}`} /> : <><b>{number}</b><span><strong>To be determined</strong><small>Projected seed</small></span></>}</div>;
+    return <div className={`bracket-slot ${host ? "host" : ""}${team ? "" : " placeholder"}`} style={team ? { "--slot-spine": team.color } as React.CSSProperties : undefined}>{team && item ? <TeamIdentityBlock variant="stacked" compact team={team} division={divisionById.get(team.divisionId)} leagueRank={displayedSeed(item)} record={{ overall: item.record, division: standing ? `${standing.divisionWins}-${standing.divisionLosses}` : undefined }} showCity={showCity} href={teamHrefFor ? teamHrefFor(team.id) : `/season/${schedule.id}/team/${team.id}`} /> : <><b>{number}</b><span><strong>To be determined</strong><small>Projected seed</small></span></>}</div>;
   };
   const RoundHeading = ({ index }: { index: number }) => <h3 className="playoff-round-heading">{settings.roundLogoUrls?.[index] && <img src={settings.roundLogoUrls[index]} alt="" />}<span className="playoff-round-heading-copy"><span>{rounds[index] || `Round ${index + 1}`}</span><small>NFL Week {schedule.setup.weeks + index + 1} · {roundDate(index)}</small></span></h3>;
   const sideName = (side: "A" | "B") => {
@@ -1044,7 +1280,7 @@ function PlayoffsView({
     const standing = playoffStandingsByTeam.get(teamId);
     const seedEntry = seeds.find((item) => item.teamId === teamId);
     return <div className={`bracket-slot result-slot ${winner ? "is-winner" : "is-loser"}`} style={{ "--slot-spine": team.color } as React.CSSProperties}>
-      <TeamIdentityBlock variant="stacked" compact result={winner ? "winner" : "loser"} team={team} division={divisionById.get(team.divisionId)} leagueRank={seedByTeam.get(teamId) ?? team.overallRank} record={{ overall: seedEntry?.record ?? (standing ? formatRecord(standing) : "0-0"), division: standing ? `${standing.divisionWins}-${standing.divisionLosses}` : undefined }} showCity={showCity} href={`/season/${schedule.id}/team/${team.id}`} />
+      <TeamIdentityBlock variant="stacked" compact result={winner ? "winner" : "loser"} team={team} division={divisionById.get(team.divisionId)} leagueRank={seedByTeam.get(teamId) ?? team.overallRank} record={{ overall: seedEntry?.record ?? (standing ? formatRecord(standing) : "0-0"), division: standing ? `${standing.divisionWins}-${standing.divisionLosses}` : undefined }} showCity={showCity} href={teamHrefFor ? teamHrefFor(team.id) : `/season/${schedule.id}/team/${team.id}`} />
       <span className="bracket-score">{score ?? "—"}</span>
     </div>;
   };
@@ -1138,7 +1374,23 @@ function PlayoffsView({
         bracket: "main",
       });
     };
-    return <article className={`main-playoff-game ${played ? "is-final" : "is-projected"}`} data-bracket-game-id={gameId} style={{ "--game-half-color": halfDivision?.color, "--game-half-accent": halfDivision ? accessibleAccentColor(halfDivision.color, "#171d1a") : undefined } as React.CSSProperties}>
+    const canOpen = Boolean(recorded && onOpenGame);
+    return <article
+      className={`main-playoff-game ${played ? "is-final" : "is-projected"}${canOpen ? " is-openable" : ""}`}
+      data-bracket-game-id={gameId}
+      role={canOpen ? "button" : undefined}
+      tabIndex={canOpen ? 0 : undefined}
+      aria-label={canOpen ? `Open box score for ${gameName}` : undefined}
+      onClick={(event) => { if (canOpen && !(event.target instanceof HTMLElement && event.target.closest("a, button, input, select, textarea, summary"))) onOpenGame?.(gameId); }}
+      onKeyDown={(event) => {
+        if (!canOpen || (event.target instanceof HTMLElement && event.target.closest("a, button, input, select, textarea, summary"))) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpenGame?.(gameId);
+        }
+      }}
+      style={{ "--game-half-color": halfDivision?.color, "--game-half-accent": halfDivision ? accessibleAccentColor(halfDivision.color, "#171d1a") : undefined } as React.CSSProperties}
+    >
       <header><PlayoffGameBrand roundIndex={roundIndex} gameIndex={gameIndex} /><span><strong>{gameName}</strong><small>{sideCopy || (played ? "Final result" : settings.reseedMode === "fixed" ? "Fixed bracket path" : "Projected path")}</small></span>{played && <em>FINAL</em>}</header>
       <div className="main-playoff-game-teams">{recorded ? <><SimulatedPlayoffTeam teamId={recorded.awayTeamId} score={recorded.awayScore} winner={awayWon} /><SimulatedPlayoffTeam teamId={recorded.homeTeamId} score={recorded.homeScore} winner={homeWon} /></> : <><ResolvedSlot roundIdx={roundIndex} number={homeSeed} host /><ResolvedSlot roundIdx={roundIndex} number={awaySeed} /></>}</div>
       {!simulationMode && playoffsLive && homeTeam && awayTeam && (recorded != null || (slotResolved(roundIndex, homeSeed) && slotResolved(roundIndex, awaySeed))) && <InlinePlayoffScoreEditor awayName={teamDisplayName(awayTeam, showCity)} homeName={teamDisplayName(homeTeam, showCity)} awayScore={recorded?.awayScore} homeScore={recorded?.homeScore} onSave={(awayScore, homeScore) => saveScore(awayScore, homeScore)} onClear={() => saveScore(undefined, undefined)} />}
@@ -1280,6 +1532,17 @@ function ImportHistoryPanel({ events, loading, error, onRefresh, scheduleId }: {
           {event.revisionId ? <Link href={`/account?season=${encodeURIComponent(scheduleId)}`} className="import-history-link">View revisions</Link> : <span aria-hidden="true" />}
         </li>)}</ol>
           : <div className="import-history-state"><History /><span>No import history is attached to this saved season yet.</span></div>}
+  </section>;
+}
+
+function HistoryMissingState({ season, onSync, syncing, canSync }: { season?: HistoryBrowserSeason; onSync: () => void; syncing: boolean; canSync: boolean }) {
+  return <section className="history-missing-state" role="status">
+    <History />
+    <span>
+      <strong>{season ? `${season.season} schedule history is not saved yet.` : "No saved history is available yet."}</strong>
+      <small>Previous years show only saved LeagueWeaver seasons or real ESPN/Sleeper provider history.</small>
+    </span>
+    {canSync && <button type="button" onClick={onSync} disabled={syncing}>{syncing ? <LoaderCircle className="spin" /> : <RefreshCw />}Sync history</button>}
   </section>;
 }
 
@@ -1487,6 +1750,9 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
   const [cloudRetry, setCloudRetry] = useState<CloudRetryState | null>(null);
   const [importHistory, setImportHistory] = useState<ImportHistoryEvent[]>([]);
   const [pastChampions, setPastChampions] = useState<PastChampion[]>([]);
+  const [historySeasons, setHistorySeasons] = useState<HistoryBrowserSeason[]>([]);
+  const [historySeasonKey, setHistorySeasonKey] = useState("current");
+  const [historySyncing, setHistorySyncing] = useState(false);
   const [importHistoryLoading, setImportHistoryLoading] = useState(false);
   const [importHistoryError, setImportHistoryError] = useState<string | null>(null);
   const cloudScheduleSnapshot = useRef<string | null>(null);
@@ -1649,17 +1915,19 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
     if (!schedule || !CLOUD_SCHEDULE_ID.test(schedule.id)) {
       setImportHistory([]);
       setPastChampions([]);
+      setHistorySeasons([]);
       setImportHistoryError(null);
       return;
     }
     setImportHistoryLoading(true);
     setImportHistoryError(null);
     try {
-      const response = await fetch(`/api/platform/history?scheduleId=${encodeURIComponent(schedule.id)}`);
-      const payload = await response.json().catch(() => ({})) as { events?: ImportHistoryEvent[]; champions?: PastChampion[]; error?: string };
+      const response = await fetch(`/api/platform/history?scheduleId=${encodeURIComponent(schedule.id)}&include=browser`);
+      const payload = await response.json().catch(() => ({})) as { events?: ImportHistoryEvent[]; champions?: PastChampion[]; history?: HistoryBrowserSeason[]; error?: string };
       if (!response.ok) throw new Error(apiErrorMessage(response.status, payload.error, "Import history could not be loaded."));
       setImportHistory(payload.events ?? []);
       setPastChampions(payload.champions ?? []);
+      setHistorySeasons(payload.history ?? []);
     } catch (caught) {
       setImportHistoryError(caught instanceof Error ? caught.message : "Import history could not be loaded.");
     } finally {
@@ -1668,9 +1936,10 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
   };
   useEffect(() => {
     if (!schedule || !CLOUD_SCHEDULE_ID.test(schedule.id)) {
-      queueMicrotask(() => { setImportHistory([]); setPastChampions([]); });
+      queueMicrotask(() => { setImportHistory([]); setPastChampions([]); setHistorySeasons([]); setHistorySeasonKey("current"); });
       return;
     }
+    queueMicrotask(() => setHistorySeasonKey(new URLSearchParams(window.location.search).get("season") || "current"));
     queueMicrotask(() => void loadImportHistory());
   }, [schedule?.id]);
   useEffect(() => {
@@ -1685,6 +1954,9 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
     }
     if (requestedViewValue === "fairness") queueMicrotask(() => setView("league-schedule"));
     const requestedView = (requestedViewValue === "schedule" || requestedViewValue === "scores" || requestedViewValue === "fairness" ? "league-schedule" : requestedViewValue) as ViewKey | null;
+    const requestedHistorySeason = searchParams.get("season");
+    const historyTargetView = requestedView ?? "league-schedule";
+    if (HISTORY_COMPATIBLE_VIEWS.has(historyTargetView)) queueMicrotask(() => setHistorySeasonKey(requestedHistorySeason || "current"));
     if (requestedView && VIEW_ITEMS.some((item) => item.key === requestedView) && (requestedView !== "results" || (schedule && getLatestFinalWeek(schedule)))) queueMicrotask(() => setView(requestedView));
     const gameId = decodeURIComponent(window.location.hash.slice(1));
     const medalRank = Number(searchParams.get("medal"));
@@ -1694,10 +1966,6 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
       medalCategory: searchParams.get("medalCategory") || undefined,
     } : null));
   }, [searchParams]);
-  useEffect(() => {
-    if (!schedule || !selectedTeamId || schedule.setup.teams.some((team) => team.id === selectedTeamId)) return;
-    queueMicrotask(() => setSelectedTeamId(schedule.setup.teams[0]?.id ?? ""));
-  }, [schedule, selectedTeamId]);
   // Focus trap, scroll lock, focus restore, and Escape are handled by <Modal>.
   // Escape routing between the score sheet and its nested discard prompt lives in
   // the modal's onClose handler below.
@@ -1759,13 +2027,30 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
     }
   }, [schedule?.id, simulation, simulationLoaded]);
   const canAccessScorekeeping = true;
-  const canAccessPlatformSync = entitlements.plan === "pro" || entitlements.features.includes("platform_sync");
+  const canAccessPlatformSync = true;
   const activeSchedule = useMemo(() => schedule && simulation ? materializeSimulationSchedule(simulation) : schedule, [schedule, simulation]);
+  const historyOptions = useMemo(() => [
+    { value: "current", label: `${schedule?.setup.seasonYear ?? "Current"}`, description: "Current LeagueWeaver season" },
+    ...historySeasons
+      .filter((season) => season.season !== schedule?.setup.seasonYear)
+      .map((season) => ({ value: String(season.season), label: String(season.season), description: `${season.provider.toUpperCase()} saved history` })),
+  ], [historySeasons, schedule?.setup.seasonYear]);
+  const effectiveHistorySeasonKey = historySeasonKey === "current" ? "current" : historySeasonKey;
+  const selectedHistorySeason = useMemo(() => effectiveHistorySeasonKey === "current" ? undefined : historySeasons.find((season) => String(season.season) === effectiveHistorySeasonKey), [effectiveHistorySeasonKey, historySeasons]);
+  const historySchedule = useMemo(() => schedule && selectedHistorySeason ? buildHistoricalSchedule(schedule, selectedHistorySeason) : null, [schedule, selectedHistorySeason]);
+  const historyPlayerStats = useMemo(() => schedule && selectedHistorySeason ? buildHistoricalPlayerRows(schedule, selectedHistorySeason) : [], [schedule, selectedHistorySeason]);
+  const historyViewActive = Boolean(selectedHistorySeason && HISTORY_COMPATIBLE_VIEWS.has(view));
+  const workspaceSchedule = historyViewActive && historySchedule ? historySchedule : activeSchedule;
+  const workspacePlayerStats = historyViewActive ? historyPlayerStats : gameDetailPlayerStats;
+  useEffect(() => {
+    if (!workspaceSchedule || !selectedTeamId || workspaceSchedule.setup.teams.some((team) => team.id === selectedTeamId)) return;
+    queueMicrotask(() => setSelectedTeamId(workspaceSchedule.setup.teams[0]?.id ?? ""));
+  }, [workspaceSchedule, selectedTeamId]);
   const latestRecapWeek = activeSchedule ? getLatestFinalWeek(activeSchedule) : null;
   const visibleViewItems = VIEW_ITEMS.filter((item) => item.key !== "results" || latestRecapWeek);
   const openGameDetail = (gameId: string) => {
-    if (!activeSchedule) return;
-    const gameWeek = activeSchedule.weeks.find((item) => item.games.some((game) => game.id === gameId));
+    if (!workspaceSchedule) return;
+    const gameWeek = workspaceSchedule.weeks.find((item) => item.games.some((game) => game.id === gameId));
     if (gameWeek) setSelectedWeek(gameWeek.weekNumber);
     setHighlightedGame({ id: gameId });
     setGameDetailId(gameId);
@@ -1842,6 +2127,7 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
     if (seasonLoadState === "error") return <div className="empty-season" role="alert"><BrandLockup /><Cloud /><h1>Season could not open.</h1><p>{seasonLoadError || "The saved season was not available. Your local work is still safe on this device if it was created here."}</p><Link href="/account" className="button-primary">Open account</Link><Link href="/build" className="button-secondary">Open schedule builder</Link></div>;
     return <div className="empty-season"><BrandLockup /><CalendarDays /><h1>No generated season yet.</h1><p>Build your league first, then your complete schedule will appear here.</p><Link href="/build" className="button-primary">Open schedule builder</Link></div>;
   }
+  const scoreBarSchedule = workspaceSchedule ?? activeSchedule;
   const onScore = (id: string, home?: number, away?: number) => {
     if (simulation) {
       if (home != null && away != null && home !== away) setSimulation((current) => current ? overrideSimulationGame(current, id, { homeScore: home, awayScore: away }) : current);
@@ -1914,6 +2200,29 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
       window.setTimeout(() => setNotice(null), 5200);
     }
   }
+  async function syncLeagueHistory() {
+    const connection = schedule?.setup.platformConnection;
+    if (!connection || !CLOUD_SCHEDULE_ID.test(schedule.id) || historySyncing || simulation) return;
+    setHistorySyncing(true);
+    try {
+      const response = await fetch("/api/platform/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduleId: schedule.id, provider: connection.provider, identifier: connection.providerLeagueId, seasonYear: connection.seasonYear, populate: true }),
+      });
+      const payload = await response.json().catch(() => ({})) as { rowsWritten?: number; warnings?: string[]; availableHistoryYears?: number[]; error?: string };
+      if (!response.ok) throw new Error(apiErrorMessage(response.status, payload.error, "History could not be synced."));
+      await loadImportHistory();
+      const years = payload.availableHistoryYears?.length ? ` ${payload.availableHistoryYears.join(", ")}.` : ".";
+      const warning = payload.warnings?.[0] ? ` ${payload.warnings[0]}` : "";
+      setNotice(`History sync finished for${years}${warning}`);
+    } catch (caught) {
+      setNotice(caught instanceof Error ? caught.message : "History could not be synced.");
+    } finally {
+      setHistorySyncing(false);
+      window.setTimeout(() => setNotice(null), 6200);
+    }
+  }
   const savePlatformConnection = async (syncMode: PlatformSyncMode, swid?: string, espnS2?: string) => {
     if (!schedule?.setup.platformConnection) return;
     const connection = schedule.setup.platformConnection;
@@ -1930,10 +2239,11 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scheduleId: schedule.id, provider: connection.provider, providerLeagueId: connection.providerLeagueId, seasonYear: connection.seasonYear, syncMode, swid, espnS2 }),
       });
-      const result = await response.json().catch(() => ({})) as { authType?: PlatformConnection["authType"]; error?: string };
+      const result = await response.json().catch(() => ({})) as { authType?: PlatformConnection["authType"]; historySync?: HistorySyncResponse; error?: string };
       if (!response.ok) throw new Error(apiErrorMessage(response.status, result.error, "Platform connection could not be saved."));
       updatePlatformConnection({ syncMode, authType: result.authType ?? connection.authType, status: "ready" });
-      setNotice("Platform connection saved.");
+      await loadImportHistory();
+      setNotice(`Platform connection saved.${historySyncNotice(result.historySync)}`);
     } catch (caught) {
       setNotice(caught instanceof Error ? caught.message : "Platform connection could not be saved.");
     } finally {
@@ -1975,11 +2285,12 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scheduleId: schedule.id, provider: connection.provider, providerLeagueId: connection.providerLeagueId, seasonYear: connection.seasonYear, syncMode: connection.syncMode }),
-      }).then(() => fetch("/api/platform/history", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scheduleId: schedule.id, provider: connection.provider, identifier: connection.providerLeagueId, seasonYear: connection.seasonYear, populate: true }),
-      })).then(() => loadImportHistory()).catch(() => undefined);
+      }).then(async (response) => {
+        const result = await response.json().catch(() => ({})) as { historySync?: HistorySyncResponse };
+        await loadImportHistory();
+        const historyNotice = historySyncNotice(result.historySync);
+        if (historyNotice) setNotice(`Connected to ${connection.provider === "espn" ? "ESPN" : "Sleeper"}.${historyNotice} Pulling scores…`);
+      }).catch(() => undefined);
     }
     setNotice(`Connected to ${connection.provider === "espn" ? "ESPN" : "Sleeper"}. Pulling scores…`);
     window.setTimeout(() => setNotice(null), 4200);
@@ -2040,7 +2351,7 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
   const openLeagueScheduleWeek = (week: number) => {
     setSelectedWeek(week);
     setView("league-schedule");
-    router.push(`/season/${schedule.id}?week=${week}`);
+    router.push(hrefWithHistorySeason(`/season/${schedule.id}`, { week }));
   };
   const onSaveDraftPlaces = (places: Record<string, number | undefined>) => {
     const nextSetup = { ...schedule.setup, teams: schedule.setup.teams.map((team) => ({ ...team, draftPlace: places[team.id] })) };
@@ -2204,10 +2515,36 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
       return { error: "Something went wrong publishing your schedule." };
     }
   };
+  const historyViewHref = (key: ViewKey) => {
+    const params = new URLSearchParams();
+    if (key !== "league-schedule") params.set("view", key);
+    if (HISTORY_COMPATIBLE_VIEWS.has(key) && effectiveHistorySeasonKey !== "current") params.set("season", effectiveHistorySeasonKey);
+    const query = params.toString();
+    return `/season/${schedule.id}${query ? `?${query}` : ""}`;
+  };
+  const selectHistorySeason = (seasonKey: string) => {
+    setHistorySeasonKey(seasonKey);
+    if (!HISTORY_COMPATIBLE_VIEWS.has(view)) return;
+    const params = new URLSearchParams(window.location.search);
+    if (view === "league-schedule") params.delete("view");
+    else params.set("view", view);
+    if (seasonKey === "current") params.delete("season");
+    else params.set("season", seasonKey);
+    const query = params.toString();
+    window.history.replaceState(null, "", `/season/${schedule.id}${query ? `?${query}` : ""}${window.location.hash}`);
+  };
+  const historySeasonParam = historyViewActive && effectiveHistorySeasonKey !== "current" ? `season=${encodeURIComponent(effectiveHistorySeasonKey)}` : "";
+  const hrefWithHistorySeason = (path: string, extra?: Record<string, string | number>) => {
+    const params = new URLSearchParams(historySeasonParam);
+    for (const [key, value] of Object.entries(extra ?? {})) params.set(key, String(value));
+    const query = params.toString();
+    return `${path}${query ? `?${query}` : ""}`;
+  };
   const selectView = (item: typeof VIEW_ITEMS[number]) => {
     setScoreModalOpen(false);
+    if (!HISTORY_COMPATIBLE_VIEWS.has(item.key)) setHistorySeasonKey("current");
     setView(item.key);
-    if (item.key === "league-schedule") router.push(`/season/${schedule.id}`);
+    if (HISTORY_COMPATIBLE_VIEWS.has(item.key)) router.push(historyViewHref(item.key));
     else if (item.key === "team-schedule") {
       setSelectedTeamId("");
       router.push(`/season/${schedule.id}?view=team-schedule`);
@@ -2216,7 +2553,7 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
   const selectTeamSchedule = (teamId: string) => {
     setSelectedTeamId(teamId);
     setView("team-schedule");
-    router.push(teamId ? `/season/${schedule.id}/team/${teamId}` : `/season/${schedule.id}?view=team-schedule`);
+    router.push(teamId ? hrefWithHistorySeason(`/season/${schedule.id}/team/${teamId}`) : hrefWithHistorySeason(`/season/${schedule.id}`, { view: "team-schedule" }));
   };
   const currentTitle = VIEW_ITEMS.find((item) => item.key === view)?.label ?? "League Schedule";
   const canAccessPlayoffs = true; // Playoff rounds ship to all users on the schedule page.
@@ -2244,10 +2581,24 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
   const workspaceMainStyle = selectedTeamColor
     ? ({ "--workspace-team-wash": selectedTeamColor } as CSSProperties)
     : undefined;
-  const scoreBarTeamById = new Map(activeSchedule.setup.teams.map((team) => [team.id, team]));
-  const scoreBarRankByTeam = new Map((getEnteringWeekRankSnapshot(activeSchedule, selectedWeek)?.rows ?? []).map((row) => [row.teamId, row.rank]));
-  const scoreBarDivisionById = new Map(activeSchedule.setup.divisions.map((division) => [division.id, division]));
-  const scoreBarWeek = activeSchedule.weeks.find((item) => item.weekNumber === selectedWeek) ?? activeSchedule.weeks[0];
+  const scoreBarTeamById = new Map(scoreBarSchedule.setup.teams.map((team) => [team.id, team]));
+  const scoreBarRankByTeam = new Map((getEnteringWeekRankSnapshot(scoreBarSchedule, selectedWeek)?.rows ?? []).map((row) => [row.teamId, row.rank]));
+  const scoreBarDivisionById = new Map(scoreBarSchedule.setup.divisions.map((division) => [division.id, division]));
+  const scoreBarWeek = scoreBarSchedule.weeks.find((item) => item.weekNumber === selectedWeek) ?? scoreBarSchedule.weeks[0];
+  const modalWeek = gameDetailId && workspaceSchedule ? workspaceSchedule.weeks.find((week) => week.games.some((game) => game.id === gameDetailId)) : undefined;
+  const modalPlayoffGame = gameDetailId && workspaceSchedule ? (workspaceSchedule.playoffGames ?? []).find((game) => game.id === gameDetailId) : undefined;
+  const modalGames = modalWeek?.games ?? (modalPlayoffGame && workspaceSchedule ? (workspaceSchedule.playoffGames ?? []).filter((game) => game.week === modalPlayoffGame.week && game.bracket === modalPlayoffGame.bracket).sort((left, right) => (left.gameNumber ?? 0) - (right.gameNumber ?? 0) || left.id.localeCompare(right.id)) : undefined);
+  const modalGameIndex = modalGames?.findIndex((game) => game.id === gameDetailId) ?? -1;
+  const modalGameLabel = (game?: ScheduledGame) => {
+    if (!game || !workspaceSchedule) return "";
+    const away = workspaceSchedule.setup.teams.find((team) => team.id === game.awayTeamId);
+    const home = workspaceSchedule.setup.teams.find((team) => team.id === game.homeTeamId);
+    return away && home ? `${teamDisplayName(away, workspaceSchedule.setup.display?.cityNames !== false)} at ${teamDisplayName(home, workspaceSchedule.setup.display?.cityNames !== false)}` : "game";
+  };
+  const modalPreviousGame = modalGames && modalGameIndex > 0 ? modalGames[modalGameIndex - 1] : undefined;
+  const modalNextGame = modalGames && modalGameIndex >= 0 && modalGameIndex < modalGames.length - 1 ? modalGames[modalGameIndex + 1] : undefined;
+  const canSyncHistory = Boolean(schedule.setup.platformConnection && CLOUD_SCHEDULE_ID.test(schedule.id) && !simulation);
+  const showHistoryPicker = HISTORY_COMPATIBLE_VIEWS.has(view);
   return <main className={`workspace-page ${simulation ? "simulation-mode" : ""} ${scoreBarWeek ? "has-scorebar" : ""} ${scoreBarWeek && scorebarCollapsed ? "scorebar-collapsed" : ""}`} style={{ "--brand": schedule.setup.color, "--brand-on": readableTextColor(schedule.setup.color) } as CSSProperties}>
     {scoreModalOpen && canAccessScorekeeping && <Modal
       className="score-entry-modal"
@@ -2266,28 +2617,53 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
     </Modal>}
     {showRecap && <GenerationReveal schedule={schedule} mode="replay" onComplete={() => setShowRecap(false)} onShare={shareForReveal} />}
     {gameDetailId && <GameDetailSheet
-      schedule={activeSchedule}
+      schedule={workspaceSchedule ?? activeSchedule}
       gameId={gameDetailId}
-      playerStats={gameDetailPlayerStats}
+      playerStats={workspacePlayerStats}
       winProbability={simulationProbabilityByGame[gameDetailId]}
+      navigation={modalGames ? {
+        previous: modalPreviousGame ? { id: modalPreviousGame.id, label: modalGameLabel(modalPreviousGame) } : undefined,
+        next: modalNextGame ? { id: modalNextGame.id, label: modalGameLabel(modalNextGame) } : undefined,
+        onSelect: openGameDetail,
+      } : undefined}
       onClose={() => setGameDetailId(null)}
     />}
     <header className="workspace-topbar"><BrandLockup /><div className="workspace-top-actions"><AccountIdentity identity={entitlements} plan={entitlements.plan} /></div></header>
     {scoreBarWeek && <WeekScoreBar
-      weeks={activeSchedule.weeks}
-      seasonYear={activeSchedule.setup.seasonYear}
+      weeks={scoreBarSchedule.weeks}
+      seasonYear={scoreBarSchedule.setup.seasonYear}
       getTeam={(id) => scoreBarTeamById.get(id)}
       getDivision={(id) => scoreBarDivisionById.get(id)}
       getRank={(id) => scoreBarRankByTeam.get(id)}
       displayCityNames={activeSchedule.setup.display?.cityNames !== false}
       onSelectGame={(gameId) => { openGameDetail(gameId); }}
       onCollapsedChange={setScorebarCollapsed}
-      teamCount={activeSchedule.setup.teams.length}
+      teamCount={scoreBarSchedule.setup.teams.length}
     />}
     <div className="workspace-shell">
       <aside className="workspace-rail"><nav aria-label="Season workspace">{visibleViewItems.map((item) => { const Icon = item.icon; return <button type="button" key={item.key} aria-label={item.label} title={item.label} className={view === item.key ? "active" : ""} onClick={() => selectView(item)}><Icon /><span>{item.label}</span></button>; })}</nav><div className="rail-bottom"><WorkspaceSwitcher current={{ id: schedule.id, name: schedule.setup.name, seasonYear: schedule.setup.seasonYear, color: schedule.setup.color, logoUrl: schedule.setup.logoUrl, initials: schedule.setup.initials }} signedIn={Boolean(entitlements.signedIn)} /></div></aside>
       <section className={`workspace-main ${selectedTeamColor ? "team-workspace-branded" : ""}`} style={workspaceMainStyle}>
-        <div className="workspace-toolbar"><div><span className="workspace-breadcrumb">{schedule.setup.abbreviation} / {schedule.setup.seasonYear}</span><h1>{currentTitle}</h1></div><div className="toolbar-actions"><button type="button" title="Replay the season recap" onClick={() => setShowRecap(true)}><Sparkles />Recap</button><button type="button" title={simulation ? "Export simulated CSV" : "Export CSV"} onClick={() => downloadCsv(activeSchedule)}><Download />CSV</button><button type="button" title={simulation ? "Print simulated ESPN entry sheet" : "Print ESPN entry sheet"} disabled={pdfBusy} aria-busy={pdfBusy} onClick={async () => { if (pdfBusy) return; setPdfBusy(true); try { await downloadSchedulePdf(activeSchedule); } catch { setNotice("Couldn’t build the ESPN entry sheet. Please try again."); } finally { setPdfBusy(false); } }}>{pdfBusy ? <LoaderCircle className="spin" /> : <FileDown />}{pdfBusy ? "Building…" : "ESPN PDF"}</button><button type="button" title={simulation ? "Share the real schedule" : "Share schedule"} disabled={actionBusy !== null} onClick={() => setConfirmAction("share")}>{actionBusy === "share" ? <LoaderCircle className="spin" /> : <Share2 />}Share</button></div></div>
+        <div className="workspace-toolbar">
+          <div>
+            <span className="workspace-breadcrumb">{schedule.setup.abbreviation} / {historyViewActive && selectedHistorySeason ? selectedHistorySeason.season : schedule.setup.seasonYear}</span>
+            <h1>{currentTitle}</h1>
+          </div>
+          <div className="toolbar-actions">
+            {showHistoryPicker && <CustomSelect
+              label={`Select ${currentTitle} season`}
+              value={effectiveHistorySeasonKey}
+              options={historyOptions}
+              onChange={selectHistorySeason}
+              showSelectedDescription={false}
+            />}
+            <button type="button" title={simulation ? "Print simulated PDF entry sheet" : "Print PDF entry sheet"} disabled={pdfBusy} aria-busy={pdfBusy} onClick={async () => { if (pdfBusy) return; setPdfBusy(true); try { await downloadSchedulePdf(workspaceSchedule ?? activeSchedule); } catch { setNotice("Couldn’t build the PDF entry sheet. Please try again."); } finally { setPdfBusy(false); } }}>{pdfBusy ? <LoaderCircle className="spin" /> : <FileDown />}{pdfBusy ? "Building…" : "PDF"}</button>
+            <FloatingPopover className="toolbar-more" label="More schedule actions" trigger={<><MoreHorizontal /><span>More</span><ChevronDown /></>} menuClassName="toolbar-more-menu">
+              <button type="button" onClick={() => setShowRecap(true)}><Sparkles />Recap</button>
+              <button type="button" onClick={() => downloadCsv(workspaceSchedule ?? activeSchedule)}><Download />CSV</button>
+              {canSyncHistory && <button type="button" onClick={() => void syncLeagueHistory()} disabled={historySyncing}>{historySyncing ? <LoaderCircle className="spin" /> : <History />}Sync history</button>}
+            </FloatingPopover>
+          </div>
+        </div>
         <div className="workspace-notice" role="status" aria-live="polite">{notice && <><Cloud />{notice}</>}</div>
         {publishStatus && CLOUD_SCHEDULE_ID.test(schedule.id) && (publishStatus.published ? (
           <section className="publish-panel is-live" role="status" aria-label="Public schedule status">
@@ -2345,14 +2721,30 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
         <div className="workspace-content">
           {view === "this-week" && <ThisWeekWorkspace schedule={activeSchedule} playerStats={gameDetailPlayerStats} simulationProbabilities={simulationProbabilityByGame} onOpenGame={openGameDetail} onOpenRecap={latestRecapWeek ? () => { setView("results"); router.push(`/season/${schedule.id}?view=results`); } : undefined} />}
           {view === "results" && latestRecapWeek && <WeekRecapWorkspace schedule={activeSchedule} playerStats={gameDetailPlayerStats} onOpenGame={openGameDetail} />}
-          {view === "league-schedule" && <ScheduleView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} canAccessPlayoffs={canAccessPlayoffs} onOpenScores={openScoreEntry} onOpenPlayoffs={openPlayoffScores} onOpenGame={openGameDetail} highlightedGame={highlightedGame} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
-          {view === "team-schedule" && <TeamScheduleView schedule={activeSchedule} teamId={selectedTeamId} playerStats={gameDetailPlayerStats} onSelectTeam={selectTeamSchedule} onSelectWeek={openLeagueScheduleWeek} simulationResults={simulationResultByGame} />}
-          {view === "gotw" && <GotwWorkspace schedule={activeSchedule} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
-          {view === "matchup-ratings" && <MatchupRatingsView schedule={activeSchedule} />}
-          {view === "standings" && <StandingsView schedule={activeSchedule} playerStats={gameDetailPlayerStats} onUpdateTiebreakers={simulation ? undefined : onUpdateTiebreakers} readOnly={Boolean(simulation)} />}
-          {view === "mvt" && <MvtWorkspace schedule={activeSchedule} playerStats={gameDetailPlayerStats} pastChampions={pastChampions} />}
-          {view === "all-stars" && <AllStarsWorkspace schedule={activeSchedule} playerStats={gameDetailPlayerStats} pastChampions={pastChampions} />}
-          {view === "playoffs" && <PlayoffsView schedule={activeSchedule} onUpdatePlayoffs={simulation ? () => undefined : onUpdatePlayoffs} onUpdatePlayoffGame={simulation ? () => undefined : onUpdatePlayoffGame} highlightedGame={highlightedGame} simulationMode={Boolean(simulation)} playoffTab={playoffTab} onChangePlayoffTab={setPlayoffTab} />}
+          {view === "league-schedule" && historyViewActive && !historySchedule
+            ? <HistoryMissingState season={selectedHistorySeason} onSync={syncLeagueHistory} syncing={historySyncing} canSync={canSyncHistory} />
+            : view === "league-schedule" && <ScheduleView schedule={workspaceSchedule ?? activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} canAccessPlayoffs={!historyViewActive && canAccessPlayoffs} onOpenScores={openScoreEntry} onOpenPlayoffs={openPlayoffScores} onOpenGame={openGameDetail} highlightedGame={highlightedGame} simulationResults={historyViewActive ? {} : simulationResultByGame} simulationProbabilities={historyViewActive ? {} : simulationProbabilityByGame} readOnlyHistory={historyViewActive} teamHrefBase={`/season/${schedule.id}/team`} teamHrefFor={(teamId) => hrefWithHistorySeason(`/season/${schedule.id}/team/${teamId}`)} />}
+          {view === "team-schedule" && historyViewActive && !historySchedule
+            ? <HistoryMissingState season={selectedHistorySeason} onSync={syncLeagueHistory} syncing={historySyncing} canSync={canSyncHistory} />
+            : view === "team-schedule" && <TeamScheduleView schedule={workspaceSchedule ?? activeSchedule} teamId={selectedTeamId} playerStats={workspacePlayerStats} onSelectTeam={selectTeamSchedule} onSelectWeek={openLeagueScheduleWeek} onOpenGame={openGameDetail} simulationResults={historyViewActive ? {} : simulationResultByGame} teamHrefFor={(teamId) => hrefWithHistorySeason(`/season/${schedule.id}/team/${teamId}`)} leagueWeekHrefFor={(week) => hrefWithHistorySeason(`/season/${schedule.id}`, { week })} readOnlyHistory={historyViewActive} />}
+          {view === "gotw" && historyViewActive && !historySchedule
+            ? <HistoryMissingState season={selectedHistorySeason} onSync={syncLeagueHistory} syncing={historySyncing} canSync={canSyncHistory} />
+            : view === "gotw" && <GotwWorkspace schedule={workspaceSchedule ?? activeSchedule} simulationResults={historyViewActive ? {} : simulationResultByGame} simulationProbabilities={historyViewActive ? {} : simulationProbabilityByGame} teamHrefFor={(teamId) => hrefWithHistorySeason(`/season/${schedule.id}/team/${teamId}`)} />}
+          {view === "matchup-ratings" && historyViewActive && !historySchedule
+            ? <HistoryMissingState season={selectedHistorySeason} onSync={syncLeagueHistory} syncing={historySyncing} canSync={canSyncHistory} />
+            : view === "matchup-ratings" && <MatchupRatingsView schedule={workspaceSchedule ?? activeSchedule} teamHrefFor={(teamId) => hrefWithHistorySeason(`/season/${schedule.id}/team/${teamId}`)} leagueWeekHrefFor={(week) => hrefWithHistorySeason(`/season/${schedule.id}`, { week })} />}
+          {view === "standings" && historyViewActive && !historySchedule
+            ? <HistoryMissingState season={selectedHistorySeason} onSync={syncLeagueHistory} syncing={historySyncing} canSync={canSyncHistory} />
+            : view === "standings" && <StandingsView schedule={workspaceSchedule ?? activeSchedule} playerStats={workspacePlayerStats} onUpdateTiebreakers={simulation || historyViewActive ? undefined : onUpdateTiebreakers} readOnly={Boolean(simulation || historyViewActive)} />}
+          {view === "mvt" && historyViewActive && !historySchedule
+            ? <HistoryMissingState season={selectedHistorySeason} onSync={syncLeagueHistory} syncing={historySyncing} canSync={canSyncHistory} />
+            : view === "mvt" && <MvtWorkspace schedule={workspaceSchedule ?? activeSchedule} playerStats={workspacePlayerStats} pastChampions={pastChampions} />}
+          {view === "all-stars" && historyViewActive && !historySchedule
+            ? <HistoryMissingState season={selectedHistorySeason} onSync={syncLeagueHistory} syncing={historySyncing} canSync={canSyncHistory} />
+            : view === "all-stars" && <AllStarsWorkspace schedule={workspaceSchedule ?? activeSchedule} playerStats={workspacePlayerStats} pastChampions={pastChampions} />}
+          {view === "playoffs" && historyViewActive && !historySchedule
+            ? <HistoryMissingState season={selectedHistorySeason} onSync={syncLeagueHistory} syncing={historySyncing} canSync={canSyncHistory} />
+            : view === "playoffs" && <PlayoffsView schedule={workspaceSchedule ?? activeSchedule} onUpdatePlayoffs={simulation || historyViewActive ? () => undefined : onUpdatePlayoffs} onUpdatePlayoffGame={simulation || historyViewActive ? () => undefined : onUpdatePlayoffGame} highlightedGame={highlightedGame} simulationMode={Boolean(simulation || historyViewActive)} playoffTab={playoffTab} onChangePlayoffTab={setPlayoffTab} teamHrefFor={(teamId) => hrefWithHistorySeason(`/season/${schedule.id}/team/${teamId}`)} onOpenGame={openGameDetail} />}
           {view === "simulator" && !simulation && simulationLoaded && <SimulatorLaunch hasSavedRun={Boolean(savedSimulation)} onPlay={playSimulation} onStartFromReal={startSimulationFromReal} />}
           {view === "simulator" && simulation && <SimulatorWorkspace
             schedule={activeSchedule}

@@ -1,5 +1,5 @@
 import "server-only";
-import { espnPublicUnreliableHistoryYears } from "@/lib/platform/history";
+import { buildEspnLeagueHistoryDraft, espnPublicUnreliableHistoryYears, type LeagueHistoryDraft } from "@/lib/platform/history";
 import { deriveEspnTemplates, mapEspnPlayerWeekStats, type EspnMatchupPayload, type EspnPlayerEntryPayload, type LineupTemplate, type PlayerWeekStat, type RosterTemplate } from "@/lib/playerData";
 import { mapEspnTransactions, type EspnTransactionPayload, type NormalizedTransaction } from "@/lib/transactions";
 import { fetchProviderJson } from "./request";
@@ -13,7 +13,7 @@ export interface EspnAuthInput {
 }
 
 export interface EspnMember { id: string; displayName?: string; firstName?: string; lastName?: string }
-export interface EspnTeam { id: number; name?: string; location?: string; nickname?: string; abbrev?: string; logo?: string; primaryOwner?: string; owners?: string[]; divisionId?: number }
+export interface EspnTeam { id: number; name?: string; location?: string; nickname?: string; abbrev?: string; logo?: string; primaryOwner?: string; owners?: string[]; divisionId?: number; rankCalculatedFinal?: number; record?: unknown }
 export interface EspnLeague {
   id: number;
   seasonId?: number;
@@ -89,6 +89,25 @@ export async function scanEspnHistory(leagueId: string, seasonYear: number, auth
     hasPlayerData: true,
     hasScoreSync: true,
   };
+}
+
+export async function collectEspnLeagueHistory(scheduleId: string, leagueId: string, seasonYear: number, auth?: EspnAuthInput): Promise<LeagueHistoryDraft> {
+  const dataFound = await scanEspnHistory(leagueId, seasonYear, auth);
+  const years = dataFound.availableHistoryYears.filter((year) => year <= seasonYear);
+  const results = await Promise.allSettled(years.map(async (year) => {
+    const league = await fetchEspnLeague(leagueId, year, ["mTeam", "mStandings", "mSettings", "mMatchup", "mScoreboard"], auth);
+    const weeks = [...new Set((league.schedule ?? []).map((matchup) => matchup.matchupPeriodId).filter((week) => week >= 1 && week <= 18))];
+    const playerWeekResults = await Promise.allSettled(weeks.map((week) => fetchEspnLeague(leagueId, year, ["mMatchup", "mRoster", "mBoxscore"], auth, { scoringPeriodId: week })));
+    return {
+      league,
+      playerWeeks: playerWeekResults.flatMap((result) => result.status === "fulfilled" ? [result.value] : []),
+      playerWarnings: playerWeekResults.flatMap((result, index) => result.status === "rejected" ? [`ESPN ${year} Week ${weeks[index]} player rows could not be loaded.`] : []),
+    };
+  }));
+  const seasons = results.flatMap((result) => result.status === "fulfilled" ? [{ league: result.value.league, playerWeeks: result.value.playerWeeks }] : []);
+  const warnings = results.flatMap((result, index) => result.status === "fulfilled" ? result.value.playerWarnings : [`ESPN ${years[index]} history rows could not be loaded.`]);
+  const draft = buildEspnLeagueHistoryDraft(scheduleId, seasons);
+  return { ...draft, warnings: [...draft.warnings, ...warnings] };
 }
 
 function espnProviderId(leagueId: string, teamId?: number) {
