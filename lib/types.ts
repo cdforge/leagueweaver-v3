@@ -1,5 +1,6 @@
 export type PlanKey = "free" | "pro";
 export type PlacementSource = "regular-season" | "playoffs";
+export type DivisionPlacementMode = "manual" | "random" | "rank-snake";
 export type PlayoffFieldSize = number;
 export type PlayoffBracketType = "single-elimination" | "ladder";
 export type PlayoffPlacementMode = "auto" | "division-halves" | "division-leaders" | "overall";
@@ -100,6 +101,7 @@ export interface LeagueSetupInput {
   divisions: Division[];
   /** Present (exactly two) only for even division counts; empty/undefined otherwise. */
   conferences?: Conference[];
+  divisionPlacementMode: DivisionPlacementMode;
   teams: Team[];
   display: {
     cityNames: boolean;
@@ -385,6 +387,7 @@ export interface SavedLeagueIdentity {
   conferences?: Conference[];
   teams: Team[];
   display: LeagueSetupInput["display"];
+  divisionPlacementMode?: LeagueSetupInput["divisionPlacementMode"];
   priorSeason?: LeagueSetupInput["priorSeason"];
   platformConnection?: PlatformConnection;
   playoffs?: Pick<LeagueSetupInput["playoffs"], "name" | "color" | "theme" | "logoUrl" | "roundNames" | "roundLogoUrls" | "gameNames" | "gameLogoUrls">;

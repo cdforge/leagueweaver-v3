@@ -13,18 +13,19 @@ export function divisionMarkText(division: Division, conference?: Conference, co
 export function DivisionMark({ division, conference, size = 18, className = "" }: { division: Division; conference?: Conference; size?: number; className?: string }) {
   const initials = divisionMarkText(division, conference, size < 20);
   const hasImage = Boolean(division.logoUrl);
-  const fontScale = initials.length >= 5 ? 0.29 : initials.length > 3 ? 0.34 : 0.5;
+  const stacked = !hasImage && initials.includes("-");
+  const [stackTop, stackBottom] = stacked ? initials.split("-", 2) : ["", ""];
   return <span
-    className={`division-mark ${conference && !hasImage ? "division-mark-qualified" : ""} ${hasImage ? "division-mark-has-image" : "division-mark-filled"} ${className}`}
+    className={`division-mark ${hasImage ? "" : "division-mark-filled"} ${conference && !hasImage ? "division-mark-qualified" : ""} ${className}`}
     style={{
       width: size,
       height: size,
       color: accessibleTeamColor(division.color),
-      ...(hasImage ? {} : { "--dm-bg": division.color, "--dm-fg": accessibleTeamColor(division.color), "--dm-ink": readableTextColor(division.color) }),
+      ...(hasImage ? {} : { "--dm-bg": division.color, "--dm-ink": readableTextColor(division.color), "--dm-fg": accessibleTeamColor(division.color) }),
     } as CSSProperties}
     aria-hidden="true"
   >
-    {hasImage ? <img src={division.logoUrl} alt="" /> : <b style={{ fontSize: `${Math.max(6, Math.round(size * fontScale))}px`, lineHeight: 1 }}>{initials}</b>}
+    {hasImage ? <img src={division.logoUrl} alt="" /> : stacked ? <b className="division-mark-stack"><span>{stackTop}</span><em>{stackBottom}</em></b> : <b style={{ fontSize: `${Math.max(7, Math.round(size * (initials.length >= 5 ? 0.29 : initials.length > 3 ? 0.34 : 0.5)))}px`, lineHeight: 1 }}>{initials}</b>}
   </span>;
 }
 
@@ -34,12 +35,12 @@ export function ConferenceMark({ conference, size = 18, className = "" }: { conf
   const initials = resolveInitials(conference.initials, conferenceAcronym(conference.name));
   const hasImage = Boolean(conference.logoUrl);
   return <span
-    className={`division-mark conference-mark ${hasImage ? "division-mark-has-image" : "division-mark-filled"} ${className}`}
+    className={`division-mark conference-mark ${hasImage ? "" : "division-mark-filled"} ${className}`}
     style={{
       width: size,
       height: size,
       color: accessibleTeamColor(conference.color),
-      ...(hasImage ? {} : { "--dm-bg": conference.color, "--dm-fg": accessibleTeamColor(conference.color), "--dm-ink": readableTextColor(conference.color) }),
+      ...(hasImage ? {} : { "--dm-bg": conference.color, "--dm-ink": readableTextColor(conference.color), "--dm-fg": accessibleTeamColor(conference.color) }),
     } as CSSProperties}
     aria-hidden="true"
   >

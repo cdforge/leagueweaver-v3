@@ -9,6 +9,7 @@ export interface SelectOption {
   value: string;
   label: string;
   description?: string;
+  groupLabel?: string;
   swatch?: string;
   logoUrl?: string;
   monogram?: string;
@@ -166,13 +167,19 @@ export function CustomSelect({ value, options, onChange, label, disabled = false
       </button>
       {open && !disabled && typeof document !== "undefined" && createPortal(
         <div ref={menu} id={menuId} className="custom-select-menu" role="listbox" aria-label={label} aria-activedescendant={optionId(activeIndex)} onKeyDown={onMenuKeyDown} style={{ left: position.left, top: position.top, width: position.width, maxHeight: position.maxHeight, visibility: position.ready ? "visible" : "hidden" }}>
-          {options.map((option, index) => (
-            <button ref={(node) => { optionRefs.current[index] = node; }} id={optionId(index)} type="button" role="option" aria-selected={option.value === value} data-active={index === activeIndex ? "true" : undefined} key={option.value} onClick={() => choose(option.value)}>
-              <OptionIdentity option={option} />
-              <span><strong>{option.label}</strong>{option.description && <small>{option.description}</small>}</span>
-              {option.value === value && <Check />}
-            </button>
-          ))}
+          {options.map((option, index) => {
+            const showGroup = option.groupLabel && option.groupLabel !== options[index - 1]?.groupLabel;
+            return (
+              <div className="custom-select-option-wrap" key={option.value}>
+                {showGroup && <div className="custom-select-separator" role="presentation">{option.groupLabel}</div>}
+                <button ref={(node) => { optionRefs.current[index] = node; }} id={optionId(index)} type="button" role="option" aria-selected={option.value === value} data-active={index === activeIndex ? "true" : undefined} onClick={() => choose(option.value)}>
+                  <OptionIdentity option={option} />
+                  <span><strong>{option.label}</strong>{option.description && <small>{option.description}</small>}</span>
+                  {option.value === value && <Check />}
+                </button>
+              </div>
+            );
+          })}
         </div>,
         document.body,
       )}

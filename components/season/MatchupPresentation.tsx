@@ -126,7 +126,7 @@ export function MatchupSeriesChip({ game, awayDivision, homeDivision, setup }: {
       ? `${conference.name} conference${seriesCount ? `, game${seriesCount}` : ""}`
       : label;
   return <span className={`series-chip ${chipClass}`} style={Object.keys(style).length ? style : undefined} aria-label={ariaLabel}>
-    {conference && !isDivision && <ConferenceMark conference={conference} />}
+    {conference && <ConferenceMark conference={conference} />}
     {division && <DivisionMark division={division} conference={conference} />}
     <span>{text}</span>
   </span>;
@@ -198,9 +198,6 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, setu
   const hasAdditionalDetails = Boolean(game.dateTimeOverride || game.rescheduleStatus || game.specialEvent || game.notes?.length || game.tbdReason);
   const awayResult = !played ? "open" : game.awayScore! > game.homeScore! ? "winner" : game.awayScore! < game.homeScore! ? "loser" : "open";
   const homeResult = !played ? "open" : game.homeScore! > game.awayScore! ? "winner" : game.homeScore! < game.awayScore! ? "loser" : "open";
-  const leagueHasConferences = Boolean(setup && hasConferences(setup));
-  const awayConference = setup && awayDivision && leagueHasConferences ? conferenceOfDivision(setup, awayDivision.id) : undefined;
-  const homeConference = setup && homeDivision && leagueHasConferences ? conferenceOfDivision(setup, homeDivision.id) : undefined;
   return <article id={game.id} className={`matchup-card ${featured ? "is-gotw" : ""} ${highlighted ? "is-stat-highlight" : ""} ${showProjected ? "is-projected" : ""} ${simulationSource ? `is-simulated simulation-${simulationSource}` : ""} matchup-card-${variant}`}>
     <div className="matchup-card-badges">
       <div className="matchup-card-chips">
@@ -226,7 +223,7 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, setu
       {/* Each team wraps with an inline score (ESPN-style, shown ≤560px); the
           center score stays for desktop. Both read from the same game data. */}
       <div className="matchup-team-row">
-        <TeamIdentityBlock team={away} division={awayDivision} conference={awayConference} leagueRank={awayRank} record={awayRecord} showCity={showCity} result={awayResult} href={teamHrefBase ? `${teamHrefBase}/${away.id}` : undefined} />
+        <TeamIdentityBlock team={away} division={awayDivision} leagueRank={awayRank} record={awayRecord} showCity={showCity} result={awayResult} href={teamHrefBase ? `${teamHrefBase}/${away.id}` : undefined} />
         {!showProjected && <span className="matchup-row-score"><strong className={awayResult === "loser" ? "loser" : ""}>{played ? formatPoints(game.awayScore ?? 0) : "—"}</strong></span>}
       </div>
       {showProjected ? (
@@ -246,7 +243,7 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, setu
         </div>
       )}
       <div className="matchup-team-row">
-        <TeamIdentityBlock mirrored team={home} division={homeDivision} conference={homeConference} leagueRank={homeRank} record={homeRecord} showCity={showCity} result={homeResult} href={teamHrefBase ? `${teamHrefBase}/${home.id}` : undefined} />
+        <TeamIdentityBlock mirrored team={home} division={homeDivision} leagueRank={homeRank} record={homeRecord} showCity={showCity} result={homeResult} href={teamHrefBase ? `${teamHrefBase}/${home.id}` : undefined} />
         {!showProjected && <span className="matchup-row-score"><strong className={homeResult === "loser" ? "loser" : ""}>{played ? formatPoints(game.homeScore ?? 0) : "—"}</strong></span>}
       </div>
     </div>

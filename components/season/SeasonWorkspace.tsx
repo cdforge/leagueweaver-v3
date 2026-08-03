@@ -51,6 +51,7 @@ import { SimulatorWorkspace, type SimulatorResultView } from "@/components/seaso
 import { StatsWorkspace, TiebreakerEditor } from "@/components/season/StatsWorkspace";
 import { TeamScheduleView } from "@/components/season/TeamSchedulePage";
 import { WeekScoreBar } from "@/components/season/WeekScoreBar";
+import { NflWeekTrail } from "@/components/season/NflWeekTrail";
 import { PlayoffPicturePanel } from "@/components/season/PlayoffPictureModal";
 import { StakesButton } from "@/components/season/StakesPanel";
 import { getLiveWeek } from "@/lib/scenarios";
@@ -73,9 +74,12 @@ import { getMatchupRatingRange, getMatchupSignal, matchupRating, sortGamesForDis
 import {
   getPlayoffByeCount,
   getPlayoffGameBrandingSlots,
+  getMaximumPlayoffFieldSize,
   getPlayoffRoundNames,
+  isPlayoffPlacementUsable,
   normalizePlayoffSettings,
   playoffPlacementLabel,
+  PLAYOFF_THEME_COLORS,
   projectPlayoffRounds,
   projectPlayoffSeeds,
   resolvePlayoffPlacementMode,
@@ -103,13 +107,13 @@ import { formatPoints, gameOfWeekStatusLabel, getScheduleGameSignals } from "@/l
 import { normalizeTiebreakerSettings, TIEBREAKER_RULE_LABELS } from "@/lib/tiebreakers";
 import { formatDraftPlace, getTeamsMissingDraftPlaces, getWeekOneRankMap, getWeekOneTeamOrder, hasCompleteDraftRanking } from "@/lib/rankings";
 import { loadSeasonById, normalizeSeason, removeLocalSeason, saveSeason, saveSetup } from "@/lib/storage";
-import { getNflWeekWindow, getWeekDateLabel, updateGameScore } from "@/lib/schedule";
+import { getCurrentSlateWeek, getNflWeekWindow, getWeekDateLabel, updateGameScore } from "@/lib/schedule";
 import { getWeekPhase } from "@/lib/weekPhase";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
 import { normalizeSavedLeague } from "@/lib/savedLeagues";
 import type { GeneratedSchedule, ImportHistoryEvent, ImportPreview, LeagueSetupInput, PlatformConnection, PlatformSyncMode, PlayoffGame, SavedLeaguePreset, ScheduledGame, Team, TiebreakerSettings } from "@/lib/types";
 
-type ViewKey = "this-week" | "league-schedule" | "team-schedule" | "gotw" | "matchup-ratings" | "standings" | "playoffs" | "simulator" | "settings";
+type ViewKey = "this-week" | "league-schedule" | "team-schedule" | "gotw" | "matchup-ratings" | "standings" | "playoffs" | "share" | "simulator" | "settings";
 const CLOUD_SCHEDULE_ID = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
 
 type ExistingSeasonConflict = {
@@ -126,6 +130,10 @@ type CloudSaveResponse = {
   code?: string;
   existingSeason?: ExistingSeasonConflict;
 };
+
+type PublicDisplaySettings = { cityNames: boolean; managers: boolean; venues: boolean };
+type PublishStatus = { published: boolean; url: string | null; slug: string | null; publicDisplay?: Partial<PublicDisplaySettings> };
+type PlayoffSettings = LeagueSetupInput["playoffs"];
 
 type SavedLeagueFreshness = {
   status: "none" | "current" | "outdated" | "missing";
@@ -183,6 +191,7 @@ const VIEW_ITEMS: Array<{ key: ViewKey; label: string; icon: typeof CalendarDays
   { key: "matchup-ratings", label: "Matchup Ratings", icon: SlidersHorizontal },
   { key: "standings", label: "Standings", icon: BarChart3 },
   { key: "playoffs", label: "Playoffs", icon: Trophy },
+  { key: "share", label: "Share", icon: Share2 },
   { key: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -202,6 +211,7 @@ type PlayoffWeekMatchupView = {
   logoUrl?: string;
   recorded: boolean;
 };
+void (undefined as unknown as PlayoffWeekMatchupView);
 
 function playoffRoundShortLabel(name: string) {
   if (name === "Divisional Championship") return "Div Champ";
@@ -231,6 +241,8 @@ function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores }: { schedule
   const championshipNeutral = roundIndex === projectedRounds.length - 1 && settings.championshipVenueMode === "neutral-site";
   const playoffPhaseLabel = roundComplete ? "Final" : actualGames.length ? "Scheduled" : "Projected";
   const playoffPillClass = roundComplete ? "phase-final" : "phase-playoff";
+  void playoffPhaseLabel;
+  void playoffPillClass;
   const playoffScored = actualGames.filter((game) => game.homeScore != null && game.awayScore != null).length;
 
   const TeamSlot = ({ teamId, seedNumber, mirrored = false, result = "open" }: {
@@ -344,6 +356,7 @@ function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores }: { schedule
     return <div className="playoff-game-banner">{logo ? <img src={logo} alt="" /> : <span className="playoff-game-banner-mark"><Trophy /></span>}<strong>{name}</strong>{projected && <em>Projected</em>}</div>;
   };
   const PlayoffGameBlock = ({ id, name, index, count, home, away, homeScore, awayScore, stadium }: { id: string; name: string; index: number; count: number; home: SlotV; away: SlotV; homeScore?: number; awayScore?: number; stadium?: string }) => {
+    void count;
     const homeReal = home.kind === "team" ? home : null;
     const awayReal = away.kind === "team" ? away : null;
     const played = homeScore != null && awayScore != null && !(homeScore === 0 && awayScore === 0);
@@ -417,7 +430,7 @@ function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores }: { schedule
   </div>;
 }
 
-function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayoffs, onOpenScores, onOpenPlayoffs, highlightedGame, simulationResults = {}, simulationProbabilities = {} }: {
+function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayoffs, onOpenScores, onOpenPlayoffs, highlightedGame, simulationResults = {}, simulationProbabilities = {}, showWeekSelector = true }: {
   schedule: GeneratedSchedule;
   selectedWeek: number;
   setSelectedWeek: (week: number) => void;
@@ -427,6 +440,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
   highlightedGame?: HighlightedGame;
   simulationResults?: Record<string, SimulatorResultView>;
   simulationProbabilities?: Record<string, { away: number; home: number }>;
+  showWeekSelector?: boolean;
 }) {
   const weekStripRef = useRef<HTMLDivElement>(null);
   const scheduleSignals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
@@ -464,6 +478,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
     return { overall: row ? formatRecord(row) : "0-0", division: row ? `${row.divisionWins}-${row.divisionLosses}` : "0-0" };
   };
   const presentationFor = (game: ScheduledGame, weekNumber: number) => {
+    void weekNumber;
     const away = teamById.get(game.awayTeamId)!;
     const home = teamById.get(game.homeTeamId)!;
     return {
@@ -534,13 +549,13 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
   />;
   if (selectedPlayoffIndex >= 0) {
     return <div className="workspace-stack">
-      {weekSelector}
+      {showWeekSelector && weekSelector}
       <PlayoffWeekSchedule schedule={schedule} roundIndex={selectedPlayoffIndex} onEnterScores={onOpenPlayoffs} />
     </div>;
   }
   return (
     <div className="workspace-stack">
-      {weekSelector}
+      {showWeekSelector && weekSelector}
       <div className="schedule-week-panel">
         <div className={`section-bar schedule-week-header${isThanksgivingWeek ? " is-thanksgiving" : ""}${weekPhase.phase === "live" ? " is-live" : ""}`}>
           <div className="week-lead">
@@ -824,6 +839,7 @@ function ScoreImageImport({ schedule, selectedWeek, onApply, onPendingChange }: 
     </>}
   </section>;
 }
+void ScoreImageImport;
 
 function StandingsView({ schedule, onUpdateTiebreakers, readOnly = false }: { schedule: GeneratedSchedule; onUpdateTiebreakers?: (settings: TiebreakerSettings) => void; readOnly?: boolean }) {
   return <StatsWorkspace schedule={schedule} onUpdateTiebreakers={onUpdateTiebreakers} readOnly={readOnly} />;
@@ -893,7 +909,10 @@ function PlayoffsView({
 }) {
   const [roundBrandingOpen, setRoundBrandingOpen] = useState(false);
   const [boardSection, setBoardSection] = useState<"championship" | "consolation" | "placement">("championship");
-  const settings = normalizePlayoffSettings(schedule.setup.playoffs, schedule.setup.teams.length, schedule.setup.color, schedule.setup.weeks);
+  const rawSettings = normalizePlayoffSettings(schedule.setup.playoffs, schedule.setup.teams.length, schedule.setup.color, schedule.setup.weeks);
+  const settings = mode === "settings" && rawSettings.consolationMode === "standard" && isDivisionHalvesConsolationUsable({ ...schedule.setup, playoffs: rawSettings }, rawSettings.fieldSize)
+    ? { ...rawSettings, consolationMode: "division-halves" as const, thirdPlaceGame: true }
+    : rawSettings;
   const normalizedSchedule = settings === schedule.setup.playoffs ? schedule : { ...schedule, setup: { ...schedule.setup, playoffs: settings } };
   const fieldSize = settings.fieldSize;
   const seeds = projectPlayoffSeeds(normalizedSchedule, fieldSize);
@@ -946,13 +965,9 @@ function PlayoffsView({
   const gameDisplayName = (gameId: string, fallback: string) => settings.gameNames?.[gameId]?.trim() || fallback;
   const halfChampionCopy = placement === "division-halves" ? `${sideName("A")} champion vs. ${sideName("B")} champion` : null;
   const championshipCopy = halfChampionCopy ? `${halfChampionCopy} · ${championshipVenueCopy}` : championshipVenueCopy;
-  const lockField = () => onUpdatePlayoffs(settings.fieldStatus === "locked"
-    ? { fieldStatus: "live", lockedTeamIds: [] }
-    : { fieldStatus: "locked", lockedTeamIds: seeds.map((item) => item.teamId) });
-  const formatLabel = settings.bracketType.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   const consolationOptions = [
+    ...(isDivisionHalvesConsolationUsable(schedule.setup, fieldSize) ? [{ value: "division-halves", label: "Division-halves placement", description: "Recommended · teams open inside their division, then cross for final places" }] : []),
     { value: "standard", label: "Standard placement", description: "Overall seeds follow a separate ESPN-style placement bracket" },
-    ...(isDivisionHalvesConsolationUsable(schedule.setup, fieldSize) ? [{ value: "division-halves", label: "Division-halves placement", description: "Teams open inside their division, then cross for final places" }] : []),
     { value: "off", label: "No consolation bracket", description: "Show only the championship bracket" },
   ];
   const updateRoundLogo = (roundIndex: number, logoUrl?: string) => {
@@ -1208,9 +1223,9 @@ function PlayoffsView({
     }));
   return <div className="workspace-stack playoff-workspace" style={{ "--playoff-color": settings.color } as React.CSSProperties}>
     {mode === "settings" ? (<>
-    <div className={`playoff-topline playoff-theme-${settings.theme}`}><div>{settings.logoUrl && <EntityLogo color={settings.color} logoUrl={settings.logoUrl} monogram="PO" imagePresentation="bare" />}<span><strong>{settings.name}</strong><small>{fieldSize} teams · {formatLabel} · Higher seed hosts before title · {championshipVenueCopy}</small></span></div><div className="playoff-field-actions">{simulationMode ? <span className="projected-pill simulation"><Gamepad2 />SIMULATED BRACKET</span> : <><span className={`projected-pill ${settings.fieldStatus === "locked" ? "locked" : ""}`}>{settings.fieldStatus === "locked" ? "FIELD LOCKED" : "LIVE PROJECTION"}</span><button type="button" onClick={lockField}><LockKeyhole />{settings.fieldStatus === "locked" ? "Unlock field" : "Lock field"}</button></>}</div></div>
-    <div className="playoff-policy"><span><strong>{playoffPlacementLabel(placement)}</strong><small>{placement === "division-halves" ? `${sideName("A")} and ${sideName("B")} run separate tournaments; their champions meet in the final` : placement === "division-leaders" ? "Division winners protected at the top" : "Top teams qualify regardless of division"}</small></span><span><strong>{byeCount || "No"} {byeCount === 1 ? "bye" : "byes"}</strong><small>{byeCount ? "Awarded to the top seeds" : "Every qualifier opens play"}</small></span><span><strong>{settings.reseedMode === "fixed" ? "Fixed bracket" : settings.reseedMode === "protected" ? "Protected reseed" : "Reseed each round"}</strong><small>{placement === "division-halves" && settings.reseedMode !== "fixed" ? "Reseeding stays inside each half until the final" : settings.seedDisplayMode === "reranked" ? "Showing bracket seeds" : "Showing standings finish"}</small></span></div>
-    {!simulationMode && <><div className="playoff-customization-bar"><span><strong>Postseason presentation</strong><small>Choose placement format and personalize round names, game names, and logos.</small></span><CustomSelect label="Consolation format" value={settings.consolationMode} onChange={(value) => onUpdatePlayoffs({ consolationMode: value as LeagueSetupInput["playoffs"]["consolationMode"], thirdPlaceGame: value !== "off" })} options={consolationOptions} /><button type="button" aria-expanded={roundBrandingOpen} onClick={() => setRoundBrandingOpen((current) => !current)}><Pencil />Names & logos</button></div>{roundBrandingOpen && <div className="playoff-branding-panels">
+    <div className={`playoff-topline playoff-theme-${settings.theme}`}><div>{settings.logoUrl && <EntityLogo color={settings.color} logoUrl={settings.logoUrl} monogram="PO" imagePresentation="bare" />}<span><strong>{settings.name}</strong><small>{fieldSize} teams · single elimination · higher seed hosts before the title</small></span></div><div className="playoff-field-actions">{simulationMode ? <span className="projected-pill simulation"><Gamepad2 />SIMULATED BRACKET</span> : <button type="button" className="button-secondary visible" aria-expanded={roundBrandingOpen} onClick={() => setRoundBrandingOpen((current) => !current)}><Pencil />Names & logos</button>}</div></div>
+    <div className="playoff-policy"><span><strong>{fieldSize}-team playoffs</strong><small>{byeCount ? `${byeCount} ${byeCount === 1 ? "team gets a bye" : "teams get byes"} before the opening matchups.` : "Every qualifier opens play."}</small></span><span><strong>{playoffPlacementLabel(placement)}</strong><small>{placement === "division-halves" ? `${sideName("A")} and ${sideName("B")} run separate paths; their champions meet in the final.` : placement === "division-leaders" ? "Division winners are protected at the top." : "Top teams qualify regardless of division."}</small></span><span><strong>Fixed bracket</strong><small>Winners follow their set path through the bracket.</small></span><span><strong>{settings.championshipVenueMode === "neutral-site" ? "Neutral-site title" : "Higher seed hosts"}</strong><small>{settings.championshipVenueMode === "neutral-site" ? "The championship uses a set venue." : "Higher seed hosts before the title game and keeps home field in the final."}</small></span></div>
+    {!simulationMode && <><div className="playoff-customization-bar"><span><strong>Placement bracket</strong><small>Consolation and final placement update the live preview below.</small></span><CustomSelect label="Consolation format" value={settings.consolationMode} onChange={(value) => onUpdatePlayoffs({ consolationMode: value as LeagueSetupInput["playoffs"]["consolationMode"], thirdPlaceGame: value !== "off" })} options={consolationOptions} /></div>{roundBrandingOpen && <div className="playoff-branding-panels">
       <section aria-label="Playoff round names and logos"><header><span><strong>Round defaults</strong><small>Rename each round and choose the logo used when a game has no override.</small></span></header><div className="playoff-round-branding">{rounds.map((round, roundIndex) => <div key={`round-${roundIndex}`}><label><span>Round {roundIndex + 1} name</span><input aria-label={`Round ${roundIndex + 1} name`} defaultValue={round} maxLength={40} onBlur={(event) => updateRoundName(roundIndex, event.target.value)} /></label><small>NFL Week {schedule.setup.weeks + roundIndex + 1}</small><IdentityColorPicker compact showColorControl={false} showAbbreviation={false} imagePresentation="bare" name={`${round || `Round ${roundIndex + 1}`} round`} abbreviation={(round || "R").slice(0, 3).toUpperCase()} color={settings.color} logoUrl={settings.roundLogoUrls?.[roundIndex]} onChange={(next) => updateRoundLogo(roundIndex, next.logoUrl)} /></div>)}</div></section>
       <section aria-label="Specific playoff game names and logos"><header><span><strong>Specific playoff games</strong><small>Rename any matchup and optionally override its round logo.</small></span><em>{mainGameBrandingSlots.length + consolationGameBrandingSlots.length} games</em></header><div className="playoff-game-branding-rounds">{rounds.map((round, roundIndex) => {
         const mainSlots = mainGameBrandingSlots.filter((slot) => slot.roundIndex === roundIndex);
@@ -1302,9 +1317,11 @@ function PlatformSyncCard({
   const [syncMode, setSyncMode] = useState<PlatformSyncMode>(connection?.syncMode ?? "manual");
   const [swid, setSwid] = useState("");
   const [espnS2, setEspnS2] = useState("");
+  void setSwid;
+  void setEspnS2;
   useEffect(() => setSyncMode(connection?.syncMode ?? "manual"), [connection?.syncMode]);
   if (!canAccessPlatformSync) {
-    return <div className="platform-sync-card is-locked"><div><LockKeyhole /><span><strong>Platform Sync</strong><small>Auto-filling weekly scores from a public ESPN or Sleeper league is a Pro feature. Manual score entry is always available.</small></span></div></div>;
+    return <div className="platform-sync-card is-locked"><div><LockKeyhole /><span><strong>Score Sync</strong><small>Automatic score sync is paused for the MVP release. Manual score entry is available.</small></span></div></div>;
   }
   if (!connection) {
     return <div className="platform-sync-card"><div><Cloud /><span><strong>Platform Sync</strong><small>Connect a public ESPN or Sleeper league to auto-fill weekly scores. Manual entry always stays available.</small></span></div><div className="platform-sync-actions"><button type="button" className="button-primary" onClick={onConnect}><Cloud />Connect for scores</button><Link href="/build" className="button-secondary">Import a league</Link></div></div>;
@@ -1331,6 +1348,42 @@ function PlatformSyncCard({
     </div>
     <div className="platform-sync-note"><ShieldCheck /><span>LeagueWeaver cannot update ESPN/Sleeper schedules for you. Refresh scores after your fantasy platform has matching results.</span><button type="button" onClick={onDisconnect}>Disconnect</button></div>
   </div>;
+}
+
+function PlatformConnectionCenter({
+  schedule,
+  loading,
+  historyLoading,
+  onRefreshCurrentSeasonData,
+  onRefreshImportHistory,
+}: {
+  schedule: GeneratedSchedule;
+  loading: boolean;
+  historyLoading: boolean;
+  onRefreshCurrentSeasonData: () => void;
+  onRefreshImportHistory: () => void;
+}) {
+  const connection = schedule.setup.platformConnection;
+  const providerName = connection ? providerLabel(connection.provider) : "ESPN or Sleeper";
+  return <section className="platform-connection-center" aria-labelledby="platform-connection-title">
+    <div className="platform-connection-copy">
+      <span className="platform-connection-icon"><Cloud /></span>
+      <span>
+        <strong id="platform-connection-title">{providerName} connectivity</strong>
+        <small>Manage the league connection, refresh this season’s available data, and review sync history from one place.</small>
+      </span>
+    </div>
+    <div className="platform-connection-actions">
+      <button type="button" className="button-primary" disabled={loading} onClick={onRefreshCurrentSeasonData}>
+        {loading ? <LoaderCircle className="spin" /> : <RefreshCw />}
+        Refresh current season data
+      </button>
+      <button type="button" className="button-secondary visible" disabled={historyLoading} onClick={onRefreshImportHistory}>
+        {historyLoading ? <LoaderCircle className="spin" /> : <History />}
+        Refresh league history
+      </button>
+    </div>
+  </section>;
 }
 
 function ImportHistoryPanel({ events, loading, error, onRefresh, scheduleId }: {
@@ -1360,7 +1413,108 @@ function ImportHistoryPanel({ events, loading, error, onRefresh, scheduleId }: {
   </section>;
 }
 
-function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, onUpdateSavedLeague, savedLeagueFreshness, savedLeagueBusy = false, onUpdatePlayoffs, onUpdateTiebreakers, readOnly = false, canAccessPlatformSync, platformSyncLoading, onRefreshPlatformScores, onSavePlatformConnection, onDisconnectPlatform, onConnectPlatform, importHistory, importHistoryLoading, importHistoryError, onRefreshImportHistory, onShowRecap, onDownloadCsv, onDownloadPdf, pdfBusy, onShare, shareBusy, simulationActive }: {
+function PlayoffWizardModal({ schedule, onClose, onSave }: { schedule: GeneratedSchedule; onClose: () => void; onSave: (settings: PlayoffSettings) => void }) {
+  const [step, setStep] = useState<"format" | "rules" | "brand">("format");
+  const recommendedDraft = (settings: PlayoffSettings) => {
+    const halvesUsable = isPlayoffPlacementUsable("division-halves", schedule.setup.divisions.length, settings.fieldSize);
+    const consolationHalvesUsable = isDivisionHalvesConsolationUsable({ ...schedule.setup, playoffs: settings }, settings.fieldSize);
+    return normalizePlayoffSettings({
+      ...settings,
+      bracketType: "single-elimination",
+      placementMode: halvesUsable && (settings.placementMode === "auto" || settings.placementMode === "overall") ? "division-halves" : settings.placementMode,
+      consolationMode: consolationHalvesUsable && settings.consolationMode === "standard" ? "division-halves" : settings.consolationMode,
+      thirdPlaceGame: settings.consolationMode !== "off" && settings.fieldSize >= 4,
+    }, schedule.setup.teams.length, schedule.setup.color, schedule.setup.weeks);
+  };
+  const [draft, setDraft] = useState<PlayoffSettings>(() => recommendedDraft(normalizePlayoffSettings(schedule.setup.playoffs, schedule.setup.teams.length, schedule.setup.color, schedule.setup.weeks)));
+  const p = draft;
+  const divisionCount = schedule.setup.divisions.length;
+  const maxFieldSize = getMaximumPlayoffFieldSize(schedule.setup.teams.length, schedule.setup.weeks, "single-elimination", p.playoffWeeks);
+  const canChoosePlayoffLength = schedule.setup.weeks === 13;
+  const effectivePlayoffWeeks = schedule.setup.weeks === 14 ? 3 : (p.playoffWeeks ?? 4);
+  const fieldStep = divisionCount % 2 === 1 ? 1 : 2;
+  const fieldSizeOptions: number[] = [];
+  for (let n = 2; n <= maxFieldSize; n += fieldStep) fieldSizeOptions.push(n);
+  if (!fieldSizeOptions.includes(maxFieldSize)) fieldSizeOptions.push(maxFieldSize);
+  const byeCount = getPlayoffByeCount(p.fieldSize);
+  const patch = (next: Partial<PlayoffSettings>) => setDraft((current) => recommendedDraft(normalizePlayoffSettings({ ...current, ...next, bracketType: "single-elimination" }, schedule.setup.teams.length, schedule.setup.color, schedule.setup.weeks)));
+  const setFieldSize = (fieldSize: number) => {
+    const halvesUsable = isPlayoffPlacementUsable("division-halves", divisionCount, fieldSize);
+    const nextConsolationHalvesUsable = isDivisionHalvesConsolationUsable({ ...schedule.setup, playoffs: { ...p, fieldSize, bracketType: "single-elimination" } }, fieldSize);
+    patch({
+      fieldSize,
+      bracketType: "single-elimination",
+      placementMode: halvesUsable ? "division-halves" : p.placementMode === "division-halves" ? isPlayoffPlacementUsable("division-leaders", divisionCount, fieldSize) ? "division-leaders" : "overall" : p.placementMode,
+      consolationMode: nextConsolationHalvesUsable ? "division-halves" : p.consolationMode === "division-halves" ? "standard" : p.consolationMode,
+      thirdPlaceGame: p.consolationMode !== "off" && fieldSize >= 4,
+      fieldStatus: "live",
+      lockedTeamIds: [],
+    });
+  };
+  const setTheme = (theme: PlayoffSettings["theme"]) => patch(theme === "custom" ? { theme } : { theme, color: PLAYOFF_THEME_COLORS[theme] });
+  const setConsolation = (consolationMode: PlayoffSettings["consolationMode"]) => patch({ consolationMode, thirdPlaceGame: consolationMode !== "off" && p.fieldSize >= 4 });
+  const divisionHalvesUsable = isPlayoffPlacementUsable("division-halves", divisionCount, p.fieldSize);
+  const consolationHalvesUsable = isDivisionHalvesConsolationUsable({ ...schedule.setup, playoffs: p }, p.fieldSize);
+  const placementOptions = [
+    ...(divisionHalvesUsable ? [{ value: "division-halves", label: "Division halves", description: "Recommended · each half runs its own path to the final" }] : []),
+    ...(isPlayoffPlacementUsable("division-leaders", divisionCount, p.fieldSize) ? [{ value: "division-leaders", label: "Division leaders protected", description: "Division winners receive protected top seeds" }] : []),
+    { value: "overall", label: "Overall standings", description: "Top teams qualify regardless of division" },
+  ];
+  const consolationOptions = [
+    ...(consolationHalvesUsable ? [{ value: "division-halves", label: "Division-halves placement", description: "Recommended · teams open inside their division, then cross over" }] : []),
+    { value: "standard", label: "Standard placement", description: "Overall seeds follow a placement bracket" },
+    { value: "off", label: "No consolation bracket", description: "Championship bracket only" },
+  ];
+  return <Modal className="playoff-editor-modal" labelledBy="playoff-editor-title" onClose={onClose}>
+    <header>
+      <span className="playoff-editor-mark"><Trophy /></span>
+      <span><small>PLAYOFF WIZARD</small><h2 id="playoff-editor-title">Edit playoff setup</h2><p>Adjust postseason rules without regenerating the regular-season schedule.</p></span>
+      <button type="button" aria-label="Close playoff editor" onClick={onClose}><X /></button>
+    </header>
+    <div className="playoff-editor-body">
+      <div className="playoff-wizard-subnav" role="tablist" aria-label="Playoff setup sections">
+        {[
+          ["format", "Format", "Field & bracket"],
+          ["rules", "Rules", "Seeding & placement"],
+          ["brand", "Brand", "Name & identity"],
+        ].map(([key, label, sub], index) => <button key={key} type="button" role="tab" aria-selected={step === key} className={step === key ? "active" : ""} onClick={() => setStep(key as typeof step)}><span className="ppw-n">{index + 1}</span><span className="ppw-lab"><strong>{label}</strong><small>{sub}</small></span></button>)}
+      </div>
+      <div className="playoff-editor-grid">
+        <section className="playoff-wizard-form">
+          {step === "format" && <>
+            {canChoosePlayoffLength && <div className="ppw-group"><label className="playoff-editor-label">Playoff length</label><div className="choice-row">{[3, 4].map((wk) => <button key={wk} type="button" className={effectivePlayoffWeeks === wk ? "active" : ""} onClick={() => {
+              const nextMax = getMaximumPlayoffFieldSize(schedule.setup.teams.length, schedule.setup.weeks, "single-elimination", wk as 3 | 4);
+              patch({ playoffWeeks: wk as 3 | 4, fieldSize: Math.min(p.fieldSize, nextMax), fieldStatus: "live", lockedTeamIds: [] });
+            }}><strong>{wk} weeks</strong><small>{wk === 3 ? "Up to 8 seeds" : "Up to 16 seeds"}</small></button>)}</div></div>}
+            <div className="playoff-fixed-rule"><Trophy /><span><strong>Single-elimination bracket</strong><small>Fixed for every playoff setup. Winners advance until the title game.</small></span></div>
+            <div className="ppw-group"><label className="playoff-editor-label">Playoff teams</label><CustomSelect label="Playoff field size" value={String(p.fieldSize)} onChange={(value) => setFieldSize(Number(value))} options={fieldSizeOptions.map((n) => ({ value: String(n), label: `${n} teams`, description: getPlayoffByeCount(n) ? `${getPlayoffByeCount(n)} bye${getPlayoffByeCount(n) === 1 ? "" : "s"}` : "No byes" }))} /></div>
+          </>}
+          {step === "rules" && <>
+            <div className="ppw-group"><label className="playoff-editor-label">Qualification</label><CustomSelect label="Playoff qualification" value={p.placementMode} onChange={(value) => patch({ placementMode: value as PlayoffSettings["placementMode"], fieldStatus: "live", lockedTeamIds: [] })} options={placementOptions} /></div>
+            <div className="ppw-group"><label className="playoff-editor-label">Reseeding</label><CustomSelect label="Reseeding" value={p.reseedMode} onChange={(value) => patch({ reseedMode: value as PlayoffSettings["reseedMode"], fieldStatus: "live", lockedTeamIds: [] })} options={[{ value: "protected", label: "Protected reseed", description: "Reseed while protecting bracket halves" }, { value: "fixed", label: "Fixed bracket", description: "Winners follow set bracket paths" }, { value: "each-round", label: "Reseed each round", description: "Top remaining seed hosts the lowest" }]} /></div>
+            <div className="ppw-group"><label className="playoff-editor-label">Championship venue</label><div className="choice-row"><button type="button" className={p.championshipVenueMode === "higher-seed" ? "active" : ""} onClick={() => patch({ championshipVenueMode: "higher-seed" })}><strong>Higher seed hosts</strong><small>Top seed keeps home field</small></button><button type="button" className={p.championshipVenueMode === "neutral-site" ? "active" : ""} onClick={() => patch({ championshipVenueMode: "neutral-site" })}><strong>Neutral site</strong><small>Title game at a set venue</small></button></div></div>
+            <div className="ppw-group"><label className="playoff-editor-label">Seed labels</label><div className="choice-row"><button type="button" className={p.seedDisplayMode === "reranked" ? "active" : ""} onClick={() => patch({ seedDisplayMode: "reranked" })}><strong>Bracket seeds</strong><small>1 through the playoff field</small></button><button type="button" className={p.seedDisplayMode === "standings-finish" ? "active" : ""} onClick={() => patch({ seedDisplayMode: "standings-finish" })}><strong>Standings finish</strong><small>Show regular-season place</small></button></div></div>
+            <div className="ppw-group"><label className="playoff-editor-label">Consolation bracket</label><CustomSelect label="Consolation bracket" value={p.consolationMode} onChange={(value) => setConsolation(value as PlayoffSettings["consolationMode"])} options={consolationOptions} /></div>
+          </>}
+          {step === "brand" && <>
+            <div className="ppw-group"><label className="playoff-editor-label">Playoff identity</label><div className="playoff-branding-row"><IdentityColorPicker name={p.name || "Championship Playoffs"} abbreviation="PO" color={p.color} logoUrl={p.logoUrl} showColorControl={p.theme === "custom"} onChange={(next) => patch({ ...(p.theme === "custom" ? { color: next.color } : {}), logoUrl: next.logoUrl })} /><label className="playoff-name-field"><span>Playoff name</span><input aria-label="Playoff name" value={p.name} maxLength={40} placeholder="Championship Playoffs" onChange={(event) => patch({ name: event.target.value })} /></label></div></div>
+            <div className="ppw-group"><label className="playoff-editor-label">Trophy theme</label><div className="choice-row playoff-theme-row">{(["gold", "silver", "bronze", "custom"] as const).map((theme) => <button key={theme} type="button" className={p.theme === theme ? "active" : ""} onClick={() => setTheme(theme)}><span className="playoff-theme-swatch" style={{ background: theme === "custom" ? p.color : PLAYOFF_THEME_COLORS[theme] }} /><strong>{theme.charAt(0).toUpperCase() + theme.slice(1)}</strong></button>)}</div></div>
+          </>}
+        </section>
+        <aside className={`playoff-editor-preview playoff-theme-${p.theme}`}>
+          <span><strong>{p.name || "Championship Playoffs"}</strong><small>{p.fieldSize} teams · single elimination · {byeCount ? `${byeCount} bye${byeCount === 1 ? "" : "s"}` : "no byes"}</small></span>
+          <div><span><b>Qualification</b><small>{p.placementMode === "division-halves" ? "Division halves" : p.placementMode === "division-leaders" ? "Division leaders protected" : "Overall standings"}</small></span><span><b>Reseeding</b><small>{p.reseedMode === "each-round" ? "Each round" : p.reseedMode === "protected" ? "Protected" : "Fixed bracket"}</small></span><span><b>Consolation</b><small>{p.consolationMode === "off" ? "Off" : p.consolationMode === "division-halves" ? "Division halves" : "Standard"}</small></span></div>
+        </aside>
+      </div>
+    </div>
+    <footer>
+      <button type="button" className="button-secondary" onClick={onClose}>Cancel</button>
+      <button type="button" className="button-primary" onClick={() => { onSave({ ...draft, bracketType: "single-elimination" }); onClose(); }}><Save />Save playoff setup</button>
+    </footer>
+  </Modal>;
+}
+
+function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, onUpdateSavedLeague, savedLeagueFreshness, savedLeagueBusy = false, onUpdatePlayoffs, onUpdateTiebreakers, readOnly = false, canAccessPlatformSync, platformSyncLoading, platformDataRefreshing, onRefreshCurrentSeasonData, onRefreshPlatformScores, onSavePlatformConnection, onDisconnectPlatform, onConnectPlatform, importHistory, importHistoryLoading, importHistoryError, onRefreshImportHistory, onShowRecap, onDownloadCsv, onDownloadPdf, pdfBusy, simulationActive }: {
   schedule: GeneratedSchedule;
   onOpenDraftRanking: () => void;
   onRegenerate: () => void;
@@ -1372,6 +1526,8 @@ function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, onUpdateSave
   readOnly?: boolean;
   canAccessPlatformSync: boolean;
   platformSyncLoading: boolean;
+  platformDataRefreshing: boolean;
+  onRefreshCurrentSeasonData: () => void;
   onRefreshPlatformScores: () => void;
   onSavePlatformConnection: (syncMode: PlatformSyncMode, swid?: string, espnS2?: string) => void;
   onDisconnectPlatform: () => void;
@@ -1384,11 +1540,10 @@ function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, onUpdateSave
   onDownloadCsv: () => void;
   onDownloadPdf: () => void;
   pdfBusy: boolean;
-  onShare: () => void;
-  shareBusy: boolean;
   simulationActive: boolean;
 }) {
-  const [settingsTab, setSettingsTab] = useState<"overview" | "tools" | "scores" | "rules" | "playoffs">("overview");
+  const [settingsTab, setSettingsTab] = useState<"overview" | "tools" | "connections" | "rules" | "playoffs">("overview");
+  const [playoffEditorOpen, setPlayoffEditorOpen] = useState(false);
   const seeding = schedule.setup.priorSeason.entryMode === "manual" ? "Manual order" : schedule.setup.priorSeason.entryMode === "random" ? "Randomized order" : schedule.setup.priorSeason.entryMode === "history" ? schedule.setup.priorSeason.source === "playoffs" ? "Last year’s playoff finish" : "Last year’s regular-season finish" : "Not used";
   const draftRankingPending = schedule.setup.weekOne.rankingSource === "draft-day" && getTeamsMissingDraftPlaces(schedule.setup).length > 0;
   return <div className="workspace-stack">
@@ -1396,7 +1551,7 @@ function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, onUpdateSave
       {[
         ["overview", "Overview"],
         ["tools", "Tools"],
-        ["scores", "Scores"],
+        ["connections", "ESPN/Sleeper"],
         ["rules", "Rules"],
         ["playoffs", "Playoffs"],
       ].map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={settingsTab === key} className={settingsTab === key ? "active" : ""} onClick={() => setSettingsTab(key as typeof settingsTab)}>{label}</button>)}
@@ -1417,15 +1572,15 @@ function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, onUpdateSave
       </div>
     </>}
     {settingsTab === "tools" && <section className="settings-tools-panel" aria-labelledby="settings-tools-title">
-      <header><Download /><span><strong id="settings-tools-title">Schedule tools</strong><small>Replay the recap, export handoff files, or publish the share page.</small></span></header>
+      <header><Download /><span><strong id="settings-tools-title">Schedule tools</strong><small>Replay the recap or export handoff files.</small></span></header>
       <div className="settings-tool-grid">
         <button type="button" onClick={onShowRecap}><Sparkles /><span><strong>Recap</strong><small>Replay the season reveal.</small></span></button>
         <button type="button" onClick={onDownloadCsv}><Download /><span><strong>CSV</strong><small>{simulationActive ? "Export simulated schedule data." : "Export schedule data."}</small></span></button>
         <button type="button" disabled={pdfBusy} aria-busy={pdfBusy} onClick={onDownloadPdf}>{pdfBusy ? <LoaderCircle className="spin" /> : <FileDown />}<span><strong>{pdfBusy ? "Building..." : "ESPN PDF"}</strong><small>{simulationActive ? "Print simulated ESPN entry sheet." : "Print ESPN entry sheet."}</small></span></button>
-        <button type="button" disabled={shareBusy} onClick={onShare}>{shareBusy ? <LoaderCircle className="spin" /> : <Share2 />}<span><strong>Share</strong><small>{simulationActive ? "Publish the real schedule link." : "Publish and copy the public link."}</small></span></button>
       </div>
     </section>}
-    {settingsTab === "scores" && <>
+    {settingsTab === "connections" && <>
+      <PlatformConnectionCenter schedule={schedule} loading={platformDataRefreshing} historyLoading={importHistoryLoading} onRefreshCurrentSeasonData={onRefreshCurrentSeasonData} onRefreshImportHistory={onRefreshImportHistory} />
       <PlatformSyncCard schedule={schedule} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshScores={onRefreshPlatformScores} onSaveConnection={onSavePlatformConnection} onDisconnect={onDisconnectPlatform} onConnect={onConnectPlatform} />
       <ImportHistoryPanel events={importHistory} loading={importHistoryLoading} error={importHistoryError} onRefresh={onRefreshImportHistory} scheduleId={schedule.id} />
     </>}
@@ -1435,9 +1590,98 @@ function SettingsView({ schedule, onOpenDraftRanking, onRegenerate, onUpdateSave
     </>; })()}
     {settingsTab === "rules" && !onUpdateTiebreakers && <div className="settings-empty"><SlidersHorizontal /><span><strong>Rules are locked in simulation mode.</strong><small>Open the real schedule to edit standings tiebreakers.</small></span></div>}
     {settingsTab === "playoffs" && <>
-      <div className="settings-band"><div><Trophy /><span><strong>Playoffs</strong><small>Field size, bracket format, and postseason presentation for this league.</small></span></div></div>
+      <div className="settings-band"><div><Trophy /><span><strong>Playoffs</strong><small>Field size, bracket format, and postseason presentation for this league.</small></span></div><button type="button" className="button-secondary" disabled={readOnly} onClick={() => setPlayoffEditorOpen(true)}><Pencil />Edit playoffs</button></div>
       <PlayoffsView schedule={schedule} onUpdatePlayoffs={onUpdatePlayoffs} onUpdatePlayoffGame={() => undefined} mode="settings" />
+      {playoffEditorOpen && <PlayoffWizardModal schedule={schedule} onClose={() => setPlayoffEditorOpen(false)} onSave={(settings) => onUpdatePlayoffs(settings)} />}
     </>}
+  </div>;
+}
+
+function ShareView({
+  schedule,
+  publishStatus,
+  publicDisplay,
+  isCloudSchedule,
+  publishBusy,
+  unpublishBusy,
+  copiedPublishLink,
+  simulationActive,
+  onPublish,
+  onCopyLink,
+  onUnpublish,
+  onShowRecap,
+  onUpdatePublicDisplay,
+}: {
+  schedule: GeneratedSchedule;
+  publishStatus: PublishStatus | null;
+  publicDisplay: PublicDisplaySettings;
+  isCloudSchedule: boolean;
+  publishBusy: boolean;
+  unpublishBusy: boolean;
+  copiedPublishLink: boolean;
+  simulationActive: boolean;
+  onPublish: () => void;
+  onCopyLink: () => void;
+  onUnpublish: () => void;
+  onShowRecap: () => void;
+  onUpdatePublicDisplay: (display: PublicDisplaySettings) => void;
+}) {
+  const published = Boolean(publishStatus?.published && publishStatus.url);
+  const updateDisplay = (patch: Partial<PublicDisplaySettings>) => onUpdatePublicDisplay({ ...publicDisplay, ...patch });
+  return <div className="workspace-stack">
+    <section className={`share-page-hero ${published ? "is-live" : "is-idle"}`} aria-labelledby="share-page-title">
+      <div className="share-page-status">
+        <span className={`publish-status-dot${published ? "" : " is-off"}`} aria-hidden="true" />
+        <span>
+          <small>{published ? "PUBLIC PAGE LIVE" : "NOT PUBLISHED"}</small>
+          <h2 id="share-page-title">{published ? "Share link ready" : "Publish your schedule"}</h2>
+          <p>{published ? "Anyone with this link can open the latest public schedule page." : "Create one public page for this season, then copy the link for your league."}</p>
+        </span>
+      </div>
+      <div className="share-page-actions">
+        {published ? <>
+          <button type="button" className="button-secondary" onClick={onCopyLink}>{copiedPublishLink ? <Check /> : <Copy />}{copiedPublishLink ? "Copied" : "Copy link"}</button>
+          <a className="button-secondary" href={publishStatus?.url ?? "#"} target="_blank" rel="noreferrer"><ExternalLink />Open page</a>
+          <button type="button" className="button-danger" disabled={unpublishBusy} onClick={onUnpublish}>{unpublishBusy ? <LoaderCircle className="spin" /> : <X />}Unpublish</button>
+        </> : <button type="button" className="button-primary" disabled={publishBusy} onClick={onPublish}>{publishBusy ? <LoaderCircle className="spin" /> : <Share2 />}{publishBusy ? "Publishing..." : "Publish & copy link"}</button>}
+      </div>
+      {published && <label className="share-link-field">
+        <span>Public schedule link</span>
+        <input type="text" readOnly value={publishStatus?.url ?? ""} onFocus={(event) => event.currentTarget.select()} aria-label="Public schedule link" />
+      </label>}
+    </section>
+
+    <div className="share-page-grid">
+      <section className="share-info-panel">
+        <header><ShieldCheck /><span><strong>What goes public</strong><small>Review this before sending the link.</small></span></header>
+        <div className="share-info-list">
+          <span><Check /><strong>Full schedule</strong><small>Weeks, matchups, scores, standings, and playoff view when available.</small></span>
+          <span><Check /><strong>League details</strong><small>League name, team names, logos, and colors. Private fields follow the settings below.</small></span>
+          <span><CircleAlert /><strong>Link access</strong><small>Anyone with the link can open it until you unpublish.</small></span>
+        </div>
+      </section>
+      <section className="share-info-panel share-privacy-panel">
+        <header><ShieldCheck /><span><strong>Public privacy</strong><small>Turn off anything you do not want on the public page.</small></span></header>
+        <div className="share-privacy-options">
+          <label><input type="checkbox" checked={publicDisplay.managers} onChange={(event) => updateDisplay({ managers: event.target.checked })} /><span><strong>Show manager names</strong><small>Turn this off to remove manager names and emails from the published copy.</small></span></label>
+          <label><input type="checkbox" checked={publicDisplay.cityNames} onChange={(event) => updateDisplay({ cityNames: event.target.checked })} /><span><strong>Show team cities</strong><small>Turn this off if city/location names should stay private.</small></span></label>
+          <label><input type="checkbox" checked={publicDisplay.venues} onChange={(event) => updateDisplay({ venues: event.target.checked })} /><span><strong>Show venues</strong><small>Turn this off to hide stadium or home-field details.</small></span></label>
+        </div>
+      </section>
+      <section className="share-info-panel">
+        <header><Sparkles /><span><strong>Share card</strong><small>Replay the reveal to share the branded season card.</small></span></header>
+        <div className="share-card-summary">
+          <EntityLogo color={schedule.setup.color} logoUrl={schedule.setup.logoUrl} monogram={schedule.setup.initials || schedule.setup.abbreviation || "LW"} size={44} />
+          <span><strong>{schedule.setup.name}</strong><small>{schedule.setup.seasonYear} season · {schedule.setup.teams.length} teams · {schedule.setup.weeks} weeks</small></span>
+        </div>
+        <button type="button" className="button-secondary" onClick={onShowRecap}><Sparkles />Open recap</button>
+      </section>
+    </div>
+
+    {!isCloudSchedule && <section className="share-save-note" role="note">
+      <Cloud />
+      <span><strong>Publishing saves this season to your account first.</strong><small>{simulationActive ? "The public page uses the real schedule, not the simulator run." : "That keeps the public link stable across devices."}</small></span>
+    </section>}
   </div>;
 }
 
@@ -1580,10 +1824,13 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
   // H2: publish status persists across reloads (fetched from /api/publish for
   // cloud schedules) so the public URL and Unpublish control are always
   // recoverable, not just visible for the few seconds the toast is on screen.
-  const [publishStatus, setPublishStatus] = useState<{ published: boolean; url: string | null; slug: string | null } | null>(null);
+  const [publishStatus, setPublishStatus] = useState<PublishStatus | null>(null);
+  const [publicDisplay, setPublicDisplay] = useState<PublicDisplaySettings>({ cityNames: true, managers: false, venues: true });
   const [unpublishBusy, setUnpublishBusy] = useState(false);
   const [copiedPublishLink, setCopiedPublishLink] = useState(false);
   const [scorebarCollapsed, setScorebarCollapsed] = useState(false);
+  const [scorebarHeight, setScorebarHeight] = useState(0);
+  const scorebarRef = useRef<HTMLDivElement | null>(null);
   // H1: irreversible actions (publish, save-run-back, regenerate) open this
   // confirm gate before running, so a reflexive click can't publish private data,
   // overwrite real scores, or wipe the slate.
@@ -1689,8 +1936,12 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
     if (!schedule || !CLOUD_SCHEDULE_ID.test(schedule.id)) { setPublishStatus(null); return; }
     let cancelled = false;
     fetch(`/api/publish?scheduleId=${encodeURIComponent(schedule.id)}`)
-      .then((response) => response.json().catch(() => ({})) as Promise<{ published?: boolean; url?: string; slug?: string }>)
-      .then((payload) => { if (!cancelled) setPublishStatus({ published: Boolean(payload.published), url: payload.url ?? null, slug: payload.slug ?? null }); })
+      .then((response) => response.json().catch(() => ({})) as Promise<{ published?: boolean; url?: string; slug?: string; publicDisplay?: Partial<PublicDisplaySettings> }>)
+      .then((payload) => {
+        if (cancelled) return;
+        setPublishStatus({ published: Boolean(payload.published), url: payload.url ?? null, slug: payload.slug ?? null, publicDisplay: payload.publicDisplay });
+        if (payload.publicDisplay) setPublicDisplay((current) => ({ ...current, ...payload.publicDisplay }));
+      })
       .catch(() => { if (!cancelled) setPublishStatus({ published: false, url: null, slug: null }); });
     return () => { cancelled = true; };
   }, [schedule?.id]);
@@ -1902,6 +2153,24 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
     void refreshPlatformScores();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schedule?.setup.platformConnection, platformSyncLoading]);
+  const measuredScoreBarWeek = activeSchedule?.weeks.find((item) => item.weekNumber === selectedWeek) ?? activeSchedule?.weeks[0];
+  useEffect(() => {
+    if (!measuredScoreBarWeek) {
+      setScorebarHeight(0);
+      return;
+    }
+    const element = scorebarRef.current;
+    if (!element) return;
+    const updateHeight = () => setScorebarHeight(Math.ceil(element.getBoundingClientRect().height));
+    updateHeight();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(updateHeight) : null;
+    observer?.observe(element);
+    window.addEventListener("resize", updateHeight);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updateHeight);
+    };
+  }, [measuredScoreBarWeek?.weekNumber, scorebarCollapsed]);
   if (!schedule || !activeSchedule) {
     if (seasonLoadState === "loading") return <div className="empty-season" role="status"><BrandLockup /><LoaderCircle className="spin" /><h1>Loading season…</h1><p>Opening the latest saved schedule and checking your access.</p></div>;
     if (seasonLoadState === "error") return <div className="empty-season" role="alert"><BrandLockup /><Cloud /><h1>Season could not open.</h1><p>{seasonLoadError || "The saved season was not available. Your local work is still safe on this device if it was created here."}</p><Link href="/account" className="button-primary">Open account</Link><Link href="/build" className="button-secondary">Open schedule builder</Link></div>;
@@ -1927,6 +2196,7 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
     setNotice(`${rows.length} reviewed ${rows.length === 1 ? "matchup" : "matchups"} added to Week ${selectedWeek}.`);
     window.setTimeout(() => setNotice(null), 4200);
   };
+  void applyImportedScores;
   const updatePlatformConnection = (patch: Partial<PlatformConnection>) => setSchedule((current) => {
     if (!current?.setup.platformConnection) return current;
     return { ...current, setup: { ...current.setup, platformConnection: { ...current.setup.platformConnection, ...patch } } };
@@ -1979,6 +2249,13 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
       window.setTimeout(() => setNotice(null), 5200);
     }
   }
+  const refreshCurrentSeasonData = () => {
+    if (canAccessPlatformSync && schedule?.setup.platformConnection && !simulation) {
+      void refreshPlatformScores();
+      return;
+    }
+    void loadImportHistory();
+  };
   const savePlatformConnection = async (syncMode: PlatformSyncMode, swid?: string, espnS2?: string) => {
     if (!schedule?.setup.platformConnection) return;
     const connection = schedule.setup.platformConnection;
@@ -2069,6 +2346,7 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
     return { ...current, playoffGames };
   });
   const onUpdateTiebreakers = (tiebreakers: TiebreakerSettings) => setSchedule((current) => current ? normalizeSeason({ ...current, rankHistory: undefined, setup: { ...current.setup, tiebreakers } }) : current);
+  const onUpdatePublicDisplay = (display: PublicDisplaySettings) => setPublicDisplay(display);
   const savedLeagueFreshness: SavedLeagueFreshness = !schedule?.setup.savedLeague?.id
     ? { status: "none" }
     : linkedSavedLeague
@@ -2261,15 +2539,25 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
         if (!saved) return;
         cloudSchedule = saved;
       }
-      const response = await fetch("/api/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: cloudSchedule.id }) });
+      const response = await fetch("/api/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: cloudSchedule.id, publicDisplay }) });
       const payload = await response.json().catch(() => ({})) as { url?: string; slug?: string; error?: string };
       if (!response.ok || !payload.url) return setNotice(apiErrorMessage(response.status, payload.error, "This schedule could not be published."));
-      setPublishStatus({ published: true, url: payload.url, slug: payload.slug ?? null });
+      setPublishStatus({ published: true, url: payload.url, slug: payload.slug ?? null, publicDisplay });
       try { await navigator.clipboard.writeText(payload.url); setNotice("Public schedule link copied."); }
       catch { setNotice(`Public schedule ready: ${payload.url}`); }
       window.setTimeout(() => setNotice(null), 5200);
     } finally {
       setActionBusy(null);
+    }
+  };
+  const copyPublishLink = async () => {
+    if (!publishStatus?.url) return;
+    try {
+      await navigator.clipboard.writeText(publishStatus.url);
+      setCopiedPublishLink(true);
+      window.setTimeout(() => setCopiedPublishLink(false), 2400);
+    } catch {
+      setNotice(`Public schedule ready: ${publishStatus.url}`);
     }
   };
   // Unpublish a live public page (H2). Reversible: publishing again reuses the
@@ -2298,10 +2586,10 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
         if (!saved) return { error: "Sign in and save this schedule to share it." };
         cloudSchedule = saved;
       }
-      const response = await fetch("/api/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: cloudSchedule.id }) });
+      const response = await fetch("/api/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scheduleId: cloudSchedule.id, publicDisplay }) });
       const payload = await response.json().catch(() => ({})) as { url?: string; slug?: string; error?: string };
       if (!response.ok || !payload.url) return { error: apiErrorMessage(response.status, payload.error, "This schedule could not be published.") };
-      setPublishStatus({ published: true, url: payload.url, slug: payload.slug ?? null });
+      setPublishStatus({ published: true, url: payload.url, slug: payload.slug ?? null, publicDisplay });
       return { url: payload.url, slug: payload.slug };
     } catch {
       return { error: "Something went wrong publishing your schedule." };
@@ -2352,8 +2640,9 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
   const scoreBarRankByTeam = new Map((getEnteringWeekRankSnapshot(activeSchedule, selectedWeek)?.rows ?? []).map((row) => [row.teamId, row.rank]));
   const scoreBarDivisionById = new Map(activeSchedule.setup.divisions.map((division) => [division.id, division]));
   const scoreBarHasConferences = hasConferences(activeSchedule.setup);
-  const scoreBarWeek = activeSchedule.weeks.find((item) => item.weekNumber === selectedWeek) ?? activeSchedule.weeks[0];
-  return <main className={`workspace-page ${simulation ? "simulation-mode" : ""} ${scoreBarWeek ? "has-scorebar" : ""} ${scoreBarWeek && scorebarCollapsed ? "scorebar-collapsed" : ""}`} style={{ "--brand": schedule.setup.color, "--brand-on": readableTextColor(schedule.setup.color) } as CSSProperties}>
+  const scoreBarWeek = measuredScoreBarWeek;
+  const nflTrailWeek = getCurrentSlateWeek(new Date(), activeSchedule.setup.seasonYear, 18);
+  return <main className={`workspace-page ${simulation ? "simulation-mode" : ""} ${scoreBarWeek ? "has-scorebar" : ""} ${scoreBarWeek && scorebarCollapsed ? "scorebar-collapsed" : ""}`} style={{ "--brand": schedule.setup.color, "--brand-on": readableTextColor(schedule.setup.color), "--sb-strip-h": `${scorebarHeight || (scorebarCollapsed ? 40 : 91)}px` } as CSSProperties}>
     {scoreModalOpen && canAccessScorekeeping && <Modal
       className="score-entry-modal"
       backdropClassName="score-entry-modal-backdrop"
@@ -2371,43 +2660,31 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
     </Modal>}
     {showRecap && <GenerationReveal schedule={schedule} mode="replay" onComplete={() => setShowRecap(false)} onShare={shareForReveal} />}
     <AppHeader />
-    {scoreBarWeek && <WeekScoreBar
-      weeks={activeSchedule.weeks}
-      seasonYear={activeSchedule.setup.seasonYear}
-      getTeam={(id) => scoreBarTeamById.get(id)}
-      getDivision={(id) => scoreBarDivisionById.get(id)}
-      getConference={(divisionId) => scoreBarHasConferences ? conferenceOfDivision(activeSchedule.setup, divisionId) : undefined}
-      getRank={(id) => scoreBarRankByTeam.get(id)}
-      displayCityNames={activeSchedule.setup.display?.cityNames !== false}
-      onSelectGame={(gameId) => { const gameWeek = activeSchedule.weeks.find((item) => item.games.some((game) => game.id === gameId)); if (gameWeek) openLeagueScheduleWeek(gameWeek.weekNumber); setHighlightedGame({ id: gameId }); }}
-      onCollapsedChange={setScorebarCollapsed}
-      teamCount={activeSchedule.setup.teams.length}
-    />}
+    {scoreBarWeek && <div className="scorebar-measure" ref={scorebarRef}><WeekScoreBar
+        weeks={activeSchedule.weeks}
+        seasonYear={activeSchedule.setup.seasonYear}
+        getTeam={(id) => scoreBarTeamById.get(id)}
+        getDivision={(id) => scoreBarDivisionById.get(id)}
+        getConference={(divisionId) => scoreBarHasConferences ? conferenceOfDivision(activeSchedule.setup, divisionId) : undefined}
+        getRank={(id) => scoreBarRankByTeam.get(id)}
+        displayCityNames={activeSchedule.setup.display?.cityNames !== false}
+        onSelectGame={(gameId) => { const gameWeek = activeSchedule.weeks.find((item) => item.games.some((game) => game.id === gameId)); if (gameWeek) openLeagueScheduleWeek(gameWeek.weekNumber); setHighlightedGame({ id: gameId }); }}
+        onCollapsedChange={setScorebarCollapsed}
+        teamCount={activeSchedule.setup.teams.length}
+      /></div>}
     <div className="workspace-shell">
       <aside className="workspace-rail"><nav aria-label="Season workspace">{VIEW_ITEMS.map((item) => { const Icon = item.icon; return <button type="button" key={item.key} aria-label={item.label} title={item.label} className={view === item.key ? "active" : ""} onClick={() => selectView(item)}><Icon /><span>{item.label}</span></button>; })}</nav><div className="rail-bottom"><WorkspaceSwitcher current={{ id: schedule.id, name: schedule.setup.name, seasonYear: schedule.setup.seasonYear, color: schedule.setup.color, logoUrl: schedule.setup.logoUrl, initials: schedule.setup.initials }} signedIn={Boolean(entitlements.signedIn)} /></div></aside>
       <section className={`workspace-main ${selectedTeamColor ? "team-workspace-branded" : ""}`} style={workspaceMainStyle}>
-        <div className="workspace-toolbar"><div><span className="workspace-breadcrumb">{schedule.setup.abbreviation} / {schedule.setup.seasonYear}</span><h1>{currentTitle}</h1></div></div>
-        <div className="workspace-notice" role="status" aria-live="polite">{notice && <><Cloud />{notice}</>}</div>
-        {publishStatus && CLOUD_SCHEDULE_ID.test(schedule.id) && (publishStatus.published ? (
-          <section className="publish-panel is-live" role="status" aria-label="Public schedule status">
-            <span className="publish-status-dot" aria-hidden="true" />
-            <span className="publish-panel-copy">
-              <strong>Public page is live</strong>
-              <input type="text" readOnly value={publishStatus.url ?? ""} onFocus={(event) => event.currentTarget.select()} aria-label="Public schedule link" />
+        <div className="workspace-toolbar">
+          <div className="workspace-toolbar-identity" aria-label={`${currentTitle} for ${schedule.setup.name}`}>
+            <EntityLogo color={schedule.setup.color} logoUrl={schedule.setup.logoUrl} monogram={schedule.setup.initials || schedule.setup.abbreviation || "LW"} size={44} />
+            <span className="workspace-title-stack">
+              <span className="workspace-breadcrumb">{schedule.setup.name} - NFL {schedule.setup.seasonYear} season</span>
+              <h1>{currentTitle}</h1>
             </span>
-            <div className="publish-panel-actions">
-              <button type="button" className="button-secondary" onClick={async () => { if (!publishStatus.url) return; try { await navigator.clipboard.writeText(publishStatus.url); setCopiedPublishLink(true); window.setTimeout(() => setCopiedPublishLink(false), 2400); } catch { setNotice(`Public schedule ready: ${publishStatus.url}`); } }}>{copiedPublishLink ? <Check /> : <Copy />}{copiedPublishLink ? "Copied" : "Copy link"}</button>
-              <a className="button-secondary" href={publishStatus.url ?? "#"} target="_blank" rel="noreferrer"><ExternalLink />Open</a>
-              <button type="button" className="button-danger publish-panel-unpublish" disabled={unpublishBusy} onClick={() => void unpublish()}>{unpublishBusy ? <LoaderCircle className="spin" /> : <X />}Unpublish</button>
-            </div>
-          </section>
-        ) : (
-          <section className="publish-panel is-idle" role="status" aria-label="Public schedule status">
-            <span className="publish-status-dot is-off" aria-hidden="true" />
-            <span className="publish-panel-copy"><strong>Not published</strong><small>Publish to share a public schedule page with anyone.</small></span>
-            <button type="button" className="button-secondary" disabled={actionBusy !== null} onClick={() => setConfirmAction("share")}>{actionBusy === "share" ? <LoaderCircle className="spin" /> : <Share2 />}Publish</button>
-          </section>
-        ))}
+          </div>
+        </div>
+        <div className="workspace-notice" role="status" aria-live="polite">{notice && <><Cloud />{notice}</>}</div>
         {!entitlements.signedIn && !CLOUD_SCHEDULE_ID.test(schedule.id) && !saveNudgeDismissed && <section className="cloud-retry-banner save-nudge-banner" role="status" aria-label="Save this schedule to an account">
           <ShieldCheck />
           <span><strong>This schedule is saved on this device only.</strong><small>Create a free account so you never lose it and can open it on any device.</small></span>
@@ -2443,7 +2720,8 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
         <DraftRankingReminder schedule={schedule} onSave={onSaveDraftPlaces} openRequest={draftRankingRequest} onOpenSettings={openDraftRankingSettings} />
         <div className="workspace-content">
           {view === "this-week" && <div className="workspace-stack">
-            <ScheduleView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} canAccessPlayoffs={canAccessPlayoffs} onOpenScores={openScoreEntry} onOpenPlayoffs={openPlayoffScores} highlightedGame={highlightedGame} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />
+            <NflWeekTrail seasonYear={activeSchedule.setup.seasonYear} week={nflTrailWeek} />
+            <ScheduleView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} canAccessPlayoffs={canAccessPlayoffs} onOpenScores={openScoreEntry} onOpenPlayoffs={openPlayoffScores} highlightedGame={highlightedGame} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} showWeekSelector={false} />
           </div>}
           {view === "league-schedule" && <ScheduleView schedule={activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} canAccessPlayoffs={canAccessPlayoffs} onOpenScores={openScoreEntry} onOpenPlayoffs={openPlayoffScores} highlightedGame={highlightedGame} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
           {view === "team-schedule" && <TeamScheduleView schedule={activeSchedule} teamId={selectedTeamId} onSelectTeam={selectTeamSchedule} onSelectWeek={openLeagueScheduleWeek} simulationResults={simulationResultByGame} />}
@@ -2451,6 +2729,7 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
           {view === "matchup-ratings" && <MatchupRatingsView schedule={activeSchedule} />}
           {view === "standings" && <StandingsView schedule={activeSchedule} onUpdateTiebreakers={simulation ? undefined : onUpdateTiebreakers} readOnly={Boolean(simulation)} />}
           {view === "playoffs" && <PlayoffsView schedule={activeSchedule} onUpdatePlayoffs={simulation ? () => undefined : onUpdatePlayoffs} onUpdatePlayoffGame={simulation ? () => undefined : onUpdatePlayoffGame} highlightedGame={highlightedGame} simulationMode={Boolean(simulation)} playoffTab={playoffTab} onChangePlayoffTab={setPlayoffTab} />}
+          {view === "share" && <ShareView schedule={activeSchedule} publishStatus={publishStatus} publicDisplay={publicDisplay} isCloudSchedule={CLOUD_SCHEDULE_ID.test(schedule.id)} publishBusy={actionBusy === "share"} unpublishBusy={unpublishBusy} copiedPublishLink={copiedPublishLink} simulationActive={Boolean(simulation)} onPublish={() => setConfirmAction("share")} onCopyLink={() => void copyPublishLink()} onUnpublish={() => void unpublish()} onShowRecap={() => setShowRecap(true)} onUpdatePublicDisplay={onUpdatePublicDisplay} />}
           {view === "simulator" && !simulation && simulationLoaded && <SimulatorLaunch hasSavedRun={Boolean(savedSimulation)} onPlay={playSimulation} onStartFromReal={startSimulationFromReal} />}
           {view === "simulator" && simulation && <SimulatorWorkspace
             schedule={activeSchedule}
@@ -2474,7 +2753,7 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
             onDiscard={discardSimulation}
             onOpenSchedule={openLeagueScheduleWeek}
           />}
-          {view === "settings" && <SettingsView schedule={activeSchedule} onOpenDraftRanking={() => setDraftRankingRequest((current) => current + 1)} onRegenerate={() => setConfirmAction("regenerate")} onUpdateSavedLeague={updateFromSavedLeague} savedLeagueFreshness={savedLeagueFreshness} savedLeagueBusy={savedLeagueBusy} onUpdatePlayoffs={onUpdatePlayoffs} onUpdateTiebreakers={simulation ? undefined : onUpdateTiebreakers} readOnly={Boolean(simulation)} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} onRefreshPlatformScores={refreshPlatformScores} onSavePlatformConnection={savePlatformConnection} onDisconnectPlatform={disconnectPlatform} onConnectPlatform={() => setConnectOpen(true)} importHistory={importHistory} importHistoryLoading={importHistoryLoading} importHistoryError={importHistoryError} onRefreshImportHistory={loadImportHistory} onShowRecap={() => setShowRecap(true)} onDownloadCsv={() => downloadCsv(activeSchedule)} onDownloadPdf={async () => { if (pdfBusy) return; setPdfBusy(true); try { await downloadSchedulePdf(activeSchedule); } catch { setNotice("Couldn’t build the ESPN entry sheet. Please try again."); } finally { setPdfBusy(false); } }} pdfBusy={pdfBusy} onShare={() => setConfirmAction("share")} shareBusy={actionBusy !== null} simulationActive={Boolean(simulation)} />}
+          {view === "settings" && <SettingsView schedule={activeSchedule} onOpenDraftRanking={() => setDraftRankingRequest((current) => current + 1)} onRegenerate={() => setConfirmAction("regenerate")} onUpdateSavedLeague={updateFromSavedLeague} savedLeagueFreshness={savedLeagueFreshness} savedLeagueBusy={savedLeagueBusy} onUpdatePlayoffs={onUpdatePlayoffs} onUpdateTiebreakers={simulation ? undefined : onUpdateTiebreakers} readOnly={Boolean(simulation)} canAccessPlatformSync={canAccessPlatformSync} platformSyncLoading={platformSyncLoading} platformDataRefreshing={platformSyncLoading || importHistoryLoading} onRefreshCurrentSeasonData={refreshCurrentSeasonData} onRefreshPlatformScores={refreshPlatformScores} onSavePlatformConnection={savePlatformConnection} onDisconnectPlatform={disconnectPlatform} onConnectPlatform={() => setConnectOpen(true)} importHistory={importHistory} importHistoryLoading={importHistoryLoading} importHistoryError={importHistoryError} onRefreshImportHistory={loadImportHistory} onShowRecap={() => setShowRecap(true)} onDownloadCsv={() => downloadCsv(activeSchedule)} onDownloadPdf={async () => { if (pdfBusy) return; setPdfBusy(true); try { await downloadSchedulePdf(activeSchedule); } catch { setNotice("Couldn’t build the ESPN entry sheet. Please try again."); } finally { setPdfBusy(false); } }} pdfBusy={pdfBusy} simulationActive={Boolean(simulation)} />}
           {connectOpen && <ConnectScoresModal schedule={schedule} onClose={closeConnect} onConnect={applyPlatformConnection} dismissLabel={connectAutoOpened ? "Skip for now" : "Cancel"} />}
           {saveConnectionSetup && <SaveConnectionPrompt setup={saveConnectionSetup} onClose={() => setSaveConnectionSetup(null)} />}
         </div>
@@ -2503,7 +2782,7 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
         share: {
           icon: <Share2 />, kicker: "Publish publicly",
           title: "Publish this schedule to a public page?",
-          body: <p>This publishes your full schedule <strong>and manager names</strong> to a public web page anyone with the link can open.</p>,
+          body: <p>This publishes your schedule to a public web page anyone with the link can open. Private fields follow your Share page privacy settings.</p>,
           confirmLabel: "Publish & copy link", confirmIcon: <Share2 />,
           run: () => { void share(); },
         },

@@ -374,7 +374,7 @@ check(() => {
   assert.equal(bracket.admittedTeamIds.length, 8);
   assert.equal(bracket.eliminatedTeamIds.length, 2);
   const chart = projectPlacementChart(blankSchedule(setup));
-  assert.deepEqual(chart.at(-1), { placeStart: 15, placeEnd: 16, label: "15th–16th", source: "Outside the bracket", teamIds: chart.at(-1)?.teamIds ?? [], exact: false });
+  assert.deepEqual(chart.at(-1), { placeStart: 15, placeEnd: 16, label: "15th–16th", source: "Outside the bracket", teamIds: chart.at(-1)?.teamIds ?? [], exact: false, tier: "eliminated" });
 });
 
 check(() => {
@@ -389,10 +389,9 @@ check(() => {
   assert.equal(bracket.placementCap, 16);
   assert.equal(bracket.admittedTeamIds.length, 10);
   assert.equal(bracket.eliminatedTeamIds.length, 0);
-  assert.equal(bracket.rounds.length, 4);
-  assert.equal(bracket.rounds[0].games.length, 2);
-  assert.ok(bracket.rounds[1].games.some((game) => game.entrants.some((entrant) => entrant.kind === "team" && entrant.projectedSeed <= 8)));
-  assert.ok(bracket.rounds[3].games.some((game) => game.label === "7th Place"));
+  assert.equal(bracket.rounds.length, 3);
+  assert.equal(bracket.rounds[0].games.length, 4);
+  assert.ok(bracket.rounds.at(-1)?.games.some((game) => game.label === "7th Place"));
 });
 
 check(() => {

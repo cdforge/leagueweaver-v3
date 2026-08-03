@@ -9,12 +9,12 @@ export function EntityLogo({ color, logoUrl, monogram, size = 32, className = ""
   const [failedLogo, setFailedLogo] = useState<string | null>(null);
   const visibleLogo = logoUrl && failedLogo !== logoUrl ? logoUrl : undefined;
   const enforcedSize = Math.max(32, size);
-  const compactText = monogram.length >= 5;
   const bareImage = Boolean(visibleLogo && imagePresentation === "bare");
-  const fallbackFill = entityType === "league" || entityType === "division" ? color : tintColor(color);
-  const fallbackInk = entityType === "league" || entityType === "division" ? readableTextColor(color) : accessibleTeamColor(color);
-  const fittedMonoFontSize = monoFontSize ?? (compactText ? Math.max(8, Math.round(enforcedSize * 0.29)) : undefined);
-  return <span className={`entity-logo entity-logo-${entityType} ${visibleLogo ? "entity-logo-has-image" : "entity-logo-no-image"} ${compactText && !visibleLogo ? "entity-logo-compact-text" : ""} ${bareImage ? "entity-logo-bare-image" : ""} ${className}`} style={{ "--entity-color": color, width: enforcedSize, height: enforcedSize, background: bareImage ? "transparent" : visibleLogo ? tintColor(color) : fallbackFill, color: visibleLogo ? readableTextColor(color) : fallbackInk, ...(fittedMonoFontSize && !visibleLogo ? { fontSize: fittedMonoFontSize } : {}) } as React.CSSProperties}>
-    {visibleLogo ? <img src={visibleLogo} alt="" onError={() => setFailedLogo(visibleLogo)} /> : <span>{monogram}</span>}
+  const solidFallback = entityType === "league" || entityType === "division";
+  const stackedDivision = !visibleLogo && entityType === "division" && monogram.includes("-");
+  const [stackTop, stackBottom] = stackedDivision ? monogram.split("-", 2) : ["", ""];
+  const fittedMonoFontSize = monoFontSize ?? (!stackedDivision && monogram.length >= 5 ? Math.max(8, Math.round(enforcedSize * 0.29)) : undefined);
+  return <span className={`entity-logo entity-logo-${entityType} ${visibleLogo ? "entity-logo-has-image" : "entity-logo-no-image"} ${bareImage ? "entity-logo-bare-image" : ""} ${stackedDivision ? "entity-logo-stacked-division" : monogram.length >= 5 ? "entity-logo-compact-text" : ""} ${className}`} style={{ "--entity-color": color, width: enforcedSize, height: enforcedSize, background: bareImage ? "transparent" : solidFallback ? color : tintColor(color), color: visibleLogo ? readableTextColor(color) : solidFallback ? readableTextColor(color) : accessibleTeamColor(color), ...(fittedMonoFontSize && !visibleLogo ? { fontSize: fittedMonoFontSize } : {}) } as React.CSSProperties}>
+    {visibleLogo ? <img src={visibleLogo} alt="" onError={() => setFailedLogo(visibleLogo)} /> : stackedDivision ? <span><i>{stackTop}</i><b>{stackBottom}</b></span> : <span>{monogram}</span>}
   </span>;
 }

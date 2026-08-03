@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   const entitlements = await getEntitlements(auth.userId, auth.supabase, parsed.data.scheduleId);
   const proSync = entitlements.plan === "pro" || entitlements.features.includes("platform_sync");
   const hasPrivateEspn = parsed.data.provider === "espn" && parsed.data.swid && parsed.data.espnS2;
-  if ((hasPrivateEspn || parsed.data.syncMode !== "manual") && !proSync) return NextResponse.json({ error: "Deep platform sync is included with Pro." }, { status: 403 });
+  if ((hasPrivateEspn || parsed.data.syncMode !== "manual") && !proSync) return NextResponse.json({ error: "Automatic platform sync is paused for the MVP release." }, { status: 403 });
 
   const { data: schedule } = await auth.supabase.from("schedules").select("id").eq("id", parsed.data.scheduleId).maybeSingle();
   if (!schedule) return NextResponse.json({ error: "Save this season before connecting platform sync." }, { status: 404 });

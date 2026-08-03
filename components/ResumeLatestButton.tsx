@@ -55,7 +55,14 @@ export function ResumeLatestButton() {
     };
   }, []);
 
-  if (!latest) return null;
+  if (!latest) {
+    return (
+      <span className="resume-latest is-placeholder" aria-hidden="true">
+        <History aria-hidden="true" />
+        <span className="resume-latest-copy"><small>Resume</small><strong>Latest schedule</strong></span>
+      </span>
+    );
+  }
 
   return (
     <Link href={`/season/${latest.id}`} className="resume-latest" aria-label={`Resume ${latest.name}`} title={`Resume ${latest.name}`}>

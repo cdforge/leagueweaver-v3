@@ -64,6 +64,7 @@ export function identityFromSetup(setup: LeagueSetupInput): SavedLeagueIdentity 
     },
     divisions: setup.divisions.map((division) => ({ ...division, initials: division.initials ?? "" })),
     conferences: setup.conferences,
+    divisionPlacementMode: setup.divisionPlacementMode,
     teams: setup.teams.map((team) => ({ ...team, initials: team.initials ?? "" })),
     display: setup.display,
     priorSeason: setup.priorSeason,
@@ -91,7 +92,7 @@ export function normalizeSavedLeague(row: { id: string; name: string; data: unkn
     const leagueInitials = hasLeagueInitials ? data.league.initials || undefined : data.league.abbreviation || undefined;
     const league = { ...data.league, initials: leagueInitials?.slice(0, 4), abbreviation: data.league.abbreviation || leagueAcronym(data.league.name) };
     const priorSeason = data.priorSeason ? { ...data.priorSeason, entryMode: data.priorSeason.entryMode ?? (data.priorSeason.enabled ? data.priorSeason.hasData ? "history" : "manual" : "none") } : { enabled: false, hasData: false, entryMode: "none" as const, source: "regular-season" as const };
-    return { id: row.id, name: row.name, data: { ...data, league, divisions, teams, display: data.display || { cityNames: true, managers: true, venues: true }, priorSeason, platformConnection: data.platformConnection }, updatedAt: row.updated_at || row.updatedAt || new Date().toISOString() };
+    return { id: row.id, name: row.name, data: { ...data, league, divisions, teams, display: data.display || { cityNames: true, managers: true, venues: true }, divisionPlacementMode: data.divisionPlacementMode ?? "manual", priorSeason, platformConnection: data.platformConnection }, updatedAt: row.updated_at || row.updatedAt || new Date().toISOString() };
   }
   const legacy = data as LegacyLeagueData;
   if (!legacy.leagueName || !Array.isArray(legacy.divisions)) return null;
@@ -116,6 +117,7 @@ export function normalizeSavedLeague(row: { id: string; name: string; data: unkn
         logoUrl: legacy.leagueLogo || undefined,
       },
       divisions,
+      divisionPlacementMode: "manual",
       teams,
       display: { cityNames: true, managers: true, venues: true },
       priorSeason: { enabled: false, hasData: false, entryMode: "none", source: "regular-season" },

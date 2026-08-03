@@ -14,6 +14,7 @@ export function normalizeSetup(setup: LeagueSetupInput): LeagueSetupInput {
     abbreviation: leagueAcronym(setup.name),
     initials,
     display: setup.display || { cityNames: true, managers: true, venues: true },
+    divisionPlacementMode: setup.divisionPlacementMode ?? "manual",
     priorSeason: { ...setup.priorSeason, hasData: setup.priorSeason.hasData ?? setup.priorSeason.enabled, entryMode: setup.priorSeason.entryMode ?? (setup.priorSeason.enabled ? setup.priorSeason.hasData ? "history" : "manual" : "none") },
     weekOne: setup.weekOne || { rankingSource: "prior-season" },
     tiebreakers: normalizeTiebreakerSettings(setup.tiebreakers),
