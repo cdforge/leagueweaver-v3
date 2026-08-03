@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { LoaderCircle } from "lucide-react";
 import { EntityLogo } from "./EntityLogo";
 import { readableTextColor } from "@/lib/colorContrast";
@@ -10,15 +10,34 @@ import type { Division, Team } from "@/lib/types";
 
 function LeagueDivisionMark({ division, size }: { division: Division; size: number }) {
   const initials = resolveInitials(division.initials, divisionAcronym(division.name));
-  const [loading, setLoading] = useState(Boolean(division.logoUrl));
+  const imageRef = useRef<HTMLImageElement | null>(null);
+  const [loadedLogo, setLoadedLogo] = useState<string | null>(null);
+  const [loadingLogo, setLoadingLogo] = useState<string | null>(division.logoUrl ?? null);
+  const loading = Boolean(division.logoUrl && loadingLogo === division.logoUrl && loadedLogo !== division.logoUrl);
+  const markLoaded = () => {
+    if (!division.logoUrl) return;
+    setLoadedLogo(division.logoUrl);
+    setLoadingLogo((current) => current === division.logoUrl ? null : current);
+  };
 
   useEffect(() => {
-    setLoading(Boolean(division.logoUrl));
+    if (!division.logoUrl) {
+      setLoadedLogo(null);
+      setLoadingLogo(null);
+      return;
+    }
+    const image = imageRef.current;
+    if (image?.complete && image.naturalWidth > 0) {
+      setLoadedLogo(division.logoUrl);
+      setLoadingLogo(null);
+      return;
+    }
+    setLoadingLogo(division.logoUrl);
   }, [division.logoUrl]);
 
   return (
     <span className={`entity-logo league-division-mark${division.logoUrl ? " entity-logo-has-image" : ""} ${loading ? "entity-logo-loading" : ""}`} style={{ width: size, height: size, background: division.color, color: readableTextColor(division.color), "--entity-color": division.color } as CSSProperties} title={division.name}>
-      {division.logoUrl ? <><img src={division.logoUrl} alt="" onLoad={() => setLoading(false)} onError={() => setLoading(false)} />{loading && <LoaderCircle className="entity-logo-spinner spin" aria-hidden="true" />}</> : <span>{initials}</span>}
+      {division.logoUrl ? <><img ref={imageRef} src={division.logoUrl} alt="" onLoad={markLoaded} onError={() => { setLoadedLogo(null); setLoadingLogo(null); }} />{loading && <LoaderCircle className="entity-logo-spinner spin" aria-hidden="true" />}</> : <span>{initials}</span>}
     </span>
   );
 }

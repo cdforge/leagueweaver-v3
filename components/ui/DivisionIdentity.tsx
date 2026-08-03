@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { LoaderCircle } from "lucide-react";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
@@ -8,14 +8,27 @@ import { conferenceAcronym, divisionAcronym, resolveInitials } from "@/lib/monog
 import type { Conference, Division } from "@/lib/types";
 
 function LoadingMarkImage({ src }: { src: string }) {
-  const [loading, setLoading] = useState(true);
+  const imageRef = useRef<HTMLImageElement | null>(null);
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
+  const [loadingSrc, setLoadingSrc] = useState<string | null>(src);
+  const loading = Boolean(loadingSrc === src && loadedSrc !== src);
+  const markLoaded = () => {
+    setLoadedSrc(src);
+    setLoadingSrc((current) => current === src ? null : current);
+  };
 
   useEffect(() => {
-    setLoading(true);
+    const image = imageRef.current;
+    if (image?.complete && image.naturalWidth > 0) {
+      setLoadedSrc(src);
+      setLoadingSrc(null);
+      return;
+    }
+    setLoadingSrc(src);
   }, [src]);
 
   return <>
-    <img className={loading ? "is-loading" : ""} src={src} alt="" onLoad={() => setLoading(false)} onError={() => setLoading(false)} />
+    <img ref={imageRef} className={loading ? "is-loading" : ""} src={src} alt="" onLoad={markLoaded} onError={() => { setLoadedSrc(null); setLoadingSrc(null); }} />
     {loading && <LoaderCircle className="division-mark-spinner spin" aria-hidden="true" />}
   </>;
 }
