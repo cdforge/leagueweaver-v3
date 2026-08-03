@@ -113,7 +113,7 @@ import { getNflWeekWindow, getWeekDateLabel, updateGameScore } from "@/lib/sched
 import { getWeekPhase } from "@/lib/weekPhase";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
 import { GAME_DETAIL_CACHE_PREFIX, type GameDetailPlayerStat } from "@/lib/gameDetail";
-import type { GeneratedSchedule, ImportHistoryEvent, ImportPreview, LeagueSetupInput, PlatformConnection, PlatformSyncMode, PlayoffGame, ScheduledGame, Team, TiebreakerSettings } from "@/lib/types";
+import type { GeneratedSchedule, ImportHistoryEvent, ImportPreview, LeagueSetupInput, PastChampion, PlatformConnection, PlatformSyncMode, PlayoffGame, ScheduledGame, Team, TiebreakerSettings } from "@/lib/types";
 
 type ViewKey = "this-week" | "results" | "league-schedule" | "team-schedule" | "gotw" | "matchup-ratings" | "standings" | "mvt" | "all-stars" | "playoffs" | "simulator" | "settings";
 const CLOUD_SCHEDULE_ID = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
@@ -1486,6 +1486,7 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
   }, []);
   const [cloudRetry, setCloudRetry] = useState<CloudRetryState | null>(null);
   const [importHistory, setImportHistory] = useState<ImportHistoryEvent[]>([]);
+  const [pastChampions, setPastChampions] = useState<PastChampion[]>([]);
   const [importHistoryLoading, setImportHistoryLoading] = useState(false);
   const [importHistoryError, setImportHistoryError] = useState<string | null>(null);
   const cloudScheduleSnapshot = useRef<string | null>(null);
@@ -1647,6 +1648,7 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
   const loadImportHistory = async () => {
     if (!schedule || !CLOUD_SCHEDULE_ID.test(schedule.id)) {
       setImportHistory([]);
+      setPastChampions([]);
       setImportHistoryError(null);
       return;
     }
@@ -1654,9 +1656,10 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
     setImportHistoryError(null);
     try {
       const response = await fetch(`/api/platform/history?scheduleId=${encodeURIComponent(schedule.id)}`);
-      const payload = await response.json().catch(() => ({})) as { events?: ImportHistoryEvent[]; error?: string };
+      const payload = await response.json().catch(() => ({})) as { events?: ImportHistoryEvent[]; champions?: PastChampion[]; error?: string };
       if (!response.ok) throw new Error(apiErrorMessage(response.status, payload.error, "Import history could not be loaded."));
       setImportHistory(payload.events ?? []);
+      setPastChampions(payload.champions ?? []);
     } catch (caught) {
       setImportHistoryError(caught instanceof Error ? caught.message : "Import history could not be loaded.");
     } finally {
@@ -1665,7 +1668,7 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
   };
   useEffect(() => {
     if (!schedule || !CLOUD_SCHEDULE_ID.test(schedule.id)) {
-      queueMicrotask(() => setImportHistory([]));
+      queueMicrotask(() => { setImportHistory([]); setPastChampions([]); });
       return;
     }
     queueMicrotask(() => void loadImportHistory());
@@ -1972,7 +1975,11 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scheduleId: schedule.id, provider: connection.provider, providerLeagueId: connection.providerLeagueId, seasonYear: connection.seasonYear, syncMode: connection.syncMode }),
-      }).catch(() => undefined);
+      }).then(() => fetch("/api/platform/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduleId: schedule.id, provider: connection.provider, identifier: connection.providerLeagueId, seasonYear: connection.seasonYear, populate: true }),
+      })).then(() => loadImportHistory()).catch(() => undefined);
     }
     setNotice(`Connected to ${connection.provider === "espn" ? "ESPN" : "Sleeper"}. Pulling scores…`);
     window.setTimeout(() => setNotice(null), 4200);
@@ -2343,8 +2350,8 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
           {view === "gotw" && <GotwWorkspace schedule={activeSchedule} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
           {view === "matchup-ratings" && <MatchupRatingsView schedule={activeSchedule} />}
           {view === "standings" && <StandingsView schedule={activeSchedule} playerStats={gameDetailPlayerStats} onUpdateTiebreakers={simulation ? undefined : onUpdateTiebreakers} readOnly={Boolean(simulation)} />}
-          {view === "mvt" && <MvtWorkspace schedule={activeSchedule} playerStats={gameDetailPlayerStats} />}
-          {view === "all-stars" && <AllStarsWorkspace schedule={activeSchedule} playerStats={gameDetailPlayerStats} />}
+          {view === "mvt" && <MvtWorkspace schedule={activeSchedule} playerStats={gameDetailPlayerStats} pastChampions={pastChampions} />}
+          {view === "all-stars" && <AllStarsWorkspace schedule={activeSchedule} playerStats={gameDetailPlayerStats} pastChampions={pastChampions} />}
           {view === "playoffs" && <PlayoffsView schedule={activeSchedule} onUpdatePlayoffs={simulation ? () => undefined : onUpdatePlayoffs} onUpdatePlayoffGame={simulation ? () => undefined : onUpdatePlayoffGame} highlightedGame={highlightedGame} simulationMode={Boolean(simulation)} playoffTab={playoffTab} onChangePlayoffTab={setPlayoffTab} />}
           {view === "simulator" && !simulation && simulationLoaded && <SimulatorLaunch hasSavedRun={Boolean(savedSimulation)} onPlay={playSimulation} onStartFromReal={startSimulationFromReal} />}
           {view === "simulator" && simulation && <SimulatorWorkspace

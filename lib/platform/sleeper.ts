@@ -1,4 +1,5 @@
 import "server-only";
+import { buildSleeperLeagueHistoryDraft, type LeagueHistoryDraft, type SleeperHistorySeasonPayload } from "@/lib/platform/history";
 import { deriveSleeperTemplates, mapSleeperPlayerWeekStats, type LineupTemplate, type PlayerWeekStat, type RosterTemplate } from "@/lib/playerData";
 import { mapSleeperTransactions, type NormalizedTransaction, type SleeperTransactionPayload } from "@/lib/transactions";
 import { fetchProviderJson } from "./request";
@@ -6,10 +7,42 @@ import type { GeneratedSchedule, ImportDataFound, PlatformSyncResult, PlatformSy
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 
-export interface SleeperLeague { league_id: string; name?: string; season?: string; avatar?: string | null; draft_id?: string | null; previous_league_id?: string | null; roster_positions?: string[]; settings?: { taxi_slots?: number; best_ball?: number } }
+export interface SleeperLeague {
+  league_id: string;
+  name?: string;
+  season?: string;
+  avatar?: string | null;
+  draft_id?: string | null;
+  previous_league_id?: string | null;
+  roster_positions?: string[];
+  settings?: {
+    taxi_slots?: number;
+    best_ball?: number;
+    num_teams?: number;
+    last_scored_leg?: number;
+    leg?: number;
+    playoff_teams?: number;
+    playoff_week_start?: number;
+    playoff_type?: number;
+  };
+}
 export interface SleeperUser { user_id: string; display_name?: string; avatar?: string | null; metadata?: { team_name?: string } }
-export interface SleeperRoster { roster_id: number; owner_id?: string | null; settings?: { division?: number } }
-interface SleeperMatchup { roster_id: number; matchup_id?: number; points?: number; players?: string[]; starters?: string[]; players_points?: Record<string, number> }
+export interface SleeperRoster {
+  roster_id: number;
+  owner_id?: string | null;
+  metadata?: { team_name?: string };
+  settings?: {
+    division?: number;
+    wins?: number;
+    losses?: number;
+    ties?: number;
+    fpts?: number;
+    fpts_decimal?: number;
+    fpts_against?: number;
+    fpts_against_decimal?: number;
+  };
+}
+export interface SleeperMatchup { roster_id: number; matchup_id?: number; points?: number; players?: string[]; starters?: string[]; players_points?: Record<string, number> }
 
 export async function sleeperFetch<T>(path: string): Promise<T> {
   const { response, json } = await fetchProviderJson<T>(`${SLEEPER_API}${path}`);
@@ -47,6 +80,24 @@ export async function scanSleeperHistory(leagueId: string): Promise<ImportDataFo
     }
   }
   return { availableHistoryYears: years, blockedHistoryYears: [], hasDraftData: true, hasRosterData: false, hasPlayerData: true, hasScoreSync: true };
+}
+
+export async function collectSleeperLeagueHistory(scheduleId: string, leagueId: string, opts?: { maxSeasons?: number; weeks?: number[] }): Promise<LeagueHistoryDraft> {
+  const seasons: SleeperHistorySeasonPayload[] = [];
+  const weeks = opts?.weeks ?? [1];
+  let current: string | null | undefined = leagueId;
+  for (let index = 0; index < (opts?.maxSeasons ?? 8) && current; index += 1) {
+    const league: SleeperLeague = await sleeperFetch<SleeperLeague>(`/league/${encodeURIComponent(current)}`);
+    const leagueIdForFetch = current;
+    const [rosters, users, matchupPairs] = await Promise.all([
+      sleeperFetch<SleeperRoster[]>(`/league/${encodeURIComponent(leagueIdForFetch)}/rosters`),
+      sleeperFetch<SleeperUser[]>(`/league/${encodeURIComponent(leagueIdForFetch)}/users`),
+      Promise.all(weeks.map(async (week) => [week, await sleeperFetch<SleeperMatchup[]>(`/league/${encodeURIComponent(leagueIdForFetch)}/matchups/${week}`)] as const)),
+    ]);
+    seasons.push({ league, rosters, users, matchupsByWeek: Object.fromEntries(matchupPairs) });
+    current = league.previous_league_id;
+  }
+  return buildSleeperLeagueHistoryDraft(scheduleId, seasons);
 }
 
 export async function mapSleeperPlayers(schedule: GeneratedSchedule, week: number): Promise<PlayerWeekStat[]> {

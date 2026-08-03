@@ -8,7 +8,7 @@ import { defaultConferenceAssignment } from "../lib/conferences";
 import { createConferences, createDefaultSetup, createDivisions, createTeams } from "../lib/defaults";
 import { GAME_DETAIL_CACHE_PREFIX, type GameDetailPlayerStat } from "../lib/gameDetail";
 import { generateLeagueSchedule } from "../lib/schedule";
-import type { GeneratedSchedule, LeagueSetupInput } from "../lib/types";
+import type { GeneratedSchedule, LeagueSetupInput, PastChampion } from "../lib/types";
 
 const port = Number(process.env.UI_SMOKE_PORT ?? 3130);
 const baseUrl = `http://127.0.0.1:${port}`;
@@ -264,6 +264,13 @@ function allStarsSmokeRows(schedule: GeneratedSchedule): GameDetailPlayerStat[] 
   return rows;
 }
 
+function pastChampionSmokeData(): PastChampion[] {
+  return [
+    { season: 2025, provider: "sleeper", providerLeagueId: "history-smoke-2025", leagueName: "History Smoke", teamName: "Harbor Kings", managerName: "Avery", wins: 13, losses: 1, pointsFor: 2144.42 },
+    { season: 2024, provider: "sleeper", providerLeagueId: "history-smoke-2024", leagueName: "History Smoke", teamName: "Lake Union", managerName: "Jordan", wins: 12, losses: 2, ties: 1, pointsFor: 2076.18 },
+  ];
+}
+
 function recapSmokeSchedule(id: string, finalWeek: boolean): GeneratedSchedule {
   const schedule = gameDetailSmokeSchedule(id);
   const week = schedule.weeks[0];
@@ -478,7 +485,7 @@ async function screenshotStandingsAwards(browser: Browser, name: string, schedul
   await closePage(page, name);
 }
 
-async function screenshotMvt(browser: Browser, name: string, schedule: GeneratedSchedule, viewport: { width: number; height: number }, rows: GameDetailPlayerStat[]) {
+async function screenshotMvt(browser: Browser, name: string, schedule: GeneratedSchedule, viewport: { width: number; height: number }, rows: GameDetailPlayerStat[], champions?: PastChampion[]) {
   const page = await browser.newPage({ viewport });
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
@@ -489,6 +496,11 @@ async function screenshotMvt(browser: Browser, name: string, schedule: Generated
   page.on("pageerror", (error) => {
     pageErrors.push(error.message);
   });
+  if (champions) {
+    await page.route("**/api/platform/history?**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ events: [], champions }) }));
+    await page.route("**/api/publish?**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ published: false }) }));
+    await page.route("**/api/seasons/*/player-stats", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ rows }) }));
+  }
 
   await page.addInitScript(({ seededSchedule, seededRows, cachePrefix }) => {
     window.localStorage.setItem("leagueweaver:v3:welcomed", "1");
@@ -502,6 +514,7 @@ async function screenshotMvt(browser: Browser, name: string, schedule: Generated
   await page.getByRole("button", { name: /^MVT$/i }).waitFor();
   await page.getByRole("heading", { name: /Most Valuable Team/i }).waitFor();
   await expectText(page.locator(".mvt-overview"), /Power Ranking/s, `${name}: MVT overview is present`);
+  if (champions) await expectText(page.locator(".past-champions-strip"), /Past Champions.*2025.*Harbor Kings/s, `${name}: past champions strip is present`);
   for (const label of ["Positional Awards", "Achievement Awards", "Divisional / League", "Bonus Awards"]) {
     await page.getByRole("tab", { name: label }).click();
     if (label === "Divisional / League") {
@@ -571,7 +584,7 @@ async function screenshotConferenceAwards(browser: Browser, name: string, schedu
   await closePage(page, name);
 }
 
-async function screenshotAllStars(browser: Browser, name: string, schedule: GeneratedSchedule, viewport: { width: number; height: number }, rows: GameDetailPlayerStat[]) {
+async function screenshotAllStars(browser: Browser, name: string, schedule: GeneratedSchedule, viewport: { width: number; height: number }, rows: GameDetailPlayerStat[], champions?: PastChampion[]) {
   const page = await browser.newPage({ viewport });
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
@@ -582,6 +595,11 @@ async function screenshotAllStars(browser: Browser, name: string, schedule: Gene
   page.on("pageerror", (error) => {
     pageErrors.push(error.message);
   });
+  if (champions) {
+    await page.route("**/api/platform/history?**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ events: [], champions }) }));
+    await page.route("**/api/publish?**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ published: false }) }));
+    await page.route("**/api/seasons/*/player-stats", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ rows }) }));
+  }
 
   await page.addInitScript(({ seededSchedule, seededRows, cachePrefix }) => {
     window.localStorage.setItem("leagueweaver:v3:welcomed", "1");
@@ -595,6 +613,7 @@ async function screenshotAllStars(browser: Browser, name: string, schedule: Gene
   await page.getByRole("button", { name: /All-Stars/i }).waitFor();
   await page.getByRole("heading", { name: /All-Star Team of the Week/i }).waitFor();
   await expectText(page.locator(".allstars-board"), /Week 2 Board/s, `${name}: latest week board is present`);
+  if (champions) await expectText(page.locator(".past-champions-strip"), /Past Champions.*2025.*Harbor Kings/s, `${name}: past champions strip is present`);
   await expectText(page.locator(".allstars-rail"), /All-Stars by Team/s, `${name}: team count rail is present`);
   await expectText(page.locator(".allstar-trend"), /Weekly Total Trend/s, `${name}: trend is present`);
   await page.getByRole("button", { name: /Previous All-Star week/i }).click();
@@ -685,8 +704,10 @@ async function main() {
     const stdSynced = gameDetailSmokeSchedule("ui-smoke-std-synced");
     const mvtSynced = gameDetailSmokeSchedule("ui-smoke-mvt-synced");
     const mvtMobile = gameDetailSmokeSchedule("ui-smoke-mvt-mobile");
+    const mvtHistory = gameDetailSmokeSchedule("11111111-1111-4111-8111-111111111111");
     const allStarsSynced = allStarsSmokeSchedule("ui-smoke-as-synced");
     const allStarsMobile = allStarsSmokeSchedule("ui-smoke-as-mobile");
+    const allStarsHistory = allStarsSmokeSchedule("22222222-2222-4222-8222-222222222222");
     const recapFinal = recapSmokeSchedule("ui-smoke-rw-final", true);
     const recapNonFinal = recapSmokeSchedule("ui-smoke-rw-non-final", false);
     const confAwards = conferenceAwardsSmokeSchedule("ui-smoke-conf-2-conference");
@@ -698,8 +719,10 @@ async function main() {
     await runSmokeStep("std-1-unsynced-mobile", () => screenshotStandingsAwards(browser!, "std-1-unsynced-mobile", gameDetailSmokeSchedule("ui-smoke-std-unsynced"), { width: 390, height: 844 }));
     await runSmokeStep("mvt-2-desktop", () => screenshotMvt(browser!, "mvt-2-desktop", mvtSynced, { width: 1440, height: 1000 }, gameDetailSmokeRows(mvtSynced)));
     await runSmokeStep("mvt-2-mobile", () => screenshotMvt(browser!, "mvt-2-mobile", mvtMobile, { width: 390, height: 844 }, gameDetailSmokeRows(mvtMobile)));
+    await runSmokeStep("dep-4-mvt-history-desktop", () => screenshotMvt(browser!, "dep-4-mvt-history-desktop", mvtHistory, { width: 1440, height: 1000 }, gameDetailSmokeRows(mvtHistory), pastChampionSmokeData()));
     await runSmokeStep("as-2-desktop", () => screenshotAllStars(browser!, "as-2-desktop", allStarsSynced, { width: 1440, height: 1000 }, allStarsSmokeRows(allStarsSynced)));
     await runSmokeStep("as-2-mobile", () => screenshotAllStars(browser!, "as-2-mobile", allStarsMobile, { width: 390, height: 844 }, allStarsSmokeRows(allStarsMobile)));
+    await runSmokeStep("dep-4-allstars-history-mobile", () => screenshotAllStars(browser!, "dep-4-allstars-history-mobile", allStarsHistory, { width: 390, height: 844 }, allStarsSmokeRows(allStarsHistory), pastChampionSmokeData()));
     await runSmokeStep("ui-1-empty-mvt-desktop", () => screenshotAwardEmptyState(browser!, "ui-1-empty-mvt-desktop", emptyAwards, "mvt", { width: 1440, height: 1000 }));
     await runSmokeStep("ui-1-empty-allstars-mobile", () => screenshotAwardEmptyState(browser!, "ui-1-empty-allstars-mobile", emptyAwards, "all-stars", { width: 390, height: 844 }));
     await runSmokeStep("rw-1-final-desktop", () => screenshotWeekRecap(browser!, "rw-1-final-desktop", recapFinal, { width: 1440, height: 1000 }, recapSmokeRows(recapFinal), true));

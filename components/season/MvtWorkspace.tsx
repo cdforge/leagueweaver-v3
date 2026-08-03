@@ -11,7 +11,7 @@ import { hasConferences } from "@/lib/conferences";
 import { buildMvt, type MvtAwardResult, type MvtBucket, type MvtMovement, type MvtTeamResult } from "@/lib/mvt";
 import { type LineupTemplate, type SlotKey } from "@/lib/playerData";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
-import type { GeneratedSchedule, Team } from "@/lib/types";
+import type { GeneratedSchedule, PastChampion, Team } from "@/lib/types";
 
 type MvtPanelKey = MvtBucket | "conference";
 
@@ -140,7 +140,20 @@ function DivisionLeagueAwards({ awards, teamById, schedule }: { awards: MvtAward
   </div>;
 }
 
-export function MvtWorkspace({ schedule, playerStats }: { schedule: GeneratedSchedule; playerStats: GameDetailPlayerStat[] }) {
+function PastChampionsStrip({ champions }: { champions: PastChampion[] }) {
+  if (!champions.length) return null;
+  return <section className="past-champions-strip" aria-label="Past champions">
+    <header><Trophy /><span><strong>Past Champions</strong><small>Saved league history</small></span></header>
+    <div>{champions.slice(0, 5).map((champion) => <article key={`${champion.provider}:${champion.providerLeagueId}:${champion.season}`}>
+      <small>{champion.season}</small>
+      <strong>{champion.teamName}</strong>
+      <span>{champion.managerName || champion.leagueName}</span>
+      {champion.wins != null && champion.losses != null && <em>{champion.wins}-{champion.losses}{champion.ties ? `-${champion.ties}` : ""}</em>}
+    </article>)}</div>
+  </section>;
+}
+
+export function MvtWorkspace({ schedule, playerStats, pastChampions = [] }: { schedule: GeneratedSchedule; playerStats: GameDetailPlayerStat[]; pastChampions?: PastChampion[] }) {
   const [activeBucket, setActiveBucket] = React.useState<MvtPanelKey>("positional");
   const teamById = React.useMemo(() => new Map(schedule.setup.teams.map((team) => [team.id, team])), [schedule.setup.teams]);
   const conferenceLive = hasConferences(schedule.setup);
@@ -152,12 +165,15 @@ export function MvtWorkspace({ schedule, playerStats }: { schedule: GeneratedSch
   const activeBucketLabel = activeBucket === "conference" ? "Conference Awards" : BUCKETS.find((bucket) => bucket.key === activeBucket)?.label ?? "Awards";
 
   if (!mvt || !mvt.teams.length) {
-    return <section className="mvt-workspace mvt-empty">
-      <div className="mvt-empty-panel">
-        <Sparkles />
-        <span><strong>Connect a public ESPN/Sleeper league to unlock MVT.</strong><small>League scores still work everywhere else; this page waits for real platform-scored starter rows so no award data is invented.</small></span>
-      </div>
-    </section>;
+    return <div className="mvt-workspace">
+      <PastChampionsStrip champions={pastChampions} />
+      <section className="mvt-empty">
+        <div className="mvt-empty-panel">
+          <Sparkles />
+          <span><strong>Connect a public ESPN/Sleeper league to unlock MVT.</strong><small>League scores still work everywhere else; this page waits for real platform-scored starter rows so no award data is invented.</small></span>
+        </div>
+      </section>
+    </div>;
   }
 
   const leader = mvt.teams[0];
@@ -176,6 +192,7 @@ export function MvtWorkspace({ schedule, playerStats }: { schedule: GeneratedSch
         <PointChip value={leader.total} className="mvt-leader-chip" />
       </aside>}
     </section>
+    <PastChampionsStrip champions={pastChampions} />
 
     <section className="mvt-overview" aria-label="MVT power ranking">
       <header>
