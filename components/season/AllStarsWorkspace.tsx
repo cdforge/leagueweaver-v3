@@ -3,12 +3,12 @@
 import * as React from "react";
 import { ChevronLeft, ChevronRight, LineChart, Shield, Sparkles, Star } from "lucide-react";
 import { EntityLogo } from "@/components/ui/EntityLogo";
+import { PointChip } from "@/components/ui/PointChip";
 import { buildAllStars, type AllStarWinner, type WeeklyAllStarSlot } from "@/lib/allStars";
 import { isGamePlayed } from "@/lib/game";
 import { type GameDetailPlayerStat } from "@/lib/gameDetail";
 import { type LineupTemplate, type SlotKey } from "@/lib/playerData";
 import { accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
-import { formatPoints } from "@/lib/statistics";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
 import type { GeneratedSchedule, Team } from "@/lib/types";
 
@@ -63,8 +63,10 @@ function winnerRow(winner: AllStarWinner, rows: GameDetailPlayerStat[]) {
 
 function PlayerBadge({ row }: { row?: GameDetailPlayerStat }) {
   const nfl = row?.nflTeam?.toUpperCase();
-  const color = nfl ? NFL_TEAM_COLORS[nfl] ?? "#eef1f0" : "#eef1f0";
-  return <span className="allstar-nfl-badge" style={{ background: color, color: readableTextColor(color) }}>{nfl || row?.position || "--"}</span>;
+  const knownColor = nfl ? NFL_TEAM_COLORS[nfl] : undefined;
+  const color = knownColor ?? "var(--strength-bg)";
+  const ink = knownColor ? readableTextColor(knownColor) : "var(--ink)";
+  return <span className="allstar-nfl-badge" style={{ background: color, color: ink }}>{nfl || row?.position || "--"}</span>;
 }
 
 function WinnerPill({ winner, team, rows }: { winner: AllStarWinner; team?: Team; rows: GameDetailPlayerStat[] }) {
@@ -80,14 +82,14 @@ function WinnerPill({ winner, team, rows }: { winner: AllStarWinner; team?: Team
 
 function SlotRow({ slot, teamById, rows }: { slot: WeeklyAllStarSlot; teamById: Map<string, Team>; rows: GameDetailPlayerStat[] }) {
   const firstTeam = teamById.get(slot.winners[0]?.teamId ?? "");
-  const accent = firstTeam ? accessibleTeamColor(firstTeam.color) : "#117a45";
-  return <article className="allstar-slot-row" style={{ "--team": firstTeam?.color ?? "#117a45", "--team-ink": accent } as React.CSSProperties}>
+  const accent = firstTeam ? accessibleTeamColor(firstTeam.color) : "var(--surface)";
+  return <article className="allstar-slot-row" style={{ "--team": firstTeam?.color ?? "var(--field)", "--team-ink": accent } as React.CSSProperties}>
     <span className="allstar-slot-badge">{slot.slotLabel}</span>
     {firstTeam && <EntityLogo color={firstTeam.color} logoUrl={firstTeam.logoUrl} monogram={teamInitials(firstTeam)} size={42} />}
     <div>
       {slot.winners.map((winner) => <WinnerPill winner={winner} team={teamById.get(winner.teamId)} rows={rows} key={winnerKey(winner)} />)}
     </div>
-    <b>{formatPoints(slot.score)}</b>
+    <PointChip value={slot.score} />
   </article>;
 }
 
@@ -105,7 +107,7 @@ function TrendChart({ weeks }: { weeks: Array<{ week: number; total: number }> }
   return <section className="allstar-trend">
     <header>
       <LineChart />
-      <span><strong>Weekly Total Trend</strong><small>Min red / max green. Prior-year comparison unlocks with history.</small></span>
+      <span><strong>Weekly Total Trend</strong><small>Range markers use the shared strength scale. Prior-year comparison unlocks with history.</small></span>
     </header>
     <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="All-Star weekly total trend">
       <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} />
@@ -135,7 +137,7 @@ export function AllStarsWorkspace({ schedule, playerStats }: { schedule: Generat
     return <section className="allstars-workspace allstars-empty">
       <div className="allstars-empty-panel">
         <Shield />
-        <span><strong>All-Stars unlock after a completed synced week.</strong><small>The board waits for real platform-scored starter rows so weekly awards are never filled with fake data.</small></span>
+        <span><strong>Connect a public ESPN/Sleeper league to unlock All-Stars.</strong><small>The board waits for a completed week with real platform-scored starter rows so weekly awards are never filled with fake data.</small></span>
       </div>
     </section>;
   }
@@ -162,7 +164,7 @@ export function AllStarsWorkspace({ schedule, playerStats }: { schedule: Generat
     </section>
 
     <section className="allstars-summary">
-      <span><Star fill="currentColor" /><small>Weekly total</small><strong>{formatPoints(activeWeek.total)}</strong></span>
+      <span><Star fill="currentColor" /><small>Weekly total</small><PointChip value={activeWeek.total} /></span>
       <span><Sparkles /><small>Slots awarded</small><strong>{activeWeek.slots.length}</strong></span>
       <span><LineChart /><small>Weeks tracked</small><strong>{weeks.length}</strong></span>
     </section>

@@ -4,12 +4,12 @@ import * as React from "react";
 import { ArrowDown, ArrowUp, Medal, Minus, Sparkles, Trophy } from "lucide-react";
 import { ConferenceMark } from "@/components/ui/DivisionIdentity";
 import { EntityLogo } from "@/components/ui/EntityLogo";
+import { PointChip } from "@/components/ui/PointChip";
 import { buildAllStars } from "@/lib/allStars";
 import { type GameDetailPlayerStat } from "@/lib/gameDetail";
 import { hasConferences } from "@/lib/conferences";
 import { buildMvt, type MvtAwardResult, type MvtBucket, type MvtMovement, type MvtTeamResult } from "@/lib/mvt";
 import { type LineupTemplate, type SlotKey } from "@/lib/playerData";
-import { formatPoints } from "@/lib/statistics";
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
 import type { GeneratedSchedule, Team } from "@/lib/types";
 
@@ -74,7 +74,7 @@ function TeamLine({ row, team, maxTotal }: { row: MvtTeamResult; team: Team; max
       <strong>{teamDisplayName(team)}</strong>
       <small>(Prev --) <MovementIcon movement={row.movement} /></small>
     </span>
-    <em>{formatPoints(row.total)}</em>
+    <PointChip value={row.total} className="mvt-total-chip" />
     <i aria-hidden="true"><span /></i>
   </article>;
 }
@@ -87,7 +87,7 @@ function WinnerCell({ award, place, teamById }: { award: MvtAwardResult; place: 
     return <span className="mvt-award-winner" key={`${winner.teamId}-${winner.points}`}>
       {team && <EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={24} />}
       <strong>{team ? team.name : winner.teamId}</strong>
-      <small>{formatPoints(winner.value)} / +{formatPoints(winner.points)}</small>
+      <PointChip value={winner.value} detail={`+${winner.points.toFixed(2)}`} />
     </span>;
   })}</td>;
 }
@@ -155,7 +155,7 @@ export function MvtWorkspace({ schedule, playerStats }: { schedule: GeneratedSch
     return <section className="mvt-workspace mvt-empty">
       <div className="mvt-empty-panel">
         <Sparkles />
-        <span><strong>MVT unlocks after player data syncs.</strong><small>League scores still work everywhere else; this page waits for real starter rows so no award data is invented.</small></span>
+        <span><strong>Connect a public ESPN/Sleeper league to unlock MVT.</strong><small>League scores still work everywhere else; this page waits for real platform-scored starter rows so no award data is invented.</small></span>
       </div>
     </section>;
   }
@@ -173,7 +173,7 @@ export function MvtWorkspace({ schedule, playerStats }: { schedule: GeneratedSch
       {leaderTeam && <aside>
         <Trophy />
         <span><small>Current leader</small><strong>{teamDisplayName(leaderTeam)}</strong></span>
-        <b>{formatPoints(leader.total)}</b>
+        <PointChip value={leader.total} className="mvt-leader-chip" />
       </aside>}
     </section>
 
@@ -193,7 +193,7 @@ export function MvtWorkspace({ schedule, playerStats }: { schedule: GeneratedSch
     <section className="mvt-buckets" aria-label="MVT score buckets">
       {BUCKETS.map((bucket) => <article key={bucket.key}>
         <small>{bucket.short}</small>
-        <strong>{formatPoints(mvt.teams.reduce((sum, row) => sum + bucketValue(row, bucket.key), 0))}</strong>
+        <PointChip value={mvt.teams.reduce((sum, row) => sum + bucketValue(row, bucket.key), 0)} label={bucket.short} />
         <span>{bucket.label}</span>
       </article>)}
     </section>
