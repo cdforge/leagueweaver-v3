@@ -1874,10 +1874,6 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
       medalCategory: searchParams.get("medalCategory") || undefined,
     } : null));
   }, [searchParams]);
-  useEffect(() => {
-    if (!schedule || !selectedTeamId || schedule.setup.teams.some((team) => team.id === selectedTeamId)) return;
-    queueMicrotask(() => setSelectedTeamId(schedule.setup.teams[0]?.id ?? ""));
-  }, [schedule, selectedTeamId]);
   // Focus trap, scroll lock, focus restore, and Escape are handled by <Modal>.
   // Escape routing between the score sheet and its nested discard prompt lives in
   // the modal's onClose handler below.
@@ -1947,13 +1943,17 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
       .filter((season) => season.season !== schedule?.setup.seasonYear)
       .map((season) => ({ value: String(season.season), label: String(season.season), description: `${season.provider.toUpperCase()} saved history` })),
   ], [historySeasons, schedule?.setup.seasonYear]);
-  const effectiveHistorySeasonKey = historySeasonKey === "current" || historyOptions.some((option) => option.value === historySeasonKey) ? historySeasonKey : "current";
+  const effectiveHistorySeasonKey = historySeasonKey === "current" ? "current" : historySeasonKey;
   const selectedHistorySeason = useMemo(() => effectiveHistorySeasonKey === "current" ? undefined : historySeasons.find((season) => String(season.season) === effectiveHistorySeasonKey), [effectiveHistorySeasonKey, historySeasons]);
   const historySchedule = useMemo(() => schedule && selectedHistorySeason ? buildHistoricalSchedule(schedule, selectedHistorySeason) : null, [schedule, selectedHistorySeason]);
   const historyPlayerStats = useMemo(() => schedule && selectedHistorySeason ? buildHistoricalPlayerRows(schedule, selectedHistorySeason) : [], [schedule, selectedHistorySeason]);
   const historyViewActive = Boolean(selectedHistorySeason && HISTORY_COMPATIBLE_VIEWS.has(view));
   const workspaceSchedule = historyViewActive && historySchedule ? historySchedule : activeSchedule;
   const workspacePlayerStats = historyViewActive ? historyPlayerStats : gameDetailPlayerStats;
+  useEffect(() => {
+    if (!workspaceSchedule || !selectedTeamId || workspaceSchedule.setup.teams.some((team) => team.id === selectedTeamId)) return;
+    queueMicrotask(() => setSelectedTeamId(workspaceSchedule.setup.teams[0]?.id ?? ""));
+  }, [workspaceSchedule, selectedTeamId]);
   const latestRecapWeek = activeSchedule ? getLatestFinalWeek(activeSchedule) : null;
   const visibleViewItems = VIEW_ITEMS.filter((item) => item.key !== "results" || latestRecapWeek);
   const openGameDetail = (gameId: string) => {
