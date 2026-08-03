@@ -100,11 +100,13 @@ export function ThisWeekWorkspace({
   playerStats,
   simulationProbabilities = {},
   onOpenGame,
+  onOpenRecap,
 }: {
   schedule: GeneratedSchedule;
   playerStats: GameDetailPlayerStat[];
   simulationProbabilities?: Record<string, { away: number; home: number }>;
   onOpenGame: (gameId: string) => void;
+  onOpenRecap?: () => void;
 }) {
   const [mode, setMode] = useStoredMode(schedule.id);
   const showCity = schedule.setup.display?.cityNames !== false;
@@ -166,9 +168,12 @@ export function ThisWeekWorkspace({
         <h2>Week {week.weekNumber}</h2>
         <p>{week.dateLabel}</p>
       </div>
-      <div className="tw-mode-toggle" role="group" aria-label="This Week layout">
-        <button type="button" className={mode === "featured" ? "active" : ""} onClick={() => setMode("featured")}><Star />Featured</button>
-        <button type="button" className={mode === "grid" ? "active" : ""} onClick={() => setMode("grid")}><UsersRound />Grid</button>
+      <div className="tw-head-actions">
+        {onOpenRecap && <button type="button" className="tw-recap-link" onClick={onOpenRecap}><Sparkles />Week Recap</button>}
+        <div className="tw-mode-toggle" role="group" aria-label="This Week layout">
+          <button type="button" className={mode === "featured" ? "active" : ""} onClick={() => setMode("featured")}><Star />Featured</button>
+          <button type="button" className={mode === "grid" ? "active" : ""} onClick={() => setMode("grid")}><UsersRound />Grid</button>
+        </div>
       </div>
     </section>
     {gotwVm ? <section className="tw-hero" onClick={() => onOpenGame(gotwVm.game.id)} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpenGame(gotwVm.game.id); } }}>
