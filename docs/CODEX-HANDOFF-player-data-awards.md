@@ -1,12 +1,14 @@
 # Codex Takeover Brief — Player Data + All-Stars + MVT + Game-Detail Rosters
 
-**You (Codex) own this build.** Ship the 17-story backlog, one story at a time, verified.
+**You (Codex) own this build.** Ship the backlog one story at a time, verified. The original 20-story Player
+Data + Awards batch is merged; new P7 follow-up stories live in the backlog for historical browsing and
+game-detail ergonomics.
 
 ## 0. Single source of truth
 `docs/AGENT-BACKLOG-player-data-awards.md` — **read it in full before touching code.** It is self-contained:
 §B Canon (locked decisions), §C data model + Supabase schema, §D collection rules + exact codebase seams,
 §E golden fixtures + numbers, **§E2 visual references (the HTML prototype + PNG mockups to match)**, §F QA
-protocol, §G the 17 stories (each with build + acceptance + its own QA), §H dependency graph. Do **not** build
+protocol, §G the stories (each with build + acceptance + its own QA), §H dependency graph. Do **not** build
 a story from any other doc; the backlog inlines everything.
 
 ## 1. Operating loop (per story — §A of the backlog)
