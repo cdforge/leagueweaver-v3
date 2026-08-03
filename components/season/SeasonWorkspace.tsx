@@ -182,6 +182,24 @@ type HistoryBrowserSeason = {
   playerRows: Array<{ week: number; canonicalPlayerId: string; leagueTeamId: string; providerPlayerId: string; playerName: string; position: string; nflTeam?: string; lineupStatus: string; lineupSlot: string; fantasyPoints: number }>;
 };
 
+type HistorySyncResponse = {
+  rowsWritten?: number;
+  warnings?: string[];
+  dataFound?: {
+    availableHistoryYears?: number[];
+    blockedHistoryYears?: number[];
+  };
+};
+
+function historySyncNotice(historySync?: HistorySyncResponse) {
+  if (!historySync) return "";
+  const years = historySync.dataFound?.availableHistoryYears;
+  const yearText = years?.length ? ` Previous years found: ${years.join(", ")}.` : "";
+  const warningText = historySync.warnings?.[0] ? ` ${historySync.warnings[0]}` : "";
+  if ((historySync.rowsWritten ?? 0) > 0) return ` Historical data saved.${yearText}${warningText}`;
+  return yearText || warningText ? ` Historical data checked.${yearText}${warningText}` : " Historical data checked.";
+}
+
 function normalizeHistoryName(value?: string) {
   return (value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -2121,10 +2139,11 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scheduleId: schedule.id, provider: connection.provider, providerLeagueId: connection.providerLeagueId, seasonYear: connection.seasonYear, syncMode, swid, espnS2 }),
       });
-      const result = await response.json().catch(() => ({})) as { authType?: PlatformConnection["authType"]; error?: string };
+      const result = await response.json().catch(() => ({})) as { authType?: PlatformConnection["authType"]; historySync?: HistorySyncResponse; error?: string };
       if (!response.ok) throw new Error(apiErrorMessage(response.status, result.error, "Platform connection could not be saved."));
       updatePlatformConnection({ syncMode, authType: result.authType ?? connection.authType, status: "ready" });
-      setNotice("Platform connection saved.");
+      await loadImportHistory();
+      setNotice(`Platform connection saved.${historySyncNotice(result.historySync)}`);
     } catch (caught) {
       setNotice(caught instanceof Error ? caught.message : "Platform connection could not be saved.");
     } finally {
@@ -2166,11 +2185,12 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scheduleId: schedule.id, provider: connection.provider, providerLeagueId: connection.providerLeagueId, seasonYear: connection.seasonYear, syncMode: connection.syncMode }),
-      }).then(() => fetch("/api/platform/history", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scheduleId: schedule.id, provider: connection.provider, identifier: connection.providerLeagueId, seasonYear: connection.seasonYear, populate: true }),
-      })).then(() => loadImportHistory()).catch(() => undefined);
+      }).then(async (response) => {
+        const result = await response.json().catch(() => ({})) as { historySync?: HistorySyncResponse };
+        await loadImportHistory();
+        const historyNotice = historySyncNotice(result.historySync);
+        if (historyNotice) setNotice(`Connected to ${connection.provider === "espn" ? "ESPN" : "Sleeper"}.${historyNotice} Pulling scores…`);
+      }).catch(() => undefined);
     }
     setNotice(`Connected to ${connection.provider === "espn" ? "ESPN" : "Sleeper"}. Pulling scores…`);
     window.setTimeout(() => setNotice(null), 4200);

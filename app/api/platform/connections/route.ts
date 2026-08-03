@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthenticatedClient, getEntitlements } from "@/lib/supabase/auth";
 import { encryptSecret } from "@/lib/platform/crypto";
+import { collectAndPersistConnectionHistory, type HistoryPersistenceResult } from "@/lib/platform/historyPersistence";
 
 const connectionSchema = z.object({
   scheduleId: z.string().uuid(),
@@ -20,6 +21,27 @@ const deleteSchema = z.object({
 
 function cleanError(message: string) {
   return message.replace(/espn_s2=[^;\s]+/gi, "espn_s2=[redacted]").replace(/SWID=[^;\s]+/gi, "SWID=[redacted]").slice(0, 500);
+}
+
+async function autoCaptureHistory(args: {
+  scheduleId: string;
+  provider: "espn" | "sleeper";
+  providerLeagueId: string;
+  seasonYear: number;
+  swid?: string;
+  espnS2?: string;
+}): Promise<HistoryPersistenceResult | { rowsWritten: 0; warnings: string[] }> {
+  try {
+    return await collectAndPersistConnectionHistory({
+      scheduleId: args.scheduleId,
+      provider: args.provider,
+      providerLeagueId: args.providerLeagueId,
+      seasonYear: args.seasonYear,
+      espnAuth: args.swid && args.espnS2 ? { swid: args.swid, espnS2: args.espnS2 } : undefined,
+    });
+  } catch (caught) {
+    return { rowsWritten: 0, warnings: [cleanError(caught instanceof Error ? caught.message : "Historical data could not be saved automatically.")] };
+  }
 }
 
 export async function POST(request: Request) {
@@ -70,7 +92,16 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ connectionId: link.id, saved: true, authType: metadata.authType });
+  const historySync = await autoCaptureHistory({
+    scheduleId: parsed.data.scheduleId,
+    provider: parsed.data.provider,
+    providerLeagueId: parsed.data.providerLeagueId,
+    seasonYear: parsed.data.seasonYear,
+    swid: parsed.data.swid,
+    espnS2: parsed.data.espnS2,
+  });
+
+  return NextResponse.json({ connectionId: link.id, saved: true, authType: metadata.authType, historySync });
 }
 
 export async function DELETE(request: Request) {

@@ -2,10 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseEspnLeagueId, scanEspnHistory } from "@/lib/platform/espn";
 import { collectSleeperLeagueHistory, resolveSleeperLeagueId, scanSleeperHistory } from "@/lib/platform/sleeper";
-import type { LeagueHistoryDraft } from "@/lib/platform/history";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { dataFoundFromDraft, persistLeagueHistory } from "@/lib/platform/historyPersistence";
 import { getAuthenticatedClient } from "@/lib/supabase/auth";
-import type { ImportDataFound, ImportHistoryEvent, PastChampion } from "@/lib/types";
+import type { ImportHistoryEvent, PastChampion } from "@/lib/types";
 
 const schema = z.object({
   provider: z.enum(["espn", "sleeper"]),
@@ -32,10 +31,6 @@ function revisionAction(source?: string | null) {
   if (source === "manual_save") return "Saved revision";
   if (source === "restore") return "Restored revision";
   return "Saved revision";
-}
-
-function seasonKey(providerLeagueId: string, season: number) {
-  return `${providerLeagueId}:${season}`;
 }
 
 type HistoryBrowserSeason = {
@@ -215,67 +210,6 @@ async function readPastChampions(auth: NonNullable<Awaited<ReturnType<typeof get
 async function assertScheduleOwner(auth: NonNullable<Awaited<ReturnType<typeof getAuthenticatedClient>>>, scheduleId: string) {
   const { data } = await auth.supabase.from("schedules").select("id").eq("id", scheduleId).maybeSingle();
   return Boolean(data?.id);
-}
-
-async function persistLeagueHistory(scheduleId: string, draft: LeagueHistoryDraft) {
-  const admin = createAdminClient();
-  if (!admin) return { rowsWritten: 0, warnings: ["History scanned, but server Supabase admin access is not configured for table population."] };
-  if (!draft.leagueSeasons.length) return { rowsWritten: 0, warnings: draft.warnings };
-
-  const { data: seasonRows, error: seasonError } = await admin
-    .from("league_seasons")
-    .upsert(draft.leagueSeasons, { onConflict: "schedule_id,provider,provider_league_id,season" })
-    .select("id,provider_league_id,season");
-  if (seasonError) throw seasonError;
-  const idBySeason = new Map((seasonRows ?? []).map((season) => [seasonKey(season.provider_league_id, season.season), season.id]));
-
-  const teamRows = draft.teamHistory.map((row) => {
-    const { providerLeagueId, season, ...rest } = row;
-    const leagueSeasonId = idBySeason.get(seasonKey(providerLeagueId, season));
-    return leagueSeasonId ? { league_season_id: leagueSeasonId, ...rest } : null;
-  }).filter((row): row is NonNullable<typeof row> => Boolean(row));
-  const scheduleRows = draft.scheduleHistory.map((row) => {
-    const { providerLeagueId, season, ...rest } = row;
-    const leagueSeasonId = idBySeason.get(seasonKey(providerLeagueId, season));
-    return leagueSeasonId ? { league_season_id: leagueSeasonId, ...rest } : null;
-  }).filter((row): row is NonNullable<typeof row> => Boolean(row));
-  const ownershipRows = draft.ownershipHistory.map((row) => {
-    const { providerLeagueId, season, ...rest } = row;
-    const leagueSeasonId = idBySeason.get(seasonKey(providerLeagueId, season));
-    return leagueSeasonId ? { league_season_id: leagueSeasonId, ...rest } : null;
-  }).filter((row): row is NonNullable<typeof row> => Boolean(row));
-
-  if (draft.playerCatalog.length) {
-    const { error } = await admin.from("player_catalog").upsert(draft.playerCatalog, { onConflict: "id" });
-    if (error) throw error;
-  }
-  if (teamRows.length) {
-    const { error } = await admin.from("league_team_history").upsert(teamRows, { onConflict: "league_season_id,league_team_id" });
-    if (error) throw error;
-  }
-  if (scheduleRows.length) {
-    const { error } = await admin.from("league_schedule_history").upsert(scheduleRows, { onConflict: "league_season_id,week,provider_matchup_id" });
-    if (error) throw error;
-  }
-  if (ownershipRows.length) {
-    const { error } = await admin.from("player_ownership_history").upsert(ownershipRows, { onConflict: "league_season_id,week,canonical_player_id" });
-    if (error) throw error;
-  }
-  return {
-    rowsWritten: draft.leagueSeasons.length + teamRows.length + scheduleRows.length + ownershipRows.length,
-    warnings: draft.warnings,
-  };
-}
-
-function dataFoundFromDraft(draft: LeagueHistoryDraft): ImportDataFound {
-  return {
-    availableHistoryYears: draft.leagueSeasons.map((season) => season.season).sort((left, right) => right - left),
-    blockedHistoryYears: [],
-    hasDraftData: true,
-    hasRosterData: draft.teamHistory.length > 0,
-    hasPlayerData: draft.ownershipHistory.length > 0,
-    hasScoreSync: draft.scheduleHistory.length > 0,
-  };
 }
 
 export async function GET(request: Request) {
