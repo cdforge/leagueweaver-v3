@@ -590,6 +590,12 @@ async function screenshotMvt(browser: Browser, name: string, schedule: Generated
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(100);
   await page.screenshot({ path: path.join(screenshotDir, `ui-smoke-${name}.png`), fullPage: true });
+  if (champions) {
+    await page.locator(".workspace-rail nav").getByRole("button", { name: /league schedule/i }).click();
+    await page.locator(".matchup-card.is-openable").first().locator("a.team-identity-block").first().click();
+    await page.waitForURL(new RegExp(`/season/${schedule.id}/team/`));
+    assert.ok(!page.url().includes("-history-"), `${name}: historical schedule team links use the real season route`);
+  }
   assert.deepEqual(pageErrors, [], `${name}: no page errors`);
   assert.deepEqual(consoleErrors, [], `${name}: no console errors`);
   await closePage(page, name);

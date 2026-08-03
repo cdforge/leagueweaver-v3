@@ -553,7 +553,7 @@ function PlayoffWeekSchedule({ schedule, roundIndex, onEnterScores }: { schedule
   </div>;
 }
 
-function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayoffs, onOpenScores, onOpenPlayoffs, onOpenGame, highlightedGame, simulationResults = {}, simulationProbabilities = {}, readOnlyHistory = false }: {
+function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayoffs, onOpenScores, onOpenPlayoffs, onOpenGame, highlightedGame, simulationResults = {}, simulationProbabilities = {}, readOnlyHistory = false, teamHrefBase }: {
   schedule: GeneratedSchedule;
   selectedWeek: number;
   setSelectedWeek: (week: number) => void;
@@ -565,6 +565,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
   simulationResults?: Record<string, SimulatorResultView>;
   simulationProbabilities?: Record<string, { away: number; home: number }>;
   readOnlyHistory?: boolean;
+  teamHrefBase?: string;
 }) {
   const weekStripRef = useRef<HTMLDivElement>(null);
   const scheduleSignals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
@@ -718,7 +719,7 @@ function ScheduleView({ schedule, selectedWeek, setSelectedWeek, canAccessPlayof
           const simulationResult = simulationResults[game.id];
           const isHighlighted = highlightedGame?.id === game.id;
           const highlightedMedalLabel = isHighlighted && highlightedGame?.medalRank ? ["Gold", "Silver", "Bronze"][highlightedGame.medalRank - 1] : undefined;
-          return <MatchupCard key={game.id} {...presentationFor(game, week.weekNumber)} featured={featured} featuredLabel={featured && gotwEntry ? gameOfWeekStatusLabel(gotwEntry.status) : undefined} gameLabel={featured ? undefined : `Game ${game.gameNumber}`} badges={analytics?.badges} medalRank={isHighlighted ? highlightedGame?.medalRank : analytics?.qualityRank} medalLabel={highlightedMedalLabel ? `${highlightedMedalLabel} · ${highlightedGame?.medalCategory || "League leader"}` : undefined} highlighted={isHighlighted} simulationSource={simulationResult?.source} simulationLocked={simulationResult?.locked} winProbability={simulationProbabilities[game.id]} teamHrefBase={`/season/${schedule.id}/team`} onOpenGame={onOpenGame} />;
+          return <MatchupCard key={game.id} {...presentationFor(game, week.weekNumber)} featured={featured} featuredLabel={featured && gotwEntry ? gameOfWeekStatusLabel(gotwEntry.status) : undefined} gameLabel={featured ? undefined : `Game ${game.gameNumber}`} badges={analytics?.badges} medalRank={isHighlighted ? highlightedGame?.medalRank : analytics?.qualityRank} medalLabel={highlightedMedalLabel ? `${highlightedMedalLabel} · ${highlightedGame?.medalCategory || "League leader"}` : undefined} highlighted={isHighlighted} simulationSource={simulationResult?.source} simulationLocked={simulationResult?.locked} winProbability={simulationProbabilities[game.id]} teamHrefBase={teamHrefBase ?? `/season/${schedule.id}/team`} onOpenGame={onOpenGame} />;
         })}{visibleGames.length === 0 && <div className="rating-filter-empty"><strong>No games scheduled this week.</strong>{byeTeams.length > 0 && <span>Every team is on a bye this week.</span>}</div>}</div>
       </div>
       <MatchupRatingLegend />
@@ -1915,21 +1916,19 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
   const canAccessScorekeeping = true;
   const canAccessPlatformSync = entitlements.plan === "pro" || entitlements.features.includes("platform_sync");
   const activeSchedule = useMemo(() => schedule && simulation ? materializeSimulationSchedule(simulation) : schedule, [schedule, simulation]);
-  const selectedHistorySeason = useMemo(() => historySeasonKey === "current" ? undefined : historySeasons.find((season) => String(season.season) === historySeasonKey), [historySeasonKey, historySeasons]);
-  const historySchedule = useMemo(() => schedule && selectedHistorySeason ? buildHistoricalSchedule(schedule, selectedHistorySeason) : null, [schedule, selectedHistorySeason]);
-  const historyPlayerStats = useMemo(() => schedule && selectedHistorySeason ? buildHistoricalPlayerRows(schedule, selectedHistorySeason) : [], [schedule, selectedHistorySeason]);
-  const historyViewActive = Boolean(selectedHistorySeason && (view === "league-schedule" || view === "mvt" || view === "all-stars"));
-  const workspaceSchedule = historyViewActive && historySchedule ? historySchedule : activeSchedule;
-  const workspacePlayerStats = historyViewActive ? historyPlayerStats : gameDetailPlayerStats;
   const historyOptions = useMemo(() => [
     { value: "current", label: `${schedule?.setup.seasonYear ?? "Current"}`, description: "Current LeagueWeaver season" },
     ...historySeasons
       .filter((season) => season.season !== schedule?.setup.seasonYear)
       .map((season) => ({ value: String(season.season), label: String(season.season), description: `${season.provider.toUpperCase()} saved history` })),
   ], [historySeasons, schedule?.setup.seasonYear]);
-  useEffect(() => {
-    if (historySeasonKey !== "current" && !historyOptions.some((option) => option.value === historySeasonKey)) setHistorySeasonKey("current");
-  }, [historyOptions, historySeasonKey]);
+  const effectiveHistorySeasonKey = historySeasonKey === "current" || historyOptions.some((option) => option.value === historySeasonKey) ? historySeasonKey : "current";
+  const selectedHistorySeason = useMemo(() => effectiveHistorySeasonKey === "current" ? undefined : historySeasons.find((season) => String(season.season) === effectiveHistorySeasonKey), [effectiveHistorySeasonKey, historySeasons]);
+  const historySchedule = useMemo(() => schedule && selectedHistorySeason ? buildHistoricalSchedule(schedule, selectedHistorySeason) : null, [schedule, selectedHistorySeason]);
+  const historyPlayerStats = useMemo(() => schedule && selectedHistorySeason ? buildHistoricalPlayerRows(schedule, selectedHistorySeason) : [], [schedule, selectedHistorySeason]);
+  const historyViewActive = Boolean(selectedHistorySeason && (view === "league-schedule" || view === "mvt" || view === "all-stars"));
+  const workspaceSchedule = historyViewActive && historySchedule ? historySchedule : activeSchedule;
+  const workspacePlayerStats = historyViewActive ? historyPlayerStats : gameDetailPlayerStats;
   const latestRecapWeek = activeSchedule ? getLatestFinalWeek(activeSchedule) : null;
   const visibleViewItems = VIEW_ITEMS.filter((item) => item.key !== "results" || latestRecapWeek);
   const openGameDetail = (gameId: string) => {
@@ -2505,7 +2504,7 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
           <div className="toolbar-actions">
             {showHistoryPicker && <CustomSelect
               label={`Select ${currentTitle} season`}
-              value={historySeasonKey}
+              value={effectiveHistorySeasonKey}
               options={historyOptions}
               onChange={setHistorySeasonKey}
               showSelectedDescription={false}
@@ -2577,7 +2576,7 @@ export function SeasonWorkspace({ initialView = "this-week" }: { initialView?: V
           {view === "results" && latestRecapWeek && <WeekRecapWorkspace schedule={activeSchedule} playerStats={gameDetailPlayerStats} onOpenGame={openGameDetail} />}
           {view === "league-schedule" && historyViewActive && !historySchedule
             ? <HistoryMissingState season={selectedHistorySeason} onSync={syncLeagueHistory} syncing={historySyncing} canSync={canSyncHistory} />
-            : view === "league-schedule" && <ScheduleView schedule={workspaceSchedule ?? activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} canAccessPlayoffs={!historyViewActive && canAccessPlayoffs} onOpenScores={openScoreEntry} onOpenPlayoffs={openPlayoffScores} onOpenGame={openGameDetail} highlightedGame={highlightedGame} simulationResults={historyViewActive ? {} : simulationResultByGame} simulationProbabilities={historyViewActive ? {} : simulationProbabilityByGame} readOnlyHistory={historyViewActive} />}
+            : view === "league-schedule" && <ScheduleView schedule={workspaceSchedule ?? activeSchedule} selectedWeek={selectedWeek} setSelectedWeek={setSelectedWeek} canAccessPlayoffs={!historyViewActive && canAccessPlayoffs} onOpenScores={openScoreEntry} onOpenPlayoffs={openPlayoffScores} onOpenGame={openGameDetail} highlightedGame={highlightedGame} simulationResults={historyViewActive ? {} : simulationResultByGame} simulationProbabilities={historyViewActive ? {} : simulationProbabilityByGame} readOnlyHistory={historyViewActive} teamHrefBase={`/season/${schedule.id}/team`} />}
           {view === "team-schedule" && <TeamScheduleView schedule={activeSchedule} teamId={selectedTeamId} playerStats={gameDetailPlayerStats} onSelectTeam={selectTeamSchedule} onSelectWeek={openLeagueScheduleWeek} simulationResults={simulationResultByGame} />}
           {view === "gotw" && <GotwWorkspace schedule={activeSchedule} simulationResults={simulationResultByGame} simulationProbabilities={simulationProbabilityByGame} />}
           {view === "matchup-ratings" && <MatchupRatingsView schedule={activeSchedule} />}
