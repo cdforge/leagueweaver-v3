@@ -80,6 +80,10 @@ function rankValues(values: Map<string, number>) {
   return ranks;
 }
 
+function hasReadyAwardStats(rows: GameDetailPlayerStat[]) {
+  return rows.some((row) => row.lineupStatus === "starter" && Number.isFinite(row.points) && row.points !== 0);
+}
+
 function inferLineupTemplate(schedule: GeneratedSchedule, rows: GameDetailPlayerStat[]): LineupTemplate | null {
   const starters = rows.filter((row) => row.lineupStatus === "starter" && typeof row.starterIndex === "number");
   if (!starters.length) return null;
@@ -306,9 +310,12 @@ export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectT
   const routeBase = useRouteBase(`/season/${schedule.id}`);
   const scheduleSignals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
   const summaries = useMemo(() => buildTeamScheduleSummaries(schedule), [schedule]);
-  const awardsLineup = useMemo(() => inferLineupTemplate(schedule, playerStats), [schedule, playerStats]);
-  const allStars = useMemo(() => awardsLineup ? buildAllStars({ lineupTemplate: awardsLineup, stats: playerStats }) : null, [awardsLineup, playerStats]);
-  const mvt = useMemo(() => awardsLineup ? buildMvt({ schedule, lineupTemplate: awardsLineup, playerStats, allStars: allStars ?? undefined }) : null, [schedule, awardsLineup, playerStats, allStars]);
+  const completedAwardWeeks = useMemo(() => new Set(schedule.weeks.filter((week) => week.games.some(isGamePlayed)).map((week) => week.weekNumber)), [schedule]);
+  const awardPlayerStats = useMemo(() => playerStats.filter((row) => completedAwardWeeks.has(row.week)), [playerStats, completedAwardWeeks]);
+  const hasAwardData = useMemo(() => hasReadyAwardStats(awardPlayerStats), [awardPlayerStats]);
+  const awardsLineup = useMemo(() => hasAwardData ? inferLineupTemplate(schedule, awardPlayerStats) : null, [schedule, awardPlayerStats, hasAwardData]);
+  const allStars = useMemo(() => awardsLineup ? buildAllStars({ lineupTemplate: awardsLineup, stats: awardPlayerStats, completedWeeks: completedAwardWeeks }) : null, [awardsLineup, awardPlayerStats, completedAwardWeeks]);
+  const mvt = useMemo(() => awardsLineup ? buildMvt({ schedule, lineupTemplate: awardsLineup, playerStats: awardPlayerStats, allStars: allStars ?? undefined }) : null, [schedule, awardsLineup, awardPlayerStats, allStars]);
   const mvtByTeam = useMemo(() => new Map((mvt?.teams ?? []).map((row) => [row.teamId, row])), [mvt]);
   const allStarCountByTeam = useMemo(() => allStars?.seasonCountByTeam ?? new Map<string, number>(), [allStars]);
   const allStarRankByTeam = useMemo(() => rankValues(allStarCountByTeam), [allStarCountByTeam]);
@@ -439,7 +446,7 @@ export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectT
             <small className="team-schedule-rankline">Live rank <b>#{summary.liveRank}</b> · Preseason seed #{summary.divisionSeed}</small>
             <span className="team-award-chips" aria-label="Team awards summary">
               <span className="award-chip"><strong>MVT {formatPoints(teamStats.mvtScore)}</strong>{teamStats.mvtRank ? <small>#{teamStats.mvtRank}</small> : <small>—</small>}</span>
-              <span className="award-chip"><strong>★ {teamStats.allStarCount}</strong>{teamStats.allStarRank ? <small>#{teamStats.allStarRank}</small> : <small>—</small>}</span>
+              <span className="award-chip"><strong>All-Star {teamStats.allStarCount}</strong>{teamStats.allStarRank ? <small>#{teamStats.allStarRank}</small> : <small>—</small>}</span>
             </span>
             <ClinchBadges timeline={currentClinches.get(team.id)} division={division} />
             <small>{[

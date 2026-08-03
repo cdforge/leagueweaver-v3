@@ -5052,6 +5052,10 @@ function ComingSoonWorkspace({
   );
 }
 
+function hasReadyPlayerStats(rows: GameDetailPlayerStat[]) {
+  return rows.some((row) => row.lineupStatus === "starter" && Number.isFinite(row.points) && row.points !== 0);
+}
+
 function draftPlaceValues(schedule: GeneratedSchedule) {
   return Object.fromEntries(
     schedule.setup.teams.map((team) => [
@@ -5961,6 +5965,11 @@ export function SeasonWorkspace({
         : [],
     [schedule, selectedHistorySeason],
   );
+  const readyGameDetailPlayerStats = useMemo(
+    () =>
+      hasReadyPlayerStats(gameDetailPlayerStats) ? gameDetailPlayerStats : [],
+    [gameDetailPlayerStats],
+  );
   const historyViewActive = Boolean(
     selectedHistorySeason && HISTORY_COMPATIBLE_VIEWS.has(view),
   );
@@ -5968,7 +5977,7 @@ export function SeasonWorkspace({
     historyViewActive && historySchedule ? historySchedule : activeSchedule;
   const workspacePlayerStats = historyViewActive
     ? historyPlayerStats
-    : gameDetailPlayerStats;
+    : readyGameDetailPlayerStats;
   useEffect(() => {
     if (
       !workspaceSchedule ||
@@ -7542,7 +7551,7 @@ export function SeasonWorkspace({
                 />
                 <ThisWeekWorkspace
                   schedule={activeSchedule}
-                  playerStats={gameDetailPlayerStats}
+                  playerStats={readyGameDetailPlayerStats}
                   simulationProbabilities={simulationProbabilityByGame}
                   onOpenGame={openGameDetail}
                   onOpenRecap={
@@ -7559,7 +7568,7 @@ export function SeasonWorkspace({
             {view === "results" && latestRecapWeek && (
               <WeekRecapWorkspace
                 schedule={activeSchedule}
-                playerStats={gameDetailPlayerStats}
+                playerStats={readyGameDetailPlayerStats}
                 onOpenGame={openGameDetail}
               />
             )}
