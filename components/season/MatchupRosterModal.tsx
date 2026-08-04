@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
-import { ChevronLeft, ChevronRight, MapPin, Star, UsersRound, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, CircleAlert, MapPin, Star, UsersRound, X } from "lucide-react";
+import { DivisionMark } from "@/components/ui/DivisionIdentity";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { MatchupSeriesChip } from "@/components/season/MatchupPresentation";
 import { readableTextColor, tintColor } from "@/lib/colorContrast";
+import { conferenceOfDivision } from "@/lib/conferences";
 import { isGamePlayed } from "@/lib/game";
 import { getMatchupSignal } from "@/lib/matchups";
+import { formatDivisionRecord, formatRecord, getEnteringWeekRankSnapshot } from "@/lib/standings";
 import { formatPoints } from "@/lib/statistics";
 import { teamInitials } from "@/lib/teamIdentity";
-import type { GeneratedSchedule, MatchupRosterPlayer, MatchupRosterSide, ScheduledGame, Team } from "@/lib/types";
+import type { Conference, Division, GeneratedSchedule, MatchupRosterDetail, MatchupRosterPlayer, MatchupRosterSide, ScheduledGame, Team } from "@/lib/types";
 
 const SLOT_COLORS: Record<string, string> = {
   QB: "#3867d6",
@@ -264,6 +267,19 @@ function gameTeamScore(game: ScheduledGame, detail: GeneratedSchedule["matchupRo
   return sideTotal(gameDetail?.home, game.homeScore);
 }
 
+function hasCompleteDraftPlaces(schedule: GeneratedSchedule) {
+  const teamCount = schedule.setup.teams.length;
+  return schedule.setup.teams.every((team) => Number.isInteger(team.draftPlace) && team.draftPlace! >= 1 && team.draftPlace! <= teamCount);
+}
+
+function shouldReserveRosterSlots(schedule: GeneratedSchedule, detail: MatchupRosterDetail | undefined, status: ReturnType<typeof gameStatus>) {
+  const draftPlacesPending = schedule.setup.weekOne.rankingSource === "draft-day" && !hasCompleteDraftPlaces(schedule);
+  const staleProviderSeason = detail?.sourceSeasonYear != null && detail.sourceSeasonYear < schedule.setup.seasonYear;
+  if (staleProviderSeason) return true;
+  if (status === "live" || status === "final") return false;
+  return status === "predraft" || draftPlacesPending;
+}
+
 function probability(status: ReturnType<typeof gameStatus>, awayScore?: number, homeScore?: number, awayProjected?: number, homeProjected?: number) {
   if (status === "final" && awayScore != null && homeScore != null) {
     if (awayScore === homeScore) return { away: 50, home: 50, label: "Final tie" };
@@ -291,10 +307,6 @@ export function MatchupRosterModal({
   const index = gameId ? games.findIndex((item) => item.game.id === gameId) : -1;
   const item = index >= 0 ? games[index] : undefined;
   const game = item?.game;
-  const detail = game ? schedule.matchupRosterDetails?.[game.id] : undefined;
-  const detailProviderLabel = detail?.provider
-    ? detail.provider.toUpperCase()
-    : "PLAYER";
   const teamById = useMemo(() => new Map(schedule.setup.teams.map((team) => [team.id, team])), [schedule.setup.teams]);
   const divisionById = useMemo(() => new Map(schedule.setup.divisions.map((division) => [division.id, division])), [schedule.setup.divisions]);
   const showCity = schedule.setup.display?.cityNames !== false;
@@ -311,25 +323,43 @@ export function MatchupRosterModal({
   }, [game, games, index, onClose, onSelectGame]);
 
   if (!game || !item) return null;
+  const detail = schedule.matchupRosterDetails?.[game.id];
+  const rawStatus = gameStatus(game, detail);
+  const reserveRosterSlots = shouldReserveRosterSlots(schedule, detail, rawStatus);
+  const visibleDetail = reserveRosterSlots ? undefined : detail;
+  const detailProviderLabel = visibleDetail?.provider
+    ? visibleDetail.provider.toUpperCase()
+    : "PLAYER";
 
   const away = teamById.get(game.awayTeamId);
   const home = teamById.get(game.homeTeamId);
   if (!away || !home) return null;
   const awayDivision = divisionById.get(away.divisionId);
   const homeDivision = divisionById.get(home.divisionId);
-  const status = gameStatus(game, detail);
+  const awayConference = conferenceOfDivision(schedule.setup, away.divisionId);
+  const homeConference = conferenceOfDivision(schedule.setup, home.divisionId);
+  const enteringWeekRows = getEnteringWeekRankSnapshot(schedule, item.week.weekNumber).rows;
+  const standingsByTeam = new Map(enteringWeekRows.map((row) => [row.teamId, row]));
+  const awayStanding = standingsByTeam.get(away.id);
+  const homeStanding = standingsByTeam.get(home.id);
+  const status = reserveRosterSlots ? "predraft" : rawStatus;
   const signal = getMatchupSignal(game, undefined, undefined, schedule.setup.teams.length);
-  const awayScore = sideTotal(detail?.away, game.awayScore);
-  const homeScore = sideTotal(detail?.home, game.homeScore);
+  const gameLabel = game.gameNumber === 1
+    ? "Game of the Week"
+    : game.gameNumber
+      ? `Game ${game.gameNumber}`
+      : "Matchup";
+  const awayScore = sideTotal(visibleDetail?.away, game.awayScore);
+  const homeScore = sideTotal(visibleDetail?.home, game.homeScore);
   const awayResult = awayScore == null || homeScore == null || awayScore === homeScore ? "open" : awayScore > homeScore ? "win" : "loss";
   const homeResult = awayScore == null || homeScore == null || homeScore === awayScore ? "open" : homeScore > awayScore ? "win" : "loss";
-  const winProbability = probability(status, awayScore, homeScore, detail?.away.projectedTotal, detail?.home.projectedTotal);
-  const hasPlayers = Boolean(detail && (detail.away.starters.length || detail.home.starters.length || detail.away.bench.length || detail.home.bench.length));
+  const winProbability = probability(status, awayScore, homeScore, visibleDetail?.away.projectedTotal, visibleDetail?.home.projectedTotal);
+  const hasPlayers = Boolean(visibleDetail && (visibleDetail.away.starters.length || visibleDetail.home.starters.length || visibleDetail.away.bench.length || visibleDetail.home.bench.length));
   const starterCount = hasPlayers
-    ? Math.max(detail?.away.starters.length ?? 0, detail?.home.starters.length ?? 0)
+    ? Math.max(visibleDetail?.away.starters.length ?? 0, visibleDetail?.home.starters.length ?? 0)
     : STARTER_SLOTS.length;
   const benchCount = hasPlayers
-    ? Math.max(detail?.away.bench.length ?? 0, detail?.home.bench.length ?? 0)
+    ? Math.max(visibleDetail?.away.bench.length ?? 0, visibleDetail?.home.bench.length ?? 0)
     : 5;
   const prev = index > 0 ? games[index - 1].game.id : null;
   const next = index < games.length - 1 ? games[index + 1].game.id : null;
@@ -362,12 +392,21 @@ export function MatchupRosterModal({
           </div>
         </header>
 
+        <div className="mr-beta-strip" role="note" aria-label="Beta feature notice">
+          <CircleAlert aria-hidden="true" />
+          <strong>Beta</strong>
+          <span>Game detail and player roster data are still being improved.</span>
+        </div>
+
         <div className="mr-week-strip" aria-label="Matchup position">
           {games.map(({ game: stripGame }, stripIndex) => {
             const stripAway = teamById.get(stripGame.awayTeamId);
             const stripHome = teamById.get(stripGame.homeTeamId);
-            const stripAwayScore = gameTeamScore(stripGame, schedule.matchupRosterDetails, "away");
-            const stripHomeScore = gameTeamScore(stripGame, schedule.matchupRosterDetails, "home");
+            const stripDetail = schedule.matchupRosterDetails?.[stripGame.id];
+            const stripStatus = gameStatus(stripGame, stripDetail);
+            const stripDetails = shouldReserveRosterSlots(schedule, stripDetail, stripStatus) ? undefined : schedule.matchupRosterDetails;
+            const stripAwayScore = gameTeamScore(stripGame, stripDetails, "away");
+            const stripHomeScore = gameTeamScore(stripGame, stripDetails, "home");
             const awayWon = stripAwayScore != null && stripHomeScore != null && stripAwayScore > stripHomeScore;
             const homeWon = stripAwayScore != null && stripHomeScore != null && stripHomeScore >= stripAwayScore;
             return (
@@ -405,23 +444,45 @@ export function MatchupRosterModal({
         </div>
 
         <section className="mr-score-head">
-          <TeamHeader team={away} side="away" rank={away.overallRank} score={awayScore} result={awayResult} showCity={showCity} />
+          <TeamHeader
+            team={away}
+            side="away"
+            rank={awayStanding?.rank ?? away.overallRank}
+            overallRecord={awayStanding ? formatRecord(awayStanding) : "0-0"}
+            divisionRecord={awayStanding ? formatDivisionRecord(awayStanding) : "0-0"}
+            division={awayDivision}
+            conference={awayConference}
+            score={awayScore}
+            result={awayResult}
+            showCity={showCity}
+          />
           <div className="mr-center">
             <span>at</span>
             <strong className={`mr-status status-${status}`}>{status === "predraft" ? "Pre-draft" : status === "upcoming" ? "Upcoming" : status === "live" ? "Live" : "Final"}</strong>
-            <em>{status === "final" ? "Complete" : "Roster detail"}</em>
+            <em>{gameLabel}</em>
             <div className={`mr-signal signal-${signal.label.toLowerCase()}`}>
               <b>{signal.score10.toFixed(1)}</b>
               <span>{Array.from({ length: 3 }, (_, bar) => <i className={bar < signal.bars ? "on" : ""} key={bar} />)}</span>
-              <small>#{away.overallRank} vs #{home.overallRank}</small>
+              <small>#{awayStanding?.rank ?? away.overallRank} vs #{homeStanding?.rank ?? home.overallRank}</small>
             </div>
           </div>
-          <TeamHeader team={home} side="home" rank={home.overallRank} score={homeScore} result={homeResult} showCity={showCity} />
+          <TeamHeader
+            team={home}
+            side="home"
+            rank={homeStanding?.rank ?? home.overallRank}
+            overallRecord={homeStanding ? formatRecord(homeStanding) : "0-0"}
+            divisionRecord={homeStanding ? formatDivisionRecord(homeStanding) : "0-0"}
+            division={homeDivision}
+            conference={homeConference}
+            score={homeScore}
+            result={homeResult}
+            showCity={showCity}
+          />
         </section>
 
         <div className="mr-series-row">
           <MatchupSeriesChip game={game} awayDivision={awayDivision} homeDivision={homeDivision} setup={schedule.setup} />
-          <span>{detail ? `${detailProviderLabel} ${detail.sourceSeasonYear ?? schedule.setup.seasonYear}` : "Player sync pending"}</span>
+          <span>{visibleDetail ? `${detailProviderLabel} ${visibleDetail.sourceSeasonYear ?? schedule.setup.seasonYear}` : reserveRosterSlots ? "Roster sync waits for draft" : "Player sync pending"}</span>
         </div>
 
         <div className="mr-probability" aria-label={`${winProbability.label}: ${teamLabel(away, showCity)} ${winProbability.away} percent, ${teamLabel(home, showCity)} ${winProbability.home} percent`}>
@@ -435,8 +496,8 @@ export function MatchupRosterModal({
           <div className="mr-section-label">Starters</div>
           <div className="mr-rosters">
             {Array.from({ length: starterCount }, (_, rowIndex) => {
-              const awayPlayer = detail?.away.starters[rowIndex];
-              const homePlayer = detail?.home.starters[rowIndex];
+              const awayPlayer = visibleDetail?.away.starters[rowIndex];
+              const homePlayer = visibleDetail?.home.starters[rowIndex];
               const slot = awayPlayer?.slot || homePlayer?.slot || STARTER_SLOTS[rowIndex] || "FLEX";
               return <RosterRow away={awayPlayer} home={homePlayer} slot={slot} empty={!hasPlayers} key={`starter-${rowIndex}`} />;
             })}
@@ -445,8 +506,8 @@ export function MatchupRosterModal({
           <div className="mr-rosters mr-bench">
             {Array.from({ length: benchCount }, (_, rowIndex) => (
               <RosterRow
-                away={detail?.away.bench[rowIndex]}
-                home={detail?.home.bench[rowIndex]}
+                away={visibleDetail?.away.bench[rowIndex]}
+                home={visibleDetail?.home.bench[rowIndex]}
                 slot="BE"
                 empty={!hasPlayers}
                 key={`bench-${rowIndex}`}
@@ -461,7 +522,7 @@ export function MatchupRosterModal({
                   ? "Live scoring updates as the platform sync refreshes."
                   : "Set your lineup. Projections remain visible until kickoff."
               : status === "predraft"
-                ? "Draft not held yet. Roster slots are reserved."
+                ? "Draft not held yet. Roster slots are reserved so old provider data does not show here."
                 : "ESPN/Sleeper player rows will populate here after roster sync."}
           </footer>
         </section>
@@ -474,6 +535,10 @@ function TeamHeader({
   team,
   side,
   rank,
+  overallRecord,
+  divisionRecord,
+  division,
+  conference,
   score,
   result,
   showCity,
@@ -481,16 +546,31 @@ function TeamHeader({
   team: Team;
   side: "away" | "home";
   rank: number;
+  overallRecord: string;
+  divisionRecord: string;
+  division?: Division;
+  conference?: Conference;
   score?: number;
   result: "win" | "loss" | "open";
   showCity: boolean;
 }) {
   return (
-    <div className={`mr-team-head ${side}`} style={{ "--team-accent": team.color } as React.CSSProperties}>
-      <span className="mr-team-rank">#{rank}</span>
+    <div className={`mr-team-head ${side}`} style={{ "--team-accent": team.color, "--team-ink": readableTextColor(team.color) } as React.CSSProperties}>
+      <span className="mr-team-identity">
+        <span className="mr-team-rank" aria-label={`Rank ${rank}`}>#{rank}</span>
+        <span className="mr-team-name">
+          {showCity && team.city && <small>{team.city}</small>}
+          <strong>{team.name}</strong>
+        </span>
+      </span>
+      <span className="mr-team-record" aria-label={`${teamLabel(team, showCity)} record ${overallRecord}, division record ${divisionRecord}`}>
+        <b>{overallRecord}</b>
+        <small>
+          {division && <DivisionMark division={division} conference={conference} size={15} className="mr-record-division-mark" />}
+          <span>{divisionRecord}</span>
+        </small>
+      </span>
       <EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={52} />
-      {showCity && team.city && <small>{team.city}</small>}
-      <strong>{team.name}</strong>
       <b className={`mr-team-score score-${result}`}>{score == null ? "-" : formatPoints(score)}</b>
     </div>
   );
