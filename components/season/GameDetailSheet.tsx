@@ -182,6 +182,10 @@ export function GameDetailSheet({
         <button type="button" className="gdm-close" aria-label="Close game detail" onClick={onClose}><X /></button>
       </div>
     </header>
+    <div className="gdm-beta-strip" role="note" aria-label="Beta feature notice">
+      <CircleAlert />
+      <span><strong>Beta</strong> Game details are still being improved, especially player-level and historical context.</span>
+    </div>
     <div className="gdm-scoreline" style={{ "--away": vm.away.team.color, "--home": vm.home.team.color } as React.CSSProperties}>
       <span><small>Away</small><strong>{scoreLabel(vm.away)}</strong></span>
       <b>@</b>

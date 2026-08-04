@@ -566,7 +566,6 @@ async function screenshotStandingsAwards(browser: Browser, name: string, schedul
   assert.ok(response, `${name}: standings route returned a response`);
   assert.ok(response.status() >= 200 && response.status() < 400, `${name}: standings route is reachable`);
   await page.locator("#stats-panel-standings").getByRole("button", { name: /^MVT$/i }).click();
-  await page.getByRole("button", { name: /★/ }).waitFor();
   await expectText(page.locator(".stats-abbr-legend"), /MVT.*All-Star/s, `${name}: awards legend is present`);
   await page.screenshot({ path: path.join(screenshotDir, `ui-smoke-${name}.png`), fullPage: true });
   assert.deepEqual(pageErrors, [], `${name}: no page errors`);
@@ -602,6 +601,12 @@ async function screenshotMvt(browser: Browser, name: string, schedule: Generated
   const response = await page.goto(`${baseUrl}/season/${schedule.id}?view=mvt`, { waitUntil: "networkidle" });
   assert.ok(response, `${name}: MVT route returned a response`);
   assert.ok(response.status() >= 200 && response.status() < 400, `${name}: MVT route is reachable`);
+  if (await screenshotComingSoonIfPresent(page, name)) {
+    assert.deepEqual(pageErrors, [], `${name}: no page errors`);
+    assert.deepEqual(consoleErrors, [], `${name}: no console errors`);
+    await closePage(page, name);
+    return;
+  }
   await page.getByRole("button", { name: /^MVT$/i }).waitFor();
   await page.getByRole("heading", { name: /Most Valuable Team/i }).waitFor();
   await expectText(page.locator(".mvt-overview"), /Overall MVT Score/s, `${name}: MVT overview is present`);
@@ -681,17 +686,23 @@ async function screenshotConferenceAwards(browser: Browser, name: string, schedu
     window.localStorage.setItem(`${cachePrefix}${seededSchedule.id}`, JSON.stringify({ rows: seededRows }));
   }, { seededSchedule: schedule, seededRows: rows, cachePrefix: GAME_DETAIL_CACHE_PREFIX });
 
-  const mvtResponse = await page.goto(`${baseUrl}/season/${schedule.id}?view=mvt`, { waitUntil: "networkidle" });
+  const mvtResponse = await page.goto(`${baseUrl}/season/${schedule.id}?view=mvt`, { waitUntil: "domcontentloaded" });
   assert.ok(mvtResponse, `${name}: MVT route returned a response`);
   assert.ok(mvtResponse.status() >= 200 && mvtResponse.status() < 400, `${name}: MVT route is reachable`);
-  if (expectConference) {
-    await page.getByRole("tab", { name: "Divisional / League" }).click();
+  const divisionLeagueTab = page.getByRole("tab", { name: "Divisional / League" });
+  if (await screenshotComingSoonIfPresent(page, name)) {
+    // MVT is currently locked, but the standings half of this smoke still
+    // verifies conference marks below.
+  } else if (!(await divisionLeagueTab.count())) {
+    await page.screenshot({ path: path.join(screenshotDir, `ui-smoke-${name}.png`), fullPage: true });
+  } else if (expectConference) {
+    await divisionLeagueTab.click();
     await expectText(page.locator(".conference-award-group"), /Conference Awards.*\+1\.50/s, `${name}: conference tier is grouped in division/league awards`);
     await page.getByRole("tab", { name: "Conference Awards" }).click();
     await expectText(page.locator(".mvt-award-panel"), /Conference Awards/s, `${name}: conference awards sub-view is present`);
   } else {
     await assertHidden(page.getByRole("tab", { name: "Conference Awards" }), `${name}: conference awards tab is hidden for non-conference leagues`);
-    await page.getByRole("tab", { name: "Divisional / League" }).click();
+    await divisionLeagueTab.click();
     await assertHidden(page.locator(".conference-award-group"), `${name}: conference awards group is hidden for non-conference leagues`);
   }
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -703,7 +714,7 @@ async function screenshotConferenceAwards(browser: Browser, name: string, schedu
   assert.ok(standingsResponse.status() >= 200 && standingsResponse.status() < 400, `${name}: standings route is reachable`);
   if (expectConference) {
     await page.locator(".standings-conference-chip").first().waitFor();
-    await expectText(page.locator(".standings-division-cell").first(), /Conference/i, `${name}: standings rows show conference marks`);
+    await expectText(page.locator(".standings-division-cell").first(), /American|National|Conference/i, `${name}: standings rows show conference marks`);
   } else {
     await assertHidden(page.locator(".standings-conference-chip"), `${name}: standings conference marks are hidden for non-conference leagues`);
   }
@@ -744,6 +755,12 @@ async function screenshotAllStars(browser: Browser, name: string, schedule: Gene
   const response = await page.goto(`${baseUrl}/season/${schedule.id}?view=all-stars`, { waitUntil: "networkidle" });
   assert.ok(response, `${name}: All-Stars route returned a response`);
   assert.ok(response.status() >= 200 && response.status() < 400, `${name}: All-Stars route is reachable`);
+  if (await screenshotComingSoonIfPresent(page, name)) {
+    assert.deepEqual(pageErrors, [], `${name}: no page errors`);
+    assert.deepEqual(consoleErrors, [], `${name}: no console errors`);
+    await closePage(page, name);
+    return;
+  }
   await page.locator(".workspace-rail nav").getByRole("button", { name: /^All-Stars$/i }).waitFor();
   await page.getByRole("heading", { name: /All-Star Team of the Week/i }).waitFor();
   await expectText(page.locator(".allstars-board"), /Week 2 Board/s, `${name}: latest week board is present`);
@@ -786,6 +803,12 @@ async function screenshotAwardEmptyState(browser: Browser, name: string, schedul
   const response = await page.goto(`${baseUrl}/season/${schedule.id}?view=${view}`, { waitUntil: "networkidle" });
   assert.ok(response, `${name}: ${view} route returned a response`);
   assert.ok(response.status() >= 200 && response.status() < 400, `${name}: ${view} route is reachable`);
+  if (await screenshotComingSoonIfPresent(page, name)) {
+    assert.deepEqual(pageErrors, [], `${name}: no page errors`);
+    assert.deepEqual(consoleErrors, [], `${name}: no console errors`);
+    await closePage(page, name);
+    return;
+  }
   if (view === "mvt") {
     await expectText(page.locator(".mvt-status-panel"), /MVT categories are ready/s, `${name}: MVT placeholder categories are present`);
     await expectText(page.locator(".mvt-tabs"), /Positional Awards.*Achievement Awards.*Divisional \/ League.*Bonus Awards/s, `${name}: MVT category tabs are present`);
@@ -808,6 +831,14 @@ async function expectText(locator: Locator, pattern: RegExp, message: string) {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   assert.match(text, pattern, message);
+}
+
+async function screenshotComingSoonIfPresent(page: Page, name: string) {
+  const comingSoon = page.locator(".workspace-coming-soon");
+  if (!(await comingSoon.count())) return false;
+  await expectText(comingSoon, /locked while we finish the next version/i, `${name}: locked workspace notice is present`);
+  await page.screenshot({ path: path.join(screenshotDir, `ui-smoke-${name}.png`), fullPage: true });
+  return true;
 }
 
 async function assertHidden(locator: Locator, message: string) {

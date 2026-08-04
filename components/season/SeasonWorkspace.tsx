@@ -701,8 +701,9 @@ const VIEW_ITEMS: Array<{
   icon: typeof CalendarDays;
   pro?: boolean;
   comingSoon?: boolean;
+  beta?: boolean;
 }> = [
-  { key: "this-week", label: "This Week", icon: Flame },
+  { key: "this-week", label: "This Week", icon: Flame, beta: true },
   { key: "results", label: "Results", icon: LayoutList },
   { key: "league-schedule", label: "League Schedule", icon: CalendarDays },
   { key: "team-schedule", label: "Team Schedule", icon: UsersRound },
@@ -713,7 +714,7 @@ const VIEW_ITEMS: Array<{
   { key: "mvt", label: "MVT", icon: Medal, comingSoon: true },
   { key: "all-stars", label: "All-Stars", icon: Sparkles, comingSoon: true },
   { key: "playoffs", label: "Playoffs", icon: Trophy },
-  { key: "share", label: "Share", icon: Share2 },
+  { key: "share", label: "Share", icon: Share2, beta: true },
   { key: "settings", label: "Settings", icon: Settings },
 ];
 const HISTORY_COMPATIBLE_VIEWS = new Set<ViewKey>([
@@ -724,6 +725,13 @@ const HISTORY_COMPATIBLE_VIEWS = new Set<ViewKey>([
   "standings",
   "playoffs",
 ]);
+
+const BETA_VIEW_COPY: Partial<Record<ViewKey, string>> = {
+  "this-week":
+    "This feature is in beta. Use it as a helpful preview while League Weaver continues refining weekly context.",
+  share:
+    "This feature is in beta. Public links are useful for previews, but sharing controls are still being improved.",
+};
 
 function TeamMark({
   team,
@@ -7547,6 +7555,10 @@ export function SeasonWorkspace({
   };
   const currentTitle =
     VIEW_ITEMS.find((item) => item.key === view)?.label ?? "League Schedule";
+  const currentViewBetaCopy = BETA_VIEW_COPY[view];
+  const currentViewIsBeta = VIEW_ITEMS.some(
+    (item) => item.key === view && item.beta,
+  );
   const canAccessPlayoffs = true; // Playoff rounds ship to all users on the schedule page.
   const openScoreEntry = (weekNumber: number) => {
     setSelectedWeek(Math.min(weekNumber, schedule.setup.weeks));
@@ -7862,14 +7874,21 @@ export function SeasonWorkspace({
           <nav aria-label="Season workspace">
             {visibleViewItems.map((item) => {
               const Icon = item.icon;
+              const statusLabel = [
+                item.comingSoon ? "coming soon" : "",
+                item.beta ? "beta" : "",
+              ]
+                .filter(Boolean)
+                .join(", ");
+              const viewLabel = statusLabel
+                ? `${item.label} ${statusLabel}`
+                : item.label;
               const button = (
                 <button
                   type="button"
                   key={item.key}
-                  aria-label={`${item.label}${item.comingSoon ? " coming soon" : ""}`}
-                  title={
-                    item.comingSoon ? `${item.label} coming soon` : item.label
-                  }
+                  aria-label={viewLabel}
+                  title={viewLabel}
                   className={`${view === item.key ? "active" : ""}${item.comingSoon ? " is-coming-soon" : ""}`}
                   onClick={() => selectView(item)}
                 >
@@ -7878,6 +7897,7 @@ export function SeasonWorkspace({
                     {item.label}
                     {item.comingSoon && <small>SOON</small>}
                   </span>
+                  {item.beta && <span className="workspace-beta-badge">Beta</span>}
                 </button>
               );
               return item.key === "prints" ? (
@@ -7928,7 +7948,14 @@ export function SeasonWorkspace({
                     : schedule.setup.seasonYear}{" "}
                   season
                 </span>
-                <h1>{currentTitle}</h1>
+                <h1 className="workspace-heading-line">
+                  <span className="workspace-heading-text">
+                    {currentTitle}
+                  </span>
+                  {currentViewIsBeta && (
+                    <span className="workspace-title-beta-badge">Beta</span>
+                  )}
+                </h1>
               </span>
             </div>
             <div className="toolbar-actions">
@@ -7987,6 +8014,15 @@ export function SeasonWorkspace({
               </FloatingPopover>
             </div>
           </div>
+          {currentViewBetaCopy && (
+            <section className="workspace-beta-banner" aria-label="Beta feature notice">
+              <CircleAlert />
+              <span>
+                <strong>Beta</strong>
+                <small>{currentViewBetaCopy}</small>
+              </span>
+            </section>
+          )}
           <div className="workspace-notice" role="status" aria-live="polite">
             {notice && (
               <>
