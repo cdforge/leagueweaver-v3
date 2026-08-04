@@ -62,6 +62,9 @@ const SLOT_COLORS: Record<string, string> = {
   K: "#8a6fc0",
   HC: "#9a7b52",
   BE: "#8a97a0",
+  IR: "#b42318",
+  TAXI: "#b7791f",
+  RES: "#5f6f68",
 };
 const STARTER_PLACEHOLDER_SLOTS = ["QB", "RB", "RB", "WR", "WR", "WR", "TE", "FLEX", "D/ST", "K", "HC"];
 const BENCH_PLACEHOLDER_SLOTS = ["BE", "BE", "BE", "BE", "BE", "BE"];
@@ -115,6 +118,14 @@ function playerDisplayName(row: GameDetailSlotVM) {
   if ((row.position === "D/ST" || row.position === "DST" || row.slot === "D/ST" || row.slot === "DST") && abbr) return `${NFL_TEAM_CITY[abbr] ?? abbr} D/ST`;
   if ((row.position === "HC" || row.slot === "HC") && abbr) return `${NFL_TEAM_CITY[abbr] ?? abbr} HC`;
   return row.name;
+}
+
+function compactPlayerDisplayName(row: GameDetailSlotVM) {
+  const display = playerDisplayName(row);
+  if (display.includes(" D/ST") || display.includes(" HC")) return display;
+  const parts = display.trim().split(/\s+/);
+  if (parts.length < 2) return display;
+  return `${parts[0][0]}. ${parts.slice(1).join(" ")}`;
 }
 
 function nflOpponentLabel(row: GameDetailSlotVM, nflMatchups: Map<string, NflMatchupMeta>) {
@@ -260,6 +271,13 @@ function slotStyle(slot: string) {
   } as React.CSSProperties;
 }
 
+function reserveSlotLabel(row?: GameDetailSlotVM) {
+  if (!row) return "RES";
+  if (row.lineupStatus === "ir") return "IR";
+  if (row.lineupStatus === "taxi") return "TAXI";
+  return "RES";
+}
+
 function WeekStrip({
   schedule,
   currentGameId,
@@ -305,15 +323,17 @@ function WeekStrip({
 function TeamHeader({ side, align, showCity, status, won }: { side: GameDetailSideVM; align: "away" | "home"; showCity: boolean; status: string; won: boolean }) {
   const score = status === "upcoming" ? side.projectedTotal ?? scoreValue(side) : scoreValue(side);
   const teamInk = accessibleTeamColor(side.team.color);
-  const rankInk = readableTextColor(side.team.color);
+  const rankColor = accessibleTeamColor(side.team.color);
+  const rankInk = readableTextColor(rankColor);
   const divisionColor = side.division?.color ?? side.team.color;
-  return <section className={`gdm-team-head ${align}`} style={{ "--team": side.team.color, "--team-ink": teamInk, "--rank-ink": rankInk } as React.CSSProperties}>
+  return <section className={`gdm-team-head ${align}`} style={{ "--team": side.team.color, "--team-ink": teamInk, "--rank-bg": rankColor, "--rank-ink": rankInk } as React.CSSProperties}>
+    <EntityLogo className="gdm-team-watermark" color={side.team.color} logoUrl={side.team.logoUrl} monogram={teamInitials(side.team)} size={148} imagePresentation="bare" />
     <EntityLogo color={side.team.color} logoUrl={side.team.logoUrl} monogram={teamInitials(side.team)} size={56} imagePresentation="bare" />
     <span className="gdm-team-title-row">
       <b className="gdm-rank-circle" title={`Rank ${side.rank}`}>#{side.rank}</b>
       <span className="gdm-team-title-copy">
-        {showCity && side.team.city && <small className="gdm-team-city">{side.team.city}</small>}
-        <strong>{side.team.name}</strong>
+        {showCity && side.team.city && <small className="gdm-team-city"><span className="gdm-label-full">{side.team.city}</span><span className="gdm-label-compact">{shortTeamLabel(side.team)}</span></small>}
+        <strong><span className="gdm-label-full">{side.team.name}</span><span className="gdm-label-compact">{shortTeamLabel(side.team)}</span></strong>
       </span>
     </span>
     <span className="gdm-team-record" aria-label={`${teamDisplay(side, showCity)} record entering this matchup`}>
@@ -361,7 +381,7 @@ function PlayerCell({
     {side === "away" && <span className="gdm-nfl-token" style={playerTokenStyle(row)} aria-hidden="true" />}
     {side === "home" && <span className="gdm-player-points"><strong>{playerScoreLabel(row, status)}</strong>{row.projected != null && <small>{status === "upcoming" ? "PROJ" : row.projected.toFixed(1)}</small>}</span>}
     <span className="gdm-player-text">
-      <strong>{playerDisplayName(row)}</strong>
+      <strong><span className="gdm-label-full">{playerDisplayName(row)}</span><span className="gdm-label-compact">{compactPlayerDisplayName(row)}</span></strong>
       <PlayerMeta row={row} nflMatchups={nflMatchups} />
     </span>
     {side === "away" && <span className="gdm-player-points"><strong>{playerScoreLabel(row, status)}</strong>{row.projected != null && <small>{status === "upcoming" ? "PROJ" : row.projected.toFixed(1)}</small>}</span>}
@@ -369,21 +389,32 @@ function PlayerCell({
   </button>;
 }
 
-function PlayerDetail({ row, nflMatchups, status }: { row: GameDetailSlotVM; nflMatchups: Map<string, NflMatchupMeta>; status: string }) {
+function PlayerDetail({ row, nflMatchups, status, side }: { row: GameDetailSlotVM; nflMatchups: Map<string, NflMatchupMeta>; status: string; side: "away" | "home" }) {
   const parts = playerMetaParts(row, nflMatchups);
   const abbr = nflAbbr(row);
   const projected = row.projected == null ? "--" : row.projected.toFixed(1);
+  const actual = playerScoreLabel(row, status);
+  const difference = row.projected == null ? null : row.points - row.projected;
+  const differenceLabel = difference == null ? "No projection" : `${difference >= 0 ? "+" : ""}${difference.toFixed(1)} vs proj`;
   const kickoff = parts.compactTiming || parts.timing || "kickoff";
   const metaText = [row.position, abbr].filter(Boolean).join(" · ");
   const upcomingCopy = `Projected ${projected} pts · kickoff ${kickoff}.`;
-  return <div className="gdm-player-detail">
+  return <div className={`gdm-player-detail ${side}`}>
     <header className="gdm-player-detail-head">
-      <span className="gdm-nfl-token" style={playerTokenStyle(row)} aria-hidden="true" />
+      {side === "away" && <span className="gdm-nfl-token" style={playerTokenStyle(row)} aria-hidden="true" />}
+      {side === "home" && <span className="gdm-player-detail-score"><b>{actual}</b><small>PTS</small></span>}
       <span>
-        <strong>{playerDisplayName(row)}</strong>
+        <strong><span className="gdm-label-full">{playerDisplayName(row)}</span><span className="gdm-label-compact">{compactPlayerDisplayName(row)}</span></strong>
         <small>{metaText}</small>
       </span>
+      {side === "away" && <span className="gdm-player-detail-score"><b>{actual}</b><small>PTS</small></span>}
+      {side === "home" && <span className="gdm-nfl-token" style={playerTokenStyle(row)} aria-hidden="true" />}
     </header>
+    <div className="gdm-player-detail-metrics">
+      <span><small>Actual</small><b>{actual}</b></span>
+      <span><small>Projected</small><b>{projected}</b></span>
+      <span><small>Difference</small><b className={difference == null ? "" : difference >= 0 ? "is-pos" : "is-neg"}>{differenceLabel}</b></span>
+    </div>
     {status === "upcoming" || status === "predraft"
       ? <p>{upcomingCopy}<br />Scoring fills in live once {abbr || "this player"} plays.</p>
       : row.statDetails?.length
@@ -411,16 +442,16 @@ function RosterPairRows({
 }: {
   away: GameDetailSlotVM[];
   home: GameDetailSlotVM[];
-  type: "starters" | "bench";
+  type: "starters" | "bench" | "reserve";
   status: string;
   nflMatchups: Map<string, NflMatchupMeta>;
   placeholderSlots?: string[];
 }) {
   const [openKey, setOpenKey] = React.useState<string | null>(null);
   const rows = Array.from({ length: Math.max(away.length, home.length, placeholderSlots?.length ?? 0) }, (_, index) => ({ away: away[index], home: home[index], index }));
-  return <div className={`gdm-roster-pairs ${type === "bench" ? "is-bench" : ""}`}>
+  return <div className={`gdm-roster-pairs ${type === "bench" ? "is-bench" : ""} ${type === "reserve" ? "is-reserve" : ""}`}>
     {rows.map(({ away: awayRow, home: homeRow, index }) => {
-      const slot = type === "bench" ? "BE" : awayRow?.slot || homeRow?.slot || placeholderSlots?.[index] || "--";
+      const slot = type === "bench" ? "BE" : type === "reserve" ? reserveSlotLabel(awayRow ?? homeRow) : awayRow?.slot || homeRow?.slot || placeholderSlots?.[index] || "--";
       const awayOpen = openKey === awayRow?.key;
       const homeOpen = openKey === homeRow?.key;
       return <React.Fragment key={`${type}:${index}`}>
@@ -429,8 +460,8 @@ function RosterPairRows({
           <span className="gdm-slot-center" style={slotStyle(slot)} aria-label={`Roster slot ${slot}`}>{slot}</span>
           <PlayerCell row={homeRow} side="home" expanded={homeOpen} status={status} nflMatchups={nflMatchups} onToggle={() => homeRow && setOpenKey(homeOpen ? null : homeRow.key)} />
         </div>
-        {awayOpen && awayRow && <PlayerDetail row={awayRow} nflMatchups={nflMatchups} status={status} />}
-        {homeOpen && homeRow && <PlayerDetail row={homeRow} nflMatchups={nflMatchups} status={status} />}
+        {awayOpen && awayRow && <PlayerDetail row={awayRow} nflMatchups={nflMatchups} status={status} side="away" />}
+        {homeOpen && homeRow && <PlayerDetail row={homeRow} nflMatchups={nflMatchups} status={status} side="home" />}
       </React.Fragment>;
     })}
   </div>;
@@ -524,6 +555,13 @@ export function GameDetailSheet({
     : displayStatus === "final" && awayScore != null && homeScore != null && awayScore !== homeScore
       ? { away: awayWon ? 1 : 0, home: homeWon ? 1 : 0 }
       : undefined;
+  const awayProbability = displayedWinProbability ? Math.round(displayedWinProbability.away * 100) : 0;
+  const homeProbability = displayedWinProbability ? Math.round(displayedWinProbability.home * 100) : 0;
+  const probabilityMarker = awayProbability === homeProbability
+    ? { color: schedule.setup.color, logoUrl: schedule.setup.logoUrl, monogram: schedule.setup.abbreviation || schedule.setup.initials || "LW", label: "Even probability marker" }
+    : awayProbability > homeProbability
+      ? { color: vm.away.team.color, logoUrl: vm.away.team.logoUrl, monogram: teamInitials(vm.away.team), label: `${teamDisplay(vm.away, showCity)} probability marker` }
+      : { color: vm.home.team.color, logoUrl: vm.home.team.logoUrl, monogram: teamInitials(vm.home.team), label: `${teamDisplay(vm.home, showCity)} probability marker` };
   const winProbabilityLabel = displayStatus === "final"
     ? "Final"
     : displayStatus === "live"
@@ -581,10 +619,19 @@ export function GameDetailSheet({
         <CenterStatus stateLabel={stateLabel} rating={vm.ratingScore10} gameLabel={gameLabel} compactGameLabel={compactGameLabel} featured={isBroadcast} status={displayStatus} />
         <TeamHeader side={vm.home} align="home" showCity={showCity} status={displayStatus} won={homeWon} />
       </div>
-      {displayedWinProbability && <div className="gdm-winbar">
-        <b style={{ color: vm.away.team.color }}>{Math.round(displayedWinProbability.away * 100)}%</b>
-        <span><i style={{ width: `${Math.round(displayedWinProbability.away * 100)}%`, background: vm.away.team.color }} /><i style={{ width: `${Math.round(displayedWinProbability.home * 100)}%`, background: vm.home.team.color }} /></span>
-        <b style={{ color: vm.home.team.color }}>{Math.round(displayedWinProbability.home * 100)}%</b>
+      {displayedWinProbability && <div
+        className="gdm-winbar"
+        aria-label={`${winProbabilityLabel}: ${teamDisplay(vm.away, showCity)} ${awayProbability} percent, ${teamDisplay(vm.home, showCity)} ${homeProbability} percent.`}
+      >
+        <b className="is-away" style={{ "--pct-bg": accessibleTeamColor(vm.away.team.color), "--pct-ink": readableTextColor(accessibleTeamColor(vm.away.team.color)) } as React.CSSProperties}>{awayProbability}%</b>
+        <span style={{ "--away-pct": `${awayProbability}%`, "--home-pct": `${homeProbability}%`, "--away": vm.away.team.color, "--home": vm.home.team.color, "--marker": `${awayProbability}%` } as React.CSSProperties}>
+          <i className="gdm-winbar-away" />
+          <i className="gdm-winbar-home" />
+          <span className="gdm-winbar-marker" title={probabilityMarker.label}>
+            <EntityLogo color={probabilityMarker.color} logoUrl={probabilityMarker.logoUrl} monogram={probabilityMarker.monogram} size={28} imagePresentation="bare" />
+          </span>
+        </span>
+        <b className="is-home" style={{ "--pct-bg": accessibleTeamColor(vm.home.team.color), "--pct-ink": readableTextColor(accessibleTeamColor(vm.home.team.color)) } as React.CSSProperties}>{homeProbability}%</b>
         <small>{winProbabilityLabel}</small>
       </div>}
       {vm.unsynced && <div className="gdm-unsynced" role="status">Roster details appear after ESPN or Sleeper player data syncs.</div>}
@@ -593,6 +640,10 @@ export function GameDetailSheet({
         <RosterPairRows away={starterRows.away} home={starterRows.home} type="starters" status={displayStatus} nflMatchups={nflMatchups} placeholderSlots={reserveFutureRoster ? STARTER_PLACEHOLDER_SLOTS : undefined} />
         <h3>Bench</h3>
         <RosterPairRows away={benchRows.away} home={benchRows.home} type="bench" status={displayStatus} nflMatchups={nflMatchups} placeholderSlots={reserveFutureRoster ? BENCH_PLACEHOLDER_SLOTS : undefined} />
+        {!reserveFutureRoster && (vm.away.reserves.length > 0 || vm.home.reserves.length > 0) && <>
+          <h3>IR / Reserve</h3>
+          <RosterPairRows away={vm.away.reserves} home={vm.home.reserves} type="reserve" status={displayStatus} nflMatchups={nflMatchups} />
+        </>}
         <footer>{displayStatus === "final" ? "Tap any player to see how their points were scored" : displayStatus === "predraft" ? "Draft not held yet · roster slots reserved" : displayStatus === "live" ? "Live scoring · tap a player for scoring detail" : "Projected roster view until this matchup is final"}</footer>
       </main>
     </div>
