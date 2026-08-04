@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ArrowLeft, ChevronLeft, ChevronRight, MapPin, Share2, Star, X } from "lucide-react";
+import { ArrowLeft, Share2, Star, X } from "lucide-react";
 import { DivisionMark } from "@/components/ui/DivisionIdentity";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { Modal } from "@/components/ui/Modal";
@@ -17,6 +17,25 @@ const NFL_TEAM_COLORS: Record<string, string> = {
   JAX: "#006778", KC: "#e31837", LV: "#000000", LAC: "#0080c6", LAR: "#003594", MIA: "#008e97", MIN: "#4f2683",
   NE: "#002244", NO: "#d3bc8d", NYG: "#0b2265", NYJ: "#125740", PHI: "#004c54", PIT: "#ffb612", SEA: "#002244",
   SF: "#aa0000", TB: "#d50a0a", TEN: "#4b92db", WAS: "#5a1414", WSH: "#5a1414",
+};
+const NFL_TEAM_SECONDARY_COLORS: Record<string, string> = {
+  ARI: "#000000", ATL: "#000000", BAL: "#9e7c0c", BUF: "#c60c30", CAR: "#101820", CHI: "#c83803", CIN: "#000000",
+  CLE: "#ff3c00", DAL: "#869397", DEN: "#002244", DET: "#b0b7bc", GB: "#ffb612", HOU: "#a71930", IND: "#a2aaad",
+  JAX: "#d7a22a", KC: "#ffb81c", LV: "#a5acaf", LAC: "#ffc20e", LAR: "#ffa300", MIA: "#fc4c02", MIN: "#ffc62f",
+  NE: "#c60c30", NO: "#101820", NYG: "#a71930", NYJ: "#000000", PHI: "#a5acaf", PIT: "#101820", SEA: "#69be28",
+  SF: "#b3995d", TB: "#34302b", TEN: "#c8102e", WAS: "#ffb612", WSH: "#ffb612",
+};
+const SLOT_COLORS: Record<string, string> = {
+  QB: "#c9457a",
+  RB: "#2f9e73",
+  WR: "#3f7cc9",
+  FLEX: "#7a5bbf",
+  TE: "#d0872e",
+  "D/ST": "#6c7a86",
+  DST: "#6c7a86",
+  K: "#8a6fc0",
+  HC: "#9a7b52",
+  BE: "#8a97a0",
 };
 
 function teamDisplay(side: GameDetailSideVM, showCity: boolean) {
@@ -58,6 +77,32 @@ function playerAccent(row?: GameDetailSlotVM) {
   return row?.nflTeam ? NFL_TEAM_COLORS[row.nflTeam.toUpperCase()] : undefined;
 }
 
+function playerSecondaryAccent(row?: GameDetailSlotVM) {
+  return row?.nflTeam ? NFL_TEAM_SECONDARY_COLORS[row.nflTeam.toUpperCase()] : undefined;
+}
+
+function playerTokenStyle(row?: GameDetailSlotVM) {
+  const primary = playerAccent(row);
+  const secondary = playerSecondaryAccent(row);
+  if (!primary) return { background: "var(--strength-bg)", color: "var(--muted)" } as React.CSSProperties;
+  return {
+    background: secondary ? `linear-gradient(135deg, ${primary} 0 50%, ${secondary} 50% 100%)` : primary,
+    color: readableTextColor(primary),
+  } as React.CSSProperties;
+}
+
+function slotColor(slot: string) {
+  return SLOT_COLORS[slot.toUpperCase()] ?? "#607069";
+}
+
+function slotStyle(slot: string) {
+  const color = slotColor(slot);
+  return {
+    "--slot": color,
+    "--slot-ink": readableTextColor(color),
+  } as React.CSSProperties;
+}
+
 function WeekStrip({
   schedule,
   currentGameId,
@@ -85,8 +130,16 @@ function WeekStrip({
         onClick={() => onSelect?.(game.id)}
       >
         <span>{game.gameNumber === 1 ? "GOTW" : `Game ${game.gameNumber ?? ""}`}</span>
-        <b><EntityLogo color={away.color} logoUrl={away.logoUrl} monogram={teamInitials(away)} size={18} />{shortTeamLabel(away)}<em className={awayWin ? "is-winner" : ""}>{game.awayScore == null ? "--" : formatPoints(game.awayScore)}</em></b>
-        <b><EntityLogo color={home.color} logoUrl={home.logoUrl} monogram={teamInitials(home)} size={18} />{shortTeamLabel(home)}<em className={homeWin ? "is-winner" : ""}>{game.homeScore == null ? "--" : formatPoints(game.homeScore)}</em></b>
+        <b>
+          <EntityLogo color={away.color} logoUrl={away.logoUrl} monogram={teamInitials(away)} size={18} imagePresentation="bare" />
+          {shortTeamLabel(away)}
+          <em className={awayWin ? "is-winner" : ""}>{game.awayScore == null ? "--" : formatPoints(game.awayScore)}</em>
+        </b>
+        <b>
+          <EntityLogo color={home.color} logoUrl={home.logoUrl} monogram={teamInitials(home)} size={18} imagePresentation="bare" />
+          {shortTeamLabel(home)}
+          <em className={homeWin ? "is-winner" : ""}>{game.homeScore == null ? "--" : formatPoints(game.homeScore)}</em>
+        </b>
       </button>;
     })}
   </div>;
@@ -95,12 +148,13 @@ function WeekStrip({
 function TeamHeader({ side, align, showCity, status, won }: { side: GameDetailSideVM; align: "away" | "home"; showCity: boolean; status: string; won: boolean }) {
   const score = status === "upcoming" ? side.projectedTotal ?? scoreValue(side) : scoreValue(side);
   const teamInk = accessibleTeamColor(side.team.color);
+  const divisionColor = side.division?.color ?? side.team.color;
   return <section className={`gdm-team-head ${align}`} style={{ "--team": side.team.color, "--team-ink": teamInk } as React.CSSProperties}>
     <span className="gdm-rank-row">
-      <b>#{side.rank}</b>
+      <b style={{ "--rank-bg": divisionColor, "--rank-ink": readableTextColor(divisionColor) } as React.CSSProperties} title={side.division ? `${side.division.name} rank ${side.rank}` : `Rank ${side.rank}`}>#{side.rank}</b>
       {side.division && <><DivisionMark division={side.division} /> <small>{side.division.name}</small></>}
     </span>
-    <EntityLogo color={side.team.color} logoUrl={side.team.logoUrl} monogram={teamInitials(side.team)} size={56} />
+    <EntityLogo color={side.team.color} logoUrl={side.team.logoUrl} monogram={teamInitials(side.team)} size={56} imagePresentation="bare" />
     {showCity && side.team.city && <small className="gdm-team-city">{side.team.city}</small>}
     <strong>{side.team.name}</strong>
     <span className={`gdm-team-score ${won ? "is-win" : ""} ${status === "upcoming" ? "is-proj" : ""}`}>{scoreLabel(side, status)}</span>
@@ -132,24 +186,28 @@ function PlayerCell({
   status: string;
 }) {
   if (!row) return <div className={`gdm-player-cell ${side} is-empty`}><span className="gdm-player-text"><strong>Empty</strong><small>--</small></span><b>--</b></div>;
-  const accent = playerAccent(row);
-  const ink = accent ? readableTextColor(accent) : "var(--ink)";
   return <button type="button" className={`gdm-player-cell ${side} ${expanded ? "is-expanded" : ""}`} onClick={onToggle} aria-expanded={expanded}>
-    {side === "home" && <span className="gdm-player-points"><strong>{playerScoreLabel(row, status)}</strong>{row.projected != null && <small>{status === "upcoming" ? "PROJ" : row.projected.toFixed(1)}</small>}</span>}
-    {side === "home" && <span className="gdm-nfl-token" style={{ background: accent ?? "var(--strength-bg)", color: accent ? ink : "var(--muted)" }}>{row.nflTeam || row.position}</span>}
+    {side === "away" && <span className="gdm-player-points"><strong>{playerScoreLabel(row, status)}</strong>{row.projected != null && <small>{status === "upcoming" ? "PROJ" : row.projected.toFixed(1)}</small>}</span>}
+    {side === "away" && <span className="gdm-nfl-token" style={playerTokenStyle(row)}>{row.nflTeam || row.position}</span>}
     <span className="gdm-player-text">
       <strong>{row.name}</strong>
       <small>{playerMeta(row)}</small>
       {row.statLine && <em>{row.statLine}</em>}
     </span>
-    {side === "away" && <span className="gdm-nfl-token" style={{ background: accent ?? "var(--strength-bg)", color: accent ? ink : "var(--muted)" }}>{row.nflTeam || row.position}</span>}
-    {side === "away" && <span className="gdm-player-points"><strong>{playerScoreLabel(row, status)}</strong>{row.projected != null && <small>{status === "upcoming" ? "PROJ" : row.projected.toFixed(1)}</small>}</span>}
+    {side === "home" && <span className="gdm-nfl-token" style={playerTokenStyle(row)}>{row.nflTeam || row.position}</span>}
+    {side === "home" && <span className="gdm-player-points"><strong>{playerScoreLabel(row, status)}</strong>{row.projected != null && <small>{status === "upcoming" ? "PROJ" : row.projected.toFixed(1)}</small>}</span>}
   </button>;
 }
 
 function PlayerDetail({ row }: { row: GameDetailSlotVM }) {
   return <div className="gdm-player-detail">
-    <strong>{row.name}</strong>
+    <header className="gdm-player-detail-head">
+      <span className="gdm-nfl-token" style={playerTokenStyle(row)}>{row.nflTeam || row.position}</span>
+      <span>
+        <strong>{row.name}</strong>
+        <small>{row.position}{row.nflTeam ? ` · ${row.nflTeam}` : ""}</small>
+      </span>
+    </header>
     {row.statDetails?.length ? <ul>
       {row.statDetails.slice(0, 8).map((stat) => <li key={`${stat.raw}:${stat.points}`}><span>{stat.label}</span><b>{stat.points >= 0 ? "+" : ""}{stat.points.toFixed(1)}</b></li>)}
     </ul> : <p>{row.statLine || `${row.position}${row.nflTeam ? ` · ${row.nflTeam}` : ""}`}</p>}
@@ -167,7 +225,7 @@ function RosterPairRows({ away, home, type, status }: { away: GameDetailSlotVM[]
       return <React.Fragment key={`${type}:${index}`}>
         <div className="gdm-pair-row">
           <PlayerCell row={awayRow} side="away" expanded={awayOpen} status={status} onToggle={() => awayRow && setOpenKey(awayOpen ? null : awayRow.key)} />
-          <span className="gdm-slot-center">{slot}</span>
+          <span className="gdm-slot-center" style={slotStyle(slot)}>{slot}</span>
           <PlayerCell row={homeRow} side="home" expanded={homeOpen} status={status} onToggle={() => homeRow && setOpenKey(homeOpen ? null : homeRow.key)} />
         </div>
         {awayOpen && awayRow && <PlayerDetail row={awayRow} />}
@@ -246,7 +304,9 @@ export function GameDetailSheet({
       <WeekStrip schedule={schedule} currentGameId={gameId} games={slateGames} onSelect={navigation?.onSelect} />
       {isBroadcast && <div className="gdm-gotw-band"><Star fill="currentColor" /> Game of the Week <Star fill="currentColor" /></div>}
       <div className="gdm-eyebrow">
-        {contextLabel}<span>·</span>{vm.dateLabel}<span>·</span><MapPin />{vm.stadium}
+        {contextLabel}<span>·</span>{vm.dateLabel}<span>·</span>
+        <EntityLogo className="gdm-venue-logo" color={vm.home.team.color} logoUrl={vm.home.team.logoUrl} monogram={teamInitials(vm.home.team)} size={24} imagePresentation="bare" />
+        {vm.stadium}
       </div>
       <div className="gdm-matchup-head">
         <TeamHeader side={vm.away} align="away" showCity={showCity} status={vm.status} won={awayWon} />
