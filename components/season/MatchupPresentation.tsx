@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { KeyboardEvent, MouseEvent } from "react";
 import { CalendarClock, ChevronDown, CircleAlert, Gamepad2, LockKeyhole, MapPin, Medal, SlidersHorizontal, Star, StickyNote, TrendingUp, Zap } from "lucide-react";
 import { ConferenceMark, DivisionIdentity, DivisionMark } from "@/components/ui/DivisionIdentity";
 import { EntityLogo } from "@/components/ui/EntityLogo";
@@ -159,7 +160,7 @@ function GameDetails({ game }: { game: ScheduledGame }) {
   </div>;
 }
 
-export function MatchupCard({ game, away, home, awayDivision, homeDivision, setup, awayRank, homeRank, awayRecord, homeRecord, signal, featured, featuredLabel = "GOTW", gameLabel, dateLabel, showCity, showVenue, variant = "standard", teamHrefBase, badges = [], medalRank, medalLabel, highlighted = false, simulationSource, simulationLocked = false, winProbability, projected = false }: {
+export function MatchupCard({ game, away, home, awayDivision, homeDivision, setup, awayRank, homeRank, awayRecord, homeRecord, signal, featured, featuredLabel = "GOTW", gameLabel, dateLabel, showCity, showVenue, variant = "standard", teamHrefBase, badges = [], medalRank, medalLabel, highlighted = false, simulationSource, simulationLocked = false, winProbability, projected = false, onOpenGame }: {
   game: ScheduledGame;
   away: Team;
   home: Team;
@@ -188,6 +189,7 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, setu
   simulationLocked?: boolean;
   winProbability?: { away: number; home: number };
   projected?: boolean;
+  onOpenGame?: (gameId: string) => void;
 }) {
   // A 0-0 "score" is never a real fantasy result — treat it as not-yet-played so an
   // unstarted season reads as scheduled/projected instead of a fake FINAL 0-0.
@@ -201,7 +203,23 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, setu
   const leagueHasConferences = Boolean(setup && hasConferences(setup));
   const awayConference = setup && awayDivision && leagueHasConferences ? conferenceOfDivision(setup, awayDivision.id) : undefined;
   const homeConference = setup && homeDivision && leagueHasConferences ? conferenceOfDivision(setup, homeDivision.id) : undefined;
-  return <article id={game.id} className={`matchup-card ${featured ? "is-gotw" : ""} ${highlighted ? "is-stat-highlight" : ""} ${showProjected ? "is-projected" : ""} ${simulationSource ? `is-simulated simulation-${simulationSource}` : ""} matchup-card-${variant}`}>
+  const openFromCard = onOpenGame
+    ? (event: MouseEvent<HTMLElement>) => {
+        const target = event.target as HTMLElement;
+        if (target.closest("a,button")) return;
+        onOpenGame(game.id);
+      }
+    : undefined;
+  const openFromKeyboard = onOpenGame
+    ? (event: KeyboardEvent<HTMLElement>) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        const target = event.target as HTMLElement;
+        if (target.closest("a,button")) return;
+        event.preventDefault();
+        onOpenGame(game.id);
+      }
+    : undefined;
+  return <article id={game.id} role={onOpenGame ? "button" : undefined} tabIndex={onOpenGame ? 0 : undefined} onClick={openFromCard} onKeyDown={openFromKeyboard} className={`matchup-card ${onOpenGame ? "is-openable" : ""} ${featured ? "is-gotw" : ""} ${highlighted ? "is-stat-highlight" : ""} ${showProjected ? "is-projected" : ""} ${simulationSource ? `is-simulated simulation-${simulationSource}` : ""} matchup-card-${variant}`}>
     <div className="matchup-card-badges">
       <div className="matchup-card-chips">
         {featured && <span className="gotw-chip"><Star fill="currentColor" /><strong>{featuredLabel}</strong></span>}
@@ -226,7 +244,7 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, setu
       {/* Each team wraps with an inline score (ESPN-style, shown ≤560px); the
           center score stays for desktop. Both read from the same game data. */}
       <div className="matchup-team-row">
-        <TeamIdentityBlock team={away} division={awayDivision} conference={awayConference} leagueRank={awayRank} record={awayRecord} showCity={showCity} result={awayResult} href={teamHrefBase ? `${teamHrefBase}/${away.id}` : undefined} />
+        <TeamIdentityBlock team={away} division={awayDivision} conference={awayConference} leagueRank={awayRank} record={awayRecord} showCity={showCity} result={awayResult} href={teamHrefBase && !onOpenGame ? `${teamHrefBase}/${away.id}` : undefined} />
         {!showProjected && <span className="matchup-row-score"><strong className={awayResult === "loser" ? "loser" : ""}>{played ? formatPoints(game.awayScore ?? 0) : "—"}</strong></span>}
       </div>
       {showProjected ? (
@@ -246,7 +264,7 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, setu
         </div>
       )}
       <div className="matchup-team-row">
-        <TeamIdentityBlock mirrored team={home} division={homeDivision} conference={homeConference} leagueRank={homeRank} record={homeRecord} showCity={showCity} result={homeResult} href={teamHrefBase ? `${teamHrefBase}/${home.id}` : undefined} />
+        <TeamIdentityBlock mirrored team={home} division={homeDivision} conference={homeConference} leagueRank={homeRank} record={homeRecord} showCity={showCity} result={homeResult} href={teamHrefBase && !onOpenGame ? `${teamHrefBase}/${home.id}` : undefined} />
         {!showProjected && <span className="matchup-row-score"><strong className={homeResult === "loser" ? "loser" : ""}>{played ? formatPoints(game.homeScore ?? 0) : "—"}</strong></span>}
       </div>
     </div>

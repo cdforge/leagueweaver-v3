@@ -6,6 +6,8 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent,
+  type MouseEvent,
 } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -77,6 +79,7 @@ import {
 } from "@/components/season/StatsWorkspace";
 import { TeamScheduleView } from "@/components/season/TeamSchedulePage";
 import { WeekScoreBar } from "@/components/season/WeekScoreBar";
+import { MatchupRosterModal } from "@/components/season/MatchupRosterModal";
 import { NflWeekTrail } from "@/components/season/NflWeekTrail";
 import { PlayoffPicturePanel } from "@/components/season/PlayoffPictureModal";
 import { PlayoffLivePreview } from "@/components/playoffs/PlayoffLivePreview";
@@ -1094,6 +1097,7 @@ function ScheduleView({
   simulationResults = {},
   simulationProbabilities = {},
   showWeekSelector = true,
+  onOpenGame,
 }: {
   schedule: GeneratedSchedule;
   selectedWeek: number;
@@ -1105,6 +1109,7 @@ function ScheduleView({
   simulationResults?: Record<string, SimulatorResultView>;
   simulationProbabilities?: Record<string, { away: number; home: number }>;
   showWeekSelector?: boolean;
+  onOpenGame?: (gameId: string) => void;
 }) {
   const weekStripRef = useRef<HTMLDivElement>(null);
   const scheduleSignals = useMemo(
@@ -1510,6 +1515,7 @@ function ScheduleView({
                 simulationLocked={simulationResult?.locked}
                 winProbability={simulationProbabilities[game.id]}
                 teamHrefBase={`/season/${schedule.id}/team`}
+                onOpenGame={onOpenGame}
               />
             );
           })}
@@ -1544,7 +1550,7 @@ function ScheduleView({
   );
 }
 
-function MatchupRatingsView({ schedule }: { schedule: GeneratedSchedule }) {
+function MatchupRatingsView({ schedule, onOpenGame }: { schedule: GeneratedSchedule; onOpenGame?: (gameId: string) => void }) {
   // Fixed presentation: all matchups, strongest first, weekly-standings lens.
   const lens: "live" | "preseason" = "live";
   const scheduleSignals = getScheduleGameSignals(schedule);
@@ -1673,10 +1679,30 @@ function MatchupRatingsView({ schedule }: { schedule: GeneratedSchedule }) {
               const awayWon = played && game.awayScore! > game.homeScore!;
               const homeWon = played && game.homeScore! > game.awayScore!;
               const isGameOfWeek = scheduleSignals.gotwIds.has(game.id);
+              const openFromRow = onOpenGame
+                ? (event: MouseEvent<HTMLTableRowElement>) => {
+                    const target = event.target as HTMLElement;
+                    if (target.closest("a,button")) return;
+                    onOpenGame(game.id);
+                  }
+                : undefined;
+              const openFromRowKey = onOpenGame
+                ? (event: KeyboardEvent<HTMLTableRowElement>) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    const target = event.target as HTMLElement;
+                    if (target.closest("a,button")) return;
+                    event.preventDefault();
+                    onOpenGame(game.id);
+                  }
+                : undefined;
               return (
                 <tr
-                  className={isGameOfWeek ? "is-gotw" : undefined}
+                  className={[isGameOfWeek ? "is-gotw" : "", onOpenGame ? "is-openable" : ""].filter(Boolean).join(" ") || undefined}
                   key={game.id}
+                  onClick={openFromRow}
+                  onKeyDown={openFromRowKey}
+                  role={onOpenGame ? "button" : undefined}
+                  tabIndex={onOpenGame ? 0 : undefined}
                 >
                   <td>
                     <Link
@@ -1704,7 +1730,7 @@ function MatchupRatingsView({ schedule }: { schedule: GeneratedSchedule }) {
                       leagueRank={rowRanks.get(away.id) ?? away.overallRank}
                       record={{ overall: "0-0" }}
                       showCity={schedule.setup.display.cityNames}
-                      href={`/season/${schedule.id}/team/${away.id}`}
+                      href={onOpenGame ? undefined : `/season/${schedule.id}/team/${away.id}`}
                     />
                   </td>
                   <td>
@@ -1749,7 +1775,7 @@ function MatchupRatingsView({ schedule }: { schedule: GeneratedSchedule }) {
                       leagueRank={rowRanks.get(home.id) ?? home.overallRank}
                       record={{ overall: "0-0" }}
                       showCity={schedule.setup.display.cityNames}
-                      href={`/season/${schedule.id}/team/${home.id}`}
+                      href={onOpenGame ? undefined : `/season/${schedule.id}/team/${home.id}`}
                     />
                   </td>
                   <td>
@@ -1821,6 +1847,7 @@ function MatchupRatingsView({ schedule }: { schedule: GeneratedSchedule }) {
               showCity={schedule.setup.display.cityNames}
               showVenue={false}
               teamHrefBase={`/season/${schedule.id}/team`}
+              onOpenGame={onOpenGame}
             />
           );
         })}
@@ -5908,6 +5935,7 @@ export function SeasonWorkspace({
   const [selectedTeamId, setSelectedTeamId] = useState(params.teamId ?? "");
   const [selectedWeek, setSelectedWeek] = useState(1);
   const [highlightedGame, setHighlightedGame] = useState<HighlightedGame>(null);
+  const [matchupRosterGameId, setMatchupRosterGameId] = useState<string | null>(null);
   const [draftRankingRequest, setDraftRankingRequest] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [simulation, setSimulation] = useState<SimulationSandbox | null>(null);
@@ -6400,6 +6428,15 @@ export function SeasonWorkspace({
         : schedule,
     [schedule, simulation],
   );
+  const openMatchupRoster = (gameId: string) => {
+    if (!activeSchedule) return;
+    const gameWeek = activeSchedule.weeks.find((item) =>
+      item.games.some((game) => game.id === gameId),
+    );
+    if (gameWeek) setSelectedWeek(gameWeek.weekNumber);
+    setHighlightedGame({ id: gameId });
+    setMatchupRosterGameId(gameId);
+  };
   const simulationResultByGame = useMemo((): Record<
     string,
     SimulatorResultView
@@ -6640,6 +6677,7 @@ export function SeasonWorkspace({
       });
       const result = (await response.json().catch(() => ({}))) as {
         rows?: Array<ImportedScoreRow & { confidence?: "high" | "review" }>;
+        rosterDetails?: GeneratedSchedule["matchupRosterDetails"];
         unmatched?: unknown[];
         warnings?: string[];
         syncedAt?: string;
@@ -6666,6 +6704,10 @@ export function SeasonWorkspace({
           );
           return freezeCompletedRankHistory({
             ...updated,
+            matchupRosterDetails: {
+              ...(updated.matchupRosterDetails ?? {}),
+              ...(result.rosterDetails ?? {}),
+            },
             setup: {
               ...updated.setup,
               platformConnection: updated.setup.platformConnection
@@ -6680,6 +6722,19 @@ export function SeasonWorkspace({
           });
         });
       } else {
+        if (result.rosterDetails && Object.keys(result.rosterDetails).length > 0) {
+          setSchedule((current) =>
+            current
+              ? {
+                  ...current,
+                  matchupRosterDetails: {
+                    ...(current.matchupRosterDetails ?? {}),
+                    ...result.rosterDetails,
+                  },
+                }
+              : current,
+          );
+        }
         updatePlatformConnection({
           lastSyncAt: result.syncedAt,
           status: result.warnings?.length ? "warning" : "ready",
@@ -7534,6 +7589,14 @@ export function SeasonWorkspace({
           onShare={shareForReveal}
         />
       )}
+      {activeSchedule && (
+        <MatchupRosterModal
+          schedule={activeSchedule}
+          gameId={matchupRosterGameId}
+          onClose={() => setMatchupRosterGameId(null)}
+          onSelectGame={openMatchupRoster}
+        />
+      )}
       <AppHeader />
       {scoreBarWeek && (
         <div className="scorebar-measure" ref={scorebarRef}>
@@ -7549,13 +7612,7 @@ export function SeasonWorkspace({
             }
             getRank={(id) => scoreBarRankByTeam.get(id)}
             displayCityNames={activeSchedule.setup.display?.cityNames !== false}
-            onSelectGame={(gameId) => {
-              const gameWeek = activeSchedule.weeks.find((item) =>
-                item.games.some((game) => game.id === gameId),
-              );
-              if (gameWeek) openLeagueScheduleWeek(gameWeek.weekNumber);
-              setHighlightedGame({ id: gameId });
-            }}
+            onSelectGame={openMatchupRoster}
             onCollapsedChange={setScorebarCollapsed}
             teamCount={activeSchedule.setup.teams.length}
           />
@@ -7800,6 +7857,7 @@ export function SeasonWorkspace({
                   simulationResults={simulationResultByGame}
                   simulationProbabilities={simulationProbabilityByGame}
                   showWeekSelector={false}
+                  onOpenGame={openMatchupRoster}
                 />
               </div>
             )}
@@ -7814,6 +7872,7 @@ export function SeasonWorkspace({
                 highlightedGame={highlightedGame}
                 simulationResults={simulationResultByGame}
                 simulationProbabilities={simulationProbabilityByGame}
+                onOpenGame={openMatchupRoster}
               />
             )}
             {view === "team-schedule" && (
@@ -7823,6 +7882,7 @@ export function SeasonWorkspace({
                 onSelectTeam={selectTeamSchedule}
                 onSelectWeek={openLeagueScheduleWeek}
                 simulationResults={simulationResultByGame}
+                onOpenGame={openMatchupRoster}
               />
             )}
             {view === "gotw" && (
@@ -7833,7 +7893,7 @@ export function SeasonWorkspace({
               />
             )}
             {view === "matchup-ratings" && (
-              <MatchupRatingsView schedule={activeSchedule} />
+              <MatchupRatingsView schedule={activeSchedule} onOpenGame={openMatchupRoster} />
             )}
             {view === "standings" && (
               <StandingsView

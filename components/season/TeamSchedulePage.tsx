@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, type CSSProperties } from "react";
+import { useMemo, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
 import { BarChart3, MapPin, MoreHorizontal, Star, UsersRound } from "lucide-react";
 import { ClinchBadges } from "@/components/season/ClinchBadges";
 import { GameBadgeChip, MatchupCard, MatchupRatingLegend, MatchupSeriesChip, TeamIdentityBlock } from "@/components/season/MatchupPresentation";
@@ -233,7 +233,7 @@ function TeamScheduleDirectory({ schedule, summaries, clinches, onSelectTeam }: 
   );
 }
 
-export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek, simulationResults = {}, readOnly = false }: {
+export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek, simulationResults = {}, readOnly = false, onOpenGame }: {
   schedule: GeneratedSchedule;
   teamId: string;
   onSelectTeam: (teamId: string) => void;
@@ -243,6 +243,7 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
     locked: boolean;
   }>;
   readOnly?: boolean;
+  onOpenGame?: (gameId: string) => void;
 }) {
   const routeBase = useRouteBase(`/season/${schedule.id}`);
   const scheduleSignals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
@@ -463,8 +464,32 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
               const gotwLabel = gotwEntry ? gameOfWeekStatusLabel(gotwEntry.status) : "GOTW";
               const badges = (scheduleSignals.byGameId.get(game.id)?.badges ?? []).filter((badge) => badge !== "GOTW");
 
+              const openFromRow = onOpenGame
+                ? (event: MouseEvent<HTMLTableRowElement>) => {
+                    const target = event.target as HTMLElement;
+                    if (target.closest("a,button")) return;
+                    onOpenGame(game.id);
+                  }
+                : undefined;
+              const openFromRowKey = onOpenGame
+                ? (event: KeyboardEvent<HTMLTableRowElement>) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    const target = event.target as HTMLElement;
+                    if (target.closest("a,button")) return;
+                    event.preventDefault();
+                    onOpenGame(game.id);
+                  }
+                : undefined;
+
               return (
-                <tr className={[isGameOfWeek ? "is-gotw" : "", simulationResult ? `is-simulated simulation-${simulationResult.source}` : ""].filter(Boolean).join(" ")} key={week.weekNumber}>
+                <tr
+                  className={[isGameOfWeek ? "is-gotw" : "", onOpenGame ? "is-openable" : "", simulationResult ? `is-simulated simulation-${simulationResult.source}` : ""].filter(Boolean).join(" ")}
+                  key={week.weekNumber}
+                  onClick={openFromRow}
+                  onKeyDown={openFromRowKey}
+                  role={onOpenGame ? "button" : undefined}
+                  tabIndex={onOpenGame ? 0 : undefined}
+                >
                   <td className="col-week">{renderWeekLink(week.weekNumber, week.dateLabel, holidays)}</td>
                   <td className="col-location"><span className="location-chip"><span aria-hidden="true">{isHome ? "vs" : "@"}</span><span className="sr-only">{isHome ? "Home versus" : "Away at"}</span></span></td>
                   <td className="col-opponent">
@@ -478,7 +503,7 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
                         leagueRank={opponentStanding?.rank ?? opponent.overallRank}
                         record={{ overall: "0-0" }}
                         showCity={showCity}
-                        href={`${teamHrefBase}/${opponent.id}`}
+                        href={onOpenGame ? undefined : `${teamHrefBase}/${opponent.id}`}
                       />
                     </div>
                   </td>
@@ -496,7 +521,7 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
                     <FloatingPopover className="table-actions" label={`Actions for Week ${week.weekNumber}`} trigger={<MoreHorizontal />} menuClassName="table-actions-menu">
                       {!readOnly && <>
                         <Link href={`/season/${schedule.id}?view=scores&week=${week.weekNumber}`}>Set score</Link>
-                        <Link href={`/season/${schedule.id}?week=${week.weekNumber}#${game.id}`}>Game details</Link>
+                        {onOpenGame ? <button type="button" onClick={() => onOpenGame(game.id)}>Game details</button> : <Link href={`/season/${schedule.id}?week=${week.weekNumber}#${game.id}`}>Game details</Link>}
                       </>}
                         <Link href={`${teamHrefBase}/${opponent.id}`}>Opponent schedule</Link>
                     </FloatingPopover>
@@ -564,6 +589,7 @@ export function TeamScheduleView({ schedule, teamId, onSelectTeam, onSelectWeek,
               showVenue={schedule.setup.display?.venues !== false}
               badges={scheduleSignals.byGameId.get(game.id)?.badges ?? []}
               teamHrefBase={teamHrefBase}
+              onOpenGame={onOpenGame}
             />
           );
         })}
