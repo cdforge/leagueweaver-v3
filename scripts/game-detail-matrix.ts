@@ -107,6 +107,8 @@ assert.equal(rosterSynced?.home.starters[0]?.projected, 24.2, "matchup roster de
 assert.equal(rosterSynced?.home.bench[0]?.name, "Roster Home Bench", "matchup roster detail feeds bench");
 assert.equal(rosterSynced?.home.platformTotal, 111.22, "matchup roster detail carries platform total");
 assert.equal(rosterSynced?.status, "final", "matchup roster detail carries final status");
+assert.equal(rosterSynced?.away.overallRecord, "0-0", "matchup detail carries entering overall record");
+assert.equal(rosterSynced?.away.divisionRecord, "0-0", "matchup detail carries entering division record");
 const upcomingDetail: MatchupRosterDetail = {
   ...rosterDetail,
   status: "upcoming",
@@ -120,7 +122,7 @@ const liveSynced = buildGameDetailVM({ ...schedule, matchupRosterDetails: { [gam
 assert.equal(liveSynced?.status, "live", "matchup roster detail carries live status");
 const predraftSynced = buildGameDetailVM({ ...schedule, matchupRosterDetails: { [game.id]: { ...rosterDetail, status: "predraft" } } }, game.id, []);
 assert.equal(predraftSynced?.status, "predraft", "matchup roster detail carries predraft status");
-checks += 9;
+checks += 11;
 
 const orderedRows = [
   row(game.awayTeamId, "away-flex", 8.1, "starter", 4, "FLEX"),

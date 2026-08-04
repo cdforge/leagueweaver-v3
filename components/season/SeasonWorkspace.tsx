@@ -93,7 +93,6 @@ import { PlayoffLivePreview } from "@/components/playoffs/PlayoffLivePreview";
 import { StakesButton } from "@/components/season/StakesPanel";
 import { getLiveWeek } from "@/lib/scenarios";
 import { CustomSelect } from "@/components/ui/CustomSelect";
-import { FloatingPopover } from "@/components/ui/FloatingPopover";
 import { Modal, ConfirmDialog } from "@/components/ui/Modal";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { ConnectScoresModal } from "@/components/platform/ConnectScoresModal";
@@ -7619,9 +7618,6 @@ export function SeasonWorkspace({
     setView("settings");
     router.push(`/season/${schedule.id}?view=settings`);
   };
-  const openCopySheetPreview = () => {
-    setShowPrintPreview(true);
-  };
   const downloadPrintPdf = async (
     provider: PrintProvider,
     mode: EspnPrintMode,
@@ -7991,8 +7987,8 @@ export function SeasonWorkspace({
                 <h1>{currentTitle}</h1>
               </span>
             </div>
-            <div className="toolbar-actions">
-              {showHistoryPicker && (
+            {showHistoryPicker && (
+              <div className="toolbar-actions">
                 <CustomSelect
                   label={`Select ${currentTitle} season`}
                   value={effectiveHistorySeasonKey}
@@ -8000,52 +7996,8 @@ export function SeasonWorkspace({
                   onChange={selectHistorySeason}
                   showSelectedDescription={false}
                 />
-              )}
-              <button type="button" onClick={() => setShowRecap(true)}>
-                <Sparkles />
-                Recap
-              </button>
-              <button type="button" onClick={openCopySheetPreview}>
-                <Printer />
-                Copy Sheet
-              </button>
-              <FloatingPopover
-                className="toolbar-more"
-                label="More schedule actions"
-                trigger={
-                  <>
-                    <MoreHorizontal />
-                    <span>More</span>
-                    <ChevronDown />
-                  </>
-                }
-                menuClassName="toolbar-more-menu"
-              >
-                <button
-                  type="button"
-                  onClick={() =>
-                    downloadCsv(workspaceSchedule ?? activeSchedule)
-                  }
-                >
-                  <Download />
-                  CSV
-                </button>
-                {canSyncHistory && (
-                  <button
-                    type="button"
-                    onClick={() => void syncLeagueHistory()}
-                    disabled={historySyncing}
-                  >
-                    {historySyncing ? (
-                      <LoaderCircle className="spin" />
-                    ) : (
-                      <History />
-                    )}
-                    Sync history
-                  </button>
-                )}
-              </FloatingPopover>
-            </div>
+              </div>
+            )}
           </div>
           <div className="workspace-notice" role="status" aria-live="polite">
             {notice && (
