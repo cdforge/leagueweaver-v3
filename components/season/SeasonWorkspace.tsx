@@ -151,6 +151,7 @@ import {
 } from "@/lib/simulator";
 import {
   calculateStandings,
+  formatDivisionRecord,
   formatRecord,
   freezeCompletedRankHistory,
   getEnteringWeekRankSnapshot,
@@ -858,6 +859,7 @@ const VIEW_ITEMS: Array<{
 const HISTORY_COMPATIBLE_VIEWS = new Set<ViewKey>([
   "league-schedule",
   "team-schedule",
+  "prints",
   "gotw",
   "matchup-ratings",
   "standings",
@@ -4768,11 +4770,19 @@ export function PrintsView({
   onDownloadCsv,
   onDownloadPdf,
   pdfBusy,
+  onOpenGame,
+  weekHrefFor,
+  teamHrefFor,
+  onNavigate,
 }: {
   schedule: GeneratedSchedule;
   onDownloadCsv: () => void;
   onDownloadPdf: (provider: PrintProvider, mode: EspnPrintMode) => void;
   pdfBusy: boolean;
+  onOpenGame?: (gameId: string) => void;
+  weekHrefFor?: (week: number) => string;
+  teamHrefFor?: (teamId: string) => string;
+  onNavigate?: () => void;
 }) {
   const [provider, setProvider] = useState<PrintProvider>(
     schedule.setup.platformConnection?.provider ?? "espn",
@@ -4812,11 +4822,14 @@ export function PrintsView({
     return ranks;
   }, [schedule]);
   const recordsByWeekTeam = useMemo(() => {
-    const records = new Map<string, string>();
+    const records = new Map<string, { overall: string; division: string }>();
     for (const week of schedule.weeks) {
       for (const row of getEnteringWeekRankSnapshot(schedule, week.weekNumber)
         .rows) {
-        records.set(`${week.weekNumber}:${row.teamId}`, formatRecord(row));
+        records.set(`${week.weekNumber}:${row.teamId}`, {
+          overall: formatRecord(row),
+          division: formatDivisionRecord(row),
+        });
       }
     }
     return records;
@@ -4827,7 +4840,10 @@ export function PrintsView({
       : "Use in Sleeper: Settings > Commissioner Control > Edit Schedule Matchups.";
   const teamName = (team: Team) => teamDisplayName(team, display.cityNames);
   const recordFor = (teamId: string, weekNumber: number) =>
-    recordsByWeekTeam.get(`${weekNumber}:${teamId}`) ?? "0-0-0";
+    recordsByWeekTeam.get(`${weekNumber}:${teamId}`) ?? {
+      overall: "0-0",
+      division: "0-0",
+    };
   const byeTeamsFor = (week: GeneratedSchedule["weeks"][number]) => {
     const activeTeamIds = new Set(
       week.games.flatMap((game) => [game.awayTeamId, game.homeTeamId]),
@@ -4876,31 +4892,97 @@ export function PrintsView({
     side: "away" | "home",
     rank?: number,
     variant: "espn" | "sleeper" = "espn",
+  ) => {
+    const record = recordFor(team.id, weekNumber);
+    const className = `prints-team prints-team-${side}${
+      variant === "sleeper" ? " prints-sleeper-team" : ""
+    }`;
+    const content = (
+      <>
+        <EntityLogo
+          className="prints-team-mark"
+          size={20}
+          color={team.color}
+          logoUrl={team.logoUrl}
+          monogram={teamInitials(team)}
+        />
+        <span>
+          <strong>
+            {rank ? (
+              <>
+                <em>#{rank}</em>{" "}
+              </>
+            ) : null}
+            {teamName(team)}
+          </strong>
+          <small>
+            {record.overall} <span>({record.division} div)</span>
+          </small>
+        </span>
+      </>
+    );
+    const href = teamHrefFor?.(team.id);
+    return href ? (
+      <Link
+        href={href}
+        className={`${className} is-clickable`}
+        onClick={onNavigate}
+      >
+        {content}
+      </Link>
+    ) : (
+      <span className={className}>{content}</span>
+    );
+  };
+
+  const weekHeading = (
+    week: GeneratedSchedule["weeks"][number],
+    label: string,
+  ) => {
+    const content = (
+      <>
+        <span>{label}</span>
+        <small>{week.dateLabel}</small>
+      </>
+    );
+    const href = weekHrefFor?.(week.weekNumber);
+    return href ? (
+      <Link href={href} onClick={onNavigate}>
+        {content}
+      </Link>
+    ) : (
+      content
+    );
+  };
+
+  const scoreCell = (
+    game: ScheduledGame,
+    side: "away" | "home",
+    score: number | undefined,
   ) => (
-    <span
-      className={`prints-team prints-team-${side}${
-        variant === "sleeper" ? " prints-sleeper-team" : ""
-      }`}
+    <button
+      type="button"
+      className={`prints-score prints-score-${side}`}
+      onClick={() => onOpenGame?.(game.id)}
+      disabled={!onOpenGame}
+      aria-label={`Open game details for game ${game.gameNumber ?? game.seriesGame}`}
     >
-      <EntityLogo
-        className="prints-team-mark"
-        size={20}
-        color={team.color}
-        logoUrl={team.logoUrl}
-        monogram={teamInitials(team)}
-      />
-      <span>
-        <strong>
-          {rank ? (
-            <>
-              <em>#{rank}</em>{" "}
-            </>
-          ) : null}
-          {teamName(team)}
-        </strong>
-        <small>({recordFor(team.id, weekNumber)})</small>
-      </span>
-    </span>
+      {score == null ? "0.0" : score.toFixed(1)}
+    </button>
+  );
+
+  const sleeperScoreCell = (game: ScheduledGame, away: Team, home: Team) => (
+    <button
+      type="button"
+      className="prints-sleeper-score-link"
+      onClick={() => onOpenGame?.(game.id)}
+      disabled={!onOpenGame}
+      aria-label={`Open game details for ${teamName(away)} vs ${teamName(home)}`}
+    >
+      <span>{game.awayScore == null ? "0.0" : game.awayScore.toFixed(1)}</span>
+      <b>vs</b>
+      <span>{game.homeScore == null ? "0.0" : game.homeScore.toFixed(1)}</span>
+    </button>
   );
 
   const espnScheduleTable = (
@@ -4915,10 +4997,7 @@ export function PrintsView({
       </header>
       {schedule.weeks.map((week) => (
         <section className="prints-week-block" key={week.weekNumber}>
-          <h3>
-            <span>NFL Week {week.weekNumber}</span>
-            <small>{week.dateLabel}</small>
-          </h3>
+          <h3>{weekHeading(week, `NFL Week ${week.weekNumber}`)}</h3>
           <div className="prints-espn-table" role="table">
             <div className="prints-espn-row prints-espn-header" role="row">
               <span>Away Team</span>
@@ -5005,12 +5084,8 @@ export function PrintsView({
                   <span className="prints-manager prints-manager-away">
                     {away.manager}
                   </span>
-                  <span className="prints-score prints-score-away">
-                    {game.awayScore == null ? "0.0" : game.awayScore.toFixed(1)}
-                  </span>
-                  <span className="prints-score prints-score-home">
-                    {game.homeScore == null ? "0.0" : game.homeScore.toFixed(1)}
-                  </span>
+                  {scoreCell(game, "away", game.awayScore)}
+                  {scoreCell(game, "home", game.homeScore)}
                   <span className="prints-manager prints-manager-home">
                     {home.manager}
                   </span>
@@ -5046,10 +5121,7 @@ export function PrintsView({
       </header>
       {schedule.weeks.map((week) => (
         <section className="prints-sleeper-week" key={week.weekNumber}>
-          <header>
-            <strong>Week {week.weekNumber}</strong>
-            <small>{week.dateLabel}</small>
-          </header>
+          <header>{weekHeading(week, `Week ${week.weekNumber}`)}</header>
           <div className="prints-sleeper-matchups">
             {week.games.map((game) => {
               const away = teamById.get(game.awayTeamId);
@@ -5058,7 +5130,7 @@ export function PrintsView({
               return (
                 <article key={game.id}>
                   {teamCell(away, week.weekNumber, "away", undefined, "sleeper")}
-                  <b>vs</b>
+                  {sleeperScoreCell(game, away, home)}
                   {teamCell(home, week.weekNumber, "home", undefined, "sleeper")}
                 </article>
               );
@@ -7704,6 +7776,7 @@ export function SeasonWorkspace({
   const currentViewIsBeta = VIEW_ITEMS.some(
     (item) => item.key === view && item.beta,
   );
+  const historicPlayoffsBetaActive = view === "playoffs" && historyViewActive;
   const canAccessPlayoffs = true; // Playoff rounds ship to all users on the schedule page.
   const openScoreEntry = (weekNumber: number) => {
     setSelectedWeek(Math.min(weekNumber, schedule.setup.weeks));
@@ -7958,6 +8031,17 @@ export function SeasonWorkspace({
               onDownloadCsv={() => downloadCsv(workspaceSchedule ?? activeSchedule)}
               onDownloadPdf={downloadPrintPdf}
               pdfBusy={pdfBusy}
+              onOpenGame={(gameId) => {
+                setShowPrintPreview(false);
+                openGameDetail(gameId);
+              }}
+              weekHrefFor={(week) =>
+                hrefWithHistorySeason(`/season/${schedule.id}`, { week })
+              }
+              teamHrefFor={(teamId) =>
+                hrefWithHistorySeason(`/season/${schedule.id}/team/${teamId}`)
+              }
+              onNavigate={() => setShowPrintPreview(false)}
             />
           </div>
         </Modal>
@@ -8095,6 +8179,12 @@ export function SeasonWorkspace({
                   {currentViewIsBeta && (
                     <span className="workspace-title-beta-badge">Beta</span>
                   )}
+                  {historicPlayoffsBetaActive && (
+                    <span className="workspace-title-beta-badge history">
+                      <History />
+                      Historic Beta
+                    </span>
+                  )}
                 </h1>
               </span>
             </div>
@@ -8116,6 +8206,18 @@ export function SeasonWorkspace({
               <span>
                 <strong>Beta</strong>
                 <small>{currentViewBetaCopy}</small>
+              </span>
+            </section>
+          )}
+          {historicPlayoffsBetaActive && (
+            <section className="workspace-beta-banner history" aria-label="Historic playoff data beta notice">
+              <History />
+              <span>
+                <strong>Historic playoff data</strong>
+                <small>
+                  Older playoff brackets use saved ESPN/Sleeper history and are
+                  still being refined for team context and edge cases.
+                </small>
               </span>
             </section>
           )}
@@ -8380,13 +8482,31 @@ export function SeasonWorkspace({
                 />
               )
             )}
-            {view === "prints" && (
-              <PrintsView
-                schedule={workspaceSchedule ?? activeSchedule}
-                onDownloadCsv={() => downloadCsv(workspaceSchedule ?? activeSchedule)}
-                onDownloadPdf={downloadPrintPdf}
-                pdfBusy={pdfBusy}
+            {view === "prints" &&
+            historyViewActive &&
+            !historySchedule ? (
+              <HistoryMissingState
+                season={selectedHistorySeason}
+                onSync={syncLeagueHistory}
+                syncing={historySyncing}
+                canSync={canSyncHistory}
               />
+            ) : (
+              view === "prints" && (
+                <PrintsView
+                  schedule={workspaceSchedule ?? activeSchedule}
+                  onDownloadCsv={() => downloadCsv(workspaceSchedule ?? activeSchedule)}
+                  onDownloadPdf={downloadPrintPdf}
+                  pdfBusy={pdfBusy}
+                  onOpenGame={openGameDetail}
+                  weekHrefFor={(week) =>
+                    hrefWithHistorySeason(`/season/${schedule.id}`, { week })
+                  }
+                  teamHrefFor={(teamId) =>
+                    hrefWithHistorySeason(`/season/${schedule.id}/team/${teamId}`)
+                  }
+                />
+              )
             )}
             {view === "gotw" && historyViewActive && !historySchedule ? (
               <HistoryMissingState

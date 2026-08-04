@@ -608,6 +608,7 @@ export function GameDetailSheet({
       <header className="gdm-appbar">
         <button type="button" className="gdm-icon-button" aria-label="Back to schedule" onClick={onClose}><ArrowLeft /></button>
         <strong id="game-detail-title">Matchup</strong>
+        {providerLink && <a className={`gdm-icon-button gdm-provider-button provider-${providerLink.provider}`} href={providerLink.href} target="_blank" rel="noreferrer" aria-label={providerLink.label} title={providerLink.label}><ExternalLink /></a>}
         <button type="button" className="gdm-icon-button" aria-label="Share matchup"><Share2 /></button>
         <button type="button" className="gdm-close" aria-label="Close game detail" onClick={onClose}><X /></button>
       </header>
@@ -622,7 +623,6 @@ export function GameDetailSheet({
         <span className="gdm-eyebrow-date"><span className="gdm-eyebrow-full">{vm.dateLabel}</span><span className="gdm-eyebrow-compact">{compactDateLabel}</span></span><span>·</span>
         <EntityLogo className="gdm-venue-logo" color={vm.home.team.color} logoUrl={vm.home.team.logoUrl} monogram={teamInitials(vm.home.team)} size={24} imagePresentation="bare" />
         {vm.stadium}
-        {providerLink && <a className={`gdm-provider-link provider-${providerLink.provider}`} href={providerLink.href} target="_blank" rel="noreferrer"><ExternalLink />{providerLink.label}</a>}
       </div>
       <div className="gdm-matchup-head">
         <TeamHeader side={vm.away} align="away" showCity={showCity} status={displayStatus} won={awayWon} />
