@@ -570,7 +570,7 @@ export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectT
                         leagueRank={opponentStanding?.rank ?? opponent.overallRank}
                         record={{ overall: "0-0" }}
                         showCity={showCity}
-                        href={teamHrefFor ? teamHrefFor(opponent.id) : `${teamHrefBase}/${opponent.id}`}
+                        href={onOpenGame ? undefined : teamHrefFor ? teamHrefFor(opponent.id) : `${teamHrefBase}/${opponent.id}`}
                       />
                     </div>
                   </td>

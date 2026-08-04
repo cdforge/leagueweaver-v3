@@ -3,7 +3,7 @@ import { buildEspnLeagueHistoryDraft, espnPublicUnreliableHistoryYears, type Lea
 import { deriveEspnTemplates, mapEspnPlayerWeekStats, type EspnMatchupPayload, type EspnPlayerEntryPayload, type LineupTemplate, type PlayerWeekStat, type RosterTemplate } from "@/lib/playerData";
 import { mapEspnTransactions, type EspnTransactionPayload, type NormalizedTransaction } from "@/lib/transactions";
 import { fetchProviderJson } from "./request";
-import type { GeneratedSchedule, ImportDataFound, PlatformSyncResult, PlatformSyncScoreRow, PriorSeasonFinishEntry } from "@/lib/types";
+import type { GeneratedSchedule, ImportDataFound, MatchupRosterDetail, MatchupRosterPlayer, PlatformSyncResult, PlatformSyncScoreRow, PriorSeasonFinishEntry } from "@/lib/types";
 
 const ESPN_BASE = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl";
 
@@ -38,8 +38,29 @@ export interface EspnLeague {
   transactions?: EspnTransactionPayload[];
 }
 
+interface EspnPlayerStat { appliedStats?: Record<string, number>; appliedTotal?: number; statSourceId?: number; statSplitTypeId?: number; scoringPeriodId?: number }
+interface EspnRosterEntry extends EspnPlayerEntryPayload {
+  injuryStatus?: string;
+  lineupSlotId?: number;
+  playerId?: number;
+  playerPoolEntry?: {
+    appliedStatTotal?: number;
+    player?: {
+      defaultPositionId?: number;
+      eligibleSlots?: number[];
+      firstName?: string;
+      fullName?: string;
+      id?: number;
+      injured?: boolean;
+      injuryStatus?: string;
+      lastName?: string;
+      proTeamId?: number;
+      stats?: EspnPlayerStat[];
+    };
+  };
+}
 interface EspnMatchupTeam { teamId?: number; totalPoints?: number }
-interface EspnMatchupSide extends EspnMatchupTeam { rosterForCurrentScoringPeriod?: { entries?: EspnPlayerEntryPayload[] } }
+interface EspnMatchupSide extends EspnMatchupTeam { rosterForCurrentScoringPeriod?: { entries?: EspnRosterEntry[] } }
 interface EspnMatchup { id: number; matchupPeriodId: number; home?: EspnMatchupSide; away?: EspnMatchupSide }
 
 export function parseEspnLeagueId(identifier: string) {
@@ -98,7 +119,7 @@ export async function scanEspnHistory(leagueId: string, seasonYear: number, auth
     availableHistoryYears,
     blockedHistoryYears,
     hasDraftData,
-    hasRosterData: false,
+    hasRosterData: true,
     hasPlayerData: true,
     hasScoreSync: true,
   };
@@ -165,6 +186,139 @@ function espnProviderId(leagueId: string, teamId?: number) {
   return teamId == null ? "" : `espn-${leagueId}-${teamId}`;
 }
 
+const ESPN_SLOT_LABELS: Record<number, string> = {
+  0: "QB",
+  1: "TQB",
+  2: "RB",
+  3: "RB/WR",
+  4: "WR",
+  5: "WR/TE",
+  6: "TE",
+  7: "OP",
+  8: "DT",
+  9: "DE",
+  10: "LB",
+  11: "DL",
+  12: "CB",
+  13: "S",
+  14: "DB",
+  15: "DP",
+  16: "D/ST",
+  17: "K",
+  18: "P",
+  19: "HC",
+  20: "BE",
+  21: "IR",
+  23: "FLEX",
+  24: "EDGE",
+};
+
+const ESPN_POSITION_LABELS: Record<number, string> = {
+  1: "QB",
+  2: "RB",
+  3: "WR",
+  4: "TE",
+  5: "K",
+  16: "D/ST",
+};
+
+const ESPN_PRO_TEAM_ABBR: Record<number, string> = {
+  0: "FA",
+  1: "ATL",
+  2: "BUF",
+  3: "CHI",
+  4: "CIN",
+  5: "CLE",
+  6: "DAL",
+  7: "DEN",
+  8: "DET",
+  9: "GB",
+  10: "TEN",
+  11: "IND",
+  12: "KC",
+  13: "LV",
+  14: "LAR",
+  15: "MIA",
+  16: "MIN",
+  17: "NE",
+  18: "NO",
+  19: "NYG",
+  20: "NYJ",
+  21: "PHI",
+  22: "ARI",
+  23: "PIT",
+  24: "LAC",
+  25: "SF",
+  26: "SEA",
+  27: "TB",
+  28: "WSH",
+  29: "CAR",
+  30: "JAX",
+  33: "BAL",
+  34: "HOU",
+};
+
+function espnSlotLabel(slotId?: number) {
+  return slotId == null ? "BE" : ESPN_SLOT_LABELS[slotId] || `S${slotId}`;
+}
+
+function espnPlayerPoints(entry: EspnRosterEntry) {
+  const actual = entry.playerPoolEntry?.player?.stats?.find((stat) => stat.statSourceId === 0 && stat.statSplitTypeId === 1)?.appliedTotal;
+  return actual ?? entry.playerPoolEntry?.appliedStatTotal;
+}
+
+function espnProjectedPoints(entry: EspnRosterEntry) {
+  return entry.playerPoolEntry?.player?.stats?.find((stat) => stat.statSourceId === 1 && stat.statSplitTypeId === 1)?.appliedTotal;
+}
+
+function espnStatDetails(entry: EspnRosterEntry) {
+  const appliedStats = entry.playerPoolEntry?.player?.stats?.find((stat) => stat.statSourceId === 0 && stat.statSplitTypeId === 1)?.appliedStats;
+  if (!appliedStats) return undefined;
+  return Object.entries(appliedStats)
+    .map(([raw, points]) => ({
+      raw,
+      label: `Stat ${raw}`,
+      points,
+    }))
+    .sort((left, right) => Math.abs(right.points) - Math.abs(left.points));
+}
+
+function mapEspnRosterPlayer(entry: EspnRosterEntry): MatchupRosterPlayer | null {
+  const player = entry.playerPoolEntry?.player;
+  const id = String(entry.playerId ?? player?.id ?? "");
+  if (!id || !player) return null;
+  const slot = espnSlotLabel(entry.lineupSlotId);
+  const position = ESPN_POSITION_LABELS[player.defaultPositionId ?? -1] || slot;
+  const points = espnPlayerPoints(entry);
+  const projectedPoints = espnProjectedPoints(entry);
+  return {
+    id: `espn-${id}`,
+    providerPlayerId: id,
+    name: player.fullName || [player.firstName, player.lastName].filter(Boolean).join(" ") || `Player ${id}`,
+    fullName: player.fullName,
+    slot,
+    position,
+    proTeam: ESPN_PRO_TEAM_ABBR[player.proTeamId ?? -1],
+    injuryStatus: entry.injuryStatus && entry.injuryStatus !== "NORMAL" ? entry.injuryStatus : player.injuryStatus,
+    points: typeof points === "number" ? points : undefined,
+    projectedPoints: typeof projectedPoints === "number" ? projectedPoints : undefined,
+    statLine: typeof points === "number" ? `${points.toFixed(1)} pts` : undefined,
+    statDetails: espnStatDetails(entry),
+  };
+}
+
+function splitEspnRoster(side?: EspnMatchupSide) {
+  const starters: MatchupRosterPlayer[] = [];
+  const bench: MatchupRosterPlayer[] = [];
+  for (const entry of side?.rosterForCurrentScoringPeriod?.entries ?? []) {
+    const player = mapEspnRosterPlayer(entry);
+    if (!player) continue;
+    if (entry.lineupSlotId === 20 || entry.lineupSlotId === 21) bench.push(player);
+    else starters.push(player);
+  }
+  return { starters, bench };
+}
+
 export function mapEspnScores(schedule: GeneratedSchedule, league: EspnLeague): PlatformSyncResult {
   const connection = schedule.setup.platformConnection;
   const leagueId = connection?.providerLeagueId || String(league.id);
@@ -174,13 +328,17 @@ export function mapEspnScores(schedule: GeneratedSchedule, league: EspnLeague): 
   // (LeagueWeaver generates its own matchups, so joining on the fantasy pairing
   // would leave a generated schedule almost entirely unscored.)
   const pointsByTeamWeek = new Map<string, number>();
+  const sideByTeamWeek = new Map<string, EspnMatchupSide>();
   for (const matchup of league.schedule ?? []) {
     for (const side of [matchup.home, matchup.away]) {
       if (side?.teamId == null || side.totalPoints == null) continue;
-      pointsByTeamWeek.set(`${matchup.matchupPeriodId}:${espnProviderId(leagueId, side.teamId)}`, side.totalPoints);
+      const key = `${matchup.matchupPeriodId}:${espnProviderId(leagueId, side.teamId)}`;
+      pointsByTeamWeek.set(key, side.totalPoints);
+      sideByTeamWeek.set(key, side);
     }
   }
   const rows: PlatformSyncScoreRow[] = [];
+  const rosterDetails: Record<string, MatchupRosterDetail> = {};
   const unmatched: PlatformSyncResult["unmatched"] = [];
   for (const week of schedule.weeks) {
     for (const game of week.games) {
@@ -194,9 +352,26 @@ export function mapEspnScores(schedule: GeneratedSchedule, league: EspnLeague): 
         continue;
       }
       rows.push({ gameId: game.id, week: week.weekNumber, homeTeamId: home.id, awayTeamId: away.id, homeScore, awayScore, confidence: "high", source: "espn" });
+      const homeSide = sideByTeamWeek.get(`${week.weekNumber}:${home.providerId}`);
+      const awaySide = sideByTeamWeek.get(`${week.weekNumber}:${away.providerId}`);
+      const homeRoster = splitEspnRoster(homeSide);
+      const awayRoster = splitEspnRoster(awaySide);
+      if (homeRoster.starters.length || awayRoster.starters.length || homeRoster.bench.length || awayRoster.bench.length) {
+        rosterDetails[game.id] = {
+          gameId: game.id,
+          week: week.weekNumber,
+          seasonYear: schedule.setup.seasonYear,
+          provider: "espn",
+          sourceSeasonYear: league.seasonId ?? connection?.seasonYear ?? schedule.setup.seasonYear,
+          status: "final",
+          syncedAt: new Date().toISOString(),
+          home: { teamId: home.id, total: homeScore, starters: homeRoster.starters, bench: homeRoster.bench },
+          away: { teamId: away.id, total: awayScore, starters: awayRoster.starters, bench: awayRoster.bench },
+        };
+      }
     }
   }
-  return { rows, unmatched, warnings: unmatched.length ? ["Some weeks had no ESPN scores yet — refresh once those fantasy weeks are final."] : [], syncedAt: new Date().toISOString() };
+  return { rows, rosterDetails, unmatched, warnings: unmatched.length ? ["Some weeks had no ESPN scores yet — refresh once those fantasy weeks are final."] : [], syncedAt: new Date().toISOString() };
 }
 
 export function mapEspnPlayers(schedule: GeneratedSchedule, league: EspnLeague, opts?: { weeks?: number[] }): PlayerWeekStat[] {

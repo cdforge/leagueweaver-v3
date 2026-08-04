@@ -183,6 +183,49 @@ export interface ScheduledGame {
   awayScore?: number;
 }
 
+export interface PlayerScoreDetail {
+  raw: string;
+  label: string;
+  points: number;
+}
+
+export interface MatchupRosterPlayer {
+  id: string;
+  providerPlayerId?: string;
+  name: string;
+  fullName?: string;
+  slot: string;
+  position: string;
+  proTeam?: string;
+  injuryStatus?: string;
+  points?: number;
+  projectedPoints?: number;
+  statLine?: string;
+  statDetails?: PlayerScoreDetail[];
+  headshotUrl?: string;
+  teamLogoUrl?: string;
+}
+
+export interface MatchupRosterSide {
+  teamId: string;
+  total?: number;
+  projectedTotal?: number;
+  starters: MatchupRosterPlayer[];
+  bench: MatchupRosterPlayer[];
+}
+
+export interface MatchupRosterDetail {
+  gameId: string;
+  week: number;
+  seasonYear: number;
+  provider: PlatformProvider;
+  sourceSeasonYear: number;
+  status: "predraft" | "upcoming" | "live" | "final";
+  syncedAt?: string;
+  home: MatchupRosterSide;
+  away: MatchupRosterSide;
+}
+
 export interface ScheduleWeek {
   weekNumber: number;
   dateLabel: string;
@@ -220,6 +263,7 @@ export interface GeneratedSchedule {
   setup: LeagueSetupInput;
   weeks: ScheduleWeek[];
   playoffGames?: PlayoffGame[];
+  matchupRosterDetails?: Record<string, MatchupRosterDetail>;
   rankHistory?: RankHistorySnapshot[];
   fairness: FairnessReport;
   revision: number;
@@ -359,6 +403,7 @@ export interface PlatformSyncScoreRow {
 
 export interface PlatformSyncResult {
   rows: PlatformSyncScoreRow[];
+  rosterDetails?: Record<string, MatchupRosterDetail>;
   unmatched: Array<{ week: number; providerHomeId?: string; providerAwayId?: string; reason: string }>;
   warnings: string[];
   syncedAt: string;
