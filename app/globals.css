@@ -4781,6 +4781,171 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .gdm-player-detail li b { min-width: 50px; color: var(--field-dark); text-align: right; font-variant-numeric: tabular-nums; }
 .gdm-body > footer { background: var(--canvas); color: var(--muted); padding: 9px; text-align: center; font-size: 12px; }
 .is-broadcast .gdm-body > footer { border-top: 1px solid rgb(255 255 255 / .06); background: transparent; color: #8a9a92; }
+
+/* Prototype-aligned roster gamecast skin. The roster sheet should read like the
+   dark ESPN-style reference even when the matchup is not the featured game. */
+.game-detail-modal {
+  border-color: rgb(255 255 255 / .18);
+  background: radial-gradient(135% 95% at 50% -12%, #243129 0%, #141b18 52%, #0b0f0d 100%);
+  color: #eef3f1;
+  box-shadow: 0 30px 88px rgb(0 0 0 / .54);
+}
+.gdm-appbar {
+  border-bottom-color: rgb(255 255 255 / .1);
+  background: #0f1714;
+}
+.gdm-close {
+  background: transparent;
+  color: #cdd8d2;
+}
+.gdm-icon-button:hover,
+.gdm-close:hover {
+  background: rgb(255 255 255 / .1);
+}
+.gdm-week-strip {
+  border-bottom-color: rgb(255 255 255 / .12);
+  background: #111916;
+}
+.gdm-week-card {
+  border-color: rgb(255 255 255 / .13);
+  background: rgb(255 255 255 / .04);
+}
+.gdm-week-card > span {
+  color: #9fb0a8;
+}
+.gdm-week-card em {
+  color: #eef3f1;
+}
+.gdm-week-card em.is-winner,
+.gdm-week-card.is-featured > span,
+.gdm-week-card.is-active > span {
+  color: var(--gold);
+}
+.gdm-week-card.is-active {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold);
+}
+.gdm-gotw-band {
+  box-shadow: 0 2px 16px rgb(227 185 64 / .2);
+}
+.gdm-eyebrow {
+  background: #101915;
+  color: #9fb0a8;
+}
+.gdm-matchup-head {
+  border-bottom-color: rgb(255 255 255 / .12);
+  background: #0e1512;
+}
+.gdm-team-head {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--team) 30%, transparent), transparent);
+}
+.gdm-team-head::after {
+  box-shadow: 0 0 14px 1px var(--team);
+}
+.gdm-rank-row,
+.gdm-team-city {
+  color: #a7b6ae;
+}
+.gdm-rank-row > b {
+  background: #eef3f1;
+}
+.gdm-team-head > strong {
+  color: #fff;
+}
+.gdm-team-score {
+  color: #8a998f;
+}
+.gdm-team-score.is-win {
+  color: var(--gold);
+  text-shadow: 0 0 18px rgb(227 185 64 / .5);
+}
+.gdm-center-status > b {
+  border-color: rgb(255 255 255 / .35);
+  background: transparent;
+  color: #eef3f1;
+}
+.gdm-center-status em {
+  color: #eef3f1;
+}
+.gdm-center-status > span {
+  background: rgb(17 122 69 / .26);
+  color: #9be1ba;
+}
+.gdm-center-status > span.is-featured {
+  background: rgb(227 185 64 / .2);
+  color: var(--gold);
+}
+.gdm-center-status i span {
+  background: rgb(255 255 255 / .2);
+}
+.gdm-winbar {
+  border-bottom-color: rgb(255 255 255 / .12);
+  background: #0f1714;
+}
+.gdm-winbar > span {
+  background: rgb(255 255 255 / .13);
+  box-shadow: 0 0 18px rgb(227 185 64 / .28);
+}
+.gdm-winbar small {
+  color: #9fb0a8;
+}
+.gdm-body {
+  background: #0b100e;
+}
+.gdm-body > h3 {
+  border-bottom-color: rgb(255 255 255 / .1);
+  background: #0f1714;
+  color: var(--gold);
+  letter-spacing: .14em;
+}
+.gdm-pair-row {
+  border-bottom-color: rgb(255 255 255 / .07);
+}
+.gdm-roster-pairs.is-bench .gdm-pair-row {
+  background: rgb(255 255 255 / .03);
+}
+.gdm-slot-center {
+  background: rgb(17 122 69 / .24);
+  color: #9be1ba;
+}
+.gdm-roster-pairs.is-bench .gdm-slot-center {
+  background: rgb(255 255 255 / .12);
+  color: #9fb0a8;
+}
+.gdm-player-cell:hover,
+.gdm-player-cell.is-expanded {
+  background: rgb(255 255 255 / .08);
+}
+.gdm-player-text strong {
+  color: #f1f5f3;
+}
+.gdm-player-text small {
+  color: #9fb0a8;
+}
+.gdm-player-text em {
+  color: #8fa79b;
+}
+.gdm-player-points small {
+  color: #9fb0a8;
+}
+.gdm-player-detail {
+  background: linear-gradient(90deg, rgb(227 185 64 / .18), rgb(255 255 255 / .05));
+}
+.gdm-player-detail p,
+.gdm-player-detail li {
+  color: #b7c5be;
+}
+.gdm-player-detail li {
+  border-bottom-color: rgb(255 255 255 / .14);
+}
+.gdm-player-detail li b {
+  color: var(--gold);
+}
+.gdm-body > footer {
+  border-top: 1px solid rgb(255 255 255 / .06);
+  background: #0f1714;
+  color: #8a9a92;
+}
 @media (max-width: 640px) {
   .game-detail-modal { width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0; }
   .gdm-appbar { min-height: 50px; }

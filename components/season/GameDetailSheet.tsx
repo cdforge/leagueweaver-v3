@@ -28,8 +28,8 @@ function shortTeamLabel(team: Team) {
 }
 
 function scoreValue(side: GameDetailSideVM) {
-  if (side.starterTotal != null) return side.starterTotal;
   if (side.platformTotal != null) return side.platformTotal;
+  if (side.starterTotal != null) return side.starterTotal;
   return null;
 }
 
@@ -92,10 +92,9 @@ function WeekStrip({
   </div>;
 }
 
-function TeamHeader({ side, align, showCity, status }: { side: GameDetailSideVM; align: "away" | "home"; showCity: boolean; status: string }) {
+function TeamHeader({ side, align, showCity, status, won }: { side: GameDetailSideVM; align: "away" | "home"; showCity: boolean; status: string; won: boolean }) {
   const score = status === "upcoming" ? side.projectedTotal ?? scoreValue(side) : scoreValue(side);
   const teamInk = accessibleTeamColor(side.team.color);
-  const won = status === "final" && score != null && side.platformTotal != null && side.starterTotal != null ? score >= side.starterTotal : false;
   return <section className={`gdm-team-head ${align}`} style={{ "--team": side.team.color, "--team-ink": teamInk } as React.CSSProperties}>
     <span className="gdm-rank-row">
       <b>#{side.rank}</b>
@@ -206,6 +205,15 @@ export function GameDetailSheet({
   const contextLabel = vm.isPlayoff ? vm.playoffLabel || "Playoffs" : `Week ${vm.weekNumber}`;
   const isBroadcast = vm.featured;
   const slateGames = navigation?.games ?? schedule.weeks.find((week) => week.weekNumber === vm.weekNumber)?.games ?? [vm.game];
+  const awayScore = scoreValue(vm.away);
+  const homeScore = scoreValue(vm.home);
+  const awayWon = vm.status === "final" && awayScore != null && homeScore != null && awayScore > homeScore;
+  const homeWon = vm.status === "final" && awayScore != null && homeScore != null && homeScore > awayScore;
+  const displayedWinProbability = winProbability
+    ? winProbability
+    : vm.status === "final" && awayScore != null && homeScore != null && awayScore !== homeScore
+      ? { away: awayWon ? 1 : 0, home: homeWon ? 1 : 0 }
+      : undefined;
   const handleTouchEnd = (event: React.TouchEvent) => {
     const start = touchStart.current;
     touchStart.current = null;
@@ -241,15 +249,15 @@ export function GameDetailSheet({
         {contextLabel}<span>·</span>{vm.dateLabel}<span>·</span><MapPin />{vm.stadium}
       </div>
       <div className="gdm-matchup-head">
-        <TeamHeader side={vm.away} align="away" showCity={showCity} status={vm.status} />
+        <TeamHeader side={vm.away} align="away" showCity={showCity} status={vm.status} won={awayWon} />
         <CenterStatus stateLabel={stateLabel} rating={vm.ratingScore10} featured={isBroadcast} status={vm.status} />
-        <TeamHeader side={vm.home} align="home" showCity={showCity} status={vm.status} />
+        <TeamHeader side={vm.home} align="home" showCity={showCity} status={vm.status} won={homeWon} />
       </div>
-      {winProbability && vm.status !== "final" && <div className="gdm-winbar">
-        <b style={{ color: vm.away.team.color }}>{Math.round(winProbability.away * 100)}%</b>
-        <span><i style={{ width: `${Math.round(winProbability.away * 100)}%`, background: vm.away.team.color }} /><i style={{ width: `${Math.round(winProbability.home * 100)}%`, background: vm.home.team.color }} /></span>
-        <b style={{ color: vm.home.team.color }}>{Math.round(winProbability.home * 100)}%</b>
-        <small>Projected Win Probability</small>
+      {displayedWinProbability && <div className="gdm-winbar">
+        <b style={{ color: vm.away.team.color }}>{Math.round(displayedWinProbability.away * 100)}%</b>
+        <span><i style={{ width: `${Math.round(displayedWinProbability.away * 100)}%`, background: vm.away.team.color }} /><i style={{ width: `${Math.round(displayedWinProbability.home * 100)}%`, background: vm.home.team.color }} /></span>
+        <b style={{ color: vm.home.team.color }}>{Math.round(displayedWinProbability.home * 100)}%</b>
+        <small>{vm.status === "final" ? "Final" : "Projected Win Probability"}</small>
       </div>}
       {vm.unsynced && <div className="gdm-unsynced" role="status">Roster details appear after ESPN or Sleeper player data syncs.</div>}
       <main className="gdm-body">
