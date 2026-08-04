@@ -1,5 +1,13 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { AppHeader } from "@/components/AppHeader";
+import { absoluteUrl } from "@/lib/seo";
+
+export const metadata: Metadata = {
+  title: "Privacy Policy",
+  description: "Read how League Weaver handles account details, league setup, schedule data, imports, platform connections, notifications, ads, cookies, and privacy choices.",
+  alternates: { canonical: absoluteUrl("/privacy") },
+};
 
 export default function PrivacyPage() {
   return <main className="legal-page"><AppHeader /><article className="legal-copy page-width"><p className="eyebrow">Privacy</p><h1>Privacy Policy</h1><p className="legal-updated">Effective July 29, 2026</p><h2>What we collect</h2><p>League Weaver stores account details, league and team setup, generated schedules, scores, import records, platform connection settings, and notification choices needed to provide the service.</p><h2>Imports</h2><p>Sleeper and ESPN data are used only for imports and sync actions you request. We never ask for ESPN or Sleeper passwords. Private ESPN permission values are optional, encrypted when saved, and can be deleted by disconnecting the platform.</p><h2>Email</h2><p>Resend delivers requested schedule email. League Weaver does not sell account or league contact information.</p><h2>Ads and cookies</h2><p>Pages may show quiet ads. Advertising scripts should load only after marketing consent where required. Essential account and security cookies do not require marketing consent.</p><h2>Your choices</h2><p>You can export your schedules, disconnect platform sync, unsubscribe from public schedule emails, or contact us to request account deletion.</p><h2>Contact</h2><p>Questions can be sent through the account support channel. See the <Link href="/terms">Terms of Service</Link> for service rules.</p></article></main>;

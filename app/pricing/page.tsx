@@ -1,6 +1,14 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { CalendarDays, Check, ShieldCheck } from "lucide-react";
 import { AppHeader } from "@/components/AppHeader";
+import { absoluteUrl } from "@/lib/seo";
+
+export const metadata: Metadata = {
+  title: "Pricing",
+  description: "League Weaver is free for the MVP release, including schedule generation, saved schedules, manual score entry, standings, CSV and PDF exports, and public sharing.",
+  alternates: { canonical: absoluteUrl("/pricing") },
+};
 
 const included = [
   "Unlimited schedule generation",

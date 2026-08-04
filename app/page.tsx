@@ -5,12 +5,14 @@ import { MySchedulesButton } from "@/components/welcome/MySchedulesButton";
 import { SchedulePreview } from "@/components/welcome/SchedulePreview";
 import { AdUnit } from "@/components/ads/AdUnit";
 import { CalendarDays, Trophy, Users } from "lucide-react";
+import { absoluteUrl } from "@/lib/seo";
 
 const OG_DESCRIPTION = "Ditch the boring round-robin. Build a real NFL-style schedule — seeded off last season, with rivalry weeks and marquee games.";
 
 export const metadata: Metadata = {
-  title: "Fantasy Football Schedule Generator | League Weaver",
+  title: "Fantasy Football Schedule Generator",
   description: "Build an NFL-style fantasy football schedule — seeded off last season, with rivalry weeks and marquee games — then run the whole season from one workspace.",
+  alternates: { canonical: absoluteUrl("/") },
   openGraph: {
     title: "League Weaver — NFL-style fantasy football schedules",
     description: OG_DESCRIPTION,
@@ -39,8 +41,25 @@ const STEPS = [
 ];
 
 export default function HomePage() {
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    name: "League Weaver",
+    applicationCategory: "SportsApplication",
+    operatingSystem: "Web",
+    url: absoluteUrl("/"),
+    description: "League Weaver helps fantasy football commissioners build NFL-style schedules with divisions, rivalry weeks, marquee games, standings, sharing, and exports.",
+    offers: {
+      "@type": "Offer",
+      price: "0",
+      priceCurrency: "USD",
+      availability: "https://schema.org/InStock",
+    },
+  };
+
   return (
     <main>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
       <AppHeader />
       <section className="welcome-hero" aria-labelledby="welcome-title">
         {/* Two framings of the same animation: a wide, right-weighted cut for the

@@ -1,8 +1,16 @@
+import type { Metadata } from "next";
 import { AppHeader } from "@/components/AppHeader";
 import { LeagueBuilder } from "@/components/builder/LeagueBuilder";
 import { WelcomeGate } from "@/components/WelcomeGate";
 import { AdUnit } from "@/components/ads/AdUnit";
 import { CheckCircle2, FileDown, RefreshCw, Trophy } from "lucide-react";
+import { absoluteUrl } from "@/lib/seo";
+
+export const metadata: Metadata = {
+  title: "Build a Fantasy Football Schedule",
+  description: "Use the League Weaver builder to create an NFL-style fantasy football schedule with divisions, rivalry weeks, fairness rules, playoff previews, sharing, and exports.",
+  alternates: { canonical: absoluteUrl("/build") },
+};
 
 export default function BuildPage() {
   return (

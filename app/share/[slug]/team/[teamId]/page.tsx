@@ -21,10 +21,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug, teamId } = await params;
   const schedule = await loadPublishedSchedule(slug);
   const team = schedule?.setup.teams.find((item) => item.id === teamId);
-  if (!schedule || !team) return { title: "Team schedule" };
+  if (!schedule || !team) return { title: "Team schedule", robots: { index: false, follow: false } };
   return {
     title: `${teamDisplayName(team, schedule.setup.display?.cityNames !== false)} - ${schedule.setup.name}`,
     description: `Public team dashboard for ${schedule.setup.name}.`,
+    robots: { index: false, follow: false },
   };
 }
 

@@ -68,6 +68,7 @@ export function AppHeader() {
   const [scheduleLabel, setScheduleLabel] = useState("Sign in for schedules");
   const schedulesActive = pathname.startsWith("/fantasy/schedules") || pathname.startsWith("/season") || pathname.startsWith("/build");
   const leaguesActive = pathname.startsWith("/fantasy/leagues");
+  const faqActive = pathname.startsWith("/faq");
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -121,6 +122,7 @@ export function AppHeader() {
           <ResumeLatestButton />
           <Link href={scheduleHref} className={schedulesActive ? "active" : ""} aria-current={schedulesActive ? "page" : undefined}>{scheduleLabel}</Link>
           <Link href="/fantasy/leagues" className={leaguesActive ? "active" : ""} aria-current={leaguesActive ? "page" : undefined}>Saved Leagues</Link>
+          <Link href="/faq" className={faqActive ? "active" : ""} aria-current={faqActive ? "page" : undefined}>FAQ</Link>
           <AccountIdentity />
         </nav>
         <button type="button" className="mobile-menu-button" aria-label={mobileMenuOpen ? "Close menu" : "Open menu"} aria-expanded={mobileMenuOpen} aria-controls="mobile-site-menu" onClick={() => setMobileMenuOpen((open) => !open)}>
@@ -138,6 +140,7 @@ export function AppHeader() {
             <ResumeLatestButton />
             <Link href={scheduleHref} className={schedulesActive ? "active" : ""} aria-current={schedulesActive ? "page" : undefined}>{scheduleLabel}</Link>
             <Link href="/fantasy/leagues" className={leaguesActive ? "active" : ""} aria-current={leaguesActive ? "page" : undefined}>Saved Leagues</Link>
+            <Link href="/faq" className={faqActive ? "active" : ""} aria-current={faqActive ? "page" : undefined}>FAQ</Link>
           </nav>
           <nav className="mobile-menu-legal" aria-label="Legal">
             <span>More</span>
