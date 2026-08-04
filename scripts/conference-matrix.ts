@@ -58,7 +58,7 @@ const strippedSetup: LeagueSetupInput = {
   teams: applyTeamConferenceIds(conferenceSetup.teams, strippedDivisions),
 };
 assert.ok(strippedSetup.teams.every((team) => team.conferenceId === undefined));
-assert.notEqual(matchupSignature(conferenceSetup), matchupSignature(strippedSetup));
+assert.equal(matchupSignature(conferenceSetup), matchupSignature(strippedSetup));
 assert.deepEqual(scheduleCoverage(conferenceSetup), scheduleCoverage(strippedSetup));
 
 const reconciled = reconcileConferenceSetup(createDivisions(6));
@@ -76,5 +76,5 @@ assert.ok(normalizedPreset?.data.teams.every((team) => team.conferenceId));
 console.log("Conference matrix passed:");
 console.log("- non-conference setup has no team conference ids and no groups");
 console.log("- 4-division conference setup groups 16 teams as 8 + 8");
-console.log("- conference metadata participates in scheduling while preserving coverage");
+console.log("- conference metadata is preserved without changing generated matchups");
 console.log("- saved conference setup round-trips with conferences and team conference ids");

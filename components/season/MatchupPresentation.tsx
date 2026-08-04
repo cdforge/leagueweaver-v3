@@ -213,7 +213,7 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, setu
   const awayResult = !played ? "open" : game.awayScore! > game.homeScore! ? "winner" : game.awayScore! < game.homeScore! ? "loser" : "open";
   const homeResult = !played ? "open" : game.homeScore! > game.awayScore! ? "winner" : game.homeScore! < game.awayScore! ? "loser" : "open";
   const openLabel = `Open box score for ${away.name} at ${home.name}`;
-  const teamHref = (teamId: string) => teamHrefFor ? teamHrefFor(teamId) : teamHrefBase ? `${teamHrefBase}/${teamId}` : undefined;
+  const teamHref = (teamId: string) => onOpenGame ? undefined : teamHrefFor ? teamHrefFor(teamId) : teamHrefBase ? `${teamHrefBase}/${teamId}` : undefined;
   return <article
     id={game.id}
     className={`matchup-card ${onOpenGame ? "is-openable" : ""} ${featured ? "is-gotw" : ""} ${highlighted ? "is-stat-highlight" : ""} ${showProjected ? "is-projected" : ""} ${simulationSource ? `is-simulated simulation-${simulationSource}` : ""} matchup-card-${variant}`}

@@ -93,7 +93,6 @@ import { PlayoffLivePreview } from "@/components/playoffs/PlayoffLivePreview";
 import { StakesButton } from "@/components/season/StakesPanel";
 import { getLiveWeek } from "@/lib/scenarios";
 import { CustomSelect } from "@/components/ui/CustomSelect";
-import { FloatingPopover } from "@/components/ui/FloatingPopover";
 import { Modal, ConfirmDialog } from "@/components/ui/Modal";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { ConnectScoresModal } from "@/components/platform/ConnectScoresModal";
@@ -1948,10 +1947,12 @@ function MatchupRatingsView({
   schedule,
   teamHrefFor,
   leagueWeekHrefFor,
+  onOpenGame,
 }: {
   schedule: GeneratedSchedule;
   teamHrefFor?: (teamId: string) => string;
   leagueWeekHrefFor?: (week: number) => string;
+  onOpenGame?: (gameId: string) => void;
 }) {
   // Fixed presentation: all matchups, strongest first, weekly-standings lens.
   const lens: "live" | "preseason" = "live";
@@ -2078,8 +2079,46 @@ function MatchupRatingsView({
               const isGameOfWeek = scheduleSignals.gotwIds.has(game.id);
               return (
                 <tr
-                  className={isGameOfWeek ? "is-gotw" : undefined}
+                  className={[
+                    onOpenGame ? "is-openable" : "",
+                    isGameOfWeek ? "is-gotw" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   key={game.id}
+                  role={onOpenGame ? "button" : undefined}
+                  tabIndex={onOpenGame ? 0 : undefined}
+                  aria-label={
+                    onOpenGame
+                      ? `Open game details for Week ${game.week}, ${away.name} at ${home.name}`
+                      : undefined
+                  }
+                  onClick={(event) => {
+                    if (
+                      onOpenGame &&
+                      !(
+                        event.target instanceof HTMLElement &&
+                        event.target.closest(
+                          "a, button, input, select, textarea, summary",
+                        )
+                      )
+                    )
+                      onOpenGame(game.id);
+                  }}
+                  onKeyDown={(event) => {
+                    if (
+                      !onOpenGame ||
+                      (event.target instanceof HTMLElement &&
+                        event.target.closest(
+                          "a, button, input, select, textarea, summary",
+                        ))
+                    )
+                      return;
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onOpenGame(game.id);
+                    }
+                  }}
                 >
                   <td>
                     <Link
@@ -2231,6 +2270,7 @@ function MatchupRatingsView({
               showVenue={false}
               teamHrefBase={`/season/${schedule.id}/team`}
               teamHrefFor={teamHrefFor}
+              onOpenGame={onOpenGame}
             />
           );
         })}
@@ -6765,6 +6805,7 @@ export function SeasonWorkspace({
       });
       const result = (await response.json().catch(() => ({}))) as {
         rows?: Array<ImportedScoreRow & { confidence?: "high" | "review" }>;
+        rosterDetails?: GeneratedSchedule["matchupRosterDetails"];
         unmatched?: unknown[];
         warnings?: string[];
         syncedAt?: string;
@@ -6791,6 +6832,10 @@ export function SeasonWorkspace({
           );
           return freezeCompletedRankHistory({
             ...updated,
+            matchupRosterDetails: {
+              ...(updated.matchupRosterDetails ?? {}),
+              ...(result.rosterDetails ?? {}),
+            },
             setup: {
               ...updated.setup,
               platformConnection: updated.setup.platformConnection
@@ -6805,6 +6850,19 @@ export function SeasonWorkspace({
           });
         });
       } else {
+        if (result.rosterDetails) {
+          setSchedule((current) =>
+            current
+              ? {
+                  ...current,
+                  matchupRosterDetails: {
+                    ...(current.matchupRosterDetails ?? {}),
+                    ...result.rosterDetails,
+                  },
+                }
+              : current,
+          );
+        }
         updatePlatformConnection({
           lastSyncAt: result.syncedAt,
           status: result.warnings?.length ? "warning" : "ready",
@@ -7572,9 +7630,6 @@ export function SeasonWorkspace({
     setView("settings");
     router.push(`/season/${schedule.id}?view=settings`);
   };
-  const openCopySheetPreview = () => {
-    setShowPrintPreview(true);
-  };
   const downloadPrintPdf = async (
     provider: PrintProvider,
     mode: EspnPrintMode,
@@ -7841,6 +7896,7 @@ export function SeasonWorkspace({
                         label: modalGameLabel(modalNextGame),
                       }
                     : undefined,
+                  games: modalGames,
                   onSelect: openGameDetail,
                 }
               : undefined
@@ -7956,8 +8012,8 @@ export function SeasonWorkspace({
                 </h1>
               </span>
             </div>
-            <div className="toolbar-actions">
-              {showHistoryPicker && (
+            {showHistoryPicker && (
+              <div className="toolbar-actions">
                 <CustomSelect
                   label={`Select ${currentTitle} season`}
                   value={effectiveHistorySeasonKey}
@@ -7965,52 +8021,8 @@ export function SeasonWorkspace({
                   onChange={selectHistorySeason}
                   showSelectedDescription={false}
                 />
-              )}
-              <button type="button" onClick={() => setShowRecap(true)}>
-                <Sparkles />
-                Recap
-              </button>
-              <button type="button" onClick={openCopySheetPreview}>
-                <Printer />
-                Copy Sheet
-              </button>
-              <FloatingPopover
-                className="toolbar-more"
-                label="More schedule actions"
-                trigger={
-                  <>
-                    <MoreHorizontal />
-                    <span>More</span>
-                    <ChevronDown />
-                  </>
-                }
-                menuClassName="toolbar-more-menu"
-              >
-                <button
-                  type="button"
-                  onClick={() =>
-                    downloadCsv(workspaceSchedule ?? activeSchedule)
-                  }
-                >
-                  <Download />
-                  CSV
-                </button>
-                {canSyncHistory && (
-                  <button
-                    type="button"
-                    onClick={() => void syncLeagueHistory()}
-                    disabled={historySyncing}
-                  >
-                    {historySyncing ? (
-                      <LoaderCircle className="spin" />
-                    ) : (
-                      <History />
-                    )}
-                    Sync history
-                  </button>
-                )}
-              </FloatingPopover>
-            </div>
+              </div>
+            )}
           </div>
           {currentViewBetaCopy && (
             <section className="workspace-beta-banner" aria-label="Beta feature notice">
@@ -8328,6 +8340,7 @@ export function SeasonWorkspace({
               view === "matchup-ratings" && (
                 <MatchupRatingsView
                   schedule={workspaceSchedule ?? activeSchedule}
+                  onOpenGame={openGameDetail}
                   teamHrefFor={(teamId) =>
                     hrefWithHistorySeason(
                       `/season/${schedule.id}/team/${teamId}`,

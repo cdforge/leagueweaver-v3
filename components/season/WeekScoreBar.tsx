@@ -364,6 +364,7 @@ export function WeekScoreBar({
     };
     const onDown = (event: PointerEvent) => {
       if (event.pointerType === "mouse" && event.button !== 0) return;
+      if ((event.target as HTMLElement).closest(".sb-game")) return;
       dragging = true;
       moved = 0;
       startX = event.clientX;
@@ -378,11 +379,16 @@ export function WeekScoreBar({
       sc.scrollLeft = startLeft - dx;
       fades();
     };
-    const endDrag = () => {
+    const endDrag = (event?: PointerEvent) => {
       if (!dragging) return;
+      const wasTap = moved <= 6;
       dragging = false;
       sc.classList.remove("dragging");
       pause(2000);
+      if (wasTap && event) {
+        const card = (event.target as HTMLElement).closest<HTMLButtonElement>(".sb-game");
+        if (card) card.click();
+      }
     };
     const onClickCapture = (event: MouseEvent) => {
       if (moved > 6) { event.preventDefault(); event.stopPropagation(); }

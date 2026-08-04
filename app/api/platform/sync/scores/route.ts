@@ -169,9 +169,10 @@ export async function POST(request: Request) {
   const connection = schedule?.setup?.platformConnection;
   if (!connection?.provider || !connection.providerLeagueId) return NextResponse.json({ error: "This season is not connected to ESPN or Sleeper." }, { status: 400 });
   try {
+    const week = parsed.data.week ?? 1;
     const result = connection.provider === "espn"
-      ? mapEspnScores(schedule, await fetchEspnLeague(connection.providerLeagueId, connection.seasonYear, ["mMatchup", "mScoreboard"], await loadEspnAuth(schedule)))
-      : await mapSleeperScores(schedule, parsed.data.week ?? 1);
+      ? mapEspnScores(schedule, await fetchEspnLeague(connection.providerLeagueId, connection.seasonYear, ["mBoxscore", "mRoster", "mTeam", "mSettings", "mMatchup", "mScoreboard"], await loadEspnAuth(schedule), { scoringPeriodId: week }))
+      : await mapSleeperScores(schedule, week, { includeRosterDetails: true });
     await persistScores(schedule, result);
     try {
       const playerSync = await persistPlayers(schedule, parsed.data.week ? [parsed.data.week] : undefined);

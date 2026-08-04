@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createDefaultSetup, createDivisions, createTeams } from "../lib/defaults";
 import { buildGameDetailVM, type GameDetailPlayerStat } from "../lib/gameDetail";
 import { generateLeagueSchedule } from "../lib/schedule";
-import type { LeagueSetupInput, PlayoffGame } from "../lib/types";
+import type { LeagueSetupInput, MatchupRosterDetail, PlayoffGame } from "../lib/types";
 
 let checks = 0;
 function check(value: unknown, message: string) {
@@ -73,6 +73,57 @@ assert.equal(synced.away.platformTotal, 44.44, "platform team score remains avai
 check(synced.ratingScore10 >= 0.1 && synced.ratingScore10 <= 10, "rating is score10");
 check(!synced.unsynced, "synced data is detected");
 check(synced.stadium === game.stadium, "stadium is the real scheduled stadium");
+
+const rosterDetail: MatchupRosterDetail = {
+  gameId: game.id,
+  week: game.week,
+  seasonYear: schedule.setup.seasonYear,
+  provider: "espn",
+  sourceSeasonYear: 2025,
+  status: "final",
+  home: {
+    teamId: game.homeTeamId,
+    total: 111.22,
+    starters: [
+      { id: "espn-home-qb", name: "Roster Home QB", slot: "QB", position: "QB", proTeam: "KC", points: 31.4, projectedPoints: 24.2, statLine: "250 Pass Yds, 2 Pass TD" },
+    ],
+    bench: [
+      { id: "espn-home-bench", name: "Roster Home Bench", slot: "BE", position: "RB", proTeam: "DET", points: 8.8 },
+    ],
+  },
+  away: {
+    teamId: game.awayTeamId,
+    total: 99.11,
+    starters: [
+      { id: "espn-away-qb", name: "Roster Away QB", slot: "QB", position: "QB", proTeam: "BUF", points: 28.6, projectedPoints: 22.9 },
+    ],
+    bench: [],
+  },
+};
+const rosterSchedule = { ...schedule, matchupRosterDetails: { [game.id]: rosterDetail } };
+const rosterSynced = buildGameDetailVM(rosterSchedule, game.id, []);
+assert.equal(rosterSynced?.away.starters[0]?.name, "Roster Away QB", "matchup roster detail feeds away starters");
+assert.equal(rosterSynced?.home.starters[0]?.projected, 24.2, "matchup roster detail carries projections");
+assert.equal(rosterSynced?.home.bench[0]?.name, "Roster Home Bench", "matchup roster detail feeds bench");
+assert.equal(rosterSynced?.home.platformTotal, 111.22, "matchup roster detail carries platform total");
+assert.equal(rosterSynced?.status, "final", "matchup roster detail carries final status");
+assert.equal(rosterSynced?.away.overallRecord, "0-0", "matchup detail carries entering overall record");
+assert.equal(rosterSynced?.away.divisionRecord, "0-0", "matchup detail carries entering division record");
+const upcomingDetail: MatchupRosterDetail = {
+  ...rosterDetail,
+  status: "upcoming",
+  home: { ...rosterDetail.home, total: undefined, projectedTotal: 44.4 },
+  away: { ...rosterDetail.away, total: undefined, projectedTotal: 33.3 },
+};
+const upcomingSynced = buildGameDetailVM({ ...schedule, matchupRosterDetails: { [game.id]: upcomingDetail } }, game.id, []);
+assert.equal(upcomingSynced?.status, "upcoming", "matchup roster detail carries upcoming status");
+assert.equal(upcomingSynced?.home.projectedTotal, 44.4, "upcoming roster detail carries projected total");
+const liveSynced = buildGameDetailVM({ ...schedule, matchupRosterDetails: { [game.id]: { ...rosterDetail, status: "live" } } }, game.id, []);
+assert.equal(liveSynced?.status, "live", "matchup roster detail carries live status");
+const predraftSynced = buildGameDetailVM({ ...schedule, matchupRosterDetails: { [game.id]: { ...rosterDetail, status: "predraft" } } }, game.id, []);
+assert.equal(predraftSynced?.status, "predraft", "matchup roster detail carries predraft status");
+checks += 11;
+
 const orderedRows = [
   row(game.awayTeamId, "away-flex", 8.1, "starter", 4, "FLEX"),
   row(game.awayTeamId, "away-wr", 9.2, "starter", 2, "WR"),
