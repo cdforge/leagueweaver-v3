@@ -5127,6 +5127,11 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .gdm-content.is-collapsed .gdm-team-title-copy strong { font-size: 13px; -webkit-line-clamp: 1; }
 .gdm-content.is-collapsed .gdm-team-score { margin-top: 2px; font-size: 18px; }
 .gdm-content.is-collapsed .gdm-center-status { gap: 3px; padding: 5px 6px 7px; }
+.game-detail-modal .gdm-content.is-collapsed .gdm-matchup-head .gdm-team-head .gdm-team-watermark.entity-logo {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
 
 @media (min-width: 641px) {
   .gdm-content.is-collapsed .gdm-team-head .entity-logo {
