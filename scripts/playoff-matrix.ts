@@ -379,7 +379,7 @@ check(() => {
 
 check(() => {
   // 16 teams / 6 playoff teams / 13-week regular season with 4 playoff weeks: all ten
-  // consolation teams fit. Empty placeholder rounds are filtered from the projection.
+  // consolation teams fit across the full placement projection.
   const divisions = defaultConferenceAssignment(createDivisions(4), createConferences(2));
   const conferences = createConferences(2);
   const base = createDefaultSetup();
@@ -389,10 +389,10 @@ check(() => {
   assert.equal(bracket.placementCap, 16);
   assert.equal(bracket.admittedTeamIds.length, 10);
   assert.equal(bracket.eliminatedTeamIds.length, 0);
-  assert.equal(bracket.rounds.length, 3);
-  assert.equal(bracket.rounds[0].games.length, 4);
+  assert.equal(bracket.rounds.length, 4);
+  assert.equal(bracket.rounds[0].games.length, 2);
   assert.ok(bracket.rounds[1].games.some((game) => game.entrants.some((entrant) => entrant.projectedSeed <= 8)));
-  assert.ok(bracket.rounds[2].games.some((game) => game.label === "7th Place"));
+  assert.ok(bracket.rounds[3].games.some((game) => game.label === "7th Place"));
 });
 
 check(() => {
