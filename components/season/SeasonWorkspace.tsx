@@ -6757,6 +6757,7 @@ export function SeasonWorkspace({
       });
       const result = (await response.json().catch(() => ({}))) as {
         rows?: Array<ImportedScoreRow & { confidence?: "high" | "review" }>;
+        rosterDetails?: GeneratedSchedule["matchupRosterDetails"];
         unmatched?: unknown[];
         warnings?: string[];
         syncedAt?: string;
@@ -6783,6 +6784,10 @@ export function SeasonWorkspace({
           );
           return freezeCompletedRankHistory({
             ...updated,
+            matchupRosterDetails: {
+              ...(updated.matchupRosterDetails ?? {}),
+              ...(result.rosterDetails ?? {}),
+            },
             setup: {
               ...updated.setup,
               platformConnection: updated.setup.platformConnection
@@ -6797,6 +6802,19 @@ export function SeasonWorkspace({
           });
         });
       } else {
+        if (result.rosterDetails) {
+          setSchedule((current) =>
+            current
+              ? {
+                  ...current,
+                  matchupRosterDetails: {
+                    ...(current.matchupRosterDetails ?? {}),
+                    ...result.rosterDetails,
+                  },
+                }
+              : current,
+          );
+        }
         updatePlatformConnection({
           lastSyncAt: result.syncedAt,
           status: result.warnings?.length ? "warning" : "ready",
@@ -7829,6 +7847,7 @@ export function SeasonWorkspace({
                         label: modalGameLabel(modalNextGame),
                       }
                     : undefined,
+                  games: modalGames,
                   onSelect: openGameDetail,
                 }
               : undefined

@@ -1,7 +1,7 @@
 import { getMatchupRatingRange, getMatchupSignal } from "@/lib/matchups";
 import { getEnteringWeekRankSnapshot } from "@/lib/standings";
 import { lineupSlotSortRank, type LineupStatus, type PlayerWeekStat, type SlotKey } from "@/lib/playerData";
-import type { Division, GeneratedSchedule, ScheduledGame, Team } from "@/lib/types";
+import type { Division, GeneratedSchedule, MatchupRosterPlayer, MatchupRosterSide, PlayerScoreDetail, ScheduledGame, Team } from "@/lib/types";
 
 export interface GameDetailPlayerStat extends PlayerWeekStat {
   displayName?: string;
@@ -21,6 +21,9 @@ export interface GameDetailSlotVM {
   nflTeam?: string;
   points: number;
   projected?: number;
+  statLine?: string;
+  statDetails?: PlayerScoreDetail[];
+  source: "player-stats" | "roster-detail";
   lineupStatus: LineupStatus;
   starterIndex?: number;
   confidence: PlayerWeekStat["slotConfidence"];
@@ -87,10 +90,47 @@ function toSlotVM(row: GameDetailPlayerStat): GameDetailSlotVM {
     nflTeam: row.nflTeam,
     points: row.points,
     projected: row.projected,
+    source: "player-stats",
     lineupStatus: row.lineupStatus,
     starterIndex: row.starterIndex,
     confidence: row.slotConfidence,
     isProvisional: row.isProvisional,
+  };
+}
+
+function rosterPlayerToSlotVM({
+  player,
+  teamId,
+  weekNumber,
+  lineupStatus,
+  starterIndex,
+}: {
+  player: MatchupRosterPlayer;
+  teamId: string;
+  weekNumber: number;
+  lineupStatus: LineupStatus;
+  starterIndex?: number;
+}): GameDetailSlotVM {
+  const providerPlayerId = player.providerPlayerId || player.id;
+  return {
+    key: `${teamId}:${weekNumber}:${player.id}:${lineupStatus}:${starterIndex ?? "bench"}`,
+    teamId,
+    week: weekNumber,
+    playerId: providerPlayerId,
+    canonicalPlayerId: providerPlayerId,
+    name: player.name || player.fullName || providerPlayerId,
+    slot: player.slot,
+    position: player.position || player.slot,
+    nflTeam: player.proTeam,
+    points: typeof player.points === "number" ? player.points : 0,
+    projected: player.projectedPoints,
+    statLine: player.statLine,
+    statDetails: player.statDetails,
+    source: "roster-detail",
+    lineupStatus,
+    starterIndex,
+    confidence: lineupStatus === "starter" ? "confirmed" : "bench",
+    isProvisional: false,
   };
 }
 
@@ -107,6 +147,7 @@ function sideVM({
   weekNumber,
   rank,
   platformTotal,
+  rosterSide,
 }: {
   rows: GameDetailPlayerStat[];
   team: Team;
@@ -114,7 +155,26 @@ function sideVM({
   weekNumber: number;
   rank: number;
   platformTotal: number | null;
+  rosterSide?: MatchupRosterSide;
 }): GameDetailSideVM {
+  if (rosterSide && (rosterSide.starters.length || rosterSide.bench.length)) {
+    const starters = rosterSide.starters.map((player, index) => rosterPlayerToSlotVM({ player, teamId: team.id, weekNumber, lineupStatus: "starter", starterIndex: index }));
+    const bench = rosterSide.bench.map((player) => rosterPlayerToSlotVM({ player, teamId: team.id, weekNumber, lineupStatus: "bench" }));
+    const starterTotal = starters.some((row) => Number.isFinite(row.points))
+      ? Math.round(starters.reduce((sum, row) => sum + row.points, 0) * 100) / 100
+      : scoreValue(rosterSide.total);
+    return {
+      team,
+      division,
+      rank,
+      platformTotal: scoreValue(rosterSide.total) ?? platformTotal,
+      starterTotal,
+      starters,
+      bench,
+      reserves: [],
+      hasPlayerData: true,
+    };
+  }
   const teamRows = rowsForSide(rows, team.id, weekNumber);
   const starters = teamRows.filter(isStarter).map(toSlotVM);
   const bench = teamRows.filter((row) => row.lineupStatus === "bench" || row.lineupStatus === "unknown").map(toSlotVM);
@@ -154,6 +214,9 @@ export function buildGameDetailVM(schedule: GeneratedSchedule, gameId: string, p
   const ratingRange = getMatchupRatingRange(week?.games ?? [game], rankByTeam);
   const signal = getMatchupSignal(game, rankByTeam, ratingRange, schedule.setup.teams.length);
   const featured = Boolean(week?.games.some((candidate) => candidate.id === game.id && candidate.gameNumber === 1));
+  const rosterDetail = schedule.matchupRosterDetails?.[game.id];
+  const rosterHome = rosterDetail?.home.teamId === home.id ? rosterDetail.home : rosterDetail?.away.teamId === home.id ? rosterDetail.away : undefined;
+  const rosterAway = rosterDetail?.away.teamId === away.id ? rosterDetail.away : rosterDetail?.home.teamId === away.id ? rosterDetail.home : undefined;
 
   const awaySide = sideVM({
     rows: playerStats,
@@ -162,6 +225,7 @@ export function buildGameDetailVM(schedule: GeneratedSchedule, gameId: string, p
     weekNumber,
     rank: rankByTeam.get(away.id) ?? away.overallRank,
     platformTotal: scoreValue(game.awayScore),
+    rosterSide: rosterAway,
   });
   const homeSide = sideVM({
     rows: playerStats,
@@ -170,6 +234,7 @@ export function buildGameDetailVM(schedule: GeneratedSchedule, gameId: string, p
     weekNumber,
     rank: rankByTeam.get(home.id) ?? home.overallRank,
     platformTotal: scoreValue(game.homeScore),
+    rosterSide: rosterHome,
   });
 
   return {

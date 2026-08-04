@@ -348,11 +348,9 @@ export function projectConsolationBracket(schedule: GeneratedSchedule): Projecte
     fallbackReason = "Division-halves placement needs exactly two divisions and four non-playoff teams, split two per division. This projection uses standard placement instead.";
   }
 
-  // The consolation bracket runs in the championship's weeks, so it is at most `roundNames.length`
-  // rounds deep — a single-ranking bracket that deep seats at most 2^rounds teams. Any lower seeds
-  // beyond that cap are CUT: eliminated at the end of the regular season with no consolation game
-  // (previously the bracket tried to seat everyone and silently dropped the overflow games).
-  const consolationCap = 2 ** roundNames.length;
+  // The consolation bracket runs in the available playoff weeks. A 13-week season can expose a
+  // fourth placement week even when the main six-team bracket only needs three rounds.
+  const consolationCap = 2 ** availablePlayoffWeeks;
   const seatedNonPlayoff = nonPlayoffEntrants.slice(0, consolationCap);
 
   if (seatedNonPlayoff.length >= 2 && mode === "division-halves") {
