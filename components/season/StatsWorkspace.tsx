@@ -32,6 +32,7 @@ import {
 import { CustomSelect, type SelectOption } from "@/components/ui/CustomSelect";
 import { Modal, ConfirmDialog } from "@/components/ui/Modal";
 import { ClinchBadges } from "@/components/season/ClinchBadges";
+import { GameDetailSheet } from "@/components/season/GameDetailSheet";
 import { GameBadgeChip } from "@/components/season/MatchupPresentation";
 import { ConferenceMark, DivisionIdentity } from "@/components/ui/DivisionIdentity";
 import { useRouteBase } from "@/components/season/routeBase";
@@ -45,6 +46,7 @@ import type { GameDetailPlayerStat } from "@/lib/gameDetail";
 import { divisionAcronym, leagueAcronym, resolveInitials } from "@/lib/monograms";
 import { buildMvt } from "@/lib/mvt";
 import type { LineupTemplate, SlotKey } from "@/lib/playerData";
+import { normalizePlayoffSettings, projectPlayoffSeeds } from "@/lib/playoffs";
 import { calculateSeasonOdds } from "@/lib/simulator";
 import { formatDivisionRecord, formatRecord, getLiveRankHistory, resolveStandings } from "@/lib/standings";
 import {
@@ -69,12 +71,18 @@ import {
 import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
 import type { Division, GeneratedSchedule, PlayoffGame, RankedStandingsRow, RankHistorySnapshot, StandingsTieGroup, Team, TiebreakerRule, TiebreakerScope, TiebreakerSettings } from "@/lib/types";
 
-type StatsTab = "standings" | "rank-race" | "team-leaders" | "league-leaders" | "playoffs" | "team-stats";
-type TeamSortKey = "team" | "record" | "winPercentage" | "division" | "pointsFor" | "pointsAgainst" | "difference" | "home" | "away" | "featuredWins" | "sov" | "sos" | "currentStreak" | "bestStreak" | "playoff" | "mvt" | "allStars";
+type StatsMode = "standings" | "stats";
+type StatsTab = "standings" | "season-odds" | "rank-race" | "team-leaders" | "league-leaders" | "playoffs" | "team-stats";
+type TeamSortKey = "rank" | "team" | "divisionName" | "preseasonRank" | "rankChange" | "status" | "record" | "divisionRecord" | "winPercentage" | "pointsFor" | "pointsAgainst" | "difference" | "home" | "away" | "featuredWins" | "sov" | "sos" | "currentStreak" | "bestStreak" | "playoff" | "mvt" | "allStars";
+type OddsSortKey = "rank" | "team" | "draftOrder" | "projectedRecord" | "playoffOdds" | "divisionOdds" | "topSeedOdds" | "championshipOdds" | "averageFinish";
 type RaceMetric = "rank" | "pointsFor" | "pointDifference" | "winPercentage";
 type ActiveRacePoint = { teamId: string; pointIndex: number } | null;
+type TeamLeaderView = "hottest" | "home" | "away" | "division" | "divisionDiff" | "scoring" | "difference";
 type LeagueLeaderView = "overall" | "gotw" | "closest" | "scoring" | "divisional";
+type PlayoffStatsView = "championship" | "consolation" | "all";
+type PlayoffLeaderView = "overall" | "closest" | "scoring" | "upsets";
 type RaceMilestone = "top-seed" | "division-title" | "playoff-berth" | "eliminated";
+type SeasonOddsRow = ReturnType<typeof calculateSeasonOdds>[number];
 
 const RACE_METRIC_OPTIONS: SelectOption[] = [
   { value: "rank", label: "Live rank", description: "Weekly standings position" },
@@ -122,6 +130,17 @@ function RaceMilestoneMarker({ milestone, division, x, y, index, total }: {
 
 function percentage(value: number) {
   return `${Math.round(value * 100)}%`;
+}
+
+function oddsPercentage(value: number, finalized: boolean) {
+  if (finalized) return percentage(value);
+  const percent = Math.min(99.9, Math.max(0.1, value * 100));
+  return percent < 1 || percent > 99 ? `${percent.toFixed(1)}%` : `${Math.round(percent)}%`;
+}
+
+function oddsBarWidth(value: number, finalized: boolean) {
+  if (finalized) return Math.max(0, value * 100);
+  return Math.min(99.9, Math.max(0.1, value * 100));
 }
 
 function compactProjectedRecord(record: string) {
@@ -186,14 +205,14 @@ function categoryRanks(items: GameAnalytics[], metric: "qualityScore" | "margin"
   return ranked;
 }
 
-function GameHighlight({ schedule, analytics, rank, round, roundLogoUrl, deepLink }: { schedule: GeneratedSchedule; analytics: GameAnalytics; rank: number; round?: string; roundLogoUrl?: string; deepLink: string }) {
+function GameHighlight({ schedule, analytics, rank, round, roundLogoUrl, onOpenGame }: { schedule: GeneratedSchedule; analytics: GameAnalytics; rank: number; round?: string; roundLogoUrl?: string; onOpenGame: (gameId: string) => void }) {
   const game = analytics.game;
   const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
   const away = teamById.get(game.awayTeamId)!;
   const home = teamById.get(game.homeTeamId)!;
   const awayWon = game.awayScore! > game.homeScore!;
   const homeWon = game.homeScore! > game.awayScore!;
-  return <Link className="game-highlight" href={deepLink} aria-label={`Open ${away.name} at ${home.name}, ${MEDAL_LABELS[rank - 1]} in this category`}>
+  return <button type="button" className="game-highlight" onClick={() => onOpenGame(game.id)} aria-label={`Open ${away.name} at ${home.name}, ${MEDAL_LABELS[rank - 1]} in this category`}>
     <div className="game-highlight-head"><span className={`medal-pill medal-${rank}`}><Medal />{MEDAL_LABELS[rank - 1]}</span><span className="game-badge-row">{analytics.badges.map((badge) => <GameBadgeChip badge={badge} key={badge} />)}</span></div>
     <div className="game-highlight-sides">
       <span className="game-highlight-team" style={{ background: tintColor(away.color, .88), color: accessibleTeamColor(away.color) }}><EntityLogo color={away.color} logoUrl={away.logoUrl} monogram={teamInitials(away)} size={34} /><span><small className="team-city">{away.city}</small><strong>{away.name}</strong></span>{awayWon && <em>W</em>}<b>{formatPoints(game.awayScore!)}</b></span>
@@ -202,26 +221,21 @@ function GameHighlight({ schedule, analytics, rank, round, roundLogoUrl, deepLin
     </div>
     <div className="game-stat-chips"><span>Margin <strong>{formatPoints(analytics.margin)}</strong><small>#{analytics.marginRank}</small></span><span>Total <strong>{formatPoints(analytics.total)}</strong><small>#{analytics.totalRank}</small></span><span>Quality <strong>{analytics.qualityScore}</strong><small>#{analytics.qualityRank}</small></span></div>
     <footer><span><MapPin />{home.logoUrl && <img src={home.logoUrl} alt="" />}<strong>{game.stadium}</strong></span><span>{round || `Week ${game.week}`}{game.specialEvent ? ` · ${game.specialEvent}` : ""}</span><span className="game-highlight-open">Open game</span></footer>
-  </Link>;
+  </button>;
 }
 
-function GameHighlightPanel({ title, schedule, items, metric, direction, playoff = false }: { title: string; schedule: GeneratedSchedule; items: GameAnalytics[]; metric: "qualityScore" | "margin" | "total"; direction: "asc" | "desc"; playoff?: boolean }) {
-  const routeBase = useRouteBase(`/season/${schedule.id}`);
+function GameHighlightPanel({ title, schedule, items, metric, direction, playoff = false, onOpenGame }: { title: string; schedule: GeneratedSchedule; items: GameAnalytics[]; metric: "qualityScore" | "margin" | "total"; direction: "asc" | "desc"; playoff?: boolean; onOpenGame: (gameId: string) => void }) {
   const ranked = categoryRanks(items, metric, direction);
   return <article className="game-leader-panel"><header><Trophy /><strong>{title}</strong></header>{ranked.length ? <div>{ranked.map(({ item, rank }) => {
     const game = item.game as PlayoffGame;
-    const query = new URLSearchParams(playoff ? { view: "playoffs" } : { view: "league-schedule", week: String(game.week) });
-    query.set("medal", String(rank));
-    query.set("medalCategory", title);
-    const deepLink = `${routeBase}?${query.toString()}#${game.id}`;
-    return <GameHighlight schedule={schedule} analytics={item} rank={rank} round={playoff ? game.round : undefined} roundLogoUrl={playoff ? game.logoUrl || game.roundLogoUrl : undefined} deepLink={deepLink} key={item.game.id} />;
+    return <GameHighlight schedule={schedule} analytics={item} rank={rank} round={playoff ? game.round : undefined} roundLogoUrl={playoff ? game.logoUrl || game.roundLogoUrl : undefined} onOpenGame={onOpenGame} key={item.game.id} />;
   })}</div> : <div className="leader-empty">No completed results yet</div>}</article>;
 }
 
-function SortHeader({ label, sortKey, active, direction, onSort }: { label: string; sortKey: TeamSortKey; active: TeamSortKey; direction: "asc" | "desc"; onSort: (key: TeamSortKey) => void }) {
+function SortHeader<T extends string>({ label, sortKey, active, direction, onSort, className }: { label: string; sortKey: T; active: T; direction: "asc" | "desc"; onSort: (key: T) => void; className?: string }) {
   const isActive = active === sortKey;
   const Icon = isActive ? (direction === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
-  return <th scope="col" aria-sort={isActive ? direction === "asc" ? "ascending" : "descending" : "none"}><button type="button" className={isActive ? "is-sorted" : undefined} onClick={() => onSort(sortKey)}>{label}<Icon /></button></th>;
+  return <th scope="col" className={className} aria-sort={isActive ? direction === "asc" ? "ascending" : "descending" : "none"}><button type="button" className={isActive ? "is-sorted" : undefined} onClick={() => onSort(sortKey)}>{label}<Icon /></button></th>;
 }
 
 function RankMovement({ row }: { row: RankedStandingsRow }) {
@@ -547,7 +561,7 @@ function sortableValue(row: TeamSeasonStats, key: TeamSortKey, teamById: Map<str
   if (key === "allStars") return row.allStarCount;
   if (key === "winPercentage") return row.winPercentage;
   if (key === "record") return row.wins + row.winPercentage; // #19.3 — wins first, win% breaks ties (so RECORD ≠ WIN% sort)
-  if (key === "division") { const g = row.divisionWins + row.divisionLosses + row.divisionTies; return g ? (row.divisionWins + row.divisionTies * 0.5) / g : -1; } // #36.1 — count ties as half a win
+  if (key === "divisionRecord") { const g = row.divisionWins + row.divisionLosses + row.divisionTies; return g ? (row.divisionWins + row.divisionTies * 0.5) / g : -1; } // #36.1 — count ties as half a win
   if (key === "pointsFor") return row.pointsFor;
   if (key === "pointsAgainst") return row.pointsAgainst;
   if (key === "difference") return row.pointsFor - row.pointsAgainst;
@@ -559,6 +573,70 @@ function sortableValue(row: TeamSeasonStats, key: TeamSortKey, teamById: Map<str
   if (key === "currentStreak") return row.streak === "—" || row.streak.startsWith("T") ? 0 : (row.streak.startsWith("W") ? 1 : -1) * Number(row.streak.slice(1));
   if (key === "bestStreak") return row.bestStreak === "—" ? 0 : Number(row.bestStreak.slice(1));
   return row.playoffOdds;
+}
+
+function sortableStandingsValue(row: RankedStandingsRow, key: TeamSortKey, teamById: Map<string, Team>, teamStatsByTeam: Map<string, TeamSeasonStats>, divisionById: Map<string, Division>, clinches: Map<string, TeamClinchTimeline>) {
+  const team = teamById.get(row.teamId)!;
+  const stat = teamStatsByTeam.get(row.teamId)!;
+  if (key === "rank") return row.rank;
+  if (key === "team") return teamDisplayName(team).toLowerCase();
+  if (key === "divisionName") return divisionById.get(team.divisionId)?.name.toLowerCase() ?? "";
+  if (key === "preseasonRank") return row.preseasonRank;
+  if (key === "rankChange") return row.preseasonRank - row.rank;
+  if (key === "status") {
+    const clinch = clinches.get(row.teamId);
+    return clinch?.topSeedWeek ? 4 : clinch?.divisionTitleWeek ? 3 : clinch?.playoffBerthWeek ? 2 : clinch?.eliminated ? 0 : 1;
+  }
+  return sortableValue(stat, key, teamById);
+}
+
+function teamHasStatus(timeline?: TeamClinchTimeline) {
+  return Boolean(timeline?.topSeedWeek || timeline?.divisionTitleWeek || timeline?.playoffBerthWeek || timeline?.eliminated);
+}
+
+function draftOrderLabel(team: Team) {
+  return Number.isInteger(team.draftPlace) ? `#${team.draftPlace}` : "—";
+}
+
+function zeroedOddsRow(row: SeasonOddsRow, stat: TeamSeasonStats, hasPlayedGames: boolean) {
+  if (hasPlayedGames) return row;
+  return {
+    ...row,
+    playoffOdds: 0,
+    divisionOdds: 0,
+    championshipOdds: 0,
+    titleOdds: 0,
+    topSeedOdds: 0,
+    projectedWins: stat.wins,
+    projectedLosses: stat.losses,
+    projectedTies: stat.ties,
+    projectedRecord: `${stat.wins}-${stat.losses}${stat.ties ? `-${stat.ties}` : ""}`,
+    averageFinish: 0,
+  };
+}
+
+function sortableOddsValue(row: SeasonOddsRow, key: OddsSortKey, teamById: Map<string, Team>, rankByTeam: Map<string, number>) {
+  const team = teamById.get(row.teamId)!;
+  if (key === "rank") return rankByTeam.get(row.teamId) ?? Number.POSITIVE_INFINITY;
+  if (key === "team") return teamDisplayName(team).toLowerCase();
+  if (key === "draftOrder") return team.draftPlace ?? Number.POSITIVE_INFINITY;
+  if (key === "projectedRecord") return row.projectedWins + row.projectedTies * 0.5;
+  return row[key];
+}
+
+function scheduleThroughWeek(schedule: GeneratedSchedule, throughWeek: number): GeneratedSchedule {
+  return {
+    ...schedule,
+    weeks: schedule.weeks.map((week) => ({
+      ...week,
+      games: week.games.map((game) => week.weekNumber <= throughWeek ? game : {
+        ...game,
+        homeScore: undefined,
+        awayScore: undefined,
+      }),
+    })),
+    playoffGames: (schedule.playoffGames ?? []).filter((game) => game.week <= throughWeek),
+  };
 }
 
 function rankValues(values: Map<string, number>) {
@@ -598,19 +676,27 @@ function inferLineupTemplate(schedule: GeneratedSchedule, rows: GameDetailPlayer
   };
 }
 
-export function StatsWorkspace({ schedule, playerStats = [], onUpdateTiebreakers, readOnly = false }: { schedule: GeneratedSchedule; playerStats?: GameDetailPlayerStat[]; onUpdateTiebreakers?: (settings: TiebreakerSettings) => void; readOnly?: boolean }) {
+export function StatsWorkspace({ schedule, playerStats = [], onUpdateTiebreakers, readOnly = false, mode = "standings" }: { schedule: GeneratedSchedule; playerStats?: GameDetailPlayerStat[]; onUpdateTiebreakers?: (settings: TiebreakerSettings) => void; readOnly?: boolean; mode?: StatsMode }) {
   const routeBase = useRouteBase(`/season/${schedule.id}`);
   const [tab, setTab] = useState<StatsTab>("standings");
   const statsTabRefs = useRef<(HTMLButtonElement | null)[]>([]); // H8 — roving tabindex focus targets
+  const [teamLeaderView, setTeamLeaderView] = useState<TeamLeaderView>("hottest");
   const [leagueLeaderView, setLeagueLeaderView] = useState<LeagueLeaderView>("overall");
+  const [playoffStatsView, setPlayoffStatsView] = useState<PlayoffStatsView>("championship");
+  const [playoffLeaderView, setPlayoffLeaderView] = useState<PlayoffLeaderView>("overall");
+  const [leaderGameId, setLeaderGameId] = useState<string | null>(null);
   const [divisionId, setDivisionId] = useState("all");
   const [standingsWeek, setStandingsWeek] = useState("current");
-  const [sortKey, setSortKey] = useState<TeamSortKey>("winPercentage");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [oddsWeek, setOddsWeek] = useState("current");
+  const [sortKey, setSortKey] = useState<TeamSortKey>("rank");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [oddsSortKey, setOddsSortKey] = useState<OddsSortKey>("rank");
+  const [oddsSortDirection, setOddsSortDirection] = useState<"asc" | "desc">("asc");
   const [activeTieSignature, setActiveTieSignature] = useState<string | null>(null);
   const tiebreakerSettings = useMemo(() => normalizeTiebreakerSettings(schedule.setup.tiebreakers), [schedule.setup.tiebreakers]);
   const odds = useMemo(() => calculateSeasonOdds(schedule, 500), [schedule]);
-  const oddsByTeam = useMemo(() => new Map(odds.map((row) => [row.teamId, row.playoffOdds])), [odds]);
+  const hasScoredGames = useMemo(() => schedule.weeks.some((week) => week.games.some(isGamePlayed)), [schedule.weeks]);
+  const oddsByTeam = useMemo(() => new Map(odds.map((row) => [row.teamId, hasScoredGames ? row.playoffOdds : 0])), [odds, hasScoredGames]);
   const completedAwardWeeks = useMemo(() => new Set(schedule.weeks.filter((week) => week.games.some(isGamePlayed)).map((week) => week.weekNumber)), [schedule]);
   const awardPlayerStats = useMemo(() => playerStats.filter((row) => completedAwardWeeks.has(row.week)), [playerStats, completedAwardWeeks]);
   const hasAwardData = useMemo(() => hasReadyAwardStats(awardPlayerStats), [awardPlayerStats]);
@@ -630,6 +716,19 @@ export function StatsWorkspace({ schedule, playerStats = [], onUpdateTiebreakers
   const teamStatsByTeam = useMemo(() => new Map(teamStats.map((stat) => [stat.teamId, stat])), [teamStats]);
   const rankHistory = useMemo(() => getLiveRankHistory(schedule), [schedule]);
   const currentRankSnapshot = [...rankHistory].reverse().find((snapshot) => snapshot.playedGames > 0) ?? rankHistory[0];
+  const regularSeasonWeeks = useMemo(() => schedule.weeks.filter((week) => week.weekNumber <= schedule.setup.weeks), [schedule.weeks, schedule.setup.weeks]);
+  const finalRegularWeek = schedule.setup.weeks;
+  const finalRegularComplete = regularSeasonWeeks.length > 0 && regularSeasonWeeks.every((week) => week.games.length > 0 && week.games.every(isGamePlayed));
+  const completedSeasonOddsFinalized = finalRegularComplete && (schedule.playoffGames ?? []).some((game) => game.homeTeamId && game.awayTeamId) && (schedule.playoffGames ?? []).filter((game) => game.homeTeamId && game.awayTeamId).every(isGamePlayed);
+  const latestOddsWeek = finalRegularComplete ? finalRegularWeek : currentRankSnapshot.weekNumber;
+  const selectedOddsWeekNumber = oddsWeek === "current" ? latestOddsWeek : Math.max(0, Math.min(latestOddsWeek, Number(oddsWeek) || 0));
+  const selectedOddsSchedule = useMemo(() => oddsWeek === "current" ? schedule : scheduleThroughWeek(schedule, selectedOddsWeekNumber), [schedule, oddsWeek, selectedOddsWeekNumber]);
+  const selectedOdds = useMemo(() => oddsWeek === "current" ? odds : calculateSeasonOdds(selectedOddsSchedule, 500), [odds, oddsWeek, selectedOddsSchedule]);
+  const selectedOddsHasScoredGames = useMemo(() => selectedOddsSchedule.weeks.some((week) => week.weekNumber <= selectedOddsWeekNumber && week.games.some(isGamePlayed)), [selectedOddsSchedule.weeks, selectedOddsWeekNumber]);
+  const selectedOddsFinalized = oddsWeek === "current" && completedSeasonOddsFinalized;
+  const selectedOddsByTeam = useMemo(() => new Map(selectedOdds.map((row) => [row.teamId, selectedOddsHasScoredGames ? row.playoffOdds : 0])), [selectedOdds, selectedOddsHasScoredGames]);
+  const selectedOddsTeamStats = useMemo(() => calculateTeamSeasonStats(selectedOddsSchedule, selectedOddsByTeam), [selectedOddsSchedule, selectedOddsByTeam]);
+  const selectedOddsTeamStatsByTeam = useMemo(() => new Map(selectedOddsTeamStats.map((stat) => [stat.teamId, stat])), [selectedOddsTeamStats]);
   const selectedRankSnapshot = standingsWeek === "current" ? currentRankSnapshot : rankHistory.find((snapshot) => String(snapshot.weekNumber) === standingsWeek) ?? currentRankSnapshot;
   const selectedConferenceId = divisionId.startsWith("conference:") ? divisionId.replace("conference:", "") : undefined;
   const selectedScope: TiebreakerScope = divisionId === "all" || selectedConferenceId ? "league" : "division";
@@ -639,9 +738,21 @@ export function StatsWorkspace({ schedule, playerStats = [], onUpdateTiebreakers
   const selectedClinches = useMemo(() => new Map(getTeamClinchTimelines(schedule, selectedRankSnapshot.weekNumber).map((timeline) => [timeline.teamId, timeline])), [schedule, selectedRankSnapshot.weekNumber]);
   const regularSignals = useMemo(() => getScheduleGameSignals(schedule), [schedule]);
   const regularGames = useMemo(() => [...regularSignals.byGameId.values()], [regularSignals]);
-  const playoffGames = (schedule.playoffGames ?? []).filter((game) => game.bracket === "main" && game.homeScore != null && game.awayScore != null);
-  const playoffAnalytics = useMemo(() => calculateGameAnalytics(playoffGames), [playoffGames]);
+  const championshipPlayoffGames = useMemo(() => (schedule.playoffGames ?? []).filter((game) => game.bracket === "main" && game.homeScore != null && game.awayScore != null), [schedule.playoffGames]);
+  const consolationPlayoffGames = useMemo(() => (schedule.playoffGames ?? []).filter((game) => game.bracket !== "main" && game.homeScore != null && game.awayScore != null), [schedule.playoffGames]);
+  const playoffGames = playoffStatsView === "championship"
+    ? championshipPlayoffGames
+    : playoffStatsView === "consolation"
+    ? consolationPlayoffGames
+    : [...championshipPlayoffGames, ...consolationPlayoffGames];
+  const playoffRankMap = useMemo(() => {
+    const settings = normalizePlayoffSettings(schedule.setup.playoffs, schedule.setup.teams.length, schedule.setup.color, schedule.setup.weeks);
+    return new Map(projectPlayoffSeeds(schedule, settings.fieldSize).map((seed) => [seed.teamId, seed.seed]));
+  }, [schedule]);
+  const playoffRanksByGameId = useMemo(() => new Map(playoffGames.map((game) => [game.id, playoffRankMap])), [playoffGames, playoffRankMap]);
+  const playoffAnalytics = useMemo(() => calculateGameAnalytics(playoffGames, new Set<string>(), playoffRanksByGameId), [playoffGames, playoffRanksByGameId]);
   const hasPlayoffResults = playoffAnalytics.length > 0;
+  const hasAnyPlayoffResults = championshipPlayoffGames.length + consolationPlayoffGames.length > 0;
   const teamById = useMemo(() => new Map(schedule.setup.teams.map((team) => [team.id, team])), [schedule.setup.teams]);
   const divisionById = new Map(schedule.setup.divisions.map((division) => [division.id, division]));
   const conferenceLive = hasConferences(schedule.setup);
@@ -674,18 +785,53 @@ export function StatsWorkspace({ schedule, playerStats = [], onUpdateTiebreakers
     const previousRank = previousRankByTeam.get(row.teamId) ?? rank;
     return { ...row, rank, previousRank, rankChange: previousRank - rank, preseasonRank: scopedPreseasonRankByTeam.get(row.teamId) ?? rank, tiebreaker: selectedResolution.explanationsByTeam[row.teamId] };
   });
-  const visibleOdds = selectedConferenceId
-    ? odds.filter((row) => {
+  const oddsRankResolution = useMemo(() => resolveStandings(schedule, { throughWeek: latestOddsWeek, scope: selectedScope, divisionId: selectedScope === "division" ? divisionId : undefined }), [schedule, latestOddsWeek, selectedScope, divisionId]);
+  const oddsRankRows = selectedScopeTeamIds ? oddsRankResolution.rows.filter((row) => selectedScopeTeamIds.has(row.teamId)) : oddsRankResolution.rows;
+  const finalRankByTeam = new Map(oddsRankRows.map((row, index) => [row.teamId, index + 1]));
+  const comparisonOddsByTeam = new Map(odds.map((row) => {
+    const stat = teamStatsByTeam.get(row.teamId);
+    return [row.teamId, stat ? zeroedOddsRow(row, stat, hasScoredGames) : row] as [string, SeasonOddsRow];
+  }));
+  const comparingOddsWeeks = oddsWeek !== "current";
+  const visibleOdds = (selectedConferenceId
+    ? selectedOdds.filter((row) => {
         const team = teamById.get(row.teamId);
         return team ? teamConferenceId(team) === selectedConferenceId : false;
       })
-    : divisionId === "all" ? odds : odds.filter((row) => teamById.get(row.teamId)?.divisionId === divisionId);
+    : divisionId === "all" ? selectedOdds : selectedOdds.filter((row) => teamById.get(row.teamId)?.divisionId === divisionId))
+    .map((row) => zeroedOddsRow(row, selectedOddsTeamStatsByTeam.get(row.teamId)!, selectedOddsHasScoredGames))
+    .sort((left, right) => {
+      const leftValue = sortableOddsValue(left, oddsSortKey, teamById, finalRankByTeam);
+      const rightValue = sortableOddsValue(right, oddsSortKey, teamById, finalRankByTeam);
+      const comparison = typeof leftValue === "string" && typeof rightValue === "string" ? leftValue.localeCompare(rightValue) : Number(leftValue) - Number(rightValue);
+      return (oddsSortDirection === "asc" ? comparison : -comparison) || (finalRankByTeam.get(left.teamId) ?? 0) - (finalRankByTeam.get(right.teamId) ?? 0);
+    });
   const filterOptions = [{ value: "all", label: "League standings", description: `${schedule.setup.teams.length} teams`, swatch: schedule.setup.color, logoUrl: schedule.setup.logoUrl, monogram: resolveInitials(schedule.setup.initials, leagueAcronym(schedule.setup.name)) }, ...(conferenceLive ? (schedule.setup.conferences ?? []).map((conference) => ({ value: `conference:${conference.id}`, label: conference.name, description: `${schedule.setup.teams.filter((team) => teamConferenceId(team) === conference.id).length} teams`, swatch: conference.color, logoUrl: conference.logoUrl, monogram: resolveInitials(conference.initials, conference.name.slice(0, 3).toUpperCase()) })) : []), ...schedule.setup.divisions.map((division) => ({ value: division.id, label: division.name, description: `${schedule.setup.teams.filter((team) => team.divisionId === division.id).length} teams`, swatch: division.color, logoUrl: division.logoUrl, monogram: resolveInitials(division.initials, divisionAcronym(division.name)) }))];
   const rankHistoryOptions = [
     { value: "current", label: "Current live rank", description: currentRankSnapshot.weekNumber ? `Through Week ${currentRankSnapshot.weekNumber}` : "Preseason order" },
     { value: "0", label: "Preseason rank", description: "Starting seed before Week 1" },
     ...rankHistory.filter((snapshot) => snapshot.weekNumber > 0 && snapshot.playedGames > 0).map((snapshot) => ({ value: String(snapshot.weekNumber), label: snapshot.completed ? `After Week ${snapshot.weekNumber}` : `Week ${snapshot.weekNumber} in progress`, description: `${snapshot.playedGames} of ${schedule.weeks.find((week) => week.weekNumber === snapshot.weekNumber)?.games.length ?? 0} games scored` })),
   ];
+  const oddsWeekOptions = [
+    {
+      value: "current",
+      label: finalRegularComplete ? "Final odds" : latestOddsWeek ? "Current odds" : "Preseason odds",
+      description: finalRegularComplete ? `Finalized season view` : latestOddsWeek ? `Through Week ${latestOddsWeek}` : "Before Week 1 scores",
+    },
+    { value: "0", label: "Preseason odds", description: "Starting projection before Week 1" },
+    ...rankHistory
+      .filter((snapshot) => snapshot.weekNumber > 0 && snapshot.playedGames > 0 && snapshot.weekNumber <= latestOddsWeek)
+      .map((snapshot) => ({ value: String(snapshot.weekNumber), label: snapshot.completed ? `After Week ${snapshot.weekNumber}` : `Week ${snapshot.weekNumber} in progress`, description: `${snapshot.playedGames} of ${schedule.weeks.find((week) => week.weekNumber === snapshot.weekNumber)?.games.length ?? 0} games scored` })),
+  ];
+  const oddsComparisonLabel = finalRegularComplete ? "Final" : "Now";
+  const oddsSubhead = !selectedOddsHasScoredGames
+    ? "Waiting for scored games · projections start at zero"
+    : comparingOddsWeeks
+      ? `Comparing Week ${selectedOddsWeekNumber || "preseason"} to ${oddsComparisonLabel.toLowerCase()} projection`
+      : "Sortable projections · 500 deterministic simulations";
+  useEffect(() => {
+    if (oddsWeek !== "current" && Number(oddsWeek) > latestOddsWeek) setOddsWeek("current");
+  }, [latestOddsWeek, oddsWeek]);
   const selectedHistoryLabel = selectedRankSnapshot.weekNumber === 0 ? "Preseason seed" : selectedRankSnapshot.completed ? `Final table after Week ${selectedRankSnapshot.weekNumber}` : `Live table during Week ${selectedRankSnapshot.weekNumber}`;
   const isPreseason = selectedRankSnapshot.weekNumber === 0; // #19.1
   const rankHeader = selectedConferenceId
@@ -698,35 +844,109 @@ export function StatsWorkspace({ schedule, playerStats = [], onUpdateTiebreakers
       ? "FINAL RK"
       : "LIVE RK";
   const completedTeams = teamStats.filter((row) => row.wins + row.losses + row.ties > 0);
+  const hasVisibleStatus = visibleStandings.some((row) => teamHasStatus(selectedClinches.get(row.teamId)));
   const divisionsPlayed = (row: TeamSeasonStats) => row.divisionWins + row.divisionLosses + row.divisionTies > 0;
   const hottest = (row: TeamSeasonStats) => row.streak.startsWith("W") ? Number(row.streak.slice(1)) : null;
-  const sortRows = [...teamStats].sort((left, right) => {
-    const leftValue = sortableValue(left, sortKey, teamById);
-    const rightValue = sortableValue(right, sortKey, teamById);
+  const onSort = (key: TeamSortKey) => {
+    if (key === sortKey) {
+      setSortDirection((current) => current === "asc" ? "desc" : "asc");
+      return;
+    }
+    setSortKey(key);
+    setSortDirection(["rank", "team", "divisionName", "preseasonRank"].includes(key) ? "asc" : "desc");
+  };
+  const onOddsSort = (key: OddsSortKey) => {
+    if (key === oddsSortKey) {
+      setOddsSortDirection((current) => current === "asc" ? "desc" : "asc");
+      return;
+    }
+    setOddsSortKey(key);
+    setOddsSortDirection(["rank", "team", "draftOrder", "averageFinish"].includes(key) ? "asc" : "desc");
+  };
+  const displayedStandings = [...visibleStandings].sort((left, right) => {
+    const leftValue = sortableStandingsValue(left, sortKey, teamById, teamStatsByTeam, divisionById, selectedClinches);
+    const rightValue = sortableStandingsValue(right, sortKey, teamById, teamStatsByTeam, divisionById, selectedClinches);
     const comparison = typeof leftValue === "string" && typeof rightValue === "string" ? leftValue.localeCompare(rightValue) : Number(leftValue) - Number(rightValue);
-    return (sortDirection === "asc" ? comparison : -comparison) || teamById.get(left.teamId)!.name.localeCompare(teamById.get(right.teamId)!.name);
+    return (sortDirection === "asc" ? comparison : -comparison) || left.rank - right.rank;
   });
-  const onSort = (key: TeamSortKey) => { if (key === sortKey) setSortDirection((current) => current === "asc" ? "desc" : "asc"); else { setSortKey(key); setSortDirection(key === "team" ? "asc" : "desc"); } };
-  const displayedStandings = useMemo(() => sortKey === "mvt" || sortKey === "allStars"
-    ? [...visibleStandings].sort((left, right) => {
-        const leftStat = teamStatsByTeam.get(left.teamId)!;
-        const rightStat = teamStatsByTeam.get(right.teamId)!;
-        const comparison = Number(sortableValue(leftStat, sortKey, teamById)) - Number(sortableValue(rightStat, sortKey, teamById));
-        return (sortDirection === "asc" ? comparison : -comparison) || left.rank - right.rank;
-      })
-    : visibleStandings, [sortKey, sortDirection, visibleStandings, teamStatsByTeam, teamById]);
   const updateTiebreakers = (settings: TiebreakerSettings) => onUpdateTiebreakers?.(settings);
   const activeTie = selectedResolution.tieGroups.find((tie) => tie.signature === activeTieSignature);
-  const tabs: Array<{ key: StatsTab; label: string; disabled?: boolean }> = [{ key: "standings", label: "Standings" }, { key: "rank-race", label: "Rank race" }, { key: "team-leaders", label: "Team leaders" }, { key: "league-leaders", label: "League leaders" }, { key: "playoffs", label: "Playoff stats", disabled: !hasPlayoffResults }];
+  const tabs: Array<{ key: StatsTab; label: string; disabled?: boolean }> = mode === "standings"
+    ? [{ key: "standings", label: "Standings" }, { key: "season-odds", label: "Season odds" }]
+    : [{ key: "rank-race", label: "Rank race" }, { key: "team-leaders", label: "Team leaders" }, { key: "league-leaders", label: "League leaders" }, { key: "playoffs", label: "Playoff stats", disabled: !hasAnyPlayoffResults }];
+  const teamLeaderTabs: Array<{ key: TeamLeaderView; label: string }> = [
+    { key: "hottest", label: "Hottest" },
+    { key: "home", label: "Home record" },
+    { key: "away", label: "Away record" },
+    { key: "division", label: "Division record" },
+    { key: "divisionDiff", label: "Division diff" },
+    { key: "scoring", label: "Scoring" },
+    { key: "difference", label: "Point diff" },
+  ];
   const leagueLeaderTabs: Array<{ key: LeagueLeaderView; label: string }> = [{ key: "overall", label: "Best games" }, { key: "gotw", label: "GOTW" }, { key: "closest", label: "Close games" }, { key: "scoring", label: "High scoring" }, { key: "divisional", label: "Divisional" }];
-  const leagueLeaderPanels = {
-    overall: <GameHighlightPanel title="Greatest regular-season games" schedule={schedule} items={regularGames} metric="qualityScore" direction="asc" />,
-    gotw: <GameHighlightPanel title="Greatest game-of-the-week games" schedule={schedule} items={regularGames.filter((item) => item.badges.includes("GOTW"))} metric="qualityScore" direction="asc" />,
-    closest: <GameHighlightPanel title="Closest games" schedule={schedule} items={regularGames} metric="margin" direction="asc" />,
-    scoring: <GameHighlightPanel title="Highest-scoring games" schedule={schedule} items={regularGames} metric="total" direction="desc" />,
-    divisional: <GameHighlightPanel title="Best divisional showdowns" schedule={schedule} items={regularGames.filter((item) => item.game.matchupType === "division")} metric="qualityScore" direction="asc" />,
-  } satisfies Record<LeagueLeaderView, React.ReactNode>;
+  const playoffLeaderTabs: Array<{ key: PlayoffStatsView; label: string; disabled?: boolean }> = [
+    { key: "championship", label: "Championship", disabled: championshipPlayoffGames.length === 0 },
+    { key: "consolation", label: "Consolation", disabled: consolationPlayoffGames.length === 0 },
+    { key: "all", label: "All brackets", disabled: !hasAnyPlayoffResults },
+  ];
+  const playoffCategoryTabs: Array<{ key: PlayoffLeaderView; label: string; disabled?: boolean }> = [
+    { key: "overall", label: "Best games" },
+    { key: "closest", label: "Close games" },
+    { key: "scoring", label: "High scoring" },
+    { key: "upsets", label: "Upsets", disabled: !playoffAnalytics.some((item) => item.badges.includes("Upset")) },
+  ];
   const teamHrefBase = `${routeBase}/team`;
+  useEffect(() => {
+    const firstAvailableTab = tabs.find((item) => !item.disabled)?.key ?? tabs[0]?.key;
+    if (firstAvailableTab && !tabs.some((item) => item.key === tab && !item.disabled)) setTab(firstAvailableTab);
+  }, [mode, tab, tabs]);
+  useEffect(() => {
+    if (playoffStatsView === "championship" && championshipPlayoffGames.length === 0 && consolationPlayoffGames.length > 0) setPlayoffStatsView("consolation");
+    if (playoffStatsView === "consolation" && consolationPlayoffGames.length === 0 && championshipPlayoffGames.length > 0) setPlayoffStatsView("championship");
+  }, [playoffStatsView, championshipPlayoffGames.length, consolationPlayoffGames.length]);
+  useEffect(() => {
+    if (!playoffCategoryTabs.some((item) => item.key === playoffLeaderView && !item.disabled)) setPlayoffLeaderView("overall");
+  }, [playoffCategoryTabs, playoffLeaderView]);
+  const teamLeaderPanels = {
+    hottest: <TeamPodiumCard title="Hottest teams" icon={Flame} rows={completedTeams} teamById={teamById} value={hottest} label={(row) => row.streak} hrefBase={teamHrefBase} />,
+    home: <TeamPodiumCard title="Best home record" icon={Home} rows={completedTeams} teamById={teamById} value={(row) => recordGames(row.home) ? recordPercentage(row.home) : null} label={(row) => formatSplitRecord(row.home)} hrefBase={teamHrefBase} />,
+    away: <TeamPodiumCard title="Best away record" icon={Plane} rows={completedTeams} teamById={teamById} value={(row) => recordGames(row.away) ? recordPercentage(row.away) : null} label={(row) => formatSplitRecord(row.away)} hrefBase={teamHrefBase} />,
+    division: <TeamPodiumCard title="Best division record" icon={ShieldCheck} rows={completedTeams} teamById={teamById} value={(row) => { const g = row.divisionWins + row.divisionLosses + row.divisionTies; return g ? (row.divisionWins + row.divisionTies * 0.5) / g : null; }} label={(row) => `${row.divisionWins}-${row.divisionLosses}${row.divisionTies ? `-${row.divisionTies}` : ""}`} hrefBase={teamHrefBase} />,
+    divisionDiff: <TeamPodiumCard title="Best division point diff" icon={Swords} rows={completedTeams} teamById={teamById} value={(row) => divisionsPlayed(row) ? row.divisionPointsFor - row.divisionPointsAgainst : null} label={(row) => formatDifferential(row.divisionPointsFor - row.divisionPointsAgainst).text} hrefBase={teamHrefBase} />,
+    scoring: <TeamPodiumCard title="Highest scoring" icon={Zap} rows={completedTeams} teamById={teamById} value={(row) => row.pointsFor} label={(row) => `${formatPoints(row.pointsFor)} PF`} hrefBase={teamHrefBase} />,
+    difference: <TeamPodiumCard title="Best point differential" icon={Target} rows={completedTeams} teamById={teamById} value={(row) => row.pointsFor - row.pointsAgainst} label={(row) => formatDifferential(row.pointsFor - row.pointsAgainst).text} hrefBase={teamHrefBase} />,
+  } satisfies Record<TeamLeaderView, React.ReactNode>;
+  const leagueLeaderPanels = {
+    overall: <GameHighlightPanel title="Greatest regular-season games" schedule={schedule} items={regularGames} metric="qualityScore" direction="asc" onOpenGame={setLeaderGameId} />,
+    gotw: <GameHighlightPanel title="Greatest game-of-the-week games" schedule={schedule} items={regularGames.filter((item) => item.badges.includes("GOTW"))} metric="qualityScore" direction="asc" onOpenGame={setLeaderGameId} />,
+    closest: <GameHighlightPanel title="Closest games" schedule={schedule} items={regularGames} metric="margin" direction="asc" onOpenGame={setLeaderGameId} />,
+    scoring: <GameHighlightPanel title="Highest-scoring games" schedule={schedule} items={regularGames} metric="total" direction="desc" onOpenGame={setLeaderGameId} />,
+    divisional: <GameHighlightPanel title="Best divisional showdowns" schedule={schedule} items={regularGames.filter((item) => item.game.matchupType === "division")} metric="qualityScore" direction="asc" onOpenGame={setLeaderGameId} />,
+  } satisfies Record<LeagueLeaderView, React.ReactNode>;
+  const playoffLeaderPanels = {
+    overall: <GameHighlightPanel title="Greatest playoff games" schedule={schedule} items={playoffAnalytics} metric="qualityScore" direction="asc" playoff onOpenGame={setLeaderGameId} />,
+    closest: <GameHighlightPanel title="Closest playoff games" schedule={schedule} items={playoffAnalytics} metric="margin" direction="asc" playoff onOpenGame={setLeaderGameId} />,
+    scoring: <GameHighlightPanel title="Highest-scoring playoff games" schedule={schedule} items={playoffAnalytics} metric="total" direction="desc" playoff onOpenGame={setLeaderGameId} />,
+    upsets: <GameHighlightPanel title="Greatest playoff upsets" schedule={schedule} items={playoffAnalytics.filter((item) => item.badges.includes("Upset"))} metric="qualityScore" direction="asc" playoff onOpenGame={setLeaderGameId} />,
+  } satisfies Record<PlayoffLeaderView, React.ReactNode>;
+  const oddsComparison = (label: string) => comparingOddsWeeks ? <small className="season-odds-current">{oddsComparisonLabel} {label}</small> : null;
+  const oddsRecordCell = (row: SeasonOddsRow) => {
+    const comparison = comparisonOddsByTeam.get(row.teamId);
+    return <span className="season-odds-cell-stack"><strong>{compactProjectedRecord(row.projectedRecord)}</strong>{comparison ? oddsComparison(compactProjectedRecord(comparison.projectedRecord)) : null}</span>;
+  };
+  const oddsPercentCell = (row: SeasonOddsRow, team: Team, key: "playoffOdds" | "divisionOdds" | "topSeedOdds" | "championshipOdds", meter = false) => {
+    const comparison = comparisonOddsByTeam.get(row.teamId);
+    const value = oddsPercentage(row[key], selectedOddsFinalized);
+    const compare = comparison ? oddsComparison(oddsPercentage(comparison[key], completedSeasonOddsFinalized)) : null;
+    if (!meter) return <span className="season-odds-cell-stack"><strong>{value}</strong>{compare}</span>;
+    return <span className="season-odds-meter"><em>{value}</em>{compare}<i><b style={{ width: `${oddsBarWidth(row[key], selectedOddsFinalized)}%`, background: accessibleTeamColor(team.color) }} /></i></span>;
+  };
+  const oddsAverageFinishCell = (row: SeasonOddsRow) => {
+    const comparison = comparisonOddsByTeam.get(row.teamId);
+    const value = row.averageFinish > 0 ? `#${row.averageFinish.toFixed(1)}` : "—";
+    const compare = comparison && comparison.averageFinish > 0 ? `#${comparison.averageFinish.toFixed(1)}` : "—";
+    return <span className="season-odds-cell-stack"><strong>{value}</strong>{oddsComparison(compare)}</span>;
+  };
 
   return <div className="stats-workspace">
     <div className="stats-tabs" role="tablist" aria-label="Standings and statistics">{tabs.map((item, index) => <button
@@ -759,14 +979,55 @@ export function StatsWorkspace({ schedule, playerStats = [], onUpdateTiebreakers
     {tab === "standings" && <div className="stats-tab-panel" role="tabpanel" id="stats-panel-standings" aria-labelledby="stats-tab-standings" tabIndex={0}>
       <div className="stats-filter-bar controls-only"><div className="stats-filter-controls"><CustomSelect label="Standings scope" value={divisionId} onChange={setDivisionId} options={filterOptions} /></div></div>
       <div className="stats-standings-layout">
-        <div className="data-table-wrap"><table className="data-table standings-table"><thead><tr><th>{rankHeader}</th><th>TEAM</th><th>DIVISION</th>{!isPreseason && <><th>PRE RK</th><th>FROM PRE</th></>}<th>STATUS</th><SortHeader label="MVT" sortKey="mvt" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="All-Star" sortKey="allStars" active={sortKey} direction={sortDirection} onSort={onSort} /><th>REC</th><th>DIV REC</th><th>PCT</th><th>PF</th><th>PA</th><th>DIFF</th><th>STRK</th><th>HOME</th><th>AWAY</th><th>GOTW</th><th>SOV</th><th>SOS</th><th>BEST</th><th>PO %</th></tr></thead><tbody>{displayedStandings.map((row) => { const team = teamById.get(row.teamId)!; const division = divisionById.get(team.divisionId)!; const conference = conferenceOfDivision(schedule.setup, division.id); const clinch = selectedClinches.get(team.id); const diff = formatDifferential(row.pointsFor - row.pointsAgainst); const played = row.wins + row.losses + row.ties > 0; const stat = teamStatsByTeam.get(row.teamId)!; const rankReason = row.tiebreaker?.rule ? TIEBREAKER_RULE_LABELS[row.tiebreaker.rule] : row.tiebreaker?.resolution === "manual" ? "Manual tie order" : row.tiebreaker?.resolution === "fallback" ? "Fallback order" : ""; return <tr className={clinch?.eliminated ? "is-eliminated" : undefined} key={row.teamId}><td className="standings-rank-cell" title={row.tiebreaker?.label}><RankMovement row={row} />{rankReason && <small className="standings-rank-reason">{rankReason}</small>}</td><td><Link className="standings-team-link" href={`${teamHrefBase}/${team.id}`}><EntityLogo className="team-mark standings-team-logo" color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={50} /><span className="standings-team-copy">{team.city && <small className="standings-team-city team-city">{team.city}</small>}<strong>{team.name}</strong></span></Link></td><td className="standings-division-cell"><DivisionIdentity division={division} />{conference && <span className="standings-conference-chip"><ConferenceMark conference={conference} size={14} />{conference.name}</span>}</td>{!isPreseason && <><td className="standings-preseason-cell"><strong>#{row.preseasonRank}</strong></td><td className="standings-preseason-change"><PreseasonMovement row={row} /></td></>}<td className="standings-status-cell"><ClinchBadges timeline={clinch} division={division} compact /><span className="standings-no-status">—</span></td><td><span className="award-chip"><strong>{formatPoints(stat.mvtScore)}</strong>{stat.mvtRank ? <small>#{stat.mvtRank}</small> : <small>—</small>}</span></td><td><span className="award-chip"><strong>{stat.allStarCount}</strong>{stat.allStarRank ? <small>#{stat.allStarRank}</small> : <small>—</small>}</span></td><td>{formatRecord(row)}</td><td>{formatDivisionRecord(row)}</td><td>{played ? row.winPercentage.toFixed(3).replace(/^0/, "") : "—"}</td><td>{formatPoints(row.pointsFor)}</td><td>{formatPoints(row.pointsAgainst)}</td><td className={diff.tone}>{diff.text}</td><td>{row.streak}</td><td>{formatSplitRecord(stat.home)}</td><td>{formatSplitRecord(stat.away)}</td><td>{stat.featuredWins + stat.featuredLosses + stat.featuredTies === 0 ? "—" : `${stat.featuredWins}-${stat.featuredLosses}${stat.featuredTies ? `-${stat.featuredTies}` : ""}`}</td><td>{decimal(stat.strengthOfVictory)}</td><td>{decimal(stat.strengthOfSchedule)}</td><td>{stat.bestStreak}</td><td>{percentage(stat.playoffOdds)}</td></tr>; })}</tbody></table></div><dl className="stats-abbr-legend" aria-label="Column key"><div><dt>MVT</dt><dd>Most Valuable Team score (power ranking)</dd></div><div><dt>All-Star</dt><dd>Season All-Star count</dd></div><div><dt>PF / PA</dt><dd>Points for / against</dd></div><div><dt>DIFF</dt><dd>Point differential</dd></div><div><dt>GOTW</dt><dd>Game-of-the-week record</dd></div><div><dt>SOV</dt><dd>Strength of victory</dd></div><div><dt>SOS</dt><dd>Strength of schedule</dd></div><div><dt>STRK / BEST</dt><dd>Current / best win streak</dd></div><div><dt>PO %</dt><dd>Projected playoff odds</dd></div></dl>
+        <div className="data-table-wrap"><table className="data-table standings-table"><thead><tr><SortHeader label={rankHeader} sortKey="rank" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="Team" sortKey="team" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="Division" sortKey="divisionName" active={sortKey} direction={sortDirection} onSort={onSort} className="align-left" />{!isPreseason && <><SortHeader label="Pre RK" sortKey="preseasonRank" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="From Pre" sortKey="rankChange" active={sortKey} direction={sortDirection} onSort={onSort} /></>}{hasVisibleStatus && <SortHeader label="Status" sortKey="status" active={sortKey} direction={sortDirection} onSort={onSort} className="align-left is-status" />}<SortHeader label="MVT" sortKey="mvt" active={sortKey} direction={sortDirection} onSort={onSort} className="align-left is-award" /><SortHeader label="All-Star" sortKey="allStars" active={sortKey} direction={sortDirection} onSort={onSort} className="align-left is-award" /><SortHeader label="Rec" sortKey="record" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="Div Rec" sortKey="divisionRecord" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="PCT" sortKey="winPercentage" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="PF" sortKey="pointsFor" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="PA" sortKey="pointsAgainst" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="Diff" sortKey="difference" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="Strk" sortKey="currentStreak" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="Home" sortKey="home" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="Away" sortKey="away" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="GOTW" sortKey="featuredWins" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="SOV" sortKey="sov" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="SOS" sortKey="sos" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="Best" sortKey="bestStreak" active={sortKey} direction={sortDirection} onSort={onSort} /><SortHeader label="PO %" sortKey="playoff" active={sortKey} direction={sortDirection} onSort={onSort} />{!hasVisibleStatus && <SortHeader label="Status" sortKey="status" active={sortKey} direction={sortDirection} onSort={onSort} className="align-left is-status" />}</tr></thead><tbody>{displayedStandings.map((row) => { const team = teamById.get(row.teamId)!; const division = divisionById.get(team.divisionId)!; const conference = conferenceOfDivision(schedule.setup, division.id); const clinch = selectedClinches.get(team.id); const statusCell = <td className="standings-status-cell"><ClinchBadges timeline={clinch} division={division} compact /><span className="standings-no-status">—</span></td>; const diff = formatDifferential(row.pointsFor - row.pointsAgainst); const played = row.wins + row.losses + row.ties > 0; const stat = teamStatsByTeam.get(row.teamId)!; return <tr className={clinch?.eliminated ? "is-eliminated" : undefined} key={row.teamId}><td className="standings-rank-cell"><RankMovement row={row} /></td><td><Link className="standings-team-link" href={`${teamHrefBase}/${team.id}`}><EntityLogo className="team-mark standings-team-logo" color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={50} /><span className="standings-team-copy">{team.city && <small className="standings-team-city team-city">{team.city}</small>}<strong>{team.name}</strong></span></Link></td><td className="standings-division-cell"><DivisionIdentity division={division} />{conference && <span className="standings-conference-chip"><ConferenceMark conference={conference} size={14} />{conference.name}</span>}</td>{!isPreseason && <><td className="standings-preseason-cell"><strong>#{row.preseasonRank}</strong></td><td className="standings-preseason-change"><PreseasonMovement row={row} /></td></>}{hasVisibleStatus && statusCell}<td className="standings-award-cell"><span className="award-chip"><strong>{formatPoints(stat.mvtScore)}</strong>{stat.mvtRank ? <small>#{stat.mvtRank}</small> : <small>—</small>}</span></td><td className="standings-award-cell"><span className="award-chip"><strong>{stat.allStarCount}</strong>{stat.allStarRank ? <small>#{stat.allStarRank}</small> : <small>—</small>}</span></td><td>{formatRecord(row)}</td><td>{formatDivisionRecord(row)}</td><td>{played ? row.winPercentage.toFixed(3).replace(/^0/, "") : "—"}</td><td>{formatPoints(row.pointsFor)}</td><td>{formatPoints(row.pointsAgainst)}</td><td className={diff.tone}>{diff.text}</td><td>{row.streak}</td><td>{formatSplitRecord(stat.home)}</td><td>{formatSplitRecord(stat.away)}</td><td>{stat.featuredWins + stat.featuredLosses + stat.featuredTies === 0 ? "—" : `${stat.featuredWins}-${stat.featuredLosses}${stat.featuredTies ? `-${stat.featuredTies}` : ""}`}</td><td>{decimal(stat.strengthOfVictory)}</td><td>{decimal(stat.strengthOfSchedule)}</td><td>{stat.bestStreak}</td><td>{oddsPercentage(stat.playoffOdds, completedSeasonOddsFinalized)}</td>{!hasVisibleStatus && statusCell}</tr>; })}</tbody></table></div><dl className="stats-abbr-legend" aria-label="Column key"><div><dt>Status</dt><dd>Clinched playoff, division, top-seed, or eliminated state</dd></div><div><dt>MVT</dt><dd>Most Valuable Team score (power ranking)</dd></div><div><dt>All-Star</dt><dd>Season All-Star count</dd></div><div><dt>PF / PA</dt><dd>Points for / against</dd></div><div><dt>DIFF</dt><dd>Point differential</dd></div><div><dt>GOTW</dt><dd>Game-of-the-week record</dd></div><div><dt>SOV</dt><dd>Strength of victory</dd></div><div><dt>SOS</dt><dd>Strength of schedule</dd></div><div><dt>STRK / BEST</dt><dd>Current / best win streak</dd></div><div><dt>PO %</dt><dd>Projected playoff odds</dd></div></dl>
         {schedule.weeks.length > 0 && schedule.weeks.every((week) => week.games.every(isGamePlayed)) && selectedResolution.tieGroups.length > 0 && <section className="standings-tie-groups" aria-label="Standings tie groups"><header><Swords /><span><strong>{selectedResolution.tieGroups.length} tied group{selectedResolution.tieGroups.length === 1 ? "" : "s"}</strong><small>These teams reached the end of the configured field rules.</small></span></header>{selectedResolution.tieGroups.map((tie) => <article key={tie.signature}><div className="tie-group-teams">{tie.orderedTeamIds.map((teamId, index) => { const team = teamById.get(teamId)!; return <span key={teamId}><b>{index + 1}</b><EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={32} /><strong>{teamDisplayName(team)}</strong></span>; })}</div><span><strong>{tie.resolution === "manual" ? "Manual order applied" : "Deterministic fallback applied"}</strong><small>{tie.explanation}</small><em>{tie.appliedRules.map((rule) => TIEBREAKER_RULE_LABELS[rule]).join(" → ") || "No configured rules"}</em></span><button type="button" disabled={readOnly || !onUpdateTiebreakers} onClick={() => setActiveTieSignature(tie.signature)}>{tie.resolution === "manual" ? "Edit order" : "Resolve tie"}</button></article>)}</section>}
-        <section className="season-odds-table-panel">
-          <header><Gauge /><span><strong>Season odds</strong><small>500 deterministic simulations</small></span></header>
-          <div className="data-table-wrap"><table className="data-table season-odds-table"><thead><tr><th>TEAM</th><th>PROJ REC</th><th>PLAYOFF</th><th>DIVISION</th><th>CHAMP</th><th>#1 SEED</th><th>AVG FINISH</th></tr></thead><tbody>{visibleOdds.map((row) => { const team = teamById.get(row.teamId)!; const division = divisionById.get(team.divisionId); return <tr key={team.id}><td><Link className="season-odds-team-link" href={`${teamHrefBase}/${team.id}`}><EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={32} /><span><strong>{team.name}</strong><small><span className="team-city">{team.city}</span>{team.city && division ? " · " : ""}{division?.name}</small></span></Link></td><td>{compactProjectedRecord(row.projectedRecord)}</td><td><span className="season-odds-meter"><em>{percentage(row.playoffOdds)}</em><i><b style={{ width: `${Math.max(2, row.playoffOdds * 100)}%`, background: accessibleTeamColor(team.color) }} /></i></span></td><td>{percentage(row.divisionOdds)}</td><td>{percentage(row.championshipOdds)}</td><td>{percentage(row.topSeedOdds)}</td><td>#{row.averageFinish.toFixed(1)}</td></tr>; })}</tbody></table></div>
-        </section>
       </div>
       <div className="stats-rule-strip"><ShieldCheck /><span><strong>Standings rules</strong><small>League seeds and division ranks follow the same configured order above. Head-to-head and common opponents are recalculated inside each tied group, and unavailable values fall last. Clinches and eliminations appear only when every remaining outcome confirms them, and the final league order feeds playoff seeding.</small></span></div>
+    </div>}
+    {tab === "season-odds" && <div className="stats-tab-panel" role="tabpanel" id="stats-panel-season-odds" aria-labelledby="stats-tab-season-odds" tabIndex={0}>
+      <div className="stats-filter-bar controls-only">
+        <div className="stats-filter-controls season-odds-controls">
+          <CustomSelect label="Odds scope" value={divisionId} onChange={setDivisionId} options={filterOptions} />
+          <CustomSelect label="Odds week" value={oddsWeek} onChange={setOddsWeek} options={oddsWeekOptions} />
+        </div>
+      </div>
+      <section className="season-odds-table-panel">
+        <header><Gauge /><span><strong>Season odds</strong><small>{oddsSubhead}</small></span></header>
+        <div className="data-table-wrap">
+          <table className="data-table season-odds-table">
+            <thead>
+              <tr>
+                <SortHeader label={finalRegularComplete ? "Final rank" : "Current rank"} sortKey="rank" active={oddsSortKey} direction={oddsSortDirection} onSort={onOddsSort} />
+                <SortHeader label="Team" sortKey="team" active={oddsSortKey} direction={oddsSortDirection} onSort={onOddsSort} />
+                <SortHeader label="Draft order" sortKey="draftOrder" active={oddsSortKey} direction={oddsSortDirection} onSort={onOddsSort} />
+                <SortHeader label="Proj rec" sortKey="projectedRecord" active={oddsSortKey} direction={oddsSortDirection} onSort={onOddsSort} />
+                <SortHeader label="Playoff" sortKey="playoffOdds" active={oddsSortKey} direction={oddsSortDirection} onSort={onOddsSort} />
+                <SortHeader label="Division champ" sortKey="divisionOdds" active={oddsSortKey} direction={oddsSortDirection} onSort={onOddsSort} />
+                <SortHeader label="#1 seed" sortKey="topSeedOdds" active={oddsSortKey} direction={oddsSortDirection} onSort={onOddsSort} />
+                <SortHeader label="League champ" sortKey="championshipOdds" active={oddsSortKey} direction={oddsSortDirection} onSort={onOddsSort} />
+                <SortHeader label="Avg finish" sortKey="averageFinish" active={oddsSortKey} direction={oddsSortDirection} onSort={onOddsSort} />
+              </tr>
+            </thead>
+            <tbody>
+              {visibleOdds.map((row) => {
+                const team = teamById.get(row.teamId)!;
+                const division = divisionById.get(team.divisionId);
+                return <tr className={comparingOddsWeeks ? "is-comparing-odds" : undefined} key={team.id}>
+                  <td className="season-odds-rank-cell">#{finalRankByTeam.get(team.id) ?? "—"}</td>
+                  <td><Link className="season-odds-team-link" href={`${teamHrefBase}/${team.id}`}><EntityLogo color={team.color} logoUrl={team.logoUrl} monogram={teamInitials(team)} size={32} /><span><strong>{team.name}</strong><small><span className="team-city">{team.city}</span>{team.city && division ? " · " : ""}{division?.name}</small></span></Link></td>
+                  <td>{draftOrderLabel(team)}</td>
+                  <td>{oddsRecordCell(row)}</td>
+                  <td>{oddsPercentCell(row, team, "playoffOdds", true)}</td>
+                  <td>{oddsPercentCell(row, team, "divisionOdds")}</td>
+                  <td>{oddsPercentCell(row, team, "topSeedOdds")}</td>
+                  <td>{oddsPercentCell(row, team, "championshipOdds")}</td>
+                  <td>{oddsAverageFinishCell(row)}</td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>}
     {tab === "rank-race" && <div className="stats-tab-panel" role="tabpanel" id="stats-panel-rank-race" aria-labelledby="stats-tab-rank-race" tabIndex={0}>
       <div className="stats-filter-bar controls-only"><div className="stats-filter-controls"><CustomSelect label="Race scope" value={divisionId} onChange={setDivisionId} options={filterOptions} /></div></div>
@@ -775,9 +1036,30 @@ export function StatsWorkspace({ schedule, playerStats = [], onUpdateTiebreakers
         : <div className="stats-empty-state" role="status"><TrendingUp aria-hidden /><strong>The race hasn&apos;t started yet</strong><span>Enter Week 1 scores to start the race — each week you score adds a new point to every team&apos;s line.</span></div>}
       <div className="stats-rule-strip"><TrendingUp /><span><strong>Replayable weekly history</strong><small>Every point uses the rank, scoring, record, and point differential frozen after that week. Switch metrics to compare how each race changed through the selected week.</small></span></div>
     </div>}
-    {tab === "team-leaders" && <div className="stats-tab-panel" role="tabpanel" id="stats-panel-team-leaders" aria-labelledby="stats-tab-team-leaders" tabIndex={0}><div className="team-leader-grid"><TeamPodiumCard title="Hottest teams" icon={Flame} rows={completedTeams} teamById={teamById} value={hottest} label={(row) => row.streak} hrefBase={teamHrefBase} /><TeamPodiumCard title="Best home record" icon={Home} rows={completedTeams} teamById={teamById} value={(row) => recordGames(row.home) ? recordPercentage(row.home) : null} label={(row) => formatSplitRecord(row.home)} hrefBase={teamHrefBase} /><TeamPodiumCard title="Best away record" icon={Plane} rows={completedTeams} teamById={teamById} value={(row) => recordGames(row.away) ? recordPercentage(row.away) : null} label={(row) => formatSplitRecord(row.away)} hrefBase={teamHrefBase} /><TeamPodiumCard title="Best division record" icon={ShieldCheck} rows={completedTeams} teamById={teamById} value={(row) => { const g = row.divisionWins + row.divisionLosses + row.divisionTies; return g ? (row.divisionWins + row.divisionTies * 0.5) / g : null; }} label={(row) => `${row.divisionWins}-${row.divisionLosses}${row.divisionTies ? `-${row.divisionTies}` : ""}`} hrefBase={teamHrefBase} /><TeamPodiumCard title="Best division point diff" icon={Swords} rows={completedTeams} teamById={teamById} value={(row) => divisionsPlayed(row) ? row.divisionPointsFor - row.divisionPointsAgainst : null} label={(row) => formatDifferential(row.divisionPointsFor - row.divisionPointsAgainst).text} hrefBase={teamHrefBase} /><TeamPodiumCard title="Highest scoring" icon={Zap} rows={completedTeams} teamById={teamById} value={(row) => row.pointsFor} label={(row) => `${formatPoints(row.pointsFor)} PF`} hrefBase={teamHrefBase} /><TeamPodiumCard title="Best point differential" icon={Target} rows={completedTeams} teamById={teamById} value={(row) => row.pointsFor - row.pointsAgainst} label={(row) => formatDifferential(row.pointsFor - row.pointsAgainst).text} hrefBase={teamHrefBase} /></div></div>}
+    {tab === "team-leaders" && <div className="stats-tab-panel" role="tabpanel" id="stats-panel-team-leaders" aria-labelledby="stats-tab-team-leaders" tabIndex={0}>
+      <div className="league-leader-browser">
+        <div className="leader-category-tabs team-leader-tabs" role="tablist" aria-label="Team leader category">
+          {teamLeaderTabs.map((item) => <button type="button" role="tab" aria-selected={teamLeaderView === item.key} className={teamLeaderView === item.key ? "active" : ""} onClick={() => setTeamLeaderView(item.key)} key={item.key}>{item.label}</button>)}
+        </div>
+        <div className="league-leader-focus team-leader-focus">{teamLeaderPanels[teamLeaderView]}</div>
+      </div>
+    </div>}
     {tab === "league-leaders" && <div className="stats-tab-panel" role="tabpanel" id="stats-panel-league-leaders" aria-labelledby="stats-tab-league-leaders" tabIndex={0}><div className="stats-rule-strip"><Trophy /><span><strong>Game quality seed</strong><small>Quality equals margin rank plus total-points rank. Lower is better; tied values share medals. Upsets use each team’s frozen rank entering that week.</small></span><span className="badge-legend">{(["GOTW", "Upset", "Shootout"] as const).map((badge) => <GameBadgeChip badge={badge} key={badge} />)}</span></div><div className="league-leader-browser"><div className="leader-category-tabs" role="tablist" aria-label="League leader category">{leagueLeaderTabs.map((item) => <button type="button" role="tab" aria-selected={leagueLeaderView === item.key} className={leagueLeaderView === item.key ? "active" : ""} onClick={() => setLeagueLeaderView(item.key)} key={item.key}>{item.label}</button>)}</div><div className="league-leader-focus">{leagueLeaderPanels[leagueLeaderView]}</div></div></div>}
-    {tab === "playoffs" && hasPlayoffResults && <div className="stats-tab-panel" role="tabpanel" id="stats-panel-playoffs" aria-labelledby="stats-tab-playoffs" tabIndex={0}><div className="game-leader-grid playoff-stat-grid"><GameHighlightPanel title="Greatest playoff games" schedule={schedule} items={playoffAnalytics} metric="qualityScore" direction="asc" playoff /><GameHighlightPanel title="Closest playoff games" schedule={schedule} items={playoffAnalytics} metric="margin" direction="asc" playoff /><GameHighlightPanel title="Highest-scoring playoff games" schedule={schedule} items={playoffAnalytics} metric="total" direction="desc" playoff /></div></div>}
+    {tab === "playoffs" && hasAnyPlayoffResults && <div className="stats-tab-panel" role="tabpanel" id="stats-panel-playoffs" aria-labelledby="stats-tab-playoffs" tabIndex={0}>
+      <div className="stats-rule-strip"><Trophy /><span><strong>Championship bracket first</strong><small>Playoff leaders start with championship bracket games only. Switch brackets when you want to include consolation results.</small></span></div>
+      <div className="league-leader-browser">
+        <div className="leader-category-tabs playoff-bracket-tabs" role="tablist" aria-label="Playoff stat bracket">
+          {playoffLeaderTabs.map((item) => <button type="button" role="tab" aria-selected={playoffStatsView === item.key} aria-disabled={item.disabled || undefined} disabled={item.disabled} className={playoffStatsView === item.key ? "active" : ""} onClick={() => setPlayoffStatsView(item.key)} key={item.key}>{item.label}</button>)}
+        </div>
+        <div className="leader-category-tabs playoff-stat-tabs" role="tablist" aria-label="Playoff stat category">
+          {playoffCategoryTabs.map((item) => <button type="button" role="tab" aria-selected={playoffLeaderView === item.key} aria-disabled={item.disabled || undefined} disabled={item.disabled} className={playoffLeaderView === item.key ? "active" : ""} onClick={() => setPlayoffLeaderView(item.key)} key={item.key}>{item.label}</button>)}
+        </div>
+        <div className="league-leader-focus">
+          {hasPlayoffResults ? playoffLeaderPanels[playoffLeaderView] : <div className="leader-empty">No completed results for this bracket yet</div>}
+        </div>
+      </div>
+    </div>}
+    {leaderGameId && <GameDetailSheet schedule={schedule} gameId={leaderGameId} playerStats={playerStats} onClose={() => setLeaderGameId(null)} />}
     {activeTie && <TieResolutionModal tie={activeTie} schedule={schedule} onClose={() => setActiveTieSignature(null)} onSave={(orderedTeamIds) => { updateTiebreakers({ ...tiebreakerSettings, manualOverrides: { ...tiebreakerSettings.manualOverrides, [activeTie.signature]: orderedTeamIds } }); setActiveTieSignature(null); }} />}
   </div>;
 }

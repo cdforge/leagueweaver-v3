@@ -1,7 +1,16 @@
 "use client";
 
 import { useMemo, useState, type CSSProperties } from "react";
-import { ArrowRight, Maximize2, ShieldCheck, X } from "lucide-react";
+import {
+  ArrowRight,
+  ClipboardList,
+  Maximize2,
+  ShieldCheck,
+  Shuffle,
+  Ticket,
+  Trophy,
+  X,
+} from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import {
   BracketConnectorLayer,
@@ -1723,10 +1732,16 @@ export function PlayoffLivePreview({
             </button>
           )}
         </div>
+        {canExpandBracket && (
+          <p className="ppw-preview-guide">
+            Scroll sideways to follow each round. Open the expanded view for the
+            clean bracket board.
+          </p>
+        )}
         {renderPreviewBody()}
         <div className="ppw-facts">
           <span className="ppw-fact">
-            🏟{" "}
+            <Trophy aria-hidden="true" />
             <b>
               {p.championshipVenueMode === "neutral-site"
                 ? "Neutral site"
@@ -1734,7 +1749,7 @@ export function PlayoffLivePreview({
             </b>
           </span>
           <span className="ppw-fact">
-            🔀{" "}
+            <Shuffle aria-hidden="true" />
             <b>
               {p.reseedMode === "each-round"
                 ? "Reseed each round"
@@ -1744,7 +1759,7 @@ export function PlayoffLivePreview({
             </b>
           </span>
           <span className="ppw-fact">
-            🧾{" "}
+            <ClipboardList aria-hidden="true" />
             <b>
               {normalized.draftOrderMode === "reverse-standings"
                 ? "Reverse draft"
@@ -1753,7 +1768,7 @@ export function PlayoffLivePreview({
           </span>
           {byeCount > 0 && (
             <span className="ppw-fact">
-              🎫{" "}
+              <Ticket aria-hidden="true" />
               <b>
                 {byeCount} bye{byeCount === 1 ? "" : "s"}
               </b>

@@ -10,6 +10,7 @@ import {
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
+  Activity,
   BarChart3,
   CalendarDays,
   Check,
@@ -129,6 +130,7 @@ import {
   projectPlayoffSeeds,
   resolvePlayoffPlacementMode,
 } from "@/lib/playoffs";
+import { providerMatchupIdWithTeams } from "@/lib/providerGameLinks";
 import {
   clearAllHypotheticalResults,
   clearSimulatedResults,
@@ -183,7 +185,7 @@ import {
   updateGameScore,
 } from "@/lib/schedule";
 import { getWeekPhase } from "@/lib/weekPhase";
-import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
+import { teamDisplayName, teamInitials, teamMonogram } from "@/lib/teamIdentity";
 import {
   GAME_DETAIL_CACHE_PREFIX,
   type GameDetailPlayerStat,
@@ -196,6 +198,7 @@ import {
 } from "@/lib/playerData";
 import type {
   GeneratedSchedule,
+  Division,
   ImportHistoryEvent,
   ImportPreview,
   LeagueSetupInput,
@@ -218,6 +221,7 @@ type ViewKey =
   | "gotw"
   | "matchup-ratings"
   | "standings"
+  | "stats"
   | "mvt"
   | "all-stars"
   | "playoffs"
@@ -304,6 +308,7 @@ type ImportedScoreRow = {
   homeName: string;
   awayScore?: number;
   homeScore?: number;
+  providerMatchupId?: string | null;
 };
 type HistoryBrowserSeason = {
   id: string;
@@ -391,11 +396,39 @@ function providerTail(value?: string) {
   return value?.split("-").at(-1) ?? "";
 }
 
-function buildHistoryTeamMap(
+const HISTORY_TEAM_COLORS = [
+  "#117A45",
+  "#2457A7",
+  "#B42318",
+  "#7A4A12",
+  "#6D28D9",
+  "#0F766E",
+  "#BE185D",
+  "#4338CA",
+];
+
+function slugHistoryId(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "team";
+}
+
+function splitHistoryTeamName(value: string) {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return { city: "", name: value.trim() || "Historic team" };
+  return { city: parts[0], name: parts.slice(1).join(" ") };
+}
+
+function buildHistoryRoster(
   schedule: GeneratedSchedule,
   season: HistoryBrowserSeason,
 ) {
-  const byLeagueTeamId = new Map<string, string>();
+  const teamIdByHistoryTeam = new Map<string, string>();
+  const historyTeamById = new Map(
+    season.teams.map((team) => [team.leagueTeamId, team]),
+  );
   const currentProviderId = new Map<string, string>(
     schedule.setup.teams.map((team) => [team.providerId ?? "", team.id]),
   );
@@ -410,15 +443,84 @@ function buildHistoryTeamMap(
       team.id,
     ]),
   );
-  for (const team of season.teams) {
+  const divisionIds = new Set(schedule.setup.divisions.map((division) => division.id));
+  const extraDivisions = new Map<string, Division>();
+  const teams: Team[] = [];
+  const usedTeamIds = new Set<string>();
+
+  season.teams
+    .slice()
+    .sort(
+      (left, right) =>
+        (left.finalStanding ?? 999) - (right.finalStanding ?? 999) ||
+        left.teamName.localeCompare(right.teamName),
+    )
+    .forEach((team, index) => {
     const exactProviderId = `${season.provider}-${season.providerLeagueId}-${team.providerRosterOrTeamId}`;
     const match =
       currentProviderId.get(exactProviderId) ??
       currentProviderTail.get(team.providerRosterOrTeamId) ??
       currentName.get(normalizeHistoryName(team.teamName));
-    if (match) byLeagueTeamId.set(team.leagueTeamId, match);
-  }
-  return byLeagueTeamId;
+      if (match) {
+        const current = schedule.setup.teams.find((item) => item.id === match);
+        if (current && !usedTeamIds.has(current.id)) {
+          teamIdByHistoryTeam.set(team.leagueTeamId, current.id);
+          teams.push({
+            ...current,
+            overallRank: team.finalStanding ?? current.overallRank,
+            priorRegularSeasonRank: team.finalStanding ?? current.priorRegularSeasonRank,
+            priorPlayoffRank: team.finalStanding ?? current.priorPlayoffRank,
+          });
+          usedTeamIds.add(current.id);
+          return;
+        }
+      }
+
+      const { city, name } = splitHistoryTeamName(team.teamName);
+      const divisionId = team.divisionId && divisionIds.has(team.divisionId)
+        ? team.divisionId
+        : team.divisionId
+          ? `history-division-${slugHistoryId(team.divisionId)}`
+          : schedule.setup.divisions[index % Math.max(1, schedule.setup.divisions.length)]?.id ?? "history-division";
+      if (!divisionIds.has(divisionId) && !extraDivisions.has(divisionId)) {
+        extraDivisions.set(divisionId, {
+          id: divisionId,
+          name: team.divisionId ? `Historic Division ${team.divisionId}` : "Historic teams",
+          color: HISTORY_TEAM_COLORS[index % HISTORY_TEAM_COLORS.length],
+          colorSource: "auto",
+        });
+      }
+      const id = `history-${season.season}-${slugHistoryId(team.leagueTeamId)}`;
+      const color = HISTORY_TEAM_COLORS[index % HISTORY_TEAM_COLORS.length];
+      const historicTeam: Team = {
+        id,
+        providerId: `${season.provider}-${season.providerLeagueId}-${team.providerRosterOrTeamId}`,
+        city,
+        name,
+        shortName: teamMonogram(city, name),
+        manager: team.managerName ?? "",
+        color,
+        divisionId,
+        overallRank: team.finalStanding ?? index + 1,
+        priorRegularSeasonRank: team.finalStanding,
+        priorPlayoffRank: team.finalStanding,
+        stadium: `${team.teamName} venue`,
+      };
+      teamIdByHistoryTeam.set(team.leagueTeamId, id);
+      teams.push(historicTeam);
+      usedTeamIds.add(id);
+    });
+
+  const divisions = [
+    ...schedule.setup.divisions.filter((division) =>
+      teams.some((team) => team.divisionId === division.id),
+    ),
+    ...extraDivisions.values(),
+  ];
+  if (!divisions.length) divisions.push(...schedule.setup.divisions.slice(0, 1));
+
+  const teamById = new Map(teams.map((team) => [team.id, team]));
+  return { teamIdByHistoryTeam, historyTeamById, teams, divisions, teamById };
 }
 
 function historyLineupStatus(value: string): LineupStatus {
@@ -448,13 +550,13 @@ function numberFromHistorySetting(value: unknown) {
 }
 
 function historicalRegularSeasonWeeks(season: HistoryBrowserSeason) {
-  const direct = numberFromHistorySetting(season.regularSeasonWeekCount);
-  if (direct && direct >= 1 && direct <= 18) return direct;
   const sleeperStart = numberFromHistorySetting(
     season.playoffSettings?.playoff_week_start,
   );
   if (sleeperStart && sleeperStart > 1 && sleeperStart <= 18)
     return sleeperStart - 1;
+  const direct = numberFromHistorySetting(season.regularSeasonWeekCount);
+  if (direct && direct >= 1 && direct <= 18) return direct;
   return undefined;
 }
 
@@ -471,6 +573,33 @@ function historicalFieldSize(
     Math.min(season.teamCount || providerValue, Math.round(providerValue)),
   );
   return normalized as PlayoffFieldSize;
+}
+
+function historicalPlayoffWeeks(
+  season: HistoryBrowserSeason,
+  regularWeeks?: number,
+) {
+  const providerWeeks = numberFromHistorySetting(
+    season.playoffSettings?.playoff_weeks,
+  );
+  if (providerWeeks === 3 || providerWeeks === 4) return providerWeeks;
+  if (!regularWeeks) return undefined;
+  const actualWeeks = Math.max(
+    0,
+    ...season.games
+      .map((game) => game.week - regularWeeks)
+      .filter((week) => week > 0),
+  );
+  return actualWeeks === 3 || actualWeeks === 4 ? actualWeeks : undefined;
+}
+
+function historicalReseedMode(
+  season: HistoryBrowserSeason,
+): GeneratedSchedule["setup"]["playoffs"]["reseedMode"] {
+  const setting = season.playoffSettings?.playoff_reseed;
+  return setting === true || setting === "true" || setting === 1
+    ? "each-round"
+    : "fixed";
 }
 
 function compareHistoryPlayerRows(
@@ -498,48 +627,59 @@ function buildHistoricalSchedule(
   season?: HistoryBrowserSeason,
 ): GeneratedSchedule | null {
   if (!season) return null;
-  const teamIdByHistoryTeam = buildHistoryTeamMap(schedule, season);
+  const historyRoster = buildHistoryRoster(schedule, season);
+  const { teamIdByHistoryTeam, teams, divisions, teamById } = historyRoster;
   const gamesByWeek = new Map<number, ScheduledGame[]>();
   const playoffGamesByRound = new Map<number, PlayoffGame[]>();
   const regularWeeks = historicalRegularSeasonWeeks(season);
-  const playoffWeeks = regularWeeks
-    ? Math.max(
-        3,
-        Math.min(
-          4,
-          Math.max(0, ...season.games.map((game) => game.week - regularWeeks)),
-        ),
-      )
-    : undefined;
+  const playoffWeeks = historicalPlayoffWeeks(season, regularWeeks);
   const setupWeeks =
     regularWeeks === 13 || regularWeeks === 14
       ? regularWeeks
       : schedule.setup.weeks;
+  const mappedPlayoffTeamIds = new Set<string>();
+  for (const game of season.games) {
+    if (!regularWeeks || game.week <= regularWeeks) continue;
+    const homeTeamId = teamIdByHistoryTeam.get(game.homeLeagueTeamId);
+    const awayTeamId = teamIdByHistoryTeam.get(game.awayLeagueTeamId);
+    if (homeTeamId) mappedPlayoffTeamIds.add(homeTeamId);
+    if (awayTeamId) mappedPlayoffTeamIds.add(awayTeamId);
+  }
+  const historicalFinalStandingIds = season.teams
+    .filter((team) => team.finalStanding != null)
+    .sort(
+      (left, right) =>
+        (left.finalStanding ?? 999) - (right.finalStanding ?? 999),
+    )
+    .flatMap((team) => teamIdByHistoryTeam.get(team.leagueTeamId) ?? []);
+  const historicalLockedTeamIds = [
+    ...historicalFinalStandingIds,
+    ...mappedPlayoffTeamIds,
+  ].filter((teamId, index, teamIds) => teamIds.indexOf(teamId) === index);
+  const fieldSize = historicalFieldSize(
+    season,
+    schedule.setup.playoffs.fieldSize,
+  );
   const setup = {
     ...schedule.setup,
     seasonYear: season.season,
     name: `${schedule.setup.name} ${season.season}`,
     abbreviation: schedule.setup.abbreviation,
     weeks: setupWeeks,
+    divisions,
+    conferences: undefined,
+    teams,
     playoffs: {
       ...schedule.setup.playoffs,
-      fieldSize: historicalFieldSize(season, schedule.setup.playoffs.fieldSize),
+      fieldSize,
       playoffWeeks:
         playoffWeeks === 3 || playoffWeeks === 4
           ? playoffWeeks
           : schedule.setup.playoffs.playoffWeeks,
+      placementMode: "overall" as const,
+      reseedMode: historicalReseedMode(season),
       fieldStatus: "locked" as const,
-      lockedTeamIds: season.teams
-        .filter((team) => team.finalStanding != null)
-        .sort(
-          (left, right) =>
-            (left.finalStanding ?? 999) - (right.finalStanding ?? 999),
-        )
-        .flatMap((team) => teamIdByHistoryTeam.get(team.leagueTeamId) ?? [])
-        .slice(
-          0,
-          historicalFieldSize(season, schedule.setup.playoffs.fieldSize),
-        ),
+      lockedTeamIds: historicalLockedTeamIds.slice(0, fieldSize),
     },
   };
   const roundNames = getPlayoffRoundNames(
@@ -549,12 +689,8 @@ function buildHistoricalSchedule(
   for (const game of season.games) {
     const homeTeamId = teamIdByHistoryTeam.get(game.homeLeagueTeamId);
     const awayTeamId = teamIdByHistoryTeam.get(game.awayLeagueTeamId);
-    const home = homeTeamId
-      ? schedule.setup.teams.find((team) => team.id === homeTeamId)
-      : undefined;
-    const away = awayTeamId
-      ? schedule.setup.teams.find((team) => team.id === awayTeamId)
-      : undefined;
+    const home = homeTeamId ? teamById.get(homeTeamId) : undefined;
+    const away = awayTeamId ? teamById.get(awayTeamId) : undefined;
     if (!homeTeamId || !awayTeamId || !home || !away) continue;
     const isPlayoff = Boolean(regularWeeks && game.week > regularWeeks);
     const roundIndex =
@@ -578,6 +714,7 @@ function buildHistoricalSchedule(
       stadium: home.stadium,
       homeScore: game.homeScore,
       awayScore: game.awayScore,
+      providerMatchupId: providerMatchupIdWithTeams(game.providerMatchupId, game.homeLeagueTeamId, game.awayLeagueTeamId),
       notes: [
         `${season.provider.toUpperCase()} history`,
         isPlayoff
@@ -629,7 +766,7 @@ function buildHistoricalPlayerRows(
   season?: HistoryBrowserSeason,
 ): GameDetailPlayerStat[] {
   if (!season) return [];
-  const teamIdByHistoryTeam = buildHistoryTeamMap(schedule, season);
+  const { teamIdByHistoryTeam } = buildHistoryRoster(schedule, season);
   const starterCounts = new Map<string, number>();
   const sortedRows = [...season.playerRows].sort((left, right) =>
     compareHistoryPlayerRows(season.provider, left, right),
@@ -709,10 +846,12 @@ const VIEW_ITEMS: Array<{
   { key: "prints", label: "Copy Sheet", icon: Printer },
   { key: "gotw", label: "Game of the Week", icon: Star },
   { key: "matchup-ratings", label: "Matchup Ratings", icon: SlidersHorizontal },
-  { key: "standings", label: "Standings", icon: BarChart3 },
+  { key: "standings", label: "Standings", icon: BarChart3, beta: true },
+  { key: "stats", label: "Stats", icon: Activity, beta: true },
   { key: "mvt", label: "MVT", icon: Medal, comingSoon: true },
   { key: "all-stars", label: "All-Stars", icon: Sparkles, comingSoon: true },
   { key: "playoffs", label: "Playoffs", icon: Trophy },
+
   { key: "share", label: "Share", icon: Share2, beta: true },
   { key: "settings", label: "Settings", icon: Settings },
 ];
@@ -722,6 +861,7 @@ const HISTORY_COMPATIBLE_VIEWS = new Set<ViewKey>([
   "gotw",
   "matchup-ratings",
   "standings",
+  "stats",
   "playoffs",
 ]);
 
@@ -971,6 +1111,7 @@ function PlayoffWeekSchedule({
         awayDivision={divisionById.get(away.divisionId)}
         homeDivision={divisionById.get(home.divisionId)}
         setup={schedule.setup}
+        seasonYear={schedule.setup.seasonYear}
         awayRank={awaySeed}
         homeRank={homeSeed}
         awayRecord={recordFor(awayTeamId)}
@@ -1884,6 +2025,7 @@ function ScheduleView({
               <MatchupCard
                 key={game.id}
                 {...presentationFor(game, week.weekNumber)}
+                seasonYear={schedule.setup.seasonYear}
                 featured={featured}
                 featuredLabel={
                   featured && gotwEntry
@@ -1947,12 +2089,10 @@ function MatchupRatingsView({
   schedule,
   teamHrefFor,
   leagueWeekHrefFor,
-  onOpenGame,
 }: {
   schedule: GeneratedSchedule;
   teamHrefFor?: (teamId: string) => string;
   leagueWeekHrefFor?: (week: number) => string;
-  onOpenGame?: (gameId: string) => void;
 }) {
   // Fixed presentation: all matchups, strongest first, weekly-standings lens.
   const lens: "live" | "preseason" = "live";
@@ -2079,46 +2219,8 @@ function MatchupRatingsView({
               const isGameOfWeek = scheduleSignals.gotwIds.has(game.id);
               return (
                 <tr
-                  className={[
-                    onOpenGame ? "is-openable" : "",
-                    isGameOfWeek ? "is-gotw" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
+                  className={isGameOfWeek ? "is-gotw" : undefined}
                   key={game.id}
-                  role={onOpenGame ? "button" : undefined}
-                  tabIndex={onOpenGame ? 0 : undefined}
-                  aria-label={
-                    onOpenGame
-                      ? `Open game details for Week ${game.week}, ${away.name} at ${home.name}`
-                      : undefined
-                  }
-                  onClick={(event) => {
-                    if (
-                      onOpenGame &&
-                      !(
-                        event.target instanceof HTMLElement &&
-                        event.target.closest(
-                          "a, button, input, select, textarea, summary",
-                        )
-                      )
-                    )
-                      onOpenGame(game.id);
-                  }}
-                  onKeyDown={(event) => {
-                    if (
-                      !onOpenGame ||
-                      (event.target instanceof HTMLElement &&
-                        event.target.closest(
-                          "a, button, input, select, textarea, summary",
-                        ))
-                    )
-                      return;
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      onOpenGame(game.id);
-                    }
-                  }}
                 >
                   <td>
                     <Link
@@ -2249,6 +2351,7 @@ function MatchupRatingsView({
               awayDivision={divisionById.get(away.divisionId)}
               homeDivision={divisionById.get(home.divisionId)}
               setup={schedule.setup}
+              seasonYear={schedule.setup.seasonYear}
               awayRank={rowRanks.get(away.id) ?? away.overallRank}
               homeRank={rowRanks.get(home.id) ?? home.overallRank}
               awayRecord={{
@@ -2270,7 +2373,6 @@ function MatchupRatingsView({
               showVenue={false}
               teamHrefBase={`/season/${schedule.id}/team`}
               teamHrefFor={teamHrefFor}
-              onOpenGame={onOpenGame}
             />
           );
         })}
@@ -2802,11 +2904,13 @@ function StandingsView({
   playerStats,
   onUpdateTiebreakers,
   readOnly = false,
+  mode = "standings",
 }: {
   schedule: GeneratedSchedule;
   playerStats?: GameDetailPlayerStat[];
   onUpdateTiebreakers?: (settings: TiebreakerSettings) => void;
   readOnly?: boolean;
+  mode?: "standings" | "stats";
 }) {
   return (
     <StatsWorkspace
@@ -2814,6 +2918,7 @@ function StandingsView({
       playerStats={playerStats}
       onUpdateTiebreakers={onUpdateTiebreakers}
       readOnly={readOnly}
+      mode={mode}
     />
   );
 }
@@ -6773,7 +6878,7 @@ export function SeasonWorkspace({
       if (!current) return current;
       const updated = rows.reduce(
         (next, row) =>
-          updateGameScore(next, row.gameId, row.homeScore, row.awayScore),
+          updateGameScore(next, row.gameId, row.homeScore, row.awayScore, row.providerMatchupId),
         current,
       );
       return freezeCompletedRankHistory(updated);
@@ -6805,7 +6910,6 @@ export function SeasonWorkspace({
       });
       const result = (await response.json().catch(() => ({}))) as {
         rows?: Array<ImportedScoreRow & { confidence?: "high" | "review" }>;
-        rosterDetails?: GeneratedSchedule["matchupRosterDetails"];
         unmatched?: unknown[];
         warnings?: string[];
         syncedAt?: string;
@@ -6827,15 +6931,11 @@ export function SeasonWorkspace({
           if (!current) return current;
           const updated = highConfidence.reduce(
             (next, row) =>
-              updateGameScore(next, row.gameId, row.homeScore, row.awayScore),
+              updateGameScore(next, row.gameId, row.homeScore, row.awayScore, row.providerMatchupId),
             current,
           );
           return freezeCompletedRankHistory({
             ...updated,
-            matchupRosterDetails: {
-              ...(updated.matchupRosterDetails ?? {}),
-              ...(result.rosterDetails ?? {}),
-            },
             setup: {
               ...updated.setup,
               platformConnection: updated.setup.platformConnection
@@ -6850,19 +6950,6 @@ export function SeasonWorkspace({
           });
         });
       } else {
-        if (result.rosterDetails) {
-          setSchedule((current) =>
-            current
-              ? {
-                  ...current,
-                  matchupRosterDetails: {
-                    ...(current.matchupRosterDetails ?? {}),
-                    ...result.rosterDetails,
-                  },
-                }
-              : current,
-          );
-        }
         updatePlatformConnection({
           lastSyncAt: result.syncedAt,
           status: result.warnings?.length ? "warning" : "ready",
@@ -7896,7 +7983,6 @@ export function SeasonWorkspace({
                         label: modalGameLabel(modalNextGame),
                       }
                     : undefined,
-                  games: modalGames,
                   onSelect: openGameDetail,
                 }
               : undefined
@@ -8340,7 +8426,6 @@ export function SeasonWorkspace({
               view === "matchup-ratings" && (
                 <MatchupRatingsView
                   schedule={workspaceSchedule ?? activeSchedule}
-                  onOpenGame={openGameDetail}
                   teamHrefFor={(teamId) =>
                     hrefWithHistorySeason(
                       `/season/${schedule.id}/team/${teamId}`,
@@ -8352,7 +8437,9 @@ export function SeasonWorkspace({
                 />
               )
             )}
-            {view === "standings" && historyViewActive && !historySchedule ? (
+            {(view === "standings" || view === "stats") &&
+            historyViewActive &&
+            !historySchedule ? (
               <HistoryMissingState
                 season={selectedHistorySeason}
                 onSync={syncLeagueHistory}
@@ -8360,7 +8447,7 @@ export function SeasonWorkspace({
                 canSync={canSyncHistory}
               />
             ) : (
-              view === "standings" && (
+              (view === "standings" || view === "stats") && (
                 <StandingsView
                   schedule={workspaceSchedule ?? activeSchedule}
                   playerStats={workspacePlayerStats}
@@ -8370,6 +8457,7 @@ export function SeasonWorkspace({
                       : onUpdateTiebreakers
                   }
                   readOnly={Boolean(simulation || historyViewActive)}
+                  mode={view === "stats" ? "stats" : "standings"}
                 />
               )
             )}

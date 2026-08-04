@@ -181,6 +181,8 @@ export interface ScheduledGame {
   tbdReason?: string;
   homeScore?: number;
   awayScore?: number;
+  /** Provider-owned matchup identity, present only when this exact game exists on ESPN or Sleeper. */
+  providerMatchupId?: string | null;
 }
 
 export interface PlayerScoreDetail {
@@ -399,6 +401,7 @@ export interface PlatformSyncScoreRow {
   homeScore?: number;
   confidence: "high" | "review";
   source: PlatformProvider;
+  providerMatchupId?: string | null;
 }
 
 export interface PlatformSyncResult {

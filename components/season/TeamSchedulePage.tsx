@@ -646,6 +646,7 @@ export function TeamScheduleView({ schedule, teamId, playerStats = [], onSelectT
               awayRecord={recordThroughWeek(away.id)}
               homeRecord={recordThroughWeek(home.id)}
               signal={getMatchupSignal(game, undefined, planningRatingRange, teamCount)}
+              seasonYear={schedule.setup.seasonYear}
               featured={isGameOfWeek}
               featuredLabel={gotwEntry ? gameOfWeekStatusLabel(gotwEntry.status) : "GOTW"}
               gameLabel={`Week ${week.weekNumber}`}
