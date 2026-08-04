@@ -106,7 +106,21 @@ assert.equal(rosterSynced?.away.starters[0]?.name, "Roster Away QB", "matchup ro
 assert.equal(rosterSynced?.home.starters[0]?.projected, 24.2, "matchup roster detail carries projections");
 assert.equal(rosterSynced?.home.bench[0]?.name, "Roster Home Bench", "matchup roster detail feeds bench");
 assert.equal(rosterSynced?.home.platformTotal, 111.22, "matchup roster detail carries platform total");
-checks += 4;
+assert.equal(rosterSynced?.status, "final", "matchup roster detail carries final status");
+const upcomingDetail: MatchupRosterDetail = {
+  ...rosterDetail,
+  status: "upcoming",
+  home: { ...rosterDetail.home, total: undefined, projectedTotal: 44.4 },
+  away: { ...rosterDetail.away, total: undefined, projectedTotal: 33.3 },
+};
+const upcomingSynced = buildGameDetailVM({ ...schedule, matchupRosterDetails: { [game.id]: upcomingDetail } }, game.id, []);
+assert.equal(upcomingSynced?.status, "upcoming", "matchup roster detail carries upcoming status");
+assert.equal(upcomingSynced?.home.projectedTotal, 44.4, "upcoming roster detail carries projected total");
+const liveSynced = buildGameDetailVM({ ...schedule, matchupRosterDetails: { [game.id]: { ...rosterDetail, status: "live" } } }, game.id, []);
+assert.equal(liveSynced?.status, "live", "matchup roster detail carries live status");
+const predraftSynced = buildGameDetailVM({ ...schedule, matchupRosterDetails: { [game.id]: { ...rosterDetail, status: "predraft" } } }, game.id, []);
+assert.equal(predraftSynced?.status, "predraft", "matchup roster detail carries predraft status");
+checks += 9;
 
 const orderedRows = [
   row(game.awayTeamId, "away-flex", 8.1, "starter", 4, "FLEX"),

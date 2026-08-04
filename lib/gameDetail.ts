@@ -36,6 +36,7 @@ export interface GameDetailSideVM {
   rank: number;
   platformTotal: number | null;
   starterTotal: number | null;
+  projectedTotal: number | null;
   starters: GameDetailSlotVM[];
   bench: GameDetailSlotVM[];
   reserves: GameDetailSlotVM[];
@@ -48,7 +49,7 @@ export interface GameDetailVM {
   weekNumber: number;
   dateLabel: string;
   game: ScheduledGame;
-  status: "upcoming" | "final";
+  status: "predraft" | "upcoming" | "live" | "final";
   isPlayoff: boolean;
   playoffLabel?: string;
   featured: boolean;
@@ -163,12 +164,16 @@ function sideVM({
     const starterTotal = starters.some((row) => Number.isFinite(row.points))
       ? Math.round(starters.reduce((sum, row) => sum + row.points, 0) * 100) / 100
       : scoreValue(rosterSide.total);
+    const projectedTotal = scoreValue(rosterSide.projectedTotal) ?? (starters.some((row) => row.projected != null)
+      ? Math.round(starters.reduce((sum, row) => sum + (row.projected ?? 0), 0) * 100) / 100
+      : null);
     return {
       team,
       division,
       rank,
       platformTotal: scoreValue(rosterSide.total) ?? platformTotal,
       starterTotal,
+      projectedTotal,
       starters,
       bench,
       reserves: [],
@@ -180,6 +185,7 @@ function sideVM({
   const bench = teamRows.filter((row) => row.lineupStatus === "bench" || row.lineupStatus === "unknown").map(toSlotVM);
   const reserves = teamRows.filter((row) => row.lineupStatus === "ir" || row.lineupStatus === "taxi" || row.lineupStatus === "reserve").map(toSlotVM);
   const starterTotal = starters.length ? Math.round(starters.reduce((sum, row) => sum + row.points, 0) * 100) / 100 : null;
+  const projectedTotal = starters.some((row) => row.projected != null) ? Math.round(starters.reduce((sum, row) => sum + (row.projected ?? 0), 0) * 100) / 100 : null;
 
   return {
     team,
@@ -187,6 +193,7 @@ function sideVM({
     rank,
     platformTotal,
     starterTotal,
+    projectedTotal,
     starters,
     bench,
     reserves,
@@ -243,7 +250,7 @@ export function buildGameDetailVM(schedule: GeneratedSchedule, gameId: string, p
     weekNumber,
     dateLabel: week?.dateLabel ?? game.dateLabel,
     game,
-    status: game.awayScore != null && game.homeScore != null ? "final" : "upcoming",
+    status: rosterDetail?.status ?? (game.awayScore != null && game.homeScore != null ? "final" : "upcoming"),
     isPlayoff: Boolean(playoffGame),
     playoffLabel: playoffGame?.round,
     featured,

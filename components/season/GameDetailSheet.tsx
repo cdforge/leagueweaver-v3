@@ -33,14 +33,19 @@ function scoreValue(side: GameDetailSideVM) {
   return null;
 }
 
-function scoreLabel(side: GameDetailSideVM) {
-  const value = scoreValue(side);
+function scoreLabel(side: GameDetailSideVM, status: string) {
+  const value = status === "predraft"
+    ? null
+    : status === "upcoming"
+      ? side.projectedTotal ?? scoreValue(side)
+      : scoreValue(side);
   return value == null ? "--" : formatPoints(value);
 }
 
-function playerScoreLabel(row?: GameDetailSlotVM) {
+function playerScoreLabel(row: GameDetailSlotVM | undefined, status: string) {
   if (!row) return "--";
-  if (row.lineupStatus === "starter" && row.points === 0 && row.projected != null) return row.projected.toFixed(1);
+  if (status === "predraft") return "--";
+  if (status === "upcoming" && row.projected != null) return row.projected.toFixed(1);
   return row.points.toFixed(1);
 }
 
@@ -87,10 +92,10 @@ function WeekStrip({
   </div>;
 }
 
-function TeamHeader({ side, align, showCity }: { side: GameDetailSideVM; align: "away" | "home"; showCity: boolean }) {
-  const score = scoreValue(side);
+function TeamHeader({ side, align, showCity, status }: { side: GameDetailSideVM; align: "away" | "home"; showCity: boolean; status: string }) {
+  const score = status === "upcoming" ? side.projectedTotal ?? scoreValue(side) : scoreValue(side);
   const teamInk = accessibleTeamColor(side.team.color);
-  const won = score != null && side.platformTotal != null && side.starterTotal != null ? score >= side.starterTotal : false;
+  const won = status === "final" && score != null && side.platformTotal != null && side.starterTotal != null ? score >= side.starterTotal : false;
   return <section className={`gdm-team-head ${align}`} style={{ "--team": side.team.color, "--team-ink": teamInk } as React.CSSProperties}>
     <span className="gdm-rank-row">
       <b>#{side.rank}</b>
@@ -99,15 +104,15 @@ function TeamHeader({ side, align, showCity }: { side: GameDetailSideVM; align: 
     <EntityLogo color={side.team.color} logoUrl={side.team.logoUrl} monogram={teamInitials(side.team)} size={56} />
     {showCity && side.team.city && <small className="gdm-team-city">{side.team.city}</small>}
     <strong>{side.team.name}</strong>
-    <span className={`gdm-team-score ${won ? "is-win" : ""}`}>{scoreLabel(side)}</span>
+    <span className={`gdm-team-score ${won ? "is-win" : ""} ${status === "upcoming" ? "is-proj" : ""}`}>{scoreLabel(side, status)}</span>
   </section>;
 }
 
-function CenterStatus({ stateLabel, rating, featured }: { stateLabel: string; rating: number; featured: boolean }) {
+function CenterStatus({ stateLabel, rating, featured, status }: { stateLabel: string; rating: number; featured: boolean; status: string }) {
   const bars = Math.max(1, Math.min(3, Math.round(rating / 3.4)));
   return <section className="gdm-center-status">
     <b>@</b>
-    <strong>{stateLabel}</strong>
+    <strong className={`is-${status}`}>{stateLabel}</strong>
     <span className={featured ? "is-featured" : ""}>{featured ? <><Star fill="currentColor" /> GOTW</> : "Matchup"}</span>
     <em>{rating.toFixed(1)}</em>
     <i>{[1, 2, 3].map((bar) => <span className={bar <= bars ? "on" : ""} key={bar} />)}</i>
@@ -119,17 +124,19 @@ function PlayerCell({
   side,
   expanded,
   onToggle,
+  status,
 }: {
   row?: GameDetailSlotVM;
   side: "away" | "home";
   expanded: boolean;
   onToggle: () => void;
+  status: string;
 }) {
   if (!row) return <div className={`gdm-player-cell ${side} is-empty`}><span className="gdm-player-text"><strong>Empty</strong><small>--</small></span><b>--</b></div>;
   const accent = playerAccent(row);
   const ink = accent ? readableTextColor(accent) : "var(--ink)";
   return <button type="button" className={`gdm-player-cell ${side} ${expanded ? "is-expanded" : ""}`} onClick={onToggle} aria-expanded={expanded}>
-    {side === "home" && <span className="gdm-player-points"><strong>{playerScoreLabel(row)}</strong>{row.projected != null && <small>{row.projected.toFixed(1)}</small>}</span>}
+    {side === "home" && <span className="gdm-player-points"><strong>{playerScoreLabel(row, status)}</strong>{row.projected != null && <small>{status === "upcoming" ? "PROJ" : row.projected.toFixed(1)}</small>}</span>}
     {side === "home" && <span className="gdm-nfl-token" style={{ background: accent ?? "var(--strength-bg)", color: accent ? ink : "var(--muted)" }}>{row.nflTeam || row.position}</span>}
     <span className="gdm-player-text">
       <strong>{row.name}</strong>
@@ -137,7 +144,7 @@ function PlayerCell({
       {row.statLine && <em>{row.statLine}</em>}
     </span>
     {side === "away" && <span className="gdm-nfl-token" style={{ background: accent ?? "var(--strength-bg)", color: accent ? ink : "var(--muted)" }}>{row.nflTeam || row.position}</span>}
-    {side === "away" && <span className="gdm-player-points"><strong>{playerScoreLabel(row)}</strong>{row.projected != null && <small>{row.projected.toFixed(1)}</small>}</span>}
+    {side === "away" && <span className="gdm-player-points"><strong>{playerScoreLabel(row, status)}</strong>{row.projected != null && <small>{status === "upcoming" ? "PROJ" : row.projected.toFixed(1)}</small>}</span>}
   </button>;
 }
 
@@ -150,7 +157,7 @@ function PlayerDetail({ row }: { row: GameDetailSlotVM }) {
   </div>;
 }
 
-function RosterPairRows({ away, home, type }: { away: GameDetailSlotVM[]; home: GameDetailSlotVM[]; type: "starters" | "bench" }) {
+function RosterPairRows({ away, home, type, status }: { away: GameDetailSlotVM[]; home: GameDetailSlotVM[]; type: "starters" | "bench"; status: string }) {
   const [openKey, setOpenKey] = React.useState<string | null>(null);
   const rows = Array.from({ length: Math.max(away.length, home.length) }, (_, index) => ({ away: away[index], home: home[index], index }));
   return <div className={`gdm-roster-pairs ${type === "bench" ? "is-bench" : ""}`}>
@@ -160,9 +167,9 @@ function RosterPairRows({ away, home, type }: { away: GameDetailSlotVM[]; home: 
       const homeOpen = openKey === homeRow?.key;
       return <React.Fragment key={`${type}:${index}`}>
         <div className="gdm-pair-row">
-          <PlayerCell row={awayRow} side="away" expanded={awayOpen} onToggle={() => awayRow && setOpenKey(awayOpen ? null : awayRow.key)} />
+          <PlayerCell row={awayRow} side="away" expanded={awayOpen} status={status} onToggle={() => awayRow && setOpenKey(awayOpen ? null : awayRow.key)} />
           <span className="gdm-slot-center">{slot}</span>
-          <PlayerCell row={homeRow} side="home" expanded={homeOpen} onToggle={() => homeRow && setOpenKey(homeOpen ? null : homeRow.key)} />
+          <PlayerCell row={homeRow} side="home" expanded={homeOpen} status={status} onToggle={() => homeRow && setOpenKey(homeOpen ? null : homeRow.key)} />
         </div>
         {awayOpen && awayRow && <PlayerDetail row={awayRow} />}
         {homeOpen && homeRow && <PlayerDetail row={homeRow} />}
@@ -195,7 +202,7 @@ export function GameDetailSheet({
   const touchStart = React.useRef<{ x: number; y: number } | null>(null);
   if (!vm) return null;
   const showCity = schedule.setup.display?.cityNames !== false;
-  const stateLabel = vm.status === "final" ? "Final" : "Upcoming";
+  const stateLabel = vm.status === "final" ? "Final" : vm.status === "live" ? "Live" : vm.status === "predraft" ? "Pre-Draft" : "Upcoming";
   const contextLabel = vm.isPlayoff ? vm.playoffLabel || "Playoffs" : `Week ${vm.weekNumber}`;
   const isBroadcast = vm.featured;
   const slateGames = navigation?.games ?? schedule.weeks.find((week) => week.weekNumber === vm.weekNumber)?.games ?? [vm.game];
@@ -212,7 +219,7 @@ export function GameDetailSheet({
   };
 
   return <Modal
-    className={`game-detail-modal ${isBroadcast ? "is-broadcast" : ""}`}
+    className={`game-detail-modal st-${vm.status} ${isBroadcast ? "is-broadcast" : ""}`}
     backdropClassName="game-detail-modal-backdrop"
     labelledBy="game-detail-title"
     onClose={onClose}
@@ -234,9 +241,9 @@ export function GameDetailSheet({
         {contextLabel}<span>·</span>{vm.dateLabel}<span>·</span><MapPin />{vm.stadium}
       </div>
       <div className="gdm-matchup-head">
-        <TeamHeader side={vm.away} align="away" showCity={showCity} />
-        <CenterStatus stateLabel={stateLabel} rating={vm.ratingScore10} featured={isBroadcast} />
-        <TeamHeader side={vm.home} align="home" showCity={showCity} />
+        <TeamHeader side={vm.away} align="away" showCity={showCity} status={vm.status} />
+        <CenterStatus stateLabel={stateLabel} rating={vm.ratingScore10} featured={isBroadcast} status={vm.status} />
+        <TeamHeader side={vm.home} align="home" showCity={showCity} status={vm.status} />
       </div>
       {winProbability && vm.status !== "final" && <div className="gdm-winbar">
         <b style={{ color: vm.away.team.color }}>{Math.round(winProbability.away * 100)}%</b>
@@ -247,10 +254,10 @@ export function GameDetailSheet({
       {vm.unsynced && <div className="gdm-unsynced" role="status">Roster details appear after ESPN or Sleeper player data syncs.</div>}
       <main className="gdm-body">
         <h3>Starters</h3>
-        <RosterPairRows away={vm.away.starters} home={vm.home.starters} type="starters" />
+        <RosterPairRows away={vm.away.starters} home={vm.home.starters} type="starters" status={vm.status} />
         <h3>Bench</h3>
-        <RosterPairRows away={vm.away.bench} home={vm.home.bench} type="bench" />
-        <footer>{vm.status === "final" ? "Tap any player to see how their points were scored" : "Projected roster view until this matchup is final"}</footer>
+        <RosterPairRows away={vm.away.bench} home={vm.home.bench} type="bench" status={vm.status} />
+        <footer>{vm.status === "final" ? "Tap any player to see how their points were scored" : vm.status === "predraft" ? "Draft not held yet · roster slots reserved" : vm.status === "live" ? "Live scoring · tap a player for scoring detail" : "Projected roster view until this matchup is final"}</footer>
       </main>
     </div>
   </Modal>;
