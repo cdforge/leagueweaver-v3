@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { CalendarClock, ChevronDown, CircleAlert, Gamepad2, LockKeyhole, MapPin, Medal, SlidersHorizontal, Star, StickyNote, TrendingUp, Zap } from "lucide-react";
+import { CalendarClock, ChevronDown, CircleAlert, ExternalLink, Gamepad2, LockKeyhole, MapPin, Medal, SlidersHorizontal, Star, StickyNote, TrendingUp, Zap } from "lucide-react";
 import { ConferenceMark, DivisionIdentity, DivisionMark } from "@/components/ui/DivisionIdentity";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
 import { conferenceOfDivision, hasConferences, matchupRelationship } from "@/lib/conferences";
 import { formatGameDateTimeOverride, getWeeklyMatchupSignal, matchupSeriesLabel, type MatchupSignal } from "@/lib/matchups";
+import { buildProviderGameLink } from "@/lib/providerGameLinks";
 import { formatPoints, type GameBadge } from "@/lib/statistics";
 import { teamInitials } from "@/lib/teamIdentity";
 import type { Division, LeagueSetupInput, ScheduledGame, Team } from "@/lib/types";
@@ -171,7 +172,7 @@ function isInteractiveTarget(target: EventTarget | null) {
   return target instanceof HTMLElement && Boolean(target.closest("a, button, input, select, textarea, summary"));
 }
 
-export function MatchupCard({ game, away, home, awayDivision, homeDivision, setup, awayRank, homeRank, awayRecord, homeRecord, signal, featured, featuredLabel = "GOTW", gameLabel, dateLabel, showCity, showVenue, variant = "standard", teamHrefBase, teamHrefFor, badges = [], medalRank, medalLabel, highlighted = false, simulationSource, simulationLocked = false, winProbability, projected = false, onOpenGame }: {
+export function MatchupCard({ game, away, home, awayDivision, homeDivision, setup, awayRank, homeRank, awayRecord, homeRecord, signal, featured, featuredLabel = "GOTW", gameLabel, dateLabel, seasonYear, showCity, showVenue, variant = "standard", teamHrefBase, teamHrefFor, badges = [], medalRank, medalLabel, highlighted = false, simulationSource, simulationLocked = false, winProbability, projected = false, onOpenGame }: {
   game: ScheduledGame;
   away: Team;
   home: Team;
@@ -188,6 +189,7 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, setu
   featuredLabel?: string;
   gameLabel?: string;
   dateLabel?: string;
+  seasonYear?: number;
   showCity: boolean;
   showVenue: boolean;
   variant?: "standard" | "gotw";
@@ -210,6 +212,7 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, setu
   // score exists, so the score slot reads "Projected" instead of a "—" blank.
   const showProjected = projected && !played;
   const hasAdditionalDetails = Boolean(game.dateTimeOverride || game.rescheduleStatus || game.specialEvent || game.notes?.length || game.tbdReason);
+  const providerLink = seasonYear ? buildProviderGameLink(game, seasonYear, [away, home]) : null;
   const awayResult = !played ? "open" : game.awayScore! > game.homeScore! ? "winner" : game.awayScore! < game.homeScore! ? "loser" : "open";
   const homeResult = !played ? "open" : game.homeScore! > game.awayScore! ? "winner" : game.homeScore! < game.awayScore! ? "loser" : "open";
   const openLabel = `Open box score for ${away.name} at ${home.name}`;
@@ -240,6 +243,7 @@ export function MatchupCard({ game, away, home, awayDivision, homeDivision, setu
       </div>
       <div className="matchup-card-meta">
         {showProjected && <span className="matchup-projected-flag"><em>Projected</em></span>}
+        {providerLink && <a className={`matchup-provider-link provider-${providerLink.provider}`} href={providerLink.href} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}><ExternalLink />{providerLink.label}</a>}
         {showVenue && <span className="matchup-venue"><MapPin />{home.logoUrl ? <img src={home.logoUrl} alt="" /> : <span className="matchup-venue-mono" style={{ background: home.color, color: readableTextColor(home.color) }}>{teamInitials(home)}</span>}<strong>{game.stadium}</strong></span>}
         {winProbability && !played && <span className="matchup-probability" aria-label={`${away.name} ${Math.round(winProbability.away * 100)} percent, ${home.name} ${Math.round(winProbability.home * 100)} percent`}>
           <span style={{ "--away-probability": `${winProbability.away * 100}%` } as React.CSSProperties} />

@@ -1,13 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { ArrowLeft, CircleAlert, Share2, Star, X } from "lucide-react";
+import { ArrowLeft, CircleAlert, ExternalLink, Share2, Star, X } from "lucide-react";
+
 import { DivisionMark } from "@/components/ui/DivisionIdentity";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { Modal } from "@/components/ui/Modal";
 import { accessibleAccentColor, accessibleTeamColor, readableTextColor } from "@/lib/colorContrast";
 import { buildGameDetailVM, type GameDetailPlayerStat, type GameDetailSideVM, type GameDetailSlotVM } from "@/lib/gameDetail";
+import { buildProviderGameLink } from "@/lib/providerGameLinks";
 import { getNflWeekWindow } from "@/lib/schedule";
+
 import { formatPoints } from "@/lib/statistics";
 import { teamInitials } from "@/lib/teamIdentity";
 import type { GeneratedSchedule, ScheduledGame, Team } from "@/lib/types";
@@ -339,6 +342,7 @@ function TeamHeader({ side, align, showCity, status, won }: { side: GameDetailSi
     <span className="gdm-team-record" aria-label={`${teamDisplay(side, showCity)} record entering this matchup`}>
       <b>{side.overallRecord}</b>
       <small style={{ "--division-record": divisionColor, "--division-record-ink": readableTextColor(divisionColor) } as React.CSSProperties}>{side.division && <DivisionMark division={side.division} />}<span>{side.divisionRecord}</span></small>
+
     </span>
     <span className={`gdm-team-score ${won ? "is-win" : ""} ${status === "upcoming" ? "is-proj" : ""}`}>{scoreLabel(side, status)}</span>
   </section>;
@@ -452,6 +456,7 @@ function RosterPairRows({
   return <div className={`gdm-roster-pairs ${type === "bench" ? "is-bench" : ""} ${type === "reserve" ? "is-reserve" : ""}`}>
     {rows.map(({ away: awayRow, home: homeRow, index }) => {
       const slot = type === "bench" ? "BE" : type === "reserve" ? reserveSlotLabel(awayRow ?? homeRow) : awayRow?.slot || homeRow?.slot || placeholderSlots?.[index] || "--";
+
       const awayOpen = openKey === awayRow?.key;
       const homeOpen = openKey === homeRow?.key;
       return <React.Fragment key={`${type}:${index}`}>
@@ -459,6 +464,7 @@ function RosterPairRows({
           <PlayerCell row={awayRow} side="away" expanded={awayOpen} status={status} nflMatchups={nflMatchups} onToggle={() => awayRow && setOpenKey(awayOpen ? null : awayRow.key)} />
           <span className="gdm-slot-center" style={slotStyle(slot)} aria-label={`Roster slot ${slot}`}>{slot}</span>
           <PlayerCell row={homeRow} side="home" expanded={homeOpen} status={status} nflMatchups={nflMatchups} onToggle={() => homeRow && setOpenKey(homeOpen ? null : homeRow.key)} />
+
         </div>
         {awayOpen && awayRow && <PlayerDetail row={awayRow} nflMatchups={nflMatchups} status={status} side="away" />}
         {homeOpen && homeRow && <PlayerDetail row={homeRow} nflMatchups={nflMatchups} status={status} side="home" />}
@@ -542,6 +548,7 @@ export function GameDetailSheet({
   const contextLabel = vm.isPlayoff ? vm.playoffLabel || "Playoffs" : `Week ${vm.weekNumber}`;
   const compactContextLabel = vm.isPlayoff ? vm.playoffLabel || "Playoffs" : `WK ${vm.weekNumber}`;
   const compactDateLabel = compactWeekDateLabel(vm.dateLabel);
+
   const isBroadcast = vm.featured;
   const gameLabel = isBroadcast ? "Game of the Week" : vm.game.gameNumber ? `Game ${vm.game.gameNumber}` : "Matchup";
   const compactGameLabel = isBroadcast ? "GOTW" : vm.game.gameNumber ? `G${vm.game.gameNumber}` : "Game";
@@ -569,6 +576,8 @@ export function GameDetailSheet({
       : "Projected Win Probability";
   const starterRows = reserveFutureRoster ? { away: [], home: [] } : { away: vm.away.starters, home: vm.home.starters };
   const benchRows = reserveFutureRoster ? { away: [], home: [] } : { away: vm.away.bench, home: vm.home.bench };
+  const providerLink = buildProviderGameLink(vm.game, schedule.setup.seasonYear, schedule.setup.teams);
+
   const handleTouchEnd = (event: React.TouchEvent) => {
     const start = touchStart.current;
     touchStart.current = null;
@@ -613,6 +622,7 @@ export function GameDetailSheet({
         <span className="gdm-eyebrow-date"><span className="gdm-eyebrow-full">{vm.dateLabel}</span><span className="gdm-eyebrow-compact">{compactDateLabel}</span></span><span>·</span>
         <EntityLogo className="gdm-venue-logo" color={vm.home.team.color} logoUrl={vm.home.team.logoUrl} monogram={teamInitials(vm.home.team)} size={24} imagePresentation="bare" />
         {vm.stadium}
+        {providerLink && <a className={`gdm-provider-link provider-${providerLink.provider}`} href={providerLink.href} target="_blank" rel="noreferrer"><ExternalLink />{providerLink.label}</a>}
       </div>
       <div className="gdm-matchup-head">
         <TeamHeader side={vm.away} align="away" showCity={showCity} status={displayStatus} won={awayWon} />
@@ -622,6 +632,7 @@ export function GameDetailSheet({
       {displayedWinProbability && <div
         className="gdm-winbar"
         aria-label={`${winProbabilityLabel}: ${teamDisplay(vm.away, showCity)} ${awayProbability} percent, ${teamDisplay(vm.home, showCity)} ${homeProbability} percent.`}
+
       >
         <b className="is-away" style={{ "--pct-bg": accessibleTeamColor(vm.away.team.color), "--pct-ink": readableTextColor(accessibleTeamColor(vm.away.team.color)) } as React.CSSProperties}>{awayProbability}%</b>
         <span style={{ "--away-pct": `${awayProbability}%`, "--home-pct": `${homeProbability}%`, "--away": vm.away.team.color, "--home": vm.home.team.color, "--marker": `${awayProbability}%` } as React.CSSProperties}>
@@ -633,6 +644,7 @@ export function GameDetailSheet({
         </span>
         <b className="is-home" style={{ "--pct-bg": accessibleTeamColor(vm.home.team.color), "--pct-ink": readableTextColor(accessibleTeamColor(vm.home.team.color)) } as React.CSSProperties}>{homeProbability}%</b>
         <small>{winProbabilityLabel}</small>
+
       </div>}
       {vm.unsynced && <div className="gdm-unsynced" role="status">Roster details appear after ESPN or Sleeper player data syncs.</div>}
       <main className="gdm-body" onScroll={handleBodyScroll}>
@@ -645,6 +657,7 @@ export function GameDetailSheet({
           <RosterPairRows away={vm.away.reserves} home={vm.home.reserves} type="reserve" status={displayStatus} nflMatchups={nflMatchups} />
         </>}
         <footer>{displayStatus === "final" ? "Tap any player to see how their points were scored" : displayStatus === "predraft" ? "Draft not held yet · roster slots reserved" : displayStatus === "live" ? "Live scoring · tap a player for scoring detail" : "Projected roster view until this matchup is final"}</footer>
+
       </main>
     </div>
   </Modal>;
