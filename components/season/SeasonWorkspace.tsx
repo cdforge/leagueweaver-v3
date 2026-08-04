@@ -7893,10 +7893,8 @@ export function SeasonWorkspace({
                   onClick={() => selectView(item)}
                 >
                   <Icon />
-                  <span>
-                    {item.label}
-                    {item.comingSoon && <small>SOON</small>}
-                  </span>
+                  <span>{item.label}</span>
+                  {item.comingSoon && <span className="workspace-beta-badge workspace-soon-badge">Soon</span>}
                   {item.beta && <span className="workspace-beta-badge">Beta</span>}
                 </button>
               );

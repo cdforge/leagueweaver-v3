@@ -1747,8 +1747,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .workspace-rail nav button:hover { background: rgba(255,255,255,.09); color: rgba(255,255,255,0.88); }
 .workspace-rail nav button.active { background: var(--brand, var(--field)); color: var(--brand-on, white); box-shadow: 0 1px 4px color-mix(in srgb, var(--brand, var(--field)) 38%, transparent); }
 .workspace-rail nav svg { width: 16px; }
-.workspace-rail nav button.is-coming-soon small { margin-left: auto; border: 1px solid rgb(255 255 255 / .16); border-radius: var(--radius-chip); color: rgb(255 255 255 / .64); padding: 2px 6px; font-size: 9px; font-weight: var(--w-black); line-height: 1; letter-spacing: .04em; }
-.workspace-rail nav button.is-coming-soon.active small { border-color: color-mix(in srgb, var(--brand-on, white) 36%, transparent); color: var(--brand-on, white); }
 .workspace-rail nav .pro-badge { margin-left: auto; background: rgba(248,231,161,.14); color: #f8dc72; }
 .workspace-rail nav button.active .pro-badge { background: #f8e7a1; color: #5f4900; }
 .workspace-beta-badge {
@@ -1763,6 +1761,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   line-height: 1;
   letter-spacing: .06em;
   text-transform: uppercase;
+}
+.workspace-soon-badge {
+  border-color: rgba(255,255,255,.16);
+  background: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.66);
 }
 .workspace-rail nav button.active .workspace-beta-badge {
   border-color: rgba(255,255,255,.45);
@@ -5527,7 +5530,6 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
   .workspace-rail { padding-inline: 8px; }
   .workspace-rail nav button { justify-content: center; padding: 0; }
   .workspace-rail nav button span, .workspace-rail nav button em { display: none; }
-  .workspace-rail nav button.is-coming-soon small { display: none; }
   .workspace-rail nav button .workspace-beta-badge { display: none; }
   /* Collapsed rail: keep the switcher reachable, but as an icon-only trigger. */
   .rail-bottom { padding: 10px 4px 4px; }
