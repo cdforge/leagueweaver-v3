@@ -34,6 +34,7 @@ import {
   MoreHorizontal,
   Pencil,
   Play,
+  Printer,
   RefreshCw,
   Save,
   Settings,
@@ -214,6 +215,7 @@ type ViewKey =
   | "results"
   | "league-schedule"
   | "team-schedule"
+  | "prints"
   | "gotw"
   | "matchup-ratings"
   | "standings"
@@ -704,6 +706,7 @@ const VIEW_ITEMS: Array<{
   { key: "results", label: "Results", icon: LayoutList },
   { key: "league-schedule", label: "League Schedule", icon: CalendarDays },
   { key: "team-schedule", label: "Team Schedule", icon: UsersRound },
+  { key: "prints", label: "Copy Sheet", icon: Printer },
   { key: "gotw", label: "Game of the Week", icon: Star },
   { key: "matchup-ratings", label: "Matchup Ratings", icon: SlidersHorizontal },
   { key: "standings", label: "Standings", icon: BarChart3 },
@@ -4599,6 +4602,439 @@ function HistoryMissingState({
   );
 }
 
+export type PrintProvider = "espn" | "sleeper";
+export type EspnPrintMode = "schedule" | "edit";
+type CopySheetView = "clean" | "details";
+
+function copySheetDetailsHintKey(scheduleId: string) {
+  return `leagueweaver:v3:copy-sheet-details-hint:${scheduleId}`;
+}
+
+export function PrintsView({
+  schedule,
+  onDownloadCsv,
+  onDownloadPdf,
+  pdfBusy,
+}: {
+  schedule: GeneratedSchedule;
+  onDownloadCsv: () => void;
+  onDownloadPdf: (provider: PrintProvider, mode: EspnPrintMode) => void;
+  pdfBusy: boolean;
+}) {
+  const [provider, setProvider] = useState<PrintProvider>(
+    schedule.setup.platformConnection?.provider ?? "espn",
+  );
+  const [copySheetView, setCopySheetView] = useState<CopySheetView>("clean");
+  const [detailsHintDismissed, setDetailsHintDismissed] = useState(true);
+  const display = schedule.setup.display ?? {
+    cityNames: true,
+    managers: true,
+    venues: true,
+  };
+  const teamById = useMemo(
+    () => new Map(schedule.setup.teams.map((team) => [team.id, team])),
+    [schedule.setup.teams],
+  );
+  const divisionById = useMemo(
+    () =>
+      new Map(schedule.setup.divisions.map((division) => [division.id, division])),
+    [schedule.setup.divisions],
+  );
+  const scheduleSignals = useMemo(
+    () => getScheduleGameSignals(schedule),
+    [schedule],
+  );
+  const ranksByWeek = useMemo(() => {
+    const ranks = new Map<number, Map<string, number>>();
+    for (const week of schedule.weeks) {
+      ranks.set(
+        week.weekNumber,
+        new Map(
+          getEnteringWeekRankSnapshot(schedule, week.weekNumber).rows.map(
+            (row) => [row.teamId, row.rank],
+          ),
+        ),
+      );
+    }
+    return ranks;
+  }, [schedule]);
+  const recordsByWeekTeam = useMemo(() => {
+    const records = new Map<string, string>();
+    for (const week of schedule.weeks) {
+      for (const row of getEnteringWeekRankSnapshot(schedule, week.weekNumber)
+        .rows) {
+        records.set(`${week.weekNumber}:${row.teamId}`, formatRecord(row));
+      }
+    }
+    return records;
+  }, [schedule]);
+  const providerHelp =
+    provider === "espn"
+      ? "Use in ESPN: LM Tools > Edit Head-to-Head Schedule."
+      : "Use in Sleeper: Settings > Commissioner Control > Edit Schedule Matchups.";
+  const teamName = (team: Team) => teamDisplayName(team, display.cityNames);
+  const recordFor = (teamId: string, weekNumber: number) =>
+    recordsByWeekTeam.get(`${weekNumber}:${teamId}`) ?? "0-0-0";
+  const byeTeamsFor = (week: GeneratedSchedule["weeks"][number]) => {
+    const activeTeamIds = new Set(
+      week.games.flatMap((game) => [game.awayTeamId, game.homeTeamId]),
+    );
+    return schedule.setup.teams.filter((team) => !activeTeamIds.has(team.id));
+  };
+  const printPage = () => window.print();
+  const downloadPdf = () => onDownloadPdf(provider, "schedule");
+  const copySheetHasDetails = copySheetView === "details";
+  const showDetailsHint =
+    provider === "espn" &&
+    copySheetView === "clean" &&
+    !detailsHintDismissed;
+
+  useEffect(() => {
+    try {
+      setDetailsHintDismissed(
+        window.localStorage.getItem(copySheetDetailsHintKey(schedule.id)) ===
+          "dismissed",
+      );
+    } catch {
+      setDetailsHintDismissed(false);
+    }
+  }, [schedule.id]);
+
+  const dismissDetailsHint = () => {
+    setDetailsHintDismissed(true);
+    try {
+      window.localStorage.setItem(
+        copySheetDetailsHintKey(schedule.id),
+        "dismissed",
+      );
+    } catch {
+      // The hint can safely reappear if browser storage is unavailable.
+    }
+  };
+
+  const showDetailsView = () => {
+    setCopySheetView("details");
+    dismissDetailsHint();
+  };
+
+  const teamCell = (
+    team: Team,
+    weekNumber: number,
+    side: "away" | "home",
+    rank?: number,
+    variant: "espn" | "sleeper" = "espn",
+  ) => (
+    <span
+      className={`prints-team prints-team-${side}${
+        variant === "sleeper" ? " prints-sleeper-team" : ""
+      }`}
+    >
+      <EntityLogo
+        className="prints-team-mark"
+        size={20}
+        color={team.color}
+        logoUrl={team.logoUrl}
+        monogram={teamInitials(team)}
+      />
+      <span>
+        <strong>
+          {rank ? (
+            <>
+              <em>#{rank}</em>{" "}
+            </>
+          ) : null}
+          {teamName(team)}
+        </strong>
+        <small>({recordFor(team.id, weekNumber)})</small>
+      </span>
+    </span>
+  );
+
+  const espnScheduleTable = (
+    <div className="prints-document prints-espn-sheet">
+      <header className="prints-platform-head">
+        <span className="prints-provider-lockup">
+          <img src="/providers/espn.png" alt="" />
+          <strong>League Schedule</strong>
+          <small>{schedule.setup.name}</small>
+        </span>
+        <span>{schedule.setup.seasonYear}</span>
+      </header>
+      {schedule.weeks.map((week) => (
+        <section className="prints-week-block" key={week.weekNumber}>
+          <h3>
+            <span>NFL Week {week.weekNumber}</span>
+            <small>{week.dateLabel}</small>
+          </h3>
+          <div className="prints-espn-table" role="table">
+            <div className="prints-espn-row prints-espn-header" role="row">
+              <span>Away Team</span>
+              <span>Team Manager(s)</span>
+              <span>Score</span>
+              <span>Score</span>
+              <span>Team Manager(s)</span>
+              <span>Home Team</span>
+            </div>
+            {week.games.map((game) => {
+              const away = teamById.get(game.awayTeamId);
+              const home = teamById.get(game.homeTeamId);
+              if (!away || !home) return null;
+              const ranks = ranksByWeek.get(week.weekNumber);
+              const awayRank = ranks?.get(away.id) ?? away.overallRank;
+              const homeRank = ranks?.get(home.id) ?? home.overallRank;
+              const gotwEntry = scheduleSignals.gotwByWeek.get(week.weekNumber);
+              const isGotw = gotwEntry?.game.id === game.id;
+              const gameLabel = game.gameNumber ?? game.seriesGame;
+              const isDivisional =
+                Boolean(away.divisionId && home.divisionId) &&
+                away.divisionId === home.divisionId;
+              const division = isDivisional
+                ? divisionById.get(away.divisionId)
+                : undefined;
+              const divisionLabel = isDivisional
+                ? division?.name
+                  ? `${division.name} divisional`
+                  : "Divisional"
+                : "Cross-divisional";
+              const divisionChipStyle = division
+                ? ({
+                    background: division.color,
+                    color: readableTextColor(division.color),
+                  } as CSSProperties)
+                : undefined;
+              return (
+                <div
+                  className={`prints-espn-row${
+                    copySheetHasDetails ? " has-copy-details" : ""
+                  }${isGotw ? " is-gotw-row" : ""}`}
+                  role="row"
+                  key={game.id}
+                >
+                  {copySheetHasDetails && (
+                    <span className="prints-detail-strip">
+                      <em
+                        className={`prints-detail-chip${
+                          isGotw ? " is-gotw" : ""
+                        }`}
+                      >
+                        Game {gameLabel}
+                        {isGotw
+                          ? ` · ${
+                              gotwEntry
+                                ? gameOfWeekStatusLabel(gotwEntry.status)
+                                : "GOTW"
+                            }`
+                          : ""}
+                      </em>
+                      <em
+                        className={`prints-detail-chip${
+                          division ? " is-division" : ""
+                        }`}
+                        style={divisionChipStyle}
+                      >
+                        {division && (
+                          <DivisionMark
+                            division={division}
+                            size={14}
+                            className="prints-detail-division-mark"
+                          />
+                        )}
+                        {divisionLabel}
+                      </em>
+                    </span>
+                  )}
+                  {teamCell(
+                    away,
+                    week.weekNumber,
+                    "away",
+                    copySheetHasDetails ? awayRank : undefined,
+                  )}
+                  <span className="prints-manager prints-manager-away">
+                    {away.manager}
+                  </span>
+                  <span className="prints-score prints-score-away">
+                    {game.awayScore == null ? "0.0" : game.awayScore.toFixed(1)}
+                  </span>
+                  <span className="prints-score prints-score-home">
+                    {game.homeScore == null ? "0.0" : game.homeScore.toFixed(1)}
+                  </span>
+                  <span className="prints-manager prints-manager-home">
+                    {home.manager}
+                  </span>
+                  {teamCell(
+                    home,
+                    week.weekNumber,
+                    "home",
+                    copySheetHasDetails ? homeRank : undefined,
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {byeTeamsFor(week).length > 0 && (
+            <p className="prints-byes">
+              Bye: {byeTeamsFor(week).map(teamName).join(", ")}
+            </p>
+          )}
+        </section>
+      ))}
+    </div>
+  );
+
+  const sleeperSheet = (
+    <div className="prints-document prints-sleeper-sheet">
+      <header className="prints-platform-head">
+        <span className="prints-provider-lockup">
+          <img src="/providers/sleeper.png" alt="" />
+          <strong>Edit Schedule Matchups</strong>
+          <small>{schedule.setup.name}</small>
+        </span>
+        <span>{schedule.setup.seasonYear}</span>
+      </header>
+      {schedule.weeks.map((week) => (
+        <section className="prints-sleeper-week" key={week.weekNumber}>
+          <header>
+            <strong>Week {week.weekNumber}</strong>
+            <small>{week.dateLabel}</small>
+          </header>
+          <div className="prints-sleeper-matchups">
+            {week.games.map((game) => {
+              const away = teamById.get(game.awayTeamId);
+              const home = teamById.get(game.homeTeamId);
+              if (!away || !home) return null;
+              return (
+                <article key={game.id}>
+                  {teamCell(away, week.weekNumber, "away", undefined, "sleeper")}
+                  <b>vs</b>
+                  {teamCell(home, week.weekNumber, "home", undefined, "sleeper")}
+                </article>
+              );
+            })}
+          </div>
+          {byeTeamsFor(week).length > 0 && (
+            <p className="prints-byes">
+              Bye teams: {byeTeamsFor(week).map(teamName).join(", ")}
+            </p>
+          )}
+        </section>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="workspace-stack prints-workspace">
+      <section className="prints-guide" aria-labelledby="prints-title">
+        <Printer />
+        <span>
+          <strong id="prints-title">Use this as your copy sheet.</strong>
+          <small>
+            Open ESPN or Sleeper in another window, then move each matchup to
+            match this schedule.
+          </small>
+          <em>{providerHelp}</em>
+        </span>
+      </section>
+      <section className="prints-controls" aria-label="Print options">
+        <div
+          className="prints-control-group"
+          role="tablist"
+          aria-label="Platform format"
+        >
+          {(["espn", "sleeper"] as PrintProvider[]).map((item) => (
+            <button
+              type="button"
+              key={item}
+              role="tab"
+              aria-selected={provider === item}
+              className={provider === item ? "active" : ""}
+              onClick={() => setProvider(item)}
+            >
+              <img src={`/providers/${item}.png`} alt="" aria-hidden="true" />
+              {item === "espn" ? "ESPN" : "Sleeper"}
+            </button>
+          ))}
+        </div>
+        {provider === "espn" && (
+          <div
+            className="prints-control-group prints-control-group-hinted"
+            role="tablist"
+            aria-label="Copy Sheet detail level"
+          >
+            {([
+              ["clean", "Clean"],
+              ["details", "Details"],
+            ] as const).map(([key, label]) => (
+              <button
+                type="button"
+                key={key}
+                role="tab"
+                aria-selected={copySheetView === key}
+                className={copySheetView === key ? "active" : ""}
+                onClick={() => {
+                  setCopySheetView(key);
+                  if (key === "details") dismissDetailsHint();
+                }}
+              >
+                {label}
+              </button>
+            ))}
+            {showDetailsHint && (
+              <div
+                className="prints-detail-hint"
+                role="dialog"
+                aria-label="Try Details view"
+              >
+                <strong>Want the richer copy sheet?</strong>
+                <small>
+                  Details adds Game of the Week, divisional labels, and team
+                  ranks right inside the schedule.
+                </small>
+                <span>
+                  <button type="button" onClick={showDetailsView}>
+                    Show details
+                  </button>
+                  <button
+                    type="button"
+                    className="prints-detail-hint-close"
+                    aria-label="Dismiss details hint"
+                    onClick={dismissDetailsHint}
+                  >
+                    <X />
+                  </button>
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+        <div className="prints-actions">
+          <button type="button" className="button-secondary" onClick={printPage}>
+            <Printer />
+            Print
+          </button>
+          <button
+            type="button"
+            className="button-secondary"
+            disabled={pdfBusy}
+            aria-busy={pdfBusy}
+            onClick={downloadPdf}
+          >
+            {pdfBusy ? <LoaderCircle className="spin" /> : <FileDown />}
+            {pdfBusy ? "Building..." : "Download PDF"}
+          </button>
+          <button type="button" className="button-secondary" onClick={onDownloadCsv}>
+            <Download />
+            Download CSV
+          </button>
+        </div>
+      </section>
+      <div className="prints-preview-shell">
+        {provider === "espn" && espnScheduleTable}
+        {provider === "sleeper" && sleeperSheet}
+      </div>
+    </div>
+  );
+}
+
 function SettingsView({
   schedule,
   onOpenDraftRanking,
@@ -5511,6 +5947,7 @@ export function SeasonWorkspace({
     null | "share" | "commit" | "regenerate"
   >(null);
   const [showRecap, setShowRecap] = useState(false);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [playoffTab, setPlayoffTab] = useState<"board" | "picture">("board");
   // Deep link from the account page (?recap=1) opens the recap straight away.
   useEffect(() => {
@@ -7123,6 +7560,26 @@ export function SeasonWorkspace({
     setView("settings");
     router.push(`/season/${schedule.id}?view=settings`);
   };
+  const openCopySheetPreview = () => {
+    setShowPrintPreview(true);
+  };
+  const downloadPrintPdf = async (
+    provider: PrintProvider,
+    mode: EspnPrintMode,
+  ) => {
+    if (pdfBusy) return;
+    setPdfBusy(true);
+    try {
+      await downloadSchedulePdf(workspaceSchedule ?? activeSchedule, {
+        provider,
+        mode,
+      });
+    } catch {
+      setNotice("Couldn’t build the handoff sheet. Please try again.");
+    } finally {
+      setPdfBusy(false);
+    }
+  };
   const playSimulation = () =>
     setSimulation(savedSimulation ?? createSimulationSandbox(schedule));
   const startSimulationFromReal = () => {
@@ -7313,6 +7770,44 @@ export function SeasonWorkspace({
           onShare={shareForReveal}
         />
       )}
+      {showPrintPreview && (
+        <Modal
+          className="print-preview-modal"
+          backdropClassName="print-preview-modal-backdrop"
+          labelledBy="print-preview-title"
+          describedBy="print-preview-desc"
+          onClose={() => setShowPrintPreview(false)}
+        >
+          <header>
+            <span className="score-entry-modal-mark">
+              <Printer />
+            </span>
+            <span>
+              <small>SCHEDULE HANDOFF</small>
+              <h2 id="print-preview-title">Copy Sheet preview</h2>
+              <p id="print-preview-desc">
+                Open ESPN or Sleeper in another window, then move each matchup
+                to match this schedule.
+              </p>
+            </span>
+            <button
+              type="button"
+              aria-label="Close Copy Sheet preview"
+              onClick={() => setShowPrintPreview(false)}
+            >
+              <X />
+            </button>
+          </header>
+          <div className="print-preview-modal-body">
+            <PrintsView
+              schedule={workspaceSchedule ?? activeSchedule}
+              onDownloadCsv={() => downloadCsv(workspaceSchedule ?? activeSchedule)}
+              onDownloadPdf={downloadPrintPdf}
+              pdfBusy={pdfBusy}
+            />
+          </div>
+        </Modal>
+      )}
       {gameDetailId && (
         <GameDetailSheet
           schedule={workspaceSchedule ?? activeSchedule}
@@ -7367,7 +7862,7 @@ export function SeasonWorkspace({
           <nav aria-label="Season workspace">
             {visibleViewItems.map((item) => {
               const Icon = item.icon;
-              return (
+              const button = (
                 <button
                   type="button"
                   key={item.key}
@@ -7384,6 +7879,13 @@ export function SeasonWorkspace({
                     {item.comingSoon && <small>SOON</small>}
                   </span>
                 </button>
+              );
+              return item.key === "prints" ? (
+                <Tooltip label="Copy this schedule into ESPN or Sleeper." key={item.key}>
+                  {button}
+                </Tooltip>
+              ) : (
+                button
               );
             })}
           </nav>
@@ -7439,33 +7941,13 @@ export function SeasonWorkspace({
                   showSelectedDescription={false}
                 />
               )}
-              <button
-                type="button"
-                title={
-                  simulation
-                    ? "Print simulated PDF entry sheet"
-                    : "Print PDF entry sheet"
-                }
-                disabled={pdfBusy}
-                aria-busy={pdfBusy}
-                onClick={async () => {
-                  if (pdfBusy) return;
-                  setPdfBusy(true);
-                  try {
-                    await downloadSchedulePdf(
-                      workspaceSchedule ?? activeSchedule,
-                    );
-                  } catch {
-                    setNotice(
-                      "Couldn’t build the PDF entry sheet. Please try again.",
-                    );
-                  } finally {
-                    setPdfBusy(false);
-                  }
-                }}
-              >
-                {pdfBusy ? <LoaderCircle className="spin" /> : <FileDown />}
-                {pdfBusy ? "Building…" : "PDF"}
+              <button type="button" onClick={() => setShowRecap(true)}>
+                <Sparkles />
+                Recap
+              </button>
+              <button type="button" onClick={openCopySheetPreview}>
+                <Printer />
+                Copy Sheet
               </button>
               <FloatingPopover
                 className="toolbar-more"
@@ -7479,10 +7961,6 @@ export function SeasonWorkspace({
                 }
                 menuClassName="toolbar-more-menu"
               >
-                <button type="button" onClick={() => setShowRecap(true)}>
-                  <Sparkles />
-                  Recap
-                </button>
                 <button
                   type="button"
                   onClick={() =>
@@ -7769,6 +8247,14 @@ export function SeasonWorkspace({
                   readOnlyHistory={historyViewActive}
                 />
               )
+            )}
+            {view === "prints" && (
+              <PrintsView
+                schedule={workspaceSchedule ?? activeSchedule}
+                onDownloadCsv={() => downloadCsv(workspaceSchedule ?? activeSchedule)}
+                onDownloadPdf={downloadPrintPdf}
+                pdfBusy={pdfBusy}
+              />
             )}
             {view === "gotw" && historyViewActive && !historySchedule ? (
               <HistoryMissingState

@@ -20,7 +20,7 @@ const TIPS = [
   "Giving the commissioner one less spreadsheet to pretend they enjoy maintaining.",
   "Checking for schedule drama now, before it becomes a six-paragraph league chat.",
   "Tip: open Team Schedule to see one manager's full path through the season.",
-  "Tip: use Settings to replay the recap, export CSV, print ESPN sheets, or publish the share link.",
+  "Tip: use Copy Sheet to copy your schedule into ESPN or Sleeper, export CSV, or print a handoff sheet.",
   "Tip: Saved Leagues let you reuse teams, colors, logos, divisions, and conferences next season.",
   "Tip: the Playoffs view shows bracket paths, playoff picture, and postseason setup in one place.",
   "Tip: connect ESPN or Sleeper scores when you want weekly results to update faster.",

@@ -3,13 +3,16 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { CalendarDays, CalendarPlus, Check, Copy, ExternalLink, FolderHeart, LoaderCircle, MoreHorizontal, Pencil, Plus, Search, Share2, Sparkles, Trash2, X } from "lucide-react";
+import { CalendarDays, CalendarPlus, Check, Copy, ExternalLink, FolderHeart, LoaderCircle, MoreHorizontal, Pencil, Plus, Printer, Search, Share2, Sparkles, Trash2, X } from "lucide-react";
 import { SavedLeagueEditor } from "@/components/account/SavedLeagueEditor";
+import { PrintsView, type EspnPrintMode, type PrintProvider } from "@/components/season/SeasonWorkspace";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { LoadingPlaybook } from "@/components/ui/LoadingPlaybook";
 import { Modal } from "@/components/ui/Modal";
 import { apiErrorMessage } from "@/lib/apiErrors";
+import { downloadCsv } from "@/lib/csv";
 import { leagueAcronym, resolveInitials } from "@/lib/monograms";
+import { downloadSchedulePdf } from "@/lib/pdf";
 import { normalizeSavedLeague } from "@/lib/savedLeagues";
 import { createLocalSeasonId, listLocalSeasons, loadSeasonById, removeLocalSeason, saveSeason, type LocalSeasonSummary } from "@/lib/storage";
 import { createClient } from "@/lib/supabase/client";
@@ -322,6 +325,9 @@ export function FantasyDashboard({ view = "schedules" }: { view?: "schedules" | 
   const [shareCopied, setShareCopied] = useState(false);
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [sharePublicDisplay, setSharePublicDisplay] = useState<PublicDisplaySettings>({ cityNames: true, managers: false, venues: true });
+  const [printPreview, setPrintPreview] = useState<{ item: ScheduleDashboardItem; schedule: GeneratedSchedule } | null>(null);
+  const [previewLoadingId, setPreviewLoadingId] = useState<string | null>(null);
+  const [previewPdfBusy, setPreviewPdfBusy] = useState(false);
   const [cloudTeamDetails, setCloudTeamDetails] = useState<Record<string, Team[]>>({});
   const [managerControlsOpen, setManagerControlsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -633,6 +639,45 @@ export function FantasyDashboard({ view = "schedules" }: { view?: "schedules" | 
       setShareMessage(shareStatus.url);
     }
   };
+  const openPrintPreview = async (item: ScheduleDashboardItem) => {
+    if (previewLoadingId) return;
+    setPreviewLoadingId(item.id);
+    setMessage(null);
+    try {
+      if (item.source === "local") {
+        const schedule = loadSeasonById(item.season.id);
+        if (!schedule) {
+          setMessage("That schedule preview could not be opened.");
+          return;
+        }
+        setPrintPreview({ item, schedule });
+        return;
+      }
+      const response = await fetch(`/api/seasons/${item.season.id}`);
+      const payload = await response.json().catch(() => ({})) as {
+        schedule?: GeneratedSchedule;
+        error?: string;
+      };
+      if (!response.ok || !payload.schedule) {
+        setMessage(apiErrorMessage(response.status, payload.error, "That schedule preview could not be opened."));
+        return;
+      }
+      setPrintPreview({ item, schedule: payload.schedule });
+    } finally {
+      setPreviewLoadingId(null);
+    }
+  };
+  const downloadPreviewPdf = async (provider: PrintProvider, mode: EspnPrintMode) => {
+    if (!printPreview || previewPdfBusy) return;
+    setPreviewPdfBusy(true);
+    try {
+      await downloadSchedulePdf(printPreview.schedule, { provider, mode });
+    } catch {
+      setMessage("Couldn’t build the handoff sheet. Please try again.");
+    } finally {
+      setPreviewPdfBusy(false);
+    }
+  };
   const unpublishSharedSchedule = async () => {
     if (!shareSchedule || shareSchedule.source !== "cloud" || shareBusy) return;
     setShareBusy("unpublish");
@@ -807,6 +852,17 @@ export function FantasyDashboard({ view = "schedules" }: { view?: "schedules" | 
               <TeamStrip teams={seasonTeams} />
               <div className="product-row-actions">
                 <Link className="button-secondary" href={`/season/${entry.season.id}?recap=1`}><Sparkles />Recap</Link>
+                <button
+                  type="button"
+                  className="button-secondary print-preview-row-button"
+                  aria-label={`Copy Sheet preview for ${title}`}
+                  aria-busy={previewLoadingId === entry.id}
+                  disabled={Boolean(previewLoadingId)}
+                  onClick={() => void openPrintPreview(entry)}
+                >
+                  {previewLoadingId === entry.id ? <LoaderCircle className="spin" /> : <Printer />}
+                  <span>Copy Sheet</span>
+                </button>
               </div>
               <RowActionsMenu actions={rowActions} label={`${title} actions`} />
             </article>;
@@ -865,5 +921,30 @@ export function FantasyDashboard({ view = "schedules" }: { view?: "schedules" | 
       onCopy={() => void copySharedScheduleLink()}
       onUnpublish={() => void unpublishSharedSchedule()}
     />}
+    {printPreview && <Modal
+      className="print-preview-modal"
+      backdropClassName="print-preview-modal-backdrop"
+      labelledBy="dashboard-print-preview-title"
+      describedBy="dashboard-print-preview-desc"
+      onClose={() => setPrintPreview(null)}
+    >
+      <header>
+        <span className="score-entry-modal-mark"><Printer /></span>
+        <span>
+          <small>SCHEDULE HANDOFF</small>
+          <h2 id="dashboard-print-preview-title">Copy Sheet preview</h2>
+          <p id="dashboard-print-preview-desc">Use this sheet to copy {printPreview.item.name} into ESPN or Sleeper.</p>
+        </span>
+        <button type="button" aria-label="Close Copy Sheet preview" onClick={() => setPrintPreview(null)}><X /></button>
+      </header>
+      <div className="print-preview-modal-body">
+        <PrintsView
+          schedule={printPreview.schedule}
+          onDownloadCsv={() => downloadCsv(printPreview.schedule)}
+          onDownloadPdf={downloadPreviewPdf}
+          pdfBusy={previewPdfBusy}
+        />
+      </div>
+    </Modal>}
   </section>;
 }

@@ -5864,9 +5864,7 @@ export function LeagueBuilder() {
         <GenerationReveal
           schedule={revealSeason}
           onComplete={() =>
-            router.push(
-              `/season/${revealSeason.id}${revealSeason.setup.platformConnection || revealSeason.setup.teams.some((team) => team.providerId && !/^(manual|screenshot)-/.test(team.providerId)) ? "" : "?connect=scores"}`,
-            )
+            router.push(`/season/${revealSeason.id}?view=prints`)
           }
         />
       )}
