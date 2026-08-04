@@ -139,7 +139,13 @@ export function getTeamClinchTimelines(schedule: GeneratedSchedule, throughWeek 
       if (state.playoffBerth && timeline.playoffBerthWeek == null) timeline.playoffBerthWeek = week;
       if (state.topSeed && timeline.topSeedWeek == null) timeline.topSeedWeek = week;
       if (state.eliminated && timeline.eliminatedWeek == null) timeline.eliminatedWeek = week;
-      if (week === normalizedWeek) Object.assign(timeline, state);
+      if (week === normalizedWeek) {
+        Object.assign(timeline, state);
+        timeline.divisionTitle = timeline.divisionTitle || timeline.divisionTitleWeek != null;
+        timeline.playoffBerth = timeline.playoffBerth || timeline.playoffBerthWeek != null;
+        timeline.topSeed = timeline.topSeed || timeline.topSeedWeek != null;
+        timeline.eliminated = timeline.eliminated || timeline.eliminatedWeek != null;
+      }
     }
   }
 

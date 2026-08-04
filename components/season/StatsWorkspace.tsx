@@ -14,6 +14,7 @@ import {
   Home,
   LockKeyhole,
   MapPin,
+  Maximize2,
   Medal,
   Minus,
   Plane,
@@ -109,6 +110,24 @@ function raceMilestonesAtWeek(timeline: TeamClinchTimeline | undefined, weekNumb
   return milestones;
 }
 
+function raceMilestonesThroughWeek(timeline: TeamClinchTimeline | undefined, weekNumber: number): RaceMilestone[] {
+  if (!timeline) return [];
+  const milestones: RaceMilestone[] = [];
+  if (timeline.topSeedWeek != null && timeline.topSeedWeek <= weekNumber) milestones.push("top-seed");
+  if (timeline.divisionTitleWeek != null && timeline.divisionTitleWeek <= weekNumber) milestones.push("division-title");
+  if (timeline.playoffBerthWeek != null && timeline.playoffBerthWeek <= weekNumber) milestones.push("playoff-berth");
+  if (timeline.eliminatedWeek != null && timeline.eliminatedWeek <= weekNumber) milestones.push("eliminated");
+  return milestones;
+}
+
+function raceMilestoneWeek(timeline: TeamClinchTimeline | undefined, milestone: RaceMilestone) {
+  if (!timeline) return undefined;
+  if (milestone === "top-seed") return timeline.topSeedWeek;
+  if (milestone === "division-title") return timeline.divisionTitleWeek;
+  if (milestone === "playoff-berth") return timeline.playoffBerthWeek;
+  return timeline.eliminatedWeek;
+}
+
 function RaceMilestoneMarker({ milestone, division, x, y, index, total }: {
   milestone: RaceMilestone;
   division?: Division;
@@ -117,8 +136,8 @@ function RaceMilestoneMarker({ milestone, division, x, y, index, total }: {
   index: number;
   total: number;
 }) {
-  const markerX = x + (index - (total - 1) / 2) * 15;
-  const markerY = y - 18;
+  const markerX = x + (index - (total - 1) / 2) * 11;
+  const markerY = y;
   const symbol = milestone === "top-seed" ? "1" : milestone === "division-title" ? "★" : milestone === "playoff-berth" ? "✓" : "×";
   return <g className={`race-milestone-marker ${milestone}`} aria-hidden="true">
     <circle cx={markerX} cy={markerY} r="7" style={milestone === "division-title" && division ? { fill: division.color } : undefined} />
@@ -345,6 +364,13 @@ function formatRaceMovement(metric: RaceMetric, value: number, previousValue?: n
   return `${change > 0 ? "+" : "-"}${formattedChange} from prior week`;
 }
 
+function raceMovementTone(metric: RaceMetric, value: number, previousValue?: number) {
+  if (previousValue == null) return "neutral";
+  const change = metric === "rank" ? previousValue - value : value - previousValue;
+  if (Math.abs(change) < .001) return "neutral";
+  return change > 0 ? "positive" : "negative";
+}
+
 function spreadRaceEndpointYs(entries: Array<{ teamId: string; y: number }>, minimum: number, maximum: number) {
   const ordered = [...entries].sort((left, right) => left.y - right.y || left.teamId.localeCompare(right.teamId));
   if (ordered.length < 2) return new Map(ordered.map((entry) => [entry.teamId, entry.y]));
@@ -373,6 +399,7 @@ function SeasonRaceChart({ schedule, history, throughWeek, divisionId }: {
   const [metric, setMetric] = useState<RaceMetric>("rank");
   const [focusedTeamId, setFocusedTeamId] = useState<string | null>(null);
   const [activePoint, setActivePoint] = useState<ActiveRacePoint>(null);
+  const [expanded, setExpanded] = useState(false);
   const teamById = new Map(schedule.setup.teams.map((team) => [team.id, team]));
   const divisionById = new Map(schedule.setup.divisions.map((item) => [item.id, item]));
   const milestoneByTeam = useMemo(() => new Map(getTeamClinchTimelines(schedule, throughWeek).map((timeline) => [timeline.teamId, timeline])), [schedule, throughWeek]);
@@ -416,27 +443,32 @@ function SeasonRaceChart({ schedule, history, throughWeek, divisionId }: {
   });
   const values = series.flatMap((item) => item.points.map((point) => point.value));
   const rankMaximum = Math.max(1, scopeTeams.length);
+  const isRankMetric = metric === "rank";
   const yMinimum = metric === "rank" || metric === "winPercentage" || metric === "pointsFor" ? metric === "rank" ? 1 : 0 : Math.min(0, ...values);
   const yMaximum = metric === "rank" ? rankMaximum : metric === "winPercentage" ? 1 : Math.max(metric === "pointDifference" ? 0 : 1, ...values);
   const yRange = Math.max(1, yMaximum - yMinimum);
-  const width = 1000;
-  const height = 350;
-  const left = 66;
-  const right = 34;
-  const top = 28;
-  const bottom = 42;
-  const plotWidth = width - left - right;
+  const width = 1060;
+  const height = isRankMetric
+    ? Math.max(420, Math.min(740, 160 + rankMaximum * 36))
+    : Math.max(350, Math.min(560, 220 + rankMaximum * 18));
+  const left = metric === "rank" ? 86 : 66;
+  const right = metric === "rank" ? 112 : 34;
+  const top = metric === "rank" ? 34 : 28;
+  const bottom = metric === "rank" ? 62 : 42;
+  const finalColumnGap = metric === "rank" ? 62 : 0;
+  const plotWidth = width - left - right - finalColumnGap;
   const plotHeight = height - top - bottom;
   const xFor = (index: number) => left + (chartSnapshots.length === 1 ? 0 : (index / (chartSnapshots.length - 1)) * plotWidth);
   const yFor = (value: number) => metric === "rank"
     ? top + ((value - yMinimum) / yRange) * plotHeight
     : top + ((yMaximum - value) / yRange) * plotHeight;
-  const tickCount = metric === "rank" ? Math.min(5, rankMaximum) : 5;
-  const yTicks = Array.from({ length: tickCount }, (_, index) => {
-    if (tickCount === 1) return yMinimum;
-    const raw = yMinimum + (index / (tickCount - 1)) * (yMaximum - yMinimum);
-    return metric === "rank" ? Math.round(raw) : raw;
-  }).filter((value, index, items) => items.indexOf(value) === index);
+  const tickCount = 5;
+  const yTicks = metric === "rank" && rankMaximum <= 14
+    ? Array.from({ length: rankMaximum }, (_, index) => index + 1)
+    : Array.from({ length: tickCount }, (_, index) => {
+      const raw = yMinimum + (index / (tickCount - 1)) * (yMaximum - yMinimum);
+      return metric === "rank" ? Math.round(raw) : raw;
+    }).filter((value, index, items) => items.indexOf(value) === index);
   const firstEndpointYs = spreadRaceEndpointYs(series.map((item) => ({ teamId: item.team.id, y: yFor(item.points[0]?.value ?? 0) })), top + 14, height - bottom - 14);
   const lastEndpointYs = spreadRaceEndpointYs(series.map((item) => ({ teamId: item.team.id, y: yFor(item.points.at(-1)?.value ?? 0) })), top + 14, height - bottom - 14);
   const activeFocusedTeamId = scopeTeams.some((team) => team.id === focusedTeamId) ? focusedTeamId : null;
@@ -444,37 +476,59 @@ function SeasonRaceChart({ schedule, history, throughWeek, divisionId }: {
   const lastSnapshot = chartSnapshots.at(-1);
   const historyLabel = lastSnapshot?.weekNumber ? `Preseason through Week ${lastSnapshot.weekNumber}` : "Preseason starting point";
   const scopeLabel = division?.name ?? "League";
+  const raceStatusLabel = throughWeek >= schedule.setup.weeks ? "Final" : "Current";
+  const playoffFieldSize = Math.max(2, Math.min(rankMaximum, Math.round(schedule.setup.playoffs.fieldSize)));
+  const raceLeader = orderedSeries[0];
+  const topMover = isRankMetric
+    ? [...series].map((item) => ({
+      item,
+      change: (item.points[0]?.value ?? 0) - (item.points.at(-1)?.value ?? 0),
+    })).sort((leftItem, rightItem) => rightItem.change - leftItem.change)[0]
+    : undefined;
+  const cutlineTeam = isRankMetric ? orderedSeries[playoffFieldSize - 1] : undefined;
   const activePointDetails = activePoint ? (() => {
     const item = series.find((candidate) => candidate.team.id === activePoint.teamId);
     const point = item?.points[activePoint.pointIndex];
     return item && point ? { item, point, pointIndex: activePoint.pointIndex } : undefined;
   })() : undefined;
 
-  return <section className="season-race-panel">
+  return <section className={`season-race-panel ${expanded ? "is-expanded" : ""}`}>
     <header>
       <span><TrendingUp /><span><strong>{metricLabel} race</strong><small>{scopeLabel} · {historyLabel}</small></span></span>
-      <CustomSelect label="Season race metric" value={metric} onChange={(value) => setMetric(value as RaceMetric)} options={RACE_METRIC_OPTIONS} />
+      <span className="season-race-actions">
+        <CustomSelect label="Season race metric" value={metric} onChange={(value) => setMetric(value as RaceMetric)} options={RACE_METRIC_OPTIONS} />
+        <button type="button" className="season-race-expand-button" aria-pressed={expanded} aria-label={expanded ? "Close expanded rank race" : "Expand rank race"} onClick={() => setExpanded((current) => !current)}>
+          {expanded ? <X /> : <Maximize2 />}
+        </button>
+      </span>
     </header>
+    {isRankMetric && <div className="season-race-summary" aria-label="Rank race summary">
+      {raceLeader && <span><strong>{raceStatusLabel} leader</strong><b>{teamDisplayName(raceLeader.team)}</b></span>}
+      {topMover && topMover.change > 0 && <span><strong>Biggest climb</strong><b>{teamDisplayName(topMover.item.team)} +{Math.round(topMover.change)}</b></span>}
+      {cutlineTeam && <span><strong>Playoff field</strong><b>#{playoffFieldSize} {teamDisplayName(cutlineTeam.team)}</b></span>}
+    </div>}
     <div className="season-race-legend" aria-label={`${metricLabel} chart teams`}>
       {orderedSeries.map((item) => {
         const currentValue = item.points.at(-1)?.value ?? 0;
+        const startingValue = item.points[0]?.value ?? currentValue;
+        const movement = metric === "rank" ? startingValue - currentValue : currentValue - startingValue;
         const focused = activeFocusedTeamId === item.team.id;
         return <button type="button" className={focused ? "active" : ""} aria-pressed={focused} onClick={() => setFocusedTeamId((current) => current === item.team.id ? null : item.team.id)} key={item.team.id}>
           <EntityLogo color={item.team.color} logoUrl={item.team.logoUrl} monogram={teamInitials(item.team)} size={28} />
-          <span><strong>{item.team.name}</strong><small style={{ color: item.color }}>{formatRaceValue(metric, currentValue)}</small></span>
+          <span><strong>{item.team.name}</strong><small style={{ color: item.color }}>{formatRaceValue(metric, currentValue)}<em>{Math.abs(movement) < .001 ? "0" : `${movement > 0 ? "+" : "-"}${Math.abs(Math.round(movement))}`}</em></small></span>
         </button>;
       })}
     </div>
-    {metric === "rank" && <div className="race-milestone-legend" aria-label="Rank race milestone legend"><strong>Milestones</strong><span className="top-seed"><Medal />#1 seed</span><span className="division-title"><Trophy />Division title</span><span className="playoff-berth"><ShieldCheck />Playoff spot</span><span className="eliminated"><CircleX />Eliminated</span><small>Each marker sits on the first week the result became mathematically certain.</small></div>}
+    {metric === "rank" && <div className="race-milestone-legend" aria-label="Rank race milestone legend"><strong>Milestones</strong><span className="top-seed"><Medal />#1 seed</span><span className="division-title"><Trophy />Division</span><span className="playoff-berth"><ShieldCheck />Playoff</span><span className="eliminated"><CircleX />Eliminated</span><small>Markers show the first week earned. Tooltips keep earned statuses active afterward.</small></div>}
     <div className="season-race-chart-scroll">
-      <div className="season-race-chart-stage">
+      <div className={`season-race-chart-stage ${isRankMetric ? "is-rank-race" : ""}`}>
         <svg className="season-race-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${scopeLabel} ${metricLabel.toLowerCase()} from preseason through Week ${lastSnapshot?.weekNumber ?? 0}`}>
-          <title>{scopeLabel} {metricLabel.toLowerCase()} race</title>
           {yTicks.map((tick) => {
             const y = yFor(tick);
-            return <g className="race-axis-tick" key={tick}><line x1={left} x2={width - right} y1={y} y2={y} /><text x={left - 10} y={y + 4} textAnchor="end">{formatRaceValue(metric, tick)}</text></g>;
+            return <g className="race-axis-tick" key={tick}><line x1={left} x2={width - right} y1={y} y2={y} />{!isRankMetric && <text x={left - 10} y={y + 4} textAnchor="end">{formatRaceValue(metric, tick)}</text>}</g>;
           })}
-          {chartSnapshots.map((snapshot, index) => <g className="race-week-tick" key={snapshot.weekNumber}><line x1={xFor(index)} x2={xFor(index)} y1={top} y2={height - bottom} /><text x={xFor(index)} y={height - 14} textAnchor="middle">{snapshot.weekNumber === 0 ? "PRE" : `W${snapshot.weekNumber}`}</text></g>)}
+          {chartSnapshots.map((snapshot, index) => <g className="race-week-tick" key={snapshot.weekNumber}><line x1={xFor(index)} x2={xFor(index)} y1={top} y2={height - bottom} /><text x={xFor(index)} y={height - (isRankMetric ? 24 : 14)} textAnchor="middle">{snapshot.weekNumber === 0 ? "PRE" : `W${snapshot.weekNumber}`}</text></g>)}
+          {isRankMetric && <text className="race-final-label" x={width - right / 2 - 8} y={height - 24} textAnchor="middle">{raceStatusLabel}</text>}
           {series.map((item) => {
             const focused = activeFocusedTeamId === item.team.id;
             const muted = Boolean(activeFocusedTeamId && !focused);
@@ -486,11 +540,21 @@ function SeasonRaceChart({ schedule, history, throughWeek, divisionId }: {
                 const y = yFor(point.value);
                 const isEndpoint = index === 0 || index === item.points.length - 1;
                 const isFirstEndpoint = index === 0;
-                const endpointY = isEndpoint ? (isFirstEndpoint ? firstEndpointYs : lastEndpointYs).get(item.team.id) ?? y : y;
-                const endpointWasMoved = Math.abs(endpointY - y) > 1;
-                const endpointX = endpointWasMoved ? x + (isFirstEndpoint ? 18 : -18) : x;
-                const milestones = metric === "rank" ? raceMilestonesAtWeek(milestoneByTeam.get(item.team.id), point.snapshot.weekNumber) : [];
-                const milestoneLabel = milestones.length ? `, ${milestones.map((milestone) => RACE_MILESTONE_LABELS[milestone]).join(", ")}` : "";
+                const endpointY = isEndpoint && !isRankMetric ? (isFirstEndpoint ? firstEndpointYs : lastEndpointYs).get(item.team.id) ?? y : y;
+                const rankEndpointOffset = isEndpoint && isRankMetric;
+                const endpointX = rankEndpointOffset
+                  ? x + (isFirstEndpoint ? -34 : 70)
+                  : Math.abs(endpointY - y) > 1
+                    ? x + (isFirstEndpoint ? 18 : -18)
+                    : x;
+                const endpointWasMoved = Math.abs(endpointY - y) > 1 || Math.abs(endpointX - x) > 1;
+                const timeline = milestoneByTeam.get(item.team.id);
+                const milestones = metric === "rank" ? raceMilestonesAtWeek(timeline, point.snapshot.weekNumber) : [];
+                const statusMilestones = metric === "rank" ? raceMilestonesThroughWeek(timeline, point.snapshot.weekNumber) : [];
+                const milestoneLabel = statusMilestones.length ? `, ${statusMilestones.map((milestone) => {
+                  const earnedWeek = raceMilestoneWeek(timeline, milestone);
+                  return `${RACE_MILESTONE_LABELS[milestone]}${earnedWeek != null ? ` in Week ${earnedWeek}` : ""}`;
+                }).join(", ")}` : "";
                 const pointLabel = `${teamDisplayName(item.team)}, ${point.snapshot.weekNumber === 0 ? "Preseason" : `Week ${point.snapshot.weekNumber}`}, ${metricLabel} ${formatRaceValue(metric, point.value)}${milestoneLabel}`;
                 return <g
                   className="race-point"
@@ -514,11 +578,12 @@ function SeasonRaceChart({ schedule, history, throughWeek, divisionId }: {
                   <circle className="race-point-dot" cx={x} cy={y} r={isEndpoint ? 4 : 2.8} />
                   {isEndpoint && endpointWasMoved && <line className="race-endpoint-leader" x1={x} x2={endpointX} y1={y} y2={endpointY} />}
                   {isEndpoint && (item.team.logoUrl
-                    ? <image className="race-endpoint-logo" href={item.team.logoUrl} x={endpointX - 12} y={endpointY - 12} width="24" height="24" preserveAspectRatio="xMidYMid meet" />
+                    ? <image className="race-endpoint-logo" href={item.team.logoUrl} x={endpointX - 15} y={endpointY - 15} width="30" height="30" preserveAspectRatio="xMidYMid meet" />
                     : <g className="race-endpoint-monogram">
-                      <rect x={endpointX - 13} y={endpointY - 13} width="26" height="26" rx="4" fill={tintColor(item.team.color, .82)} />
+                      <rect x={endpointX - 15} y={endpointY - 15} width="30" height="30" rx="5" fill={tintColor(item.team.color, .82)} />
                       <text x={endpointX} y={endpointY + 3.5} textAnchor="middle">{teamInitials(item.team).slice(0, 3)}</text>
                     </g>)}
+                  {isRankMetric && isEndpoint && <text className="race-endpoint-rank" x={endpointX + (isFirstEndpoint ? -20 : 20)} y={endpointY + 8} textAnchor={isFirstEndpoint ? "end" : "start"}>{formatRaceValue(metric, point.value)}</text>}
                   {milestones.map((milestone, milestoneIndex) => <RaceMilestoneMarker milestone={milestone} division={divisionById.get(item.team.divisionId)} x={x} y={y} index={milestoneIndex} total={milestones.length} key={milestone} />)}
                   <circle className="race-point-focus-ring" cx={isEndpoint ? endpointX : x} cy={isEndpoint ? endpointY : y} r={isEndpoint ? 15 : 10} />
                   <circle className="race-point-hit" cx={isEndpoint ? endpointX : x} cy={isEndpoint ? endpointY : y} r={isEndpoint ? 16 : 11} />
@@ -532,7 +597,8 @@ function SeasonRaceChart({ schedule, history, throughWeek, divisionId }: {
           const x = xFor(pointIndex);
           const y = yFor(point.value);
           const weekLabel = point.snapshot.weekNumber === 0 ? "Preseason" : `Week ${point.snapshot.weekNumber}`;
-          const milestones = metric === "rank" ? raceMilestonesAtWeek(milestoneByTeam.get(item.team.id), point.snapshot.weekNumber) : [];
+          const timeline = milestoneByTeam.get(item.team.id);
+          const milestones = metric === "rank" ? raceMilestonesThroughWeek(timeline, point.snapshot.weekNumber) : [];
           return <div
             className={`race-point-tooltip ${x > width * .72 ? "align-right" : ""} ${y < 88 ? "below" : ""}`}
             id="race-point-tooltip"
@@ -546,8 +612,11 @@ function SeasonRaceChart({ schedule, history, throughWeek, divisionId }: {
               <strong>{item.team.name}</strong>
             </span>
             <span className="race-point-tooltip-value"><strong>{formatRaceValue(metric, point.value)}</strong><small>{metricLabel}</small></span>
-            <small className="race-point-tooltip-movement">{formatRaceMovement(metric, point.value, item.points[pointIndex - 1]?.value)}</small>
-            {milestones.length > 0 && <span className="race-point-tooltip-milestones">{milestones.map((milestone) => <span className={milestone} key={milestone}>{milestone === "top-seed" ? <Medal /> : milestone === "division-title" ? <Trophy /> : milestone === "playoff-berth" ? <ShieldCheck /> : <CircleX />}{RACE_MILESTONE_LABELS[milestone]}</span>)}</span>}
+            <small className={`race-point-tooltip-movement ${raceMovementTone(metric, point.value, item.points[pointIndex - 1]?.value)}`}>{formatRaceMovement(metric, point.value, item.points[pointIndex - 1]?.value)}</small>
+            {milestones.length > 0 && <span className="race-point-tooltip-milestones">{milestones.map((milestone) => {
+              const earnedWeek = raceMilestoneWeek(timeline, milestone);
+              return <span className={milestone} key={milestone}>{milestone === "top-seed" ? <Medal /> : milestone === "division-title" ? <Trophy /> : milestone === "playoff-berth" ? <ShieldCheck /> : <CircleX />}<b>{RACE_MILESTONE_LABELS[milestone]}</b>{earnedWeek != null && <em>W{earnedWeek}</em>}</span>;
+            })}</span>}
           </div>;
         })()}
       </div>
