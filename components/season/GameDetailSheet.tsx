@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ArrowLeft, Share2, Star, X } from "lucide-react";
+import { ArrowLeft, CircleAlert, Share2, Star, X } from "lucide-react";
 import { DivisionMark } from "@/components/ui/DivisionIdentity";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { Modal } from "@/components/ui/Modal";
@@ -564,6 +564,10 @@ export function GameDetailSheet({
         <button type="button" className="gdm-icon-button" aria-label="Share matchup"><Share2 /></button>
         <button type="button" className="gdm-close" aria-label="Close game detail" onClick={onClose}><X /></button>
       </header>
+      <div className="gdm-beta-strip" role="note" aria-label="Beta feature notice">
+        <CircleAlert />
+        <span><strong>Beta</strong> Game details are still being improved, especially player-level and historical context.</span>
+      </div>
       <WeekStrip schedule={schedule} currentGameId={gameId} games={slateGames} onSelect={navigation?.onSelect} />
       {isBroadcast && <div className="gdm-gotw-band"><Star fill="currentColor" /> Game of the Week <Star fill="currentColor" /></div>}
       <div className="gdm-eyebrow">

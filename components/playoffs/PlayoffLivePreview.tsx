@@ -48,25 +48,32 @@ export function PlayoffLivePreview({
     useState<PlayoffPreviewTab>("championship");
   const [bracketExpanded, setBracketExpanded] = useState(false);
   const divisionCount = setup.divisions.length;
-  const normalized = normalizePlayoffSettings(
-    setup.playoffs,
-    setup.teams.length,
-    setup.color,
-    setup.weeks,
+  const normalized = useMemo(
+    () =>
+      normalizePlayoffSettings(
+        setup.playoffs,
+        setup.teams.length,
+        setup.color,
+        setup.weeks,
+      ),
+    [setup.color, setup.playoffs, setup.teams.length, setup.weeks],
   );
-  const p = {
-    ...normalized,
-    placementMode:
-      normalized.placementMode === "auto"
-        ? isPlayoffPlacementUsable("division-halves", divisionCount, normalized.fieldSize)
-          ? "division-halves"
-          : isPlayoffPlacementUsable("division-leaders", divisionCount, normalized.fieldSize)
-            ? "division-leaders"
-            : "overall"
-        : normalized.placementMode,
-  };
+  const p = useMemo(
+    () => ({
+      ...normalized,
+      placementMode:
+        normalized.placementMode === "auto"
+          ? isPlayoffPlacementUsable("division-halves", divisionCount, normalized.fieldSize)
+            ? "division-halves"
+            : isPlayoffPlacementUsable("division-leaders", divisionCount, normalized.fieldSize)
+              ? "division-leaders"
+              : "overall"
+          : normalized.placementMode,
+    }),
+    [divisionCount, normalized],
+  );
   const roundNames = getPlayoffRoundNames(normalized, divisionCount);
-  const projectedConsolationBracket = (() => {
+  const projectedConsolationBracket = useMemo(() => {
     if (p.consolationMode === "off") return null;
     try {
       const stub = {
@@ -83,7 +90,7 @@ export function PlayoffLivePreview({
     } catch {
       return null;
     }
-  })();
+  }, [normalized, p.consolationMode, setup]);
   const consolationSlots: Array<{
     id: string;
     label: string;
