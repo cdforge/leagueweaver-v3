@@ -2964,6 +2964,8 @@ a.workspace-switcher-item:hover { background: var(--canvas); }
 .matchup-ratings-table th { height: 42px; border-bottom: 1px solid var(--line-strong); background: var(--canvas); color: var(--muted); padding: 7px 10px; font-size: var(--text-2xs); font-weight: var(--w-black); text-align: left; text-transform: uppercase; letter-spacing: 0.04em; }
 .matchup-ratings-table td { height: 64px; border-bottom: 1px solid var(--line); padding: 7px 10px; font-size: var(--text-xs); font-variant-numeric: tabular-nums; transition: background var(--transition); }
 .matchup-ratings-table tbody tr:hover td { background: #fafcfb; }
+.matchup-ratings-table tbody tr.is-openable { cursor: pointer; }
+.matchup-ratings-table tbody tr.is-openable:focus-visible { outline: 3px solid color-mix(in srgb, var(--field) 34%, transparent); outline-offset: -3px; }
 .matchup-ratings-table tbody tr.is-gotw td { background: color-mix(in srgb, var(--gold-soft) 42%, white); }
 .matchup-ratings-table tbody tr.is-gotw:hover td { background: color-mix(in srgb, var(--gold-soft) 58%, white); }
 .matchup-ratings-table tbody tr:last-child td { border-bottom: 0; }
