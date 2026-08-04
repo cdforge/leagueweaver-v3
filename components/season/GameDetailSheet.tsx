@@ -560,7 +560,7 @@ export function GameDetailSheet({
     >
       <header className="gdm-appbar">
         <button type="button" className="gdm-icon-button" aria-label="Back to schedule" onClick={onClose}><ArrowLeft /></button>
-        <strong>Matchup</strong>
+        <strong id="game-detail-title">Matchup</strong>
         <button type="button" className="gdm-icon-button" aria-label="Share matchup"><Share2 /></button>
         <button type="button" className="gdm-close" aria-label="Close game detail" onClick={onClose}><X /></button>
       </header>

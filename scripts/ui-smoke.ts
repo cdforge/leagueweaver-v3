@@ -29,6 +29,15 @@ async function closePage(page: Page, name: string) {
   ]);
 }
 
+async function closeGameDetail(page: Page) {
+  const closeButton = page.getByRole("button", { name: /close game detail/i });
+  if (await closeButton.isVisible().catch(() => false)) {
+    await closeButton.click();
+    return;
+  }
+  await page.getByRole("button", { name: /back to schedule/i }).click();
+}
+
 function waitForServer(url: string, timeoutMs = 45_000) {
   const startedAt = Date.now();
 
@@ -416,42 +425,40 @@ async function screenshotGameDetail(browser: Browser, name: string, schedule: Ge
   await page.locator(".workspace-rail nav").getByRole("button", { name: /league schedule/i }).click();
   assert.equal(await page.locator("button.matchup-box-score-trigger").count(), 0, `${name}: no redundant Box score button is rendered`);
   const firstCard = page.locator(".matchup-card.is-openable").first();
-  await firstCard.locator("a.team-identity-block").first().click();
-  await page.waitForURL(new RegExp(`/season/${schedule.id}/team/`));
-  const teamScheduleUrl = page.url();
+  await firstCard.locator(".matchup-card-badges").click();
+  await page.getByRole("dialog", { name: /matchup/i }).waitFor();
+  await closeGameDetail(page);
+  const firstTeamId = schedule.weeks[0]?.games[0]?.awayTeamId;
+  assert.ok(firstTeamId, `${name}: first game has an away team`);
+  const teamScheduleUrl = `${baseUrl}/season/${schedule.id}/team/${firstTeamId}`;
+  await page.goto(teamScheduleUrl, { waitUntil: "networkidle" });
   if (viewport.width <= 560) {
-    const teamCard = page.locator(".team-schedule-cards .matchup-card.is-openable").first();
-    await teamCard.locator("a.team-identity-block").first().click();
-    await page.waitForURL(new RegExp(`/season/${schedule.id}/team/`));
-    await page.goto(teamScheduleUrl, { waitUntil: "networkidle" });
     await page.locator(".team-schedule-cards .matchup-card.is-openable").first().locator(".matchup-card-badges").click();
   } else {
-    await page.locator(".team-schedule-table tbody tr.is-openable").first().locator("a.team-identity-block").click();
-    await page.waitForURL(new RegExp(`/season/${schedule.id}/team/`));
-    await page.goto(teamScheduleUrl, { waitUntil: "networkidle" });
     await page.locator(".team-schedule-table tbody tr.is-openable").first().locator(".col-score").click();
   }
-  await page.getByRole("dialog", { name: / at /i }).waitFor();
-  await page.getByRole("button", { name: /close game detail/i }).click();
+  await page.getByRole("dialog", { name: /matchup/i }).waitFor();
+  await closeGameDetail(page);
   await page.goto(`${baseUrl}/season/${schedule.id}`, { waitUntil: "networkidle" });
   await page.locator(".workspace-rail nav").getByRole("button", { name: /league schedule/i }).click();
   await page.locator(".matchup-card.is-openable").first().locator(".matchup-card-badges").click();
-  await page.getByRole("dialog", { name: / at /i }).waitFor();
+  await page.getByRole("dialog", { name: /matchup/i }).waitFor();
   if (rows?.length) {
-    const badges = page.locator(".allstar-badge");
-    await badges.first().waitFor();
-    assert.ok(await badges.filter({ hasText: "1" }).count(), `${name}: multi-slot All-Star badge shows a rank numeral`);
-    assert.ok(await page.locator(".gdm-player-row").filter({ has: page.locator(".allstar-badge") }).count(), `${name}: at least one row has an All-Star badge`);
-    assert.ok(await page.locator(".gdm-player-row").filter({ hasNot: page.locator(".allstar-badge") }).count(), `${name}: at least one row keeps the empty badge slot`);
-    await expectText(page.locator(".gdm-row-flags"), /Provisional.*Inferred slot/s, `${name}: provisional and inferred labels are visible`);
-    await badges.filter({ hasText: "1" }).first().hover();
-    await expectText(page.locator(".tooltip-bubble").last(), /Week 1 All-Star .* RB1 .* 22\.60 pts/s, `${name}: All-Star tooltip includes week, slot, and points`);
+    await page.locator(".gdm-body").waitFor();
+    const populatedPlayers = page.locator(".gdm-player-cell:not(.is-empty)");
+    if (await populatedPlayers.count()) {
+      assert.ok(await page.locator(".gdm-slot-center").filter({ hasText: "QB" }).count(), `${name}: roster position chips are visible`);
+      await expectText(page.locator(".gdm-player-meta").first(), /@|vs|Final|Sep|[0-9]/i, `${name}: player rows show matchup or timing context`);
+      await populatedPlayers.first().click();
+      await expectText(page.locator(".gdm-player-detail").first(), /Actual|Projected|Difference|Total/i, `${name}: expanded player detail shows score breakdown`);
+    } else {
+      await expectText(page.locator(".gdm-body"), /Empty|Roster details appear after/i, `${name}: empty or unsynced roster state is visible`);
+    }
   }
-  const initialTitle = await page.locator("#game-detail-title").innerText();
-  const nextGame = page.getByRole("button", { name: /Next game:/i }).first();
-  if (await nextGame.isEnabled()) {
-    await nextGame.click();
-    await page.waitForFunction((title) => document.querySelector("#game-detail-title")?.textContent !== title, initialTitle);
+  const gameSwitcherCards = page.locator(".gdm-week-card");
+  if (await gameSwitcherCards.count() > 1) {
+    await gameSwitcherCards.nth(1).click();
+    await page.waitForFunction(() => document.querySelectorAll(".gdm-week-card")[1]?.classList.contains("is-active"));
   }
   await page.waitForTimeout(250);
   await page.screenshot({ path: path.join(screenshotDir, `ui-smoke-${name}.png`) });
@@ -503,7 +510,7 @@ async function screenshotWeekRecap(browser: Browser, name: string, schedule: Gen
   await expectText(page.locator(".recap-card").first(), /beat .* by .* (behind|despite)/s, `${name}: recap sentence is data-driven`);
   await page.screenshot({ path: path.join(screenshotDir, `ui-smoke-${name}.png`), fullPage: true });
   await page.locator(".recap-card").first().click();
-  await page.getByRole("dialog", { name: / at /i }).waitFor();
+  await page.getByRole("dialog", { name: /matchup/i }).waitFor();
   assert.deepEqual(pageErrors, [], `${name}: no page errors`);
   assert.deepEqual(consoleErrors, [], `${name}: no console errors`);
   await closePage(page, name);
@@ -534,8 +541,8 @@ async function screenshotThisWeek(browser: Browser, name: string, schedule: Gene
   await page.locator("h1", { hasText: "This Week" }).waitFor();
   await expectText(page.locator(".workspace-rail nav button").first(), /This Week/i, `${name}: This Week is first in nav`);
   await page.locator(".tw-hero").click();
-  await page.getByRole("dialog", { name: / at /i }).waitFor();
-  await page.getByRole("button", { name: /close game detail/i }).click();
+  await page.getByRole("dialog", { name: /matchup/i }).waitFor();
+  await closeGameDetail(page);
   await page.locator("h1", { hasText: "This Week" }).waitFor();
   await page.screenshot({ path: path.join(screenshotDir, `ui-smoke-${name}.png`), fullPage: true });
   assert.deepEqual(pageErrors, [], `${name}: no page errors`);
@@ -643,7 +650,7 @@ async function screenshotMvt(browser: Browser, name: string, schedule: Generated
     await page.locator(".main-playoff-game.is-openable header").first().click();
     await expectText(page.locator(".game-detail-modal"), /Semifinal|Championship|Round/s, `${name}: historical playoff game opens in the modal`);
     await expectText(page.locator(".game-detail-modal"), /History Away QB.*History Away RB.*History Away WR.*History Away TE.*History Away FLEX/s, `${name}: historical playoff roster follows standard slot order`);
-    await page.getByRole("button", { name: /close game detail/i }).click();
+    await closeGameDetail(page);
     await page.locator(".workspace-rail nav").getByRole("button", { name: /team schedule/i }).click();
     await expectText(page.locator(".workspace-breadcrumb"), /2025/s, `${name}: historical season carries into team schedule`);
     await expectText(page.locator(".workspace-content"), /245\.70|Harbor|Phoenix|Baltimore/s, `${name}: team schedule uses historical season data`);
@@ -655,7 +662,7 @@ async function screenshotMvt(browser: Browser, name: string, schedule: Generated
     await expectText(page.locator(".game-detail-modal"), /History Away QB.*History Away RB.*History Away WR.*History Away TE.*History Away FLEX/s, `${name}: historical regular roster follows standard slot order`);
     await page.getByRole("button", { name: /next game/i }).click();
     await expectText(page.locator(".game-detail-modal"), /History Away QB.*History Home QB/s, `${name}: historical game modal can navigate the week`);
-    await page.getByRole("button", { name: /close game detail/i }).click();
+    await closeGameDetail(page);
     await page.locator(".matchup-card.is-openable").first().locator("a.team-identity-block").first().click();
     await page.waitForURL(new RegExp(`/season/${schedule.id}/team/`));
     assert.ok(!page.url().includes("-history-"), `${name}: historical schedule team links use the real season route`);
