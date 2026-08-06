@@ -6989,9 +6989,11 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .playoff-wizard-subnav .ppw-lab strong, .wizard-subnav .ppw-lab strong { display: block; font-size: var(--text-sm); font-weight: var(--w-bold); }
 .playoff-wizard-subnav .ppw-lab small, .wizard-subnav .ppw-lab small { color: var(--muted); font-size: var(--text-2xs); }
 .playoff-wizard-subnav button:focus-visible, .wizard-subnav button:focus-visible { outline: 2px solid var(--field); outline-offset: 2px; }
+.wizard-subnav .ppw-n { width: auto; min-width: 32px; padding: 0 7px; border-radius: var(--radius-chip); }
 
 /* Grouped wizard step: sub-tab bar above the active sub-panel (Teams & Divisions, Season & Rules). */
 .wizard-group-step { display: flex; flex-direction: column; gap: 22px; }
+.wizard-group-kicker { margin-bottom: -13px; }
 .wizard-group-step > .wizard-subnav { margin-bottom: 8px; }
 /* On narrow screens the 4-tab Season & Rules row scrolls sideways rather than wrapping into a tall stack. */
 @media (max-width: 560px) {
@@ -7511,3 +7513,41 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 
 /* conference assignment section in the Divisions step */
 .conference-stage { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; padding-top: 18px; border-top: 1px solid rgba(0,0,0,.08); }
+.division-shape-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 4px; color: var(--ink); }
+.division-shape-heading strong { font-size: var(--text-sm); font-weight: var(--w-black); text-transform: uppercase; }
+.division-shape-heading span { color: var(--muted); font-size: var(--text-2xs); }
+.division-shape-preview { display: grid; gap: 12px; }
+.division-shape-preview.with-conferences { grid-template-columns: 1fr; }
+.division-shape-group { display: grid; gap: 10px; border: 1px solid color-mix(in srgb, var(--shape-conference-color, var(--field)) 28%, var(--line)); border-radius: var(--radius); background: color-mix(in srgb, var(--shape-conference-color, var(--field)) 6%, white); padding: 12px; }
+.division-shape-conference { min-width: 0; display: flex; align-items: center; gap: 10px; }
+.division-shape-conference span, .division-shape-card span { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.division-shape-conference strong, .division-shape-card strong { overflow: hidden; color: var(--ink); font-size: var(--text-2xs); text-overflow: ellipsis; white-space: nowrap; }
+.division-shape-conference small, .division-shape-card small { color: var(--muted); font-size: var(--text-micro); }
+.division-shape-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.division-shape-card { min-width: 0; display: flex; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: var(--radius); background: white; padding: 8px; }
+.division-edit-structure { display: grid; gap: 14px; }
+.division-edit-conference { display: grid; gap: 10px; border: 1px solid color-mix(in srgb, var(--shape-conference-color, var(--field)) 30%, var(--line)); border-radius: var(--radius); background: color-mix(in srgb, var(--shape-conference-color, var(--field)) 5%, white); padding: 12px; }
+.division-edit-conference-head { display: flex; align-items: center; gap: 10px; }
+.division-edit-conference-head span { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.division-edit-conference-head strong { color: var(--ink); font-size: var(--text-sm); }
+.division-edit-conference-head small { color: var(--muted); font-size: var(--text-2xs); }
+.division-initials-field .input-state-wrap { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.division-initials-field em { color: var(--muted); font-size: var(--text-micro); font-style: normal; font-weight: var(--w-black); white-space: nowrap; }
+.division-placement-methods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.division-placement-methods button { min-width: 0; min-height: 96px; display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 11px; border: 1px solid var(--line); border-radius: var(--radius); background: white; color: var(--ink); padding: 13px; text-align: left; cursor: pointer; }
+.division-placement-methods button.active { border-color: var(--field); background: var(--field-soft); box-shadow: inset 0 0 0 1px var(--field); }
+.division-placement-methods button > span:first-child { width: 34px; height: 34px; display: grid; place-items: center; border-radius: var(--radius-sm); background: var(--field); color: white; }
+.division-placement-methods svg { width: 18px; height: 18px; }
+.division-placement-methods button > span:first-child { grid-column: 1; grid-row: 1 / span 2; align-self: start; }
+.division-placement-methods button > strong { grid-column: 2; grid-row: 1; align-self: end; }
+.division-placement-methods button > small { grid-column: 2; grid-row: 2; align-self: start; }
+.division-placement-methods strong, .division-placement-methods small { min-width: 0; display: block; }
+.division-placement-methods strong { font-size: var(--text-2xs); }
+.division-placement-methods small { color: var(--muted); font-size: var(--text-micro); line-height: 1.35; }
+@media (max-width: 700px) {
+  .division-shape-list, .division-placement-methods { grid-template-columns: 1fr; }
+  .division-placement-methods button { min-height: 76px; grid-template-columns: 44px minmax(0, 1fr); align-items: start; padding: 14px 16px; }
+  .division-placement-methods button > span:first-child { width: 44px; height: 44px; }
+  .division-placement-methods strong { padding-top: 3px; font-size: var(--text-sm); }
+  .division-placement-methods small { max-width: 28ch; font-size: var(--text-xs); line-height: 1.35; }
+}
