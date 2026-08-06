@@ -7516,6 +7516,11 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .division-shape-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 4px; color: var(--ink); }
 .division-shape-heading strong { font-size: var(--text-sm); font-weight: var(--w-black); text-transform: uppercase; }
 .division-shape-heading span { color: var(--muted); font-size: var(--text-2xs); }
+.division-recommendation-note { display: flex; align-items: flex-start; gap: 12px; border: 1px solid color-mix(in srgb, var(--gold) 42%, var(--line)); border-left: 4px solid var(--gold); border-radius: var(--radius); background: color-mix(in srgb, var(--gold) 11%, white); padding: 13px 15px; color: var(--ink); }
+.division-recommendation-note > svg { flex: 0 0 auto; width: 28px; height: 28px; margin-top: 1px; border-radius: 999px; background: white; color: var(--field); padding: 6px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 36%, var(--line)); }
+.division-recommendation-note span { min-width: 0; display: grid; gap: 3px; }
+.division-recommendation-note strong { font-size: var(--text-sm); font-weight: var(--w-black); }
+.division-recommendation-note small { color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
 .division-shape-preview { display: grid; gap: 12px; }
 .division-shape-preview.with-conferences { grid-template-columns: 1fr; }
 .division-shape-group { display: grid; gap: 10px; border: 1px solid color-mix(in srgb, var(--shape-conference-color, var(--field)) 28%, var(--line)); border-radius: var(--radius); background: color-mix(in srgb, var(--shape-conference-color, var(--field)) 6%, white); padding: 12px; }
@@ -7546,6 +7551,7 @@ button.account-link { min-height: 44px; display: inline-flex; align-items: cente
 .division-placement-methods small { color: var(--muted); font-size: var(--text-micro); line-height: 1.35; }
 @media (max-width: 700px) {
   .division-shape-list, .division-placement-methods { grid-template-columns: 1fr; }
+  .division-recommendation-note { padding: 12px; }
   .division-placement-methods button { min-height: 76px; grid-template-columns: 44px minmax(0, 1fr); align-items: start; padding: 14px 16px; }
   .division-placement-methods button > span:first-child { width: 44px; height: 44px; }
   .division-placement-methods strong { padding-top: 3px; font-size: var(--text-sm); }
