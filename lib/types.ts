@@ -228,6 +228,49 @@ export interface MatchupRosterDetail {
   away: MatchupRosterSide;
 }
 
+export interface PlayerScoreDetail {
+  raw: string;
+  label: string;
+  points: number;
+}
+
+export interface MatchupRosterPlayer {
+  id: string;
+  providerPlayerId?: string;
+  name: string;
+  fullName?: string;
+  slot: string;
+  position: string;
+  proTeam?: string;
+  injuryStatus?: string;
+  points?: number;
+  projectedPoints?: number;
+  statLine?: string;
+  statDetails?: PlayerScoreDetail[];
+  headshotUrl?: string;
+  teamLogoUrl?: string;
+}
+
+export interface MatchupRosterSide {
+  teamId: string;
+  total?: number;
+  projectedTotal?: number;
+  starters: MatchupRosterPlayer[];
+  bench: MatchupRosterPlayer[];
+}
+
+export interface MatchupRosterDetail {
+  gameId: string;
+  week: number;
+  seasonYear: number;
+  provider: PlatformProvider;
+  sourceSeasonYear: number;
+  status: "predraft" | "upcoming" | "live" | "final";
+  syncedAt?: string;
+  home: MatchupRosterSide;
+  away: MatchupRosterSide;
+}
+
 export interface ScheduleWeek {
   weekNumber: number;
   dateLabel: string;

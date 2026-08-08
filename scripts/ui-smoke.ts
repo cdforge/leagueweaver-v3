@@ -126,7 +126,9 @@ async function screenshotBuilderSetup(browser: Browser, name: string, setup: Lea
   await page.getByRole("button", { name: /^continue$/i }).click();
   await page.getByRole("heading", { name: "Add every team." }).waitFor();
   await page.getByRole("button", { name: /^continue$/i }).click();
-  await page.getByRole("heading", { name: "Build the divisions." }).waitFor();
+  await page.getByRole("heading", { name: "Choose the division shape." }).waitFor();
+  await page.getByRole("button", { name: /^continue$/i }).click();
+  await page.getByRole("heading", { name: "Set the divisions." }).waitFor();
   await page.screenshot({ path: path.join(screenshotDir, `ui-smoke-${name}.png`), fullPage: true });
   assert.deepEqual(pageErrors, [], `${name}: no page errors`);
   assert.deepEqual(consoleErrors, [], `${name}: no console errors`);
