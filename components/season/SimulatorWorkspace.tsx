@@ -269,6 +269,7 @@ export function SimulatorWorkspace({
             simulationLocked={focusResult?.locked}
             winProbability={probabilityByGame[focusGame!.id]}
             variant="gotw"
+            seasonYear={schedule.setup.seasonYear}
             teamHrefBase={`/season/${schedule.id}/team`}
           /> : <div className="simulator-empty-game"><Trophy /><strong>The regular season is complete.</strong><small>Start a fresh hypothetical run from Week 1, or play through the bracket.</small><button type="button" className="button-primary" onClick={() => runAnimated(restartFromBeginning)}><RotateCcw />Restart from Week 1</button></div>}
           <footer className="simulator-game-actions">

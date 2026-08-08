@@ -64,6 +64,7 @@ export function GotwWorkspace({ schedule, simulationResults = {}, simulationProb
             awayDivision={divisionById.get(away.divisionId)}
             homeDivision={divisionById.get(home.divisionId)}
             setup={schedule.setup}
+            seasonYear={schedule.setup.seasonYear}
             awayRank={entry.ranks.get(away.id) ?? away.overallRank}
             homeRank={entry.ranks.get(home.id) ?? home.overallRank}
             awayRecord={recordFor(away.id)}

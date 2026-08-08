@@ -48,6 +48,28 @@ function cleanError(message: string) {
     .slice(0, 500);
 }
 
+function numericHistoryStat(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : Number(value ?? 0) || 0;
+}
+
+function isAllZeroHistoryTeam(team: {
+  wins?: number | null;
+  losses?: number | null;
+  ties?: number | null;
+  points_for?: number | string | null;
+  points_against?: number | string | null;
+}) {
+  return (
+    numericHistoryStat(team.wins) === 0 &&
+    numericHistoryStat(team.losses) === 0 &&
+    numericHistoryStat(team.ties) === 0 &&
+    numericHistoryStat(team.points_for) === 0 &&
+    numericHistoryStat(team.points_against) === 0
+  );
+}
+
 async function loadSavedEspnAuth(
   auth: NonNullable<Awaited<ReturnType<typeof getAuthenticatedClient>>>,
   scheduleId: string,
@@ -189,63 +211,108 @@ async function readHistoryBrowser(auth: NonNullable<Awaited<ReturnType<typeof ge
     ]);
     const playerIds = [...new Set((ownership ?? []).map((row) => row.canonical_player_id).filter(Boolean))];
     const catalogById = playerIds.length ? await readCatalogRows(auth, playerIds) : new Map<string, { canonical_name?: string | null; position?: string | null; nfl_team?: string | null }>();
+    const referencedTeamIdsBySeason = new Map<string, Set<string>>();
+    for (const row of games ?? []) {
+      const set =
+        referencedTeamIdsBySeason.get(row.league_season_id) ??
+        new Set<string>();
+      if (row.home_league_team_id) set.add(row.home_league_team_id);
+      if (row.away_league_team_id) set.add(row.away_league_team_id);
+      referencedTeamIdsBySeason.set(row.league_season_id, set);
+    }
+    for (const row of ownership ?? []) {
+      const set =
+        referencedTeamIdsBySeason.get(row.league_season_id) ??
+        new Set<string>();
+      if (row.league_team_id) set.add(row.league_team_id);
+      referencedTeamIdsBySeason.set(row.league_season_id, set);
+    }
     const teamsBySeason = new Map<string, NonNullable<typeof teams>>();
-    for (const row of teams ?? []) teamsBySeason.set(row.league_season_id, [...(teamsBySeason.get(row.league_season_id) ?? []), row]);
+    for (const row of teams ?? []) {
+      if (
+        isAllZeroHistoryTeam(row) &&
+        !referencedTeamIdsBySeason.get(row.league_season_id)?.has(row.league_team_id)
+      ) {
+        continue;
+      }
+      teamsBySeason.set(row.league_season_id, [
+        ...(teamsBySeason.get(row.league_season_id) ?? []),
+        row,
+      ]);
+    }
     const gamesBySeason = new Map<string, NonNullable<typeof games>>();
     for (const row of games ?? []) gamesBySeason.set(row.league_season_id, [...(gamesBySeason.get(row.league_season_id) ?? []), row]);
     const ownershipBySeason = new Map<string, NonNullable<typeof ownership>>();
     for (const row of ownership ?? []) ownershipBySeason.set(row.league_season_id, [...(ownershipBySeason.get(row.league_season_id) ?? []), row]);
 
-    return seasons.map((season): HistoryBrowserSeason => ({
-      id: season.id,
-      season: season.season,
-      provider: season.provider,
-      providerLeagueId: season.provider_league_id,
-      leagueName: season.league_name,
-      teamCount: season.team_count,
-      rosterPositions: season.roster_positions ?? [],
-      regularSeasonWeekCount: season.regular_season_week_count ?? undefined,
-      playoffSettings: season.playoff_settings ?? {},
-      teams: (teamsBySeason.get(season.id) ?? []).map((team) => ({
-        leagueTeamId: team.league_team_id,
-        providerRosterOrTeamId: team.provider_roster_or_team_id,
-        teamName: team.team_name,
-        managerName: team.manager_name ?? undefined,
-        divisionId: team.division_id ?? undefined,
-        conferenceId: team.conference_id ?? undefined,
-        finalStanding: team.final_standing ?? undefined,
-        wins: team.wins ?? undefined,
-        losses: team.losses ?? undefined,
-        ties: team.ties ?? undefined,
-        pointsFor: team.points_for == null ? undefined : Number(team.points_for),
-        pointsAgainst: team.points_against == null ? undefined : Number(team.points_against),
-      })),
-      games: (gamesBySeason.get(season.id) ?? []).map((game) => ({
-        week: game.week,
-        providerMatchupId: game.provider_matchup_id,
-        homeLeagueTeamId: game.home_league_team_id,
-        awayLeagueTeamId: game.away_league_team_id,
-        homeScore: game.home_score == null ? undefined : Number(game.home_score),
-        awayScore: game.away_score == null ? undefined : Number(game.away_score),
-        status: game.status,
-        finalLockAt: game.final_lock_at ?? undefined,
-      })),
-      playerRows: (ownershipBySeason.get(season.id) ?? []).map((row) => {
-        const catalog = catalogById.get(row.canonical_player_id);
-        return {
-          week: row.week,
-          canonicalPlayerId: row.canonical_player_id,
-          leagueTeamId: row.league_team_id,
-          providerPlayerId: row.provider_player_id,
-          playerName: catalog?.canonical_name || row.provider_player_id,
-          position: row.position_at_time || catalog?.position || "UNKNOWN",
-          nflTeam: row.nfl_team_at_time || catalog?.nfl_team || undefined,
-          lineupStatus: row.roster_status,
-          lineupSlot: row.lineup_slot,
-          fantasyPoints: Number(row.fantasy_points ?? 0),
-        };
-      }),
-    }));
+    return seasons.map((season): HistoryBrowserSeason => {
+      const seasonTeams = teamsBySeason.get(season.id) ?? [];
+      const activeTeamIds = new Set(
+        seasonTeams.map((team) => team.league_team_id),
+      );
+      const seasonGames = (gamesBySeason.get(season.id) ?? []).filter((game) =>
+        activeTeamIds.has(game.home_league_team_id) &&
+        activeTeamIds.has(game.away_league_team_id),
+      );
+      return {
+        id: season.id,
+        season: season.season,
+        provider: season.provider,
+        providerLeagueId: season.provider_league_id,
+        leagueName: season.league_name,
+        teamCount: seasonTeams.length || season.team_count,
+        rosterPositions: season.roster_positions ?? [],
+        regularSeasonWeekCount: season.regular_season_week_count ?? undefined,
+        playoffSettings: season.playoff_settings ?? {},
+        teams: seasonTeams.map((team) => ({
+          leagueTeamId: team.league_team_id,
+          providerRosterOrTeamId: team.provider_roster_or_team_id,
+          teamName: team.team_name,
+          managerName: team.manager_name ?? undefined,
+          divisionId: team.division_id ?? undefined,
+          conferenceId: team.conference_id ?? undefined,
+          finalStanding: team.final_standing ?? undefined,
+          wins: team.wins ?? undefined,
+          losses: team.losses ?? undefined,
+          ties: team.ties ?? undefined,
+          pointsFor:
+            team.points_for == null ? undefined : Number(team.points_for),
+          pointsAgainst:
+            team.points_against == null
+              ? undefined
+              : Number(team.points_against),
+        })),
+        games: seasonGames.map((game) => ({
+          week: game.week,
+          providerMatchupId: game.provider_matchup_id,
+          homeLeagueTeamId: game.home_league_team_id,
+          awayLeagueTeamId: game.away_league_team_id,
+          homeScore:
+            game.home_score == null ? undefined : Number(game.home_score),
+          awayScore:
+            game.away_score == null ? undefined : Number(game.away_score),
+          status: game.status,
+          finalLockAt: game.final_lock_at ?? undefined,
+        })),
+        playerRows: (ownershipBySeason.get(season.id) ?? [])
+          .filter((row) => activeTeamIds.has(row.league_team_id))
+          .map((row) => {
+            const catalog = catalogById.get(row.canonical_player_id);
+            return {
+              week: row.week,
+              canonicalPlayerId: row.canonical_player_id,
+              leagueTeamId: row.league_team_id,
+              providerPlayerId: row.provider_player_id,
+              playerName: catalog?.canonical_name || row.provider_player_id,
+              position: row.position_at_time || catalog?.position || "UNKNOWN",
+              nflTeam: row.nfl_team_at_time || catalog?.nfl_team || undefined,
+              lineupStatus: row.roster_status,
+              lineupSlot: row.lineup_slot,
+              fantasyPoints: Number(row.fantasy_points ?? 0),
+            };
+          }),
+      };
+    });
   } catch {
     return [];
   }

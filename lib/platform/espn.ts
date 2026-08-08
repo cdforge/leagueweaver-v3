@@ -2,6 +2,7 @@ import "server-only";
 import { buildEspnLeagueHistoryDraft, espnPublicUnreliableHistoryYears, type LeagueHistoryDraft } from "@/lib/platform/history";
 import { deriveEspnTemplates, mapEspnPlayerWeekStats, type EspnMatchupPayload, type EspnPlayerEntryPayload, type LineupTemplate, type PlayerWeekStat, type RosterTemplate } from "@/lib/playerData";
 import { mapEspnTransactions, type EspnTransactionPayload, type NormalizedTransaction } from "@/lib/transactions";
+import { providerMatchupId } from "@/lib/providerGameLinks";
 import { fetchProviderJson } from "./request";
 import type { GeneratedSchedule, ImportDataFound, MatchupRosterDetail, MatchupRosterPlayer, PlatformSyncResult, PlatformSyncScoreRow, PriorSeasonFinishEntry } from "@/lib/types";
 
@@ -329,12 +330,14 @@ export function mapEspnScores(schedule: GeneratedSchedule, league: EspnLeague): 
   // would leave a generated schedule almost entirely unscored.)
   const pointsByTeamWeek = new Map<string, number>();
   const sideByTeamWeek = new Map<string, EspnMatchupSide>();
+  const matchupIdByTeamWeek = new Map<string, number>();
   for (const matchup of league.schedule ?? []) {
     for (const side of [matchup.home, matchup.away]) {
       if (side?.teamId == null || side.totalPoints == null) continue;
       const key = `${matchup.matchupPeriodId}:${espnProviderId(leagueId, side.teamId)}`;
       pointsByTeamWeek.set(key, side.totalPoints);
       sideByTeamWeek.set(key, side);
+      matchupIdByTeamWeek.set(key, matchup.id);
     }
   }
   const rows: PlatformSyncScoreRow[] = [];
@@ -351,7 +354,12 @@ export function mapEspnScores(schedule: GeneratedSchedule, league: EspnLeague): 
         unmatched.push({ week: week.weekNumber, providerHomeId: home.providerId, providerAwayId: away.providerId, reason: "No ESPN scores were posted for this week yet." });
         continue;
       }
-      rows.push({ gameId: game.id, week: week.weekNumber, homeTeamId: home.id, awayTeamId: away.id, homeScore, awayScore, confidence: "high", source: "espn" });
+      const homeMatchupId = matchupIdByTeamWeek.get(`${week.weekNumber}:${home.providerId}`);
+      const awayMatchupId = matchupIdByTeamWeek.get(`${week.weekNumber}:${away.providerId}`);
+      const exactProviderMatchupId = homeMatchupId != null && homeMatchupId === awayMatchupId
+        ? providerMatchupId("espn", leagueId, week.weekNumber, homeMatchupId, [home.providerId, away.providerId])
+        : undefined;
+      rows.push({ gameId: game.id, week: week.weekNumber, homeTeamId: home.id, awayTeamId: away.id, homeScore, awayScore, confidence: "high", source: "espn", providerMatchupId: exactProviderMatchupId ?? null });
       const homeSide = sideByTeamWeek.get(`${week.weekNumber}:${home.providerId}`);
       const awaySide = sideByTeamWeek.get(`${week.weekNumber}:${away.providerId}`);
       const homeRoster = splitEspnRoster(homeSide);

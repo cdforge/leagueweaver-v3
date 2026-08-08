@@ -148,6 +148,7 @@ export function ThisWeekWorkspace({
       awayRecord={{ overall: recordByTeam.get(away.id) ?? "0-0" }}
       homeRecord={{ overall: recordByTeam.get(home.id) ?? "0-0" }}
       signal={signal}
+      seasonYear={schedule.setup.seasonYear}
       featured={featured}
       featuredLabel={featured && signals.byGameId.get(game.id) ? gameOfWeekStatusLabel("current") : "GOTW"}
       gameLabel={featured ? undefined : `Game ${game.gameNumber}`}

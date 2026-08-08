@@ -17,6 +17,19 @@ function matchupSignature(setup: LeagueSetupInput) {
     .join("\n");
 }
 
+function scheduleCoverage(setup: LeagueSetupInput) {
+  const schedule = generateLeagueSchedule(setup, "conference-matrix");
+  return {
+    games: schedule.weeks.reduce((total, week) => total + week.games.length, 0),
+    teams: new Set(
+      schedule.weeks.flatMap((week) =>
+        week.games.flatMap((game) => [game.homeTeamId, game.awayTeamId]),
+      ),
+    ).size,
+    weeks: schedule.weeks.length,
+  };
+}
+
 const nonConference = createDefaultSetup();
 assert.equal(hasConferences(nonConference), false);
 assert.ok(nonConference.teams.every((team) => team.conferenceId === undefined));
@@ -46,6 +59,7 @@ const strippedSetup: LeagueSetupInput = {
 };
 assert.ok(strippedSetup.teams.every((team) => team.conferenceId === undefined));
 assert.equal(matchupSignature(conferenceSetup), matchupSignature(strippedSetup));
+assert.deepEqual(scheduleCoverage(conferenceSetup), scheduleCoverage(strippedSetup));
 
 const reconciled = reconcileConferenceSetup(createDivisions(6));
 assert.equal(reconciled.conferences?.length, 2);
@@ -62,5 +76,5 @@ assert.ok(normalizedPreset?.data.teams.every((team) => team.conferenceId));
 console.log("Conference matrix passed:");
 console.log("- non-conference setup has no team conference ids and no groups");
 console.log("- 4-division conference setup groups 16 teams as 8 + 8");
-console.log("- conference metadata does not change generated matchup output");
+console.log("- conference metadata is preserved without changing generated matchups");
 console.log("- saved conference setup round-trips with conferences and team conference ids");

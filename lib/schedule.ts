@@ -259,6 +259,7 @@ export function updateGameScore(
   gameId: string,
   homeScore: number | undefined,
   awayScore: number | undefined,
+  providerMatchupId?: string | null,
 ) {
   const frozenSchedule = freezeCompletedRankHistory(schedule);
   const updatedSchedule = {
@@ -266,7 +267,16 @@ export function updateGameScore(
     weeks: frozenSchedule.weeks.map((week) => ({
       ...week,
       games: week.games.map((game) =>
-        game.id === gameId ? { ...game, homeScore, awayScore } : game,
+        game.id === gameId
+          ? {
+              ...game,
+              homeScore,
+              awayScore,
+              ...(providerMatchupId !== undefined
+                ? { providerMatchupId: providerMatchupId ?? undefined }
+                : {}),
+            }
+          : game,
       ),
     })),
   } satisfies GeneratedSchedule;

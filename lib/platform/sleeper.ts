@@ -2,6 +2,7 @@ import "server-only";
 import { buildSleeperLeagueHistoryDraft, type LeagueHistoryDraft, type SleeperHistorySeasonPayload } from "@/lib/platform/history";
 import { deriveSleeperTemplates, mapSleeperPlayerWeekStats, type LineupTemplate, type PlayerWeekStat, type RosterTemplate } from "@/lib/playerData";
 import { mapSleeperTransactions, type NormalizedTransaction, type SleeperTransactionPayload } from "@/lib/transactions";
+import { providerMatchupId } from "@/lib/providerGameLinks";
 import { fetchProviderJson } from "./request";
 import type { GeneratedSchedule, ImportDataFound, MatchupRosterDetail, MatchupRosterPlayer, PlatformSyncResult, PlatformSyncScoreRow, PriorSeasonFinishEntry } from "@/lib/types";
 
@@ -287,7 +288,10 @@ export async function mapSleeperScores(schedule: GeneratedSchedule, week: number
     }
     // Each team's weekly points are the values a commissioner would type by hand,
     // so they auto-apply — the LeagueWeaver pairing needn't mirror Sleeper's.
-    rows.push({ gameId: game.id, week, homeTeamId: game.homeTeamId, awayTeamId: game.awayTeamId, homeScore: homeMatchup.points, awayScore: awayMatchup.points, confidence: "high", source: "sleeper" });
+    const exactProviderMatchupId = homeMatchup.matchup_id != null && homeMatchup.matchup_id === awayMatchup.matchup_id
+      ? providerMatchupId("sleeper", providerLeagueId, week, homeMatchup.matchup_id, [home?.providerId, away?.providerId])
+      : undefined;
+    rows.push({ gameId: game.id, week, homeTeamId: game.homeTeamId, awayTeamId: game.awayTeamId, homeScore: homeMatchup.points, awayScore: awayMatchup.points, confidence: "high", source: "sleeper", providerMatchupId: exactProviderMatchupId ?? null });
     if (opts?.includeRosterDetails) {
       const homeRoster = splitSleeperRoster(homeMatchup, league?.roster_positions ?? [], catalog);
       const awayRoster = splitSleeperRoster(awayMatchup, league?.roster_positions ?? [], catalog);

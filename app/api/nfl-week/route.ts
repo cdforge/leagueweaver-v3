@@ -39,6 +39,19 @@ type OddsSnapshotRow = {
   snapshot_at: string;
 };
 
+type EspnScoreboardEvent = {
+  id?: string;
+  date?: string;
+  status?: { type?: { name?: string } };
+  competitions?: Array<{
+    competitors?: Array<{
+      homeAway?: "home" | "away";
+      score?: string;
+      team?: { abbreviation?: string };
+    }>;
+  }>;
+};
+
 const NFL_DIVISIONS: Record<string, string> = {
   BUF: "AFC East", MIA: "AFC East", NE: "AFC East", NYJ: "AFC East",
   BAL: "AFC North", CIN: "AFC North", CLE: "AFC North", PIT: "AFC North",
@@ -70,9 +83,56 @@ function recordFor(records: Map<string, NflRecord>, abbr: string) {
   };
 }
 
+function normalizeEspnStatus(status?: string): NflGameRow["status"] {
+  if (status === "STATUS_FINAL" || status === "STATUS_FINAL_OVERTIME") return "final";
+  if (status === "STATUS_IN_PROGRESS" || status === "STATUS_HALFTIME" || status === "STATUS_END_PERIOD") return "in_progress";
+  if (status === "STATUS_POSTPONED") return "postponed";
+  if (status === "STATUS_CANCELED" || status === "STATUS_CANCELLED") return "cancelled";
+  return "scheduled";
+}
+
+function scoreNumber(score?: string) {
+  if (score === undefined || score === "") return null;
+  const value = Number(score);
+  return Number.isFinite(value) ? value : null;
+}
+
+async function loadEspnFallbackGames(seasonYear: number, week: number) {
+  const response = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${seasonYear}&seasontype=2&week=${week}`, {
+    next: { revalidate: 60 * 60 },
+  });
+  if (!response.ok) return [];
+  const payload = await response.json() as { events?: EspnScoreboardEvent[] };
+  return (payload.events ?? []).flatMap((event): NflGameRow[] => {
+    const competitors = event.competitions?.[0]?.competitors ?? [];
+    const away = competitors.find((competitor) => competitor.homeAway === "away");
+    const home = competitors.find((competitor) => competitor.homeAway === "home");
+    const awayAbbr = away?.team?.abbreviation?.toUpperCase();
+    const homeAbbr = home?.team?.abbreviation?.toUpperCase();
+    if (!event.id || !event.date || !awayAbbr || !homeAbbr) return [];
+    const awayScore = scoreNumber(away?.score);
+    const homeScore = scoreNumber(home?.score);
+    const winner = awayScore !== null && homeScore !== null && awayScore !== homeScore
+      ? awayScore > homeScore ? "away" : "home"
+      : null;
+    return [{
+      id: `espn-${event.id}`,
+      commence_time: event.date,
+      away_abbr: awayAbbr,
+      home_abbr: homeAbbr,
+      status: normalizeEspnStatus(event.status?.type?.name),
+      final_away_score: awayScore,
+      final_home_score: homeScore,
+      final_winner_side: winner,
+      last_score_refresh_at: null,
+      updated_at: null,
+    }];
+  });
+}
+
 async function loadGames(seasonYear: number, week: number) {
   const admin = createAdminClient();
-  if (!admin) return { games: [], unavailable: true };
+  if (!admin) return { games: await loadEspnFallbackGames(seasonYear, week), unavailable: false };
 
   const byWeek = await admin
     .from("nfl_games")
@@ -93,8 +153,9 @@ async function loadGames(seasonYear: number, week: number) {
     .lt("commence_time", window.endsAt)
     .order("commence_time", { ascending: true });
 
-  if (byDate.error) return { games: [], unavailable: true };
-  return { games: (byDate.data ?? []) as NflGameRow[], unavailable: false };
+  if (byDate.error) return { games: await loadEspnFallbackGames(seasonYear, week), unavailable: false };
+  const games = (byDate.data ?? []) as NflGameRow[];
+  return { games: games.length ? games : await loadEspnFallbackGames(seasonYear, week), unavailable: false };
 }
 
 async function loadRecords(seasonYear: number, week: number) {

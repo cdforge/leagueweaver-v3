@@ -10,6 +10,7 @@ import {
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
+  Activity,
   BarChart3,
   CalendarDays,
   Check,
@@ -93,7 +94,6 @@ import { PlayoffLivePreview } from "@/components/playoffs/PlayoffLivePreview";
 import { StakesButton } from "@/components/season/StakesPanel";
 import { getLiveWeek } from "@/lib/scenarios";
 import { CustomSelect } from "@/components/ui/CustomSelect";
-import { FloatingPopover } from "@/components/ui/FloatingPopover";
 import { Modal, ConfirmDialog } from "@/components/ui/Modal";
 import { EntityLogo } from "@/components/ui/EntityLogo";
 import { ConnectScoresModal } from "@/components/platform/ConnectScoresModal";
@@ -130,6 +130,7 @@ import {
   projectPlayoffSeeds,
   resolvePlayoffPlacementMode,
 } from "@/lib/playoffs";
+import { providerMatchupIdWithTeams } from "@/lib/providerGameLinks";
 import {
   clearAllHypotheticalResults,
   clearSimulatedResults,
@@ -150,6 +151,7 @@ import {
 } from "@/lib/simulator";
 import {
   calculateStandings,
+  formatDivisionRecord,
   formatRecord,
   freezeCompletedRankHistory,
   getEnteringWeekRankSnapshot,
@@ -184,7 +186,7 @@ import {
   updateGameScore,
 } from "@/lib/schedule";
 import { getWeekPhase } from "@/lib/weekPhase";
-import { teamDisplayName, teamInitials } from "@/lib/teamIdentity";
+import { teamDisplayName, teamInitials, teamMonogram } from "@/lib/teamIdentity";
 import {
   GAME_DETAIL_CACHE_PREFIX,
   type GameDetailPlayerStat,
@@ -197,6 +199,7 @@ import {
 } from "@/lib/playerData";
 import type {
   GeneratedSchedule,
+  Division,
   ImportHistoryEvent,
   ImportPreview,
   LeagueSetupInput,
@@ -219,6 +222,7 @@ type ViewKey =
   | "gotw"
   | "matchup-ratings"
   | "standings"
+  | "stats"
   | "mvt"
   | "all-stars"
   | "playoffs"
@@ -305,6 +309,7 @@ type ImportedScoreRow = {
   homeName: string;
   awayScore?: number;
   homeScore?: number;
+  providerMatchupId?: string | null;
 };
 type HistoryBrowserSeason = {
   id: string;
@@ -392,11 +397,39 @@ function providerTail(value?: string) {
   return value?.split("-").at(-1) ?? "";
 }
 
-function buildHistoryTeamMap(
+const HISTORY_TEAM_COLORS = [
+  "#117A45",
+  "#2457A7",
+  "#B42318",
+  "#7A4A12",
+  "#6D28D9",
+  "#0F766E",
+  "#BE185D",
+  "#4338CA",
+];
+
+function slugHistoryId(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "team";
+}
+
+function splitHistoryTeamName(value: string) {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return { city: "", name: value.trim() || "Historic team" };
+  return { city: parts[0], name: parts.slice(1).join(" ") };
+}
+
+function buildHistoryRoster(
   schedule: GeneratedSchedule,
   season: HistoryBrowserSeason,
 ) {
-  const byLeagueTeamId = new Map<string, string>();
+  const teamIdByHistoryTeam = new Map<string, string>();
+  const historyTeamById = new Map(
+    season.teams.map((team) => [team.leagueTeamId, team]),
+  );
   const currentProviderId = new Map<string, string>(
     schedule.setup.teams.map((team) => [team.providerId ?? "", team.id]),
   );
@@ -411,15 +444,84 @@ function buildHistoryTeamMap(
       team.id,
     ]),
   );
-  for (const team of season.teams) {
+  const divisionIds = new Set(schedule.setup.divisions.map((division) => division.id));
+  const extraDivisions = new Map<string, Division>();
+  const teams: Team[] = [];
+  const usedTeamIds = new Set<string>();
+
+  season.teams
+    .slice()
+    .sort(
+      (left, right) =>
+        (left.finalStanding ?? 999) - (right.finalStanding ?? 999) ||
+        left.teamName.localeCompare(right.teamName),
+    )
+    .forEach((team, index) => {
     const exactProviderId = `${season.provider}-${season.providerLeagueId}-${team.providerRosterOrTeamId}`;
     const match =
       currentProviderId.get(exactProviderId) ??
       currentProviderTail.get(team.providerRosterOrTeamId) ??
       currentName.get(normalizeHistoryName(team.teamName));
-    if (match) byLeagueTeamId.set(team.leagueTeamId, match);
-  }
-  return byLeagueTeamId;
+      if (match) {
+        const current = schedule.setup.teams.find((item) => item.id === match);
+        if (current && !usedTeamIds.has(current.id)) {
+          teamIdByHistoryTeam.set(team.leagueTeamId, current.id);
+          teams.push({
+            ...current,
+            overallRank: team.finalStanding ?? current.overallRank,
+            priorRegularSeasonRank: team.finalStanding ?? current.priorRegularSeasonRank,
+            priorPlayoffRank: team.finalStanding ?? current.priorPlayoffRank,
+          });
+          usedTeamIds.add(current.id);
+          return;
+        }
+      }
+
+      const { city, name } = splitHistoryTeamName(team.teamName);
+      const divisionId = team.divisionId && divisionIds.has(team.divisionId)
+        ? team.divisionId
+        : team.divisionId
+          ? `history-division-${slugHistoryId(team.divisionId)}`
+          : schedule.setup.divisions[index % Math.max(1, schedule.setup.divisions.length)]?.id ?? "history-division";
+      if (!divisionIds.has(divisionId) && !extraDivisions.has(divisionId)) {
+        extraDivisions.set(divisionId, {
+          id: divisionId,
+          name: team.divisionId ? `Historic Division ${team.divisionId}` : "Historic teams",
+          color: HISTORY_TEAM_COLORS[index % HISTORY_TEAM_COLORS.length],
+          colorSource: "auto",
+        });
+      }
+      const id = `history-${season.season}-${slugHistoryId(team.leagueTeamId)}`;
+      const color = HISTORY_TEAM_COLORS[index % HISTORY_TEAM_COLORS.length];
+      const historicTeam: Team = {
+        id,
+        providerId: `${season.provider}-${season.providerLeagueId}-${team.providerRosterOrTeamId}`,
+        city,
+        name,
+        shortName: teamMonogram(city, name),
+        manager: team.managerName ?? "",
+        color,
+        divisionId,
+        overallRank: team.finalStanding ?? index + 1,
+        priorRegularSeasonRank: team.finalStanding,
+        priorPlayoffRank: team.finalStanding,
+        stadium: `${team.teamName} venue`,
+      };
+      teamIdByHistoryTeam.set(team.leagueTeamId, id);
+      teams.push(historicTeam);
+      usedTeamIds.add(id);
+    });
+
+  const divisions = [
+    ...schedule.setup.divisions.filter((division) =>
+      teams.some((team) => team.divisionId === division.id),
+    ),
+    ...extraDivisions.values(),
+  ];
+  if (!divisions.length) divisions.push(...schedule.setup.divisions.slice(0, 1));
+
+  const teamById = new Map(teams.map((team) => [team.id, team]));
+  return { teamIdByHistoryTeam, historyTeamById, teams, divisions, teamById };
 }
 
 function historyLineupStatus(value: string): LineupStatus {
@@ -449,13 +551,13 @@ function numberFromHistorySetting(value: unknown) {
 }
 
 function historicalRegularSeasonWeeks(season: HistoryBrowserSeason) {
-  const direct = numberFromHistorySetting(season.regularSeasonWeekCount);
-  if (direct && direct >= 1 && direct <= 18) return direct;
   const sleeperStart = numberFromHistorySetting(
     season.playoffSettings?.playoff_week_start,
   );
   if (sleeperStart && sleeperStart > 1 && sleeperStart <= 18)
     return sleeperStart - 1;
+  const direct = numberFromHistorySetting(season.regularSeasonWeekCount);
+  if (direct && direct >= 1 && direct <= 18) return direct;
   return undefined;
 }
 
@@ -472,6 +574,33 @@ function historicalFieldSize(
     Math.min(season.teamCount || providerValue, Math.round(providerValue)),
   );
   return normalized as PlayoffFieldSize;
+}
+
+function historicalPlayoffWeeks(
+  season: HistoryBrowserSeason,
+  regularWeeks?: number,
+) {
+  const providerWeeks = numberFromHistorySetting(
+    season.playoffSettings?.playoff_weeks,
+  );
+  if (providerWeeks === 3 || providerWeeks === 4) return providerWeeks;
+  if (!regularWeeks) return undefined;
+  const actualWeeks = Math.max(
+    0,
+    ...season.games
+      .map((game) => game.week - regularWeeks)
+      .filter((week) => week > 0),
+  );
+  return actualWeeks === 3 || actualWeeks === 4 ? actualWeeks : undefined;
+}
+
+function historicalReseedMode(
+  season: HistoryBrowserSeason,
+): GeneratedSchedule["setup"]["playoffs"]["reseedMode"] {
+  const setting = season.playoffSettings?.playoff_reseed;
+  return setting === true || setting === "true" || setting === 1
+    ? "each-round"
+    : "fixed";
 }
 
 function compareHistoryPlayerRows(
@@ -499,48 +628,59 @@ function buildHistoricalSchedule(
   season?: HistoryBrowserSeason,
 ): GeneratedSchedule | null {
   if (!season) return null;
-  const teamIdByHistoryTeam = buildHistoryTeamMap(schedule, season);
+  const historyRoster = buildHistoryRoster(schedule, season);
+  const { teamIdByHistoryTeam, teams, divisions, teamById } = historyRoster;
   const gamesByWeek = new Map<number, ScheduledGame[]>();
   const playoffGamesByRound = new Map<number, PlayoffGame[]>();
   const regularWeeks = historicalRegularSeasonWeeks(season);
-  const playoffWeeks = regularWeeks
-    ? Math.max(
-        3,
-        Math.min(
-          4,
-          Math.max(0, ...season.games.map((game) => game.week - regularWeeks)),
-        ),
-      )
-    : undefined;
+  const playoffWeeks = historicalPlayoffWeeks(season, regularWeeks);
   const setupWeeks =
     regularWeeks === 13 || regularWeeks === 14
       ? regularWeeks
       : schedule.setup.weeks;
+  const mappedPlayoffTeamIds = new Set<string>();
+  for (const game of season.games) {
+    if (!regularWeeks || game.week <= regularWeeks) continue;
+    const homeTeamId = teamIdByHistoryTeam.get(game.homeLeagueTeamId);
+    const awayTeamId = teamIdByHistoryTeam.get(game.awayLeagueTeamId);
+    if (homeTeamId) mappedPlayoffTeamIds.add(homeTeamId);
+    if (awayTeamId) mappedPlayoffTeamIds.add(awayTeamId);
+  }
+  const historicalFinalStandingIds = season.teams
+    .filter((team) => team.finalStanding != null)
+    .sort(
+      (left, right) =>
+        (left.finalStanding ?? 999) - (right.finalStanding ?? 999),
+    )
+    .flatMap((team) => teamIdByHistoryTeam.get(team.leagueTeamId) ?? []);
+  const historicalLockedTeamIds = [
+    ...historicalFinalStandingIds,
+    ...mappedPlayoffTeamIds,
+  ].filter((teamId, index, teamIds) => teamIds.indexOf(teamId) === index);
+  const fieldSize = historicalFieldSize(
+    season,
+    schedule.setup.playoffs.fieldSize,
+  );
   const setup = {
     ...schedule.setup,
     seasonYear: season.season,
     name: `${schedule.setup.name} ${season.season}`,
     abbreviation: schedule.setup.abbreviation,
     weeks: setupWeeks,
+    divisions,
+    conferences: undefined,
+    teams,
     playoffs: {
       ...schedule.setup.playoffs,
-      fieldSize: historicalFieldSize(season, schedule.setup.playoffs.fieldSize),
+      fieldSize,
       playoffWeeks:
         playoffWeeks === 3 || playoffWeeks === 4
           ? playoffWeeks
           : schedule.setup.playoffs.playoffWeeks,
+      placementMode: "overall" as const,
+      reseedMode: historicalReseedMode(season),
       fieldStatus: "locked" as const,
-      lockedTeamIds: season.teams
-        .filter((team) => team.finalStanding != null)
-        .sort(
-          (left, right) =>
-            (left.finalStanding ?? 999) - (right.finalStanding ?? 999),
-        )
-        .flatMap((team) => teamIdByHistoryTeam.get(team.leagueTeamId) ?? [])
-        .slice(
-          0,
-          historicalFieldSize(season, schedule.setup.playoffs.fieldSize),
-        ),
+      lockedTeamIds: historicalLockedTeamIds.slice(0, fieldSize),
     },
   };
   const roundNames = getPlayoffRoundNames(
@@ -550,12 +690,8 @@ function buildHistoricalSchedule(
   for (const game of season.games) {
     const homeTeamId = teamIdByHistoryTeam.get(game.homeLeagueTeamId);
     const awayTeamId = teamIdByHistoryTeam.get(game.awayLeagueTeamId);
-    const home = homeTeamId
-      ? schedule.setup.teams.find((team) => team.id === homeTeamId)
-      : undefined;
-    const away = awayTeamId
-      ? schedule.setup.teams.find((team) => team.id === awayTeamId)
-      : undefined;
+    const home = homeTeamId ? teamById.get(homeTeamId) : undefined;
+    const away = awayTeamId ? teamById.get(awayTeamId) : undefined;
     if (!homeTeamId || !awayTeamId || !home || !away) continue;
     const isPlayoff = Boolean(regularWeeks && game.week > regularWeeks);
     const roundIndex =
@@ -579,6 +715,7 @@ function buildHistoricalSchedule(
       stadium: home.stadium,
       homeScore: game.homeScore,
       awayScore: game.awayScore,
+      providerMatchupId: providerMatchupIdWithTeams(game.providerMatchupId, game.homeLeagueTeamId, game.awayLeagueTeamId),
       notes: [
         `${season.provider.toUpperCase()} history`,
         isPlayoff
@@ -630,7 +767,7 @@ function buildHistoricalPlayerRows(
   season?: HistoryBrowserSeason,
 ): GameDetailPlayerStat[] {
   if (!season) return [];
-  const teamIdByHistoryTeam = buildHistoryTeamMap(schedule, season);
+  const { teamIdByHistoryTeam } = buildHistoryRoster(schedule, season);
   const starterCounts = new Map<string, number>();
   const sortedRows = [...season.playerRows].sort((left, right) =>
     compareHistoryPlayerRows(season.provider, left, right),
@@ -701,29 +838,41 @@ const VIEW_ITEMS: Array<{
   icon: typeof CalendarDays;
   pro?: boolean;
   comingSoon?: boolean;
+  beta?: boolean;
 }> = [
-  { key: "this-week", label: "This Week", icon: Flame },
+  { key: "this-week", label: "This Week", icon: Flame, beta: true },
   { key: "results", label: "Results", icon: LayoutList },
   { key: "league-schedule", label: "League Schedule", icon: CalendarDays },
   { key: "team-schedule", label: "Team Schedule", icon: UsersRound },
   { key: "prints", label: "Copy Sheet", icon: Printer },
   { key: "gotw", label: "Game of the Week", icon: Star },
   { key: "matchup-ratings", label: "Matchup Ratings", icon: SlidersHorizontal },
-  { key: "standings", label: "Standings", icon: BarChart3 },
+  { key: "standings", label: "Standings", icon: BarChart3, beta: true },
+  { key: "stats", label: "Stats", icon: Activity, beta: true },
   { key: "mvt", label: "MVT", icon: Medal, comingSoon: true },
   { key: "all-stars", label: "All-Stars", icon: Sparkles, comingSoon: true },
   { key: "playoffs", label: "Playoffs", icon: Trophy },
-  { key: "share", label: "Share", icon: Share2 },
+
+  { key: "share", label: "Share", icon: Share2, beta: true },
   { key: "settings", label: "Settings", icon: Settings },
 ];
 const HISTORY_COMPATIBLE_VIEWS = new Set<ViewKey>([
   "league-schedule",
   "team-schedule",
+  "prints",
   "gotw",
   "matchup-ratings",
   "standings",
+  "stats",
   "playoffs",
 ]);
+
+const BETA_VIEW_COPY: Partial<Record<ViewKey, string>> = {
+  "this-week":
+    "This feature is in beta. Use it as a helpful preview while League Weaver continues refining weekly context.",
+  share:
+    "This feature is in beta. Public links are useful for previews, but sharing controls are still being improved.",
+};
 
 function TeamMark({
   team,
@@ -964,6 +1113,7 @@ function PlayoffWeekSchedule({
         awayDivision={divisionById.get(away.divisionId)}
         homeDivision={divisionById.get(home.divisionId)}
         setup={schedule.setup}
+        seasonYear={schedule.setup.seasonYear}
         awayRank={awaySeed}
         homeRank={homeSeed}
         awayRecord={recordFor(awayTeamId)}
@@ -1877,6 +2027,7 @@ function ScheduleView({
               <MatchupCard
                 key={game.id}
                 {...presentationFor(game, week.weekNumber)}
+                seasonYear={schedule.setup.seasonYear}
                 featured={featured}
                 featuredLabel={
                   featured && gotwEntry
@@ -2242,6 +2393,7 @@ function MatchupRatingsView({
               awayDivision={divisionById.get(away.divisionId)}
               homeDivision={divisionById.get(home.divisionId)}
               setup={schedule.setup}
+              seasonYear={schedule.setup.seasonYear}
               awayRank={rowRanks.get(away.id) ?? away.overallRank}
               homeRank={rowRanks.get(home.id) ?? home.overallRank}
               awayRecord={{
@@ -2795,11 +2947,13 @@ function StandingsView({
   playerStats,
   onUpdateTiebreakers,
   readOnly = false,
+  mode = "standings",
 }: {
   schedule: GeneratedSchedule;
   playerStats?: GameDetailPlayerStat[];
   onUpdateTiebreakers?: (settings: TiebreakerSettings) => void;
   readOnly?: boolean;
+  mode?: "standings" | "stats";
 }) {
   return (
     <StatsWorkspace
@@ -2807,6 +2961,7 @@ function StandingsView({
       playerStats={playerStats}
       onUpdateTiebreakers={onUpdateTiebreakers}
       readOnly={readOnly}
+      mode={mode}
     />
   );
 }
@@ -4656,11 +4811,19 @@ export function PrintsView({
   onDownloadCsv,
   onDownloadPdf,
   pdfBusy,
+  onOpenGame,
+  weekHrefFor,
+  teamHrefFor,
+  onNavigate,
 }: {
   schedule: GeneratedSchedule;
   onDownloadCsv: () => void;
   onDownloadPdf: (provider: PrintProvider, mode: EspnPrintMode) => void;
   pdfBusy: boolean;
+  onOpenGame?: (gameId: string) => void;
+  weekHrefFor?: (week: number) => string;
+  teamHrefFor?: (teamId: string) => string;
+  onNavigate?: () => void;
 }) {
   const [provider, setProvider] = useState<PrintProvider>(
     schedule.setup.platformConnection?.provider ?? "espn",
@@ -4700,11 +4863,14 @@ export function PrintsView({
     return ranks;
   }, [schedule]);
   const recordsByWeekTeam = useMemo(() => {
-    const records = new Map<string, string>();
+    const records = new Map<string, { overall: string; division: string }>();
     for (const week of schedule.weeks) {
       for (const row of getEnteringWeekRankSnapshot(schedule, week.weekNumber)
         .rows) {
-        records.set(`${week.weekNumber}:${row.teamId}`, formatRecord(row));
+        records.set(`${week.weekNumber}:${row.teamId}`, {
+          overall: formatRecord(row),
+          division: formatDivisionRecord(row),
+        });
       }
     }
     return records;
@@ -4715,7 +4881,10 @@ export function PrintsView({
       : "Use in Sleeper: Settings > Commissioner Control > Edit Schedule Matchups.";
   const teamName = (team: Team) => teamDisplayName(team, display.cityNames);
   const recordFor = (teamId: string, weekNumber: number) =>
-    recordsByWeekTeam.get(`${weekNumber}:${teamId}`) ?? "0-0-0";
+    recordsByWeekTeam.get(`${weekNumber}:${teamId}`) ?? {
+      overall: "0-0",
+      division: "0-0",
+    };
   const byeTeamsFor = (week: GeneratedSchedule["weeks"][number]) => {
     const activeTeamIds = new Set(
       week.games.flatMap((game) => [game.awayTeamId, game.homeTeamId]),
@@ -4764,31 +4933,97 @@ export function PrintsView({
     side: "away" | "home",
     rank?: number,
     variant: "espn" | "sleeper" = "espn",
+  ) => {
+    const record = recordFor(team.id, weekNumber);
+    const className = `prints-team prints-team-${side}${
+      variant === "sleeper" ? " prints-sleeper-team" : ""
+    }`;
+    const content = (
+      <>
+        <EntityLogo
+          className="prints-team-mark"
+          size={20}
+          color={team.color}
+          logoUrl={team.logoUrl}
+          monogram={teamInitials(team)}
+        />
+        <span>
+          <strong>
+            {rank ? (
+              <>
+                <em>#{rank}</em>{" "}
+              </>
+            ) : null}
+            {teamName(team)}
+          </strong>
+          <small>
+            {record.overall} <span>({record.division} div)</span>
+          </small>
+        </span>
+      </>
+    );
+    const href = teamHrefFor?.(team.id);
+    return href ? (
+      <Link
+        href={href}
+        className={`${className} is-clickable`}
+        onClick={onNavigate}
+      >
+        {content}
+      </Link>
+    ) : (
+      <span className={className}>{content}</span>
+    );
+  };
+
+  const weekHeading = (
+    week: GeneratedSchedule["weeks"][number],
+    label: string,
+  ) => {
+    const content = (
+      <>
+        <span>{label}</span>
+        <small>{week.dateLabel}</small>
+      </>
+    );
+    const href = weekHrefFor?.(week.weekNumber);
+    return href ? (
+      <Link href={href} onClick={onNavigate}>
+        {content}
+      </Link>
+    ) : (
+      content
+    );
+  };
+
+  const scoreCell = (
+    game: ScheduledGame,
+    side: "away" | "home",
+    score: number | undefined,
   ) => (
-    <span
-      className={`prints-team prints-team-${side}${
-        variant === "sleeper" ? " prints-sleeper-team" : ""
-      }`}
+    <button
+      type="button"
+      className={`prints-score prints-score-${side}`}
+      onClick={() => onOpenGame?.(game.id)}
+      disabled={!onOpenGame}
+      aria-label={`Open game details for game ${game.gameNumber ?? game.seriesGame}`}
     >
-      <EntityLogo
-        className="prints-team-mark"
-        size={20}
-        color={team.color}
-        logoUrl={team.logoUrl}
-        monogram={teamInitials(team)}
-      />
-      <span>
-        <strong>
-          {rank ? (
-            <>
-              <em>#{rank}</em>{" "}
-            </>
-          ) : null}
-          {teamName(team)}
-        </strong>
-        <small>({recordFor(team.id, weekNumber)})</small>
-      </span>
-    </span>
+      {score == null ? "0.0" : score.toFixed(1)}
+    </button>
+  );
+
+  const sleeperScoreCell = (game: ScheduledGame, away: Team, home: Team) => (
+    <button
+      type="button"
+      className="prints-sleeper-score-link"
+      onClick={() => onOpenGame?.(game.id)}
+      disabled={!onOpenGame}
+      aria-label={`Open game details for ${teamName(away)} vs ${teamName(home)}`}
+    >
+      <span>{game.awayScore == null ? "0.0" : game.awayScore.toFixed(1)}</span>
+      <b>vs</b>
+      <span>{game.homeScore == null ? "0.0" : game.homeScore.toFixed(1)}</span>
+    </button>
   );
 
   const espnScheduleTable = (
@@ -4803,10 +5038,7 @@ export function PrintsView({
       </header>
       {schedule.weeks.map((week) => (
         <section className="prints-week-block" key={week.weekNumber}>
-          <h3>
-            <span>NFL Week {week.weekNumber}</span>
-            <small>{week.dateLabel}</small>
-          </h3>
+          <h3>{weekHeading(week, `NFL Week ${week.weekNumber}`)}</h3>
           <div className="prints-espn-table" role="table">
             <div className="prints-espn-row prints-espn-header" role="row">
               <span>Away Team</span>
@@ -4893,12 +5125,8 @@ export function PrintsView({
                   <span className="prints-manager prints-manager-away">
                     {away.manager}
                   </span>
-                  <span className="prints-score prints-score-away">
-                    {game.awayScore == null ? "0.0" : game.awayScore.toFixed(1)}
-                  </span>
-                  <span className="prints-score prints-score-home">
-                    {game.homeScore == null ? "0.0" : game.homeScore.toFixed(1)}
-                  </span>
+                  {scoreCell(game, "away", game.awayScore)}
+                  {scoreCell(game, "home", game.homeScore)}
                   <span className="prints-manager prints-manager-home">
                     {home.manager}
                   </span>
@@ -4934,10 +5162,7 @@ export function PrintsView({
       </header>
       {schedule.weeks.map((week) => (
         <section className="prints-sleeper-week" key={week.weekNumber}>
-          <header>
-            <strong>Week {week.weekNumber}</strong>
-            <small>{week.dateLabel}</small>
-          </header>
+          <header>{weekHeading(week, `Week ${week.weekNumber}`)}</header>
           <div className="prints-sleeper-matchups">
             {week.games.map((game) => {
               const away = teamById.get(game.awayTeamId);
@@ -4946,7 +5171,7 @@ export function PrintsView({
               return (
                 <article key={game.id}>
                   {teamCell(away, week.weekNumber, "away", undefined, "sleeper")}
-                  <b>vs</b>
+                  {sleeperScoreCell(game, away, home)}
                   {teamCell(home, week.weekNumber, "home", undefined, "sleeper")}
                 </article>
               );
@@ -6766,7 +6991,7 @@ export function SeasonWorkspace({
       if (!current) return current;
       const updated = rows.reduce(
         (next, row) =>
-          updateGameScore(next, row.gameId, row.homeScore, row.awayScore),
+          updateGameScore(next, row.gameId, row.homeScore, row.awayScore, row.providerMatchupId),
         current,
       );
       return freezeCompletedRankHistory(updated);
@@ -6820,7 +7045,7 @@ export function SeasonWorkspace({
           if (!current) return current;
           const updated = highConfidence.reduce(
             (next, row) =>
-              updateGameScore(next, row.gameId, row.homeScore, row.awayScore),
+              updateGameScore(next, row.gameId, row.homeScore, row.awayScore, row.providerMatchupId),
             current,
           );
           return freezeCompletedRankHistory({
@@ -7606,6 +7831,11 @@ export function SeasonWorkspace({
   };
   const currentTitle =
     VIEW_ITEMS.find((item) => item.key === view)?.label ?? "League Schedule";
+  const currentViewBetaCopy = BETA_VIEW_COPY[view];
+  const currentViewIsBeta = VIEW_ITEMS.some(
+    (item) => item.key === view && item.beta,
+  );
+  const historicPlayoffsBetaActive = view === "playoffs" && historyViewActive;
   const canAccessPlayoffs = true; // Playoff rounds ship to all users on the schedule page.
   const openScoreEntry = (weekNumber: number) => {
     setSelectedWeek(Math.min(weekNumber, schedule.setup.weeks));
@@ -7618,9 +7848,6 @@ export function SeasonWorkspace({
   const openDraftRankingSettings = () => {
     setView("settings");
     router.push(`/season/${schedule.id}?view=settings`);
-  };
-  const openCopySheetPreview = () => {
-    setShowPrintPreview(true);
   };
   const downloadPrintPdf = async (
     provider: PrintProvider,
@@ -7863,6 +8090,17 @@ export function SeasonWorkspace({
               onDownloadCsv={() => downloadCsv(workspaceSchedule ?? activeSchedule)}
               onDownloadPdf={downloadPrintPdf}
               pdfBusy={pdfBusy}
+              onOpenGame={(gameId) => {
+                setShowPrintPreview(false);
+                openGameDetail(gameId);
+              }}
+              weekHrefFor={(week) =>
+                hrefWithHistorySeason(`/season/${schedule.id}`, { week })
+              }
+              teamHrefFor={(teamId) =>
+                hrefWithHistorySeason(`/season/${schedule.id}/team/${teamId}`)
+              }
+              onNavigate={() => setShowPrintPreview(false)}
             />
           </div>
         </Modal>
@@ -7922,22 +8160,28 @@ export function SeasonWorkspace({
           <nav aria-label="Season workspace">
             {visibleViewItems.map((item) => {
               const Icon = item.icon;
+              const statusLabel = [
+                item.comingSoon ? "coming soon" : "",
+                item.beta ? "beta" : "",
+              ]
+                .filter(Boolean)
+                .join(", ");
+              const viewLabel = statusLabel
+                ? `${item.label} ${statusLabel}`
+                : item.label;
               const button = (
                 <button
                   type="button"
                   key={item.key}
-                  aria-label={`${item.label}${item.comingSoon ? " coming soon" : ""}`}
-                  title={
-                    item.comingSoon ? `${item.label} coming soon` : item.label
-                  }
+                  aria-label={viewLabel}
+                  title={viewLabel}
                   className={`${view === item.key ? "active" : ""}${item.comingSoon ? " is-coming-soon" : ""}`}
                   onClick={() => selectView(item)}
                 >
                   <Icon />
-                  <span>
-                    {item.label}
-                    {item.comingSoon && <small>SOON</small>}
-                  </span>
+                  <span>{item.label}</span>
+                  {item.comingSoon && <span className="workspace-beta-badge workspace-soon-badge">Soon</span>}
+                  {item.beta && <span className="workspace-beta-badge">Beta</span>}
                 </button>
               );
               return item.key === "prints" ? (
@@ -7988,11 +8232,24 @@ export function SeasonWorkspace({
                     : schedule.setup.seasonYear}{" "}
                   season
                 </span>
-                <h1>{currentTitle}</h1>
+                <h1 className="workspace-heading-line">
+                  <span className="workspace-heading-text">
+                    {currentTitle}
+                  </span>
+                  {currentViewIsBeta && (
+                    <span className="workspace-title-beta-badge">Beta</span>
+                  )}
+                  {historicPlayoffsBetaActive && (
+                    <span className="workspace-title-beta-badge history">
+                      <History />
+                      Historic Beta
+                    </span>
+                  )}
+                </h1>
               </span>
             </div>
-            <div className="toolbar-actions">
-              {showHistoryPicker && (
+            {showHistoryPicker && (
+              <div className="toolbar-actions">
                 <CustomSelect
                   label={`Select ${currentTitle} season`}
                   value={effectiveHistorySeasonKey}
@@ -8000,53 +8257,30 @@ export function SeasonWorkspace({
                   onChange={selectHistorySeason}
                   showSelectedDescription={false}
                 />
-              )}
-              <button type="button" onClick={() => setShowRecap(true)}>
-                <Sparkles />
-                Recap
-              </button>
-              <button type="button" onClick={openCopySheetPreview}>
-                <Printer />
-                Copy Sheet
-              </button>
-              <FloatingPopover
-                className="toolbar-more"
-                label="More schedule actions"
-                trigger={
-                  <>
-                    <MoreHorizontal />
-                    <span>More</span>
-                    <ChevronDown />
-                  </>
-                }
-                menuClassName="toolbar-more-menu"
-              >
-                <button
-                  type="button"
-                  onClick={() =>
-                    downloadCsv(workspaceSchedule ?? activeSchedule)
-                  }
-                >
-                  <Download />
-                  CSV
-                </button>
-                {canSyncHistory && (
-                  <button
-                    type="button"
-                    onClick={() => void syncLeagueHistory()}
-                    disabled={historySyncing}
-                  >
-                    {historySyncing ? (
-                      <LoaderCircle className="spin" />
-                    ) : (
-                      <History />
-                    )}
-                    Sync history
-                  </button>
-                )}
-              </FloatingPopover>
-            </div>
+              </div>
+            )}
           </div>
+          {currentViewBetaCopy && (
+            <section className="workspace-beta-banner" aria-label="Beta feature notice">
+              <CircleAlert />
+              <span>
+                <strong>Beta</strong>
+                <small>{currentViewBetaCopy}</small>
+              </span>
+            </section>
+          )}
+          {historicPlayoffsBetaActive && (
+            <section className="workspace-beta-banner history" aria-label="Historic playoff data beta notice">
+              <History />
+              <span>
+                <strong>Historic playoff data</strong>
+                <small>
+                  Older playoff brackets use saved ESPN/Sleeper history and are
+                  still being refined for team context and edge cases.
+                </small>
+              </span>
+            </section>
+          )}
           <div className="workspace-notice" role="status" aria-live="polite">
             {notice && (
               <>
@@ -8308,13 +8542,31 @@ export function SeasonWorkspace({
                 />
               )
             )}
-            {view === "prints" && (
-              <PrintsView
-                schedule={workspaceSchedule ?? activeSchedule}
-                onDownloadCsv={() => downloadCsv(workspaceSchedule ?? activeSchedule)}
-                onDownloadPdf={downloadPrintPdf}
-                pdfBusy={pdfBusy}
+            {view === "prints" &&
+            historyViewActive &&
+            !historySchedule ? (
+              <HistoryMissingState
+                season={selectedHistorySeason}
+                onSync={syncLeagueHistory}
+                syncing={historySyncing}
+                canSync={canSyncHistory}
               />
+            ) : (
+              view === "prints" && (
+                <PrintsView
+                  schedule={workspaceSchedule ?? activeSchedule}
+                  onDownloadCsv={() => downloadCsv(workspaceSchedule ?? activeSchedule)}
+                  onDownloadPdf={downloadPrintPdf}
+                  pdfBusy={pdfBusy}
+                  onOpenGame={openGameDetail}
+                  weekHrefFor={(week) =>
+                    hrefWithHistorySeason(`/season/${schedule.id}`, { week })
+                  }
+                  teamHrefFor={(teamId) =>
+                    hrefWithHistorySeason(`/season/${schedule.id}/team/${teamId}`)
+                  }
+                />
+              )
             )}
             {view === "gotw" && historyViewActive && !historySchedule ? (
               <HistoryMissingState
@@ -8366,7 +8618,9 @@ export function SeasonWorkspace({
                 />
               )
             )}
-            {view === "standings" && historyViewActive && !historySchedule ? (
+            {(view === "standings" || view === "stats") &&
+            historyViewActive &&
+            !historySchedule ? (
               <HistoryMissingState
                 season={selectedHistorySeason}
                 onSync={syncLeagueHistory}
@@ -8374,7 +8628,7 @@ export function SeasonWorkspace({
                 canSync={canSyncHistory}
               />
             ) : (
-              view === "standings" && (
+              (view === "standings" || view === "stats") && (
                 <StandingsView
                   schedule={workspaceSchedule ?? activeSchedule}
                   playerStats={workspacePlayerStats}
@@ -8384,6 +8638,7 @@ export function SeasonWorkspace({
                       : onUpdateTiebreakers
                   }
                   readOnly={Boolean(simulation || historyViewActive)}
+                  mode={view === "stats" ? "stats" : "standings"}
                 />
               )
             )}
